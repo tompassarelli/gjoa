@@ -1,14 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Skiff logo — single-color sailboat, designed to read at 16x16 and scale
-  to 1024x1024 without redesign. Three shapes: sail, mast, hull.
-  Color is the skiff palette dark slate (matches skiff.json backgroundColor).
+  Skiff logo — Lucide sailboat icon (https://lucide.dev/icons/sailboat),
+  MIT licensed. Single-color line art, designed for UI use at 16-24px.
+  Stroke is currentColor in source; rendered as #1e1e2e (skiff dark slate)
+  in PNG export via tools/icons/generate.ts.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Sail: filled triangle, top of mast → bottom-right -->
-  <path d="M16 4 L16 22 L26 22 Z" fill="#1e1e2e"/>
-  <!-- Mast: vertical stripe, slightly taller than sail so it pokes above -->
-  <rect x="15" y="3" width="2" height="20" fill="#1e1e2e"/>
-  <!-- Hull: trapezoid with curved bottom (boat shape) -->
-  <path d="M2 23 L30 23 L26 28 Q16 31 6 28 Z" fill="#1e1e2e"/>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="#1e1e2e"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10 2v15" />
+  <path d="M7 22a4 4 0 0 1-4-4 1 1 0 0 1 1-1h16a1 1 0 0 1 1 1 4 4 0 0 1-4 4z" />
+  <path d="M9.159 2.46a1 1 0 0 1 1.521-.193l9.977 8.98A1 1 0 0 1 20 13H4a1 1 0 0 1-.824-1.567z" />
 </svg>
