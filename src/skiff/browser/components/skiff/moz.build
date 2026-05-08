@@ -1,0 +1,8 @@
+# -*- Mode: python; indent-tabs-mode: nil; tab-width: 40 -*-
+# Skiff chrome loader build manifest.
+
+JAR_MANIFESTS += ["jar.mn"]
+
+EXTRA_JS_MODULES.skiff += [
+    "SkiffLoader.sys.mjs",
+]

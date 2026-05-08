@@ -1,0 +1,17 @@
+Add the new browser/components/skiff/ subdir to the build. Single-line
+DIRS entry, alphabetical placement between "sidebar" and "syncedtabs".
+
+Skiff component owns chrome:// registration and the chrome JS/CSS
+loader (SkiffLoader.sys.mjs) that replaces the fx-autoconfig pattern.
+
+diff --git a/browser/components/moz.build b/browser/components/moz.build
+--- a/browser/components/moz.build
++++ b/browser/components/moz.build
+@@ -67,6 +67,7 @@
+     "sessionstore",
+     "shell",
+     "sidebar",
++    "skiff",
+     "syncedtabs",
+     "tabbrowser",
+     "tabnotes",
