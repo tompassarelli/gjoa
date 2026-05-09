@@ -1,10 +1,10 @@
-Wire SkiffLoader into BrowserGlue._init so it runs at app-startup.
-SkiffLoader.start() registers the chrome-document-loaded observer that
+Wire GjoaLoader into BrowserGlue._init so it runs at app-startup.
+GjoaLoader.start() registers the chrome-document-loaded observer that
 loads our chrome JS/CSS into each browser window.
 
 Source-of-truth implementation lives at
-browser/components/skiff/SkiffLoader.sys.mjs (registered as
-resource:///modules/skiff/ via skiff/moz.build's EXTRA_JS_MODULES).
+browser/components/gjoa/GjoaLoader.sys.mjs (registered as
+resource:///modules/gjoa/ via gjoa/moz.build's EXTRA_JS_MODULES).
 
 diff --git a/browser/components/BrowserGlue.sys.mjs b/browser/components/BrowserGlue.sys.mjs
 --- a/browser/components/BrowserGlue.sys.mjs
@@ -14,10 +14,10 @@ diff --git a/browser/components/BrowserGlue.sys.mjs b/browser/components/Browser
 
      lazy.DesktopActorRegistry.init();
 +
-+    // Skiff chrome JS/CSS loader. See browser/components/skiff/SkiffLoader.sys.mjs.
++    // Gjoa chrome JS/CSS loader. See browser/components/gjoa/GjoaLoader.sys.mjs.
 +    ChromeUtils.importESModule(
-+      "resource:///modules/skiff/SkiffLoader.sys.mjs",
-+    ).SkiffLoader.start();
++      "resource:///modules/gjoa/GjoaLoader.sys.mjs",
++    ).GjoaLoader.start();
    },
 
    // cleanup (called on application shutdown)

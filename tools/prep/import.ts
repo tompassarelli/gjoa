@@ -5,9 +5,9 @@ import { patches } from "./patches";
 import { log } from "./log";
 
 // Four sequential phases. Each is idempotent, so re-running `bun run import`
-// after editing src/skiff/ or skiff.json picks up the changes correctly.
+// after editing src/gjoa/ or gjoa.json picks up the changes correctly.
 export async function importSources(): Promise<void> {
-  log.step("phase 1/4 — overlaying src/skiff/");
+  log.step("phase 1/4 — overlaying src/gjoa/");
   await overlay();
 
   log.step("phase 2/4 — applying patches/");

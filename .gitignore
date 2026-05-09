@@ -21,7 +21,7 @@ result-*
 # Build acceleration caches
 .sccache/
 
-# Skiff prep tool source cache (downloaded firefox tarballs)
+# Gjoa prep tool source cache (downloaded firefox tarballs)
 .cache/
 
 # IDE / OS

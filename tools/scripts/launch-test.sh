@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Launch the mach-built skiff against the skiff-test profile, capturing
-# stderr/stdout to /tmp/skiff.log so autoconfig + chrome JS errors are
+# Launch the mach-built gjoa against the gjoa-test profile, capturing
+# stderr/stdout to /tmp/gjoa.log so autoconfig + chrome JS errors are
 # inspectable.
 #
 # Use after `bun run chrome:install`.
-# Inspect log: `tail -f /tmp/skiff.log` from another terminal, or
-# `grep -iE 'autoconfig|config\.js|palefox|skiff' /tmp/skiff.log`.
+# Inspect log: `tail -f /tmp/gjoa.log` from another terminal, or
+# `grep -iE 'autoconfig|config\.js|palefox|gjoa' /tmp/gjoa.log`.
 
 set -euo pipefail
 
-BIN="$HOME/code/skiff/engine/obj-x86_64-pc-linux-gnu/dist/bin/skiff"
-PROFILE="$HOME/.mozilla/firefox/skiff-test"
-LOG="/tmp/skiff.log"
+BIN="$HOME/code/gjoa/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa"
+PROFILE="$HOME/.mozilla/firefox/gjoa-test"
+LOG="/tmp/gjoa.log"
 
 if [ ! -x "$BIN" ]; then
-  echo "✗ skiff binary not found at $BIN" >&2
+  echo "✗ gjoa binary not found at $BIN" >&2
   echo "  did you run \`cd engine && ./mach build\` (or \`./mach build faster\` if it's just chrome edits)?" >&2
   exit 1
 fi

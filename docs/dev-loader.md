@@ -1,10 +1,10 @@
-# Skiff chrome loader
+# Gjoa chrome loader
 
-How chrome JS/CSS gets into Skiff at startup. Replaces fx-autoconfig.
+How chrome JS/CSS gets into Gjoa at startup. Replaces fx-autoconfig.
 
 ## Architecture
 
-`browser/components/skiff/SkiffLoader.sys.mjs` — sys-mjs module baked
+`browser/components/gjoa/GjoaLoader.sys.mjs` — sys-mjs module baked
 into Firefox's resource:// namespace via standard EXTRA_JS_MODULES +
 jar.mn registration. Gets imported from `BrowserGlue._init()` (one-line
 patch) at app-startup. Registers a `chrome-document-loaded` observer
@@ -12,11 +12,11 @@ that fires for each chrome window opened (`chrome://browser/content/browser.xhtm
 
 When the observer fires, it:
 
-1. Checks for `<install_root>/skiff-dev/` (a "dev mode" override directory)
-2. If present: reads `.uc.js` and `.uc.css` files from `skiff-dev/{JS,CSS}/`
+1. Checks for `<install_root>/gjoa-dev/` (a "dev mode" override directory)
+2. If present: reads `.uc.js` and `.uc.css` files from `gjoa-dev/{JS,CSS}/`
    and loads them into the chrome window
 3. If absent: production mode — currently no-op (the production-mode
-   path will load from `chrome://skiff/content/scripts/` baked into
+   path will load from `chrome://gjoa/content/scripts/` baked into
    omni.ja in a later batch)
 
 Stylesheets are registered globally via `nsIStyleSheetService` once;
@@ -35,64 +35,64 @@ pref system to bolt on a loader without touching the binary. Costs:
 - Required `defaults/pref/config-prefs.js` + `program/config.js` shipped
   alongside the binary — extra install machinery, awkward to bundle.
 
-For Skiff (a fork we own end-to-end), fx-autoconfig is the wrong
+For Gjoa (a fork we own end-to-end), fx-autoconfig is the wrong
 substrate. The native loader uses Firefox's standard chrome-registration
 machinery, lives in install-root-owned omni.ja, has no profile chrome
 dir, and produces no warning banner.
 
 ## Security model
 
-### Production (no `<install_root>/skiff-dev/` directory)
+### Production (no `<install_root>/gjoa-dev/` directory)
 
-Scripts and styles eventually load from omni.ja via `chrome://skiff/content/...`
+Scripts and styles eventually load from omni.ja via `chrome://gjoa/content/...`
 URLs (production-mode path TBD — see TODOs). Same trust boundary as
-Firefox itself: if you trust the install (downloaded from skiff-browser.app
+Firefox itself: if you trust the install (downloaded from gjoa-browser.app
 or built locally), you trust the chrome JS. No user-writable script
 directory exists; no hash-pinning needed because there's nothing for
 local-mode malware to tamper with.
 
-### Dev mode (`<install_root>/skiff-dev/` exists)
+### Dev mode (`<install_root>/gjoa-dev/` exists)
 
-The loader reads `.uc.js` and `.uc.css` files from `<install_root>/skiff-dev/`
+The loader reads `.uc.js` and `.uc.css` files from `<install_root>/gjoa-dev/`
 directly at startup. This is the sub-second iteration path:
 
 ```
-edit src/skiff/chrome/src/foo.ts
+edit src/gjoa/chrome/src/foo.ts
 → bun run chrome:dist     # ~1 sec, produces dist/chrome/{JS,CSS}/
-→ restart skiff           # ~3 sec, loader reads new files
+→ restart gjoa           # ~3 sec, loader reads new files
 ```
 
-`bun run chrome:install` makes `<install_root>/skiff-dev/` a symlink to
+`bun run chrome:install` makes `<install_root>/gjoa-dev/` a symlink to
 `dist/chrome/`, so re-bundling is enough — no separate install step.
 
 **Trust boundary:** anyone who can write to the install root (`<install_root>`,
-typically `engine/obj-*/dist/bin/` for dev or `/usr/lib/skiff/` for prod)
-can inject arbitrary chrome JS by dropping it into `skiff-dev/JS/`. This
+typically `engine/obj-*/dist/bin/` for dev or `/usr/lib/gjoa/` for prod)
+can inject arbitrary chrome JS by dropping it into `gjoa-dev/JS/`. This
 is the same trust boundary as "anyone who can write to the install root
-can replace the Skiff binary itself" — no new attack surface.
+can replace the Gjoa binary itself" — no new attack surface.
 
 In a typical setup:
 
-| Install location | Who can write skiff-dev/ | Who can activate dev mode |
+| Install location | Who can write gjoa-dev/ | Who can activate dev mode |
 |---|---|---|
-| `~/code/skiff/engine/obj-*/dist/bin/` (dev build) | the dev | the dev (intentional) |
-| `/usr/lib/skiff/` (system install) | root | root |
-| `~/.local/lib/skiff/` (per-user install) | the user | the user |
+| `~/code/gjoa/engine/obj-*/dist/bin/` (dev build) | the dev | the dev (intentional) |
+| `/usr/lib/gjoa/` (system install) | root | root |
+| `~/.local/lib/gjoa/` (per-user install) | the user | the user |
 
 End users on a system install **cannot** accidentally activate dev mode
 without escalation. End users on a per-user install can — same as they
-can edit `~/.local/lib/skiff/` files in general (which can already
+can edit `~/.local/lib/gjoa/` files in general (which can already
 modify the binary itself).
 
 ### Hardening for release builds
 
 Currently the dev-mode code path is always present. For shipped release
-binaries, defense-in-depth says compile it out entirely — no `skiff-dev/`
+binaries, defense-in-depth says compile it out entirely — no `gjoa-dev/`
 check, no script-from-disk loading, even if someone created the directory.
 
-Open issue: add `MOZ_SKIFF_DEV_LOADER` preprocessor define + `#ifdef`
+Open issue: add `MOZ_GJOA_DEV_LOADER` preprocessor define + `#ifdef`
 around `devModeDir()` and the dev-mode branch of `loadIntoChromeWindow()`.
-Release builds compile with `MOZ_SKIFF_DEV_LOADER=0`, dev builds default
+Release builds compile with `MOZ_GJOA_DEV_LOADER=0`, dev builds default
 to `=1`. Linear: TBD.
 
 ### What's NOT a concern
@@ -102,7 +102,7 @@ to `=1`. Linear: TBD.
   `tools/prep/patches.ts`. Re-applied on every `bun run import`. Auditable
   in `patches/`.
 - **Firefox built-in autoconfig pref** (`general.config.filename`) — we no
-  longer set it. Skiff doesn't ship `defaults/pref/config-prefs.js` with
+  longer set it. Gjoa doesn't ship `defaults/pref/config-prefs.js` with
   autoconfig overrides. The pref is not the loader's mechanism anymore.
 - **Hash-pinning of chrome scripts** — unnecessary for the same reason
   hash-pinning of native browser code (`libxul.so` etc.) is unnecessary:
@@ -112,10 +112,10 @@ to `=1`. Linear: TBD.
 
 ## TODOs
 
-- [ ] Production path: enumerate `chrome://skiff/content/scripts/` and load
+- [ ] Production path: enumerate `chrome://gjoa/content/scripts/` and load
       from there in non-dev-mode. Requires baking bundles into omni.ja via
       jar.mn. Until then, production builds have no chrome JS.
-- [ ] `MOZ_SKIFF_DEV_LOADER` preprocessor define for release-build hardening.
+- [ ] `MOZ_GJOA_DEV_LOADER` preprocessor define for release-build hardening.
 - [ ] Hot-reload (no restart): once the loader knows how to load scripts,
       teach it to *re-load* via `chrome-document-loaded` re-fire on a
       profile-internal trigger (e.g. an env-var-set keyboard shortcut that
@@ -124,17 +124,17 @@ to `=1`. Linear: TBD.
 ## Files
 
 ```
-src/skiff/browser/components/skiff/
-├── SkiffLoader.sys.mjs   the loader itself
-├── jar.mn                chrome registration (chrome://skiff/content/)
-└── moz.build             EXTRA_JS_MODULES.skiff registration
+src/gjoa/browser/components/gjoa/
+├── GjoaLoader.sys.mjs   the loader itself
+├── jar.mn                chrome registration (chrome://gjoa/content/)
+└── moz.build             EXTRA_JS_MODULES.gjoa registration
 
 patches/
-├── 0001-browser-components-mozbuild-include-skiff.patch
-└── 0002-browser-glue-import-skiff-loader.patch
+├── 0001-browser-components-mozbuild-include-gjoa.patch
+└── 0002-browser-glue-import-gjoa-loader.patch
 
 tools/chrome-bundle/
-├── build.ts              bundles src/skiff/chrome/src/* → dist/chrome/JS/*.uc.js
+├── build.ts              bundles src/gjoa/chrome/src/* → dist/chrome/JS/*.uc.js
 ├── dist.ts               build + stage CSS into dist/chrome/
-└── install.ts            symlink dist/chrome → <install>/skiff-dev/
+└── install.ts            symlink dist/chrome → <install>/gjoa-dev/
 ```

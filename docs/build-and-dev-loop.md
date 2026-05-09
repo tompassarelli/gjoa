@@ -1,6 +1,6 @@
-# Building skiff + the dev feedback loop
+# Building gjoa + the dev feedback loop
 
-> "skiff" is the project. "engine/" is its Firefox source tree on disk.
+> "gjoa" is the project. "engine/" is its Firefox source tree on disk.
 > "tools/prep/" is the script that turns mozilla-central into engine/.
 
 This doc answers the questions that come up over and over when you're
@@ -25,13 +25,13 @@ mozilla-central source (~5 GB, 350k files)
         │
         │  `bun run import` (fast — file copies + patch apply)
         ▼
-   engine/ overlaid with skiff source
+   engine/ overlaid with gjoa source
         │
         │  ./mach configure (~30 sec)
         │  ./mach build     (cold: 30-90 min, warm-incremental: seconds-minutes)
         ▼
    engine/obj-x86_64-pc-linux-gnu/
-   ├── dist/bin/skiff      ← the launcher binary (~50 KB stub)
+   ├── dist/bin/gjoa      ← the launcher binary (~50 KB stub)
    ├── dist/bin/libxul.so    ← the engine (~250 MB compiled C++ + Rust)
    └── dist/bin/omni.ja      ← the JS/CSS/XHTML zip (~10 MB)
 ```
@@ -167,9 +167,9 @@ when:
 
 Builds (incrementally) and launches the binary with a fresh-ish
 profile. Mostly useful as a smoke test. For real dev work, run the
-binary directly: `$MOZ_OBJDIR/dist/bin/skiff`.
+binary directly: `$MOZ_OBJDIR/dist/bin/gjoa`.
 
-### `nix build .#skiff`
+### `nix build .#gjoa`
 
 The nuclear option. Runs the entire build inside a Nix sandbox using
 the toolchain from `flake.nix`. Reproducible, hermetic, slow. Each
@@ -188,10 +188,10 @@ invocation is a full cold build because Nix derivations are atomic
 
 ```bash
 nix develop                              # one-time per shell — sets PATH/env
-# edit src/skiff/foo.mjs ...
+# edit src/gjoa/foo.mjs ...
 bun run import                           # ~10 sec, copies overlays into engine/
 cd engine && ./mach build faster         # ~30 sec, re-zips omni.ja
-$MOZ_OBJDIR/dist/bin/skiff             # launch
+$MOZ_OBJDIR/dist/bin/gjoa             # launch
 ```
 
 About 60 seconds per iteration. Most of that is the manual restart of
@@ -202,7 +202,7 @@ Firefox to pick up the new omni.ja.
 ```bash
 # edit engine/foo/bar.cpp ...
 cd engine && ./mach build                # ~1-15 min depending on blast radius
-$MOZ_OBJDIR/dist/bin/skiff
+$MOZ_OBJDIR/dist/bin/gjoa
 ```
 
 For tight C++ iteration, get familiar with `./mach build path/to/dir` to
@@ -220,8 +220,8 @@ cd engine && ./mach configure            # re-probe toolchain
 
 ```bash
 bun run init                             # download + import (~10 min)
-nix build .#skiff --impure               # 30-45 min cold compile (dev variant)
-./result/bin/skiff                       # launch
+nix build .#gjoa --impure               # 30-45 min cold compile (dev variant)
+./result/bin/gjoa                       # launch
 ```
 
 `bun run init` handles tarball download + SHA256 verification + extract +
@@ -265,14 +265,14 @@ minutes. Benefit: ~5-10% smaller and faster binary.
 ### Why we have two flake variants
 
 ```bash
-nix build .#skiff          # DEV  — no PGO, no LTO — ~30-45 min cold
-nix build .#skiff-release  # RELEASE — full PGO + LTO — ~60-90 min cold
+nix build .#gjoa          # DEV  — no PGO, no LTO — ~30-45 min cold
+nix build .#gjoa-release  # RELEASE — full PGO + LTO — ~60-90 min cold
 ```
 
 PGO + LTO are essential for a shipped browser (no one wants to give up
 10-20% performance vs upstream Firefox). They're useless during
 development — the dev iteration cost is much higher than the runtime
-cost. So the default `nix build .#skiff` is the dev variant; the
+cost. So the default `nix build .#gjoa` is the dev variant; the
 release variant is what we use when cutting an actual distribution
 artifact.
 
@@ -286,16 +286,16 @@ For cases where even 30 seconds is too slow, there's the **runtime
 injection escape hatch**: drop a `.uc.js` or `.css` into a profile's
 `chrome/` directory, restart Firefox, and the changes load via the
 old fx-autoconfig pattern. This was the entire architecture of pre-fork
-skiff (lives in `archive/`). It's still useful for prototyping in
+gjoa (lives in `archive/`). It's still useful for prototyping in
 the fork:
 
 ```bash
-# In a running skiff profile:
+# In a running gjoa profile:
 ~/.mozilla/firefox/<profile>/chrome/JS/my-experiment.uc.js   # write code
 # Restart Firefox → script loads via fx-autoconfig
 ```
 
-When the experiment stabilizes, port it into `src/skiff/` as a proper
+When the experiment stabilizes, port it into `src/gjoa/` as a proper
 source-tree file and rebuild via `./mach build faster`.
 
 ---
@@ -320,13 +320,13 @@ error and fix the source.
 
 The sandbox throws away all work. Re-running starts over. If it's a
 toolchain mismatch, fix `flake.nix` and re-run. If it's a source
-issue, fix in `src/skiff/`, `bun run import`, then re-run nix build.
+issue, fix in `src/gjoa/`, `bun run import`, then re-run nix build.
 
 ### "MissingVCSTool: git not found"
 
 Surfer creates `engine/.git/`. Mach detects it and tries to invoke
 `git`. The fix is in `flake.nix`: `extraNativeBuildInputs = [ pkgs.git ];`
-in the `mkSkiff` derivation. Already wired.
+in the `mkGjoa` derivation. Already wired.
 
 ### `engine/mozconfig` has stale flags
 

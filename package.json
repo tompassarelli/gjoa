@@ -1,9 +1,9 @@
 {
-  "name": "skiff",
+  "name": "gjoa",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Skiff — a Firefox fork.",
+  "description": "Gjoa — a Firefox fork.",
   "scripts": {
     "init": "bun run download && bun run import",
     "download": "bun tools/prep/cli.ts download",

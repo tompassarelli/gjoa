@@ -2,7 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, extname, join, relative } from "node:path";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { $ } from "bun";
-import { loadConfig, type SkiffConfig } from "./config";
+import { loadConfig, type GjoaConfig } from "./config";
 import {
   BRANDING_SRC,
   ENGINE_BRANDING_DIR,
@@ -31,7 +31,7 @@ function isTextFile(path: string): boolean {
 // License"), URLs (mozilla.org/MPL/2.0), file paths (firefox-branding.js),
 // and generic comments. Only swap brand strings inside specific structured
 // patterns we recognize.
-function substitutions(cfg: SkiffConfig): Array<[RegExp, string]> {
+function substitutions(cfg: GjoaConfig): Array<[RegExp, string]> {
   const b = cfg.branding;
   const u = cfg.urls;
 
@@ -123,7 +123,7 @@ function substitutions(cfg: SkiffConfig): Array<[RegExp, string]> {
   ];
 }
 
-function applySubstitutions(text: string, cfg: SkiffConfig): string {
+function applySubstitutions(text: string, cfg: GjoaConfig): string {
   let out = text;
   for (const [re, replacement] of substitutions(cfg)) {
     out = out.replace(re, replacement);
@@ -182,7 +182,7 @@ export async function branding(): Promise<void> {
   }
   log.info(`copied ${textCount} text + ${binaryCount} binary files from unofficial template`);
 
-  // 2. Overlay our own logo PNGs from configs/branding/skiff/. Mozilla's
+  // 2. Overlay our own logo PNGs from configs/branding/gjoa/. Mozilla's
   //    convention: defaultNN.png at the branding root for sizes the desktop
   //    integration needs (16/22/24/32/48/64/128/256/512). We expect logoNN.png
   //    in our source dir at matching sizes.
@@ -200,7 +200,7 @@ export async function branding(): Promise<void> {
   }
   log.info(`installed ${iconCount} desktop icons`);
 
-  // 3. Overlay our content/ directory wholesale onto engine/.../skiff/content/.
+  // 3. Overlay our content/ directory wholesale onto engine/.../gjoa/content/.
   //    Replaces the Firefox-logo PNGs/SVGs that copied through from the
   //    unofficial template (about-logo*, about-wordmark, etc.) with ours.
   const ourContent = join(BRANDING_SRC, "content");

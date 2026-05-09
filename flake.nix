@@ -1,5 +1,5 @@
 {
-  description = "Skiff — a Firefox fork built via nixpkgs's buildMozillaMach";
+  description = "Gjoa — a Firefox fork built via nixpkgs's buildMozillaMach";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -18,13 +18,13 @@
         # firefox-unwrapped.
         #
         # We feed it our customized source: tools/prep/ downloads
-        # mozilla-central to ./engine/ then overlays src/skiff/, branding,
+        # mozilla-central to ./engine/ then overlays src/gjoa/, branding,
         # patches. Nix imports ./engine/ as the derivation source.
         #
         # TWO BUILD VARIANTS:
-        #   skiff         = dev quality (no PGO, no LTO, no crashreporter)
-        #                   what `nix build .#skiff` produces — fast iteration
-        #   skiff-release = release quality (full PGO + LTO + everything)
+        #   gjoa         = dev quality (no PGO, no LTO, no crashreporter)
+        #                   what `nix build .#gjoa` produces — fast iteration
+        #   gjoa-release = release quality (full PGO + LTO + everything)
         #                   what we ship — same correctness, longer build,
         #                   ~5-15% faster runtime. Use only for distribution.
         #
@@ -33,15 +33,15 @@
         #   2. callPackage args (pgoSupport, ltoSupport, crashreporterSupport, ...)
         #      → set as defaults inside, override via .override
         # The dance: build with user args, then .override the feature flags.
-        mkSkiff = { pgoSupport, ltoSupport, crashreporterSupport, suffix ? "" }:
+        mkGjoa = { pgoSupport, ltoSupport, crashreporterSupport, suffix ? "" }:
           (pkgs.buildMozillaMach {
-            pname = "skiff${suffix}";
+            pname = "gjoa${suffix}";
             version = "150.0";
-            applicationName = "Skiff";
-            binaryName = "skiff";
+            applicationName = "Gjoa";
+            binaryName = "gjoa";
 
             # Prepared source. Must run `bun run init` (downloads mozilla-central +
-            # applies overlays) before `nix build .#skiff`.
+            # applies overlays) before `nix build .#gjoa`.
             #
             # Reference engine/ as an absolute path because it's gitignored
             # (5GB of mozilla-central source — too big to git-track). Pure
@@ -50,8 +50,8 @@
             # without --impure, we'd commit a tarball of the prepared source
             # OR build engine/ as its own Nix derivation. Out of scope today.
             src = builtins.path {
-              name = "skiff-source";
-              path = "/home/tom/code/skiff/engine";
+              name = "gjoa-source";
+              path = "/home/tom/code/gjoa/engine";
             };
 
             # buildMozillaMach defaults to extracting a tarball. Our src is
@@ -66,15 +66,15 @@
               runHook postUnpack
             '';
 
-            # Branding lives at browser/branding/skiff/ inside the source
+            # Branding lives at browser/branding/gjoa/ inside the source
             # (placed there by the prep tool). buildMozillaMach picks up
             # `branding` and translates to --with-branding= and friends.
-            branding = "browser/branding/skiff";
+            branding = "browser/branding/gjoa";
 
             extraConfigureFlags = [
-              "--with-distribution-id=org.skiff"
-              "--with-app-name=skiff"
-              "--with-app-basename=Skiff"
+              "--with-distribution-id=org.gjoa"
+              "--with-app-name=gjoa"
+              "--with-app-basename=Gjoa"
             ];
 
             # Prep tool creates engine/.git/ for change tracking. mach
@@ -83,25 +83,25 @@
             extraNativeBuildInputs = [ pkgs.git ];
 
             meta = with pkgs.lib; {
-              description = "Skiff — a Firefox fork";
-              homepage = "https://github.com/tompassarelli/skiff";
+              description = "Gjoa — a Firefox fork";
+              homepage = "https://github.com/tompassarelli/gjoa";
               license = licenses.mpl20;
               platforms = platforms.linux;
-              mainProgram = "skiff";
+              mainProgram = "gjoa";
             };
           }).override {
             inherit pgoSupport ltoSupport crashreporterSupport;
           };
 
         # Dev variant — what you build day-to-day. Skips PGO+LTO.
-        skiff-dev = mkSkiff {
+        gjoa-dev = mkGjoa {
           pgoSupport = false;
           ltoSupport = false;
           crashreporterSupport = false;
         };
 
         # Release variant — full PGO + LTO. What we ship.
-        skiff-release = mkSkiff {
+        gjoa-release = mkGjoa {
           pgoSupport = true;
           ltoSupport = true;
           crashreporterSupport = false;  # would need dump_syms; not yet wired
@@ -109,11 +109,11 @@
         };
       in
       {
-        # Defaults: `nix build .#skiff` is the FAST dev variant.
-        # Use `.#skiff-release` when actually shipping.
-        packages.default = skiff-dev;
-        packages.skiff = skiff-dev;
-        packages.skiff-release = skiff-release;
+        # Defaults: `nix build .#gjoa` is the FAST dev variant.
+        # Use `.#gjoa-release` when actually shipping.
+        packages.default = gjoa-dev;
+        packages.gjoa = gjoa-dev;
+        packages.gjoa-release = gjoa-release;
 
         # ===================================================================
         # Dev shell — provides EVERYTHING `mach build faster` needs to run
@@ -121,7 +121,7 @@
         # The same toolchain buildMozillaMach uses, plus the env vars mach
         # expects (LIBCLANG_PATH, AS unset, etc).
         #
-        # Use this for daily JS/CSS iteration. Use `nix build .#skiff`
+        # Use this for daily JS/CSS iteration. Use `nix build .#gjoa`
         # only for cold-start bootstrap, Firefox version bumps, or release.
         # ===================================================================
         devShells.default = pkgs.mkShell {
@@ -225,18 +225,18 @@
 
             cat <<'EOF'
 
-skiff dev shell — mach is on PATH, env wired for direct iteration.
+gjoa dev shell — mach is on PATH, env wired for direct iteration.
 
   COLD START (one-time, or when bumping Firefox version):
     bun run init                 # downloads mozilla-central + applies overlays
-    nix build .#skiff --impure   # produces ./result/bin/skiff
+    nix build .#gjoa --impure   # produces ./result/bin/gjoa
 
   DAILY DEV LOOP (sub-30-sec for JS/CSS, few min for C++):
     cd engine
     ./mach build faster          # only re-zips omni.ja
-    $MOZ_OBJDIR/dist/bin/skiff   # run the built binary
+    $MOZ_OBJDIR/dist/bin/gjoa   # run the built binary
 
-  AFTER EDITING src/skiff/ OR configs/:
+  AFTER EDITING src/gjoa/ OR configs/:
     bun run import               # re-applies overlays + branding
     cd engine && ./mach build faster
 
@@ -245,7 +245,7 @@ skiff dev shell — mach is on PATH, env wired for direct iteration.
 
   NIX BUILD WHEN:
     - First time on this machine (or after `git clean`)
-    - Bumping Firefox version (skiff.json change)
+    - Bumping Firefox version (gjoa.json change)
     - Producing a release artifact for distribution
     - Toolchain change in flake.nix
 EOF

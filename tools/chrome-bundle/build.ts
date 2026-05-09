@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Bundle src/skiff/chrome/src/{hello,drawer,tabs}/index.ts → IIFE .uc.js
+// Bundle src/gjoa/chrome/src/{hello,drawer,tabs}/index.ts → IIFE .uc.js
 // files in dist/chrome/JS/, prepending each with its UserScript banner.
 //
 // Mechanically lifted from archive/build.ts (palefox v0.43.0).

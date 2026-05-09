@@ -4,8 +4,8 @@ import { $ } from "bun";
 import { ENGINE_DIR, SRC_DIR } from "./paths";
 import { log } from "./log";
 
-// Apply src/skiff/ overlays onto engine/. Mirrors the directory structure:
-// src/skiff/browser/components/foo/X.mjs → engine/browser/components/foo/X.mjs.
+// Apply src/gjoa/ overlays onto engine/. Mirrors the directory structure:
+// src/gjoa/browser/components/foo/X.mjs → engine/browser/components/foo/X.mjs.
 // Existing engine/ files are overwritten. New files are added.
 //
 // We don't currently delete files from engine/ that aren't in src/ — Firefox
@@ -14,19 +14,19 @@ import { log } from "./log";
 // scoped to specific subtrees.
 export async function overlay(): Promise<void> {
   if (!existsSync(SRC_DIR)) {
-    log.info(`no src/skiff/ overlays present, skipping`);
+    log.info(`no src/gjoa/ overlays present, skipping`);
     return;
   }
 
   const entries = readdirSync(SRC_DIR);
   if (entries.length === 0) {
-    log.info(`src/skiff/ is empty, skipping overlay`);
+    log.info(`src/gjoa/ is empty, skipping overlay`);
     return;
   }
 
-  log.step(`applying src/skiff/ overlays`);
+  log.step(`applying src/gjoa/ overlays`);
   // -a preserves perms/timestamps; trailing slash on source so contents merge
-  // into engine/ rather than creating engine/skiff/.
+  // into engine/ rather than creating engine/gjoa/.
   await $`cp -a ${SRC_DIR}/. ${ENGINE_DIR}/`.quiet();
 
   const fileCount = countFiles(SRC_DIR);

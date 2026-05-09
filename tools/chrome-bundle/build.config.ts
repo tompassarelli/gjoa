@@ -3,7 +3,7 @@
 // UserScript header banner.
 //
 // Mechanically lifted from archive/build.config.ts (palefox v0.43.0).
-// Names kept as `palefox-*` for now — the rename to `skiff-*` is a
+// Names kept as `palefox-*` for now — the rename to `gjoa-*` is a
 // post-Batch-1 stretch goal (audit said: don't redesign first).
 
 export type Entry = {
@@ -15,7 +15,7 @@ export type Entry = {
   banner: string;
 };
 
-const SRC = "src/skiff/chrome/src";
+const SRC = "src/gjoa/chrome/src";
 
 export const entries: Entry[] = [
   {

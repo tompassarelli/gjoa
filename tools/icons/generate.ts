@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
-// Render assets/skiff.svg → all the PNG sizes Firefox/skiff needs.
-// Outputs go into configs/branding/skiff/ and configs/branding/skiff/content/.
-// Run after editing assets/skiff.svg, then `bun run import` to push to engine/.
+// Render assets/gjoa.svg → all the PNG sizes Firefox/gjoa needs.
+// Outputs go into configs/branding/gjoa/ and configs/branding/gjoa/content/.
+// Run after editing assets/gjoa.svg, then `bun run import` to push to engine/.
 
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -10,14 +10,14 @@ import { $ } from "bun";
 import { BRANDING_SRC, REPO_ROOT } from "../prep/paths";
 import { log } from "../prep/log";
 
-const SOURCE_SVG = join(REPO_ROOT, "assets", "skiff.svg");
+const SOURCE_SVG = join(REPO_ROOT, "assets", "gjoa.svg");
 const CONTENT_DIR = join(BRANDING_SRC, "content");
 
 // Desktop integration sizes (default<N>.png in the install tree). Mozilla
 // expects these exact sizes — see how unofficial branding ships them.
 const DESKTOP_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512];
 
-// Larger logo sizes Skiff carries beyond what unofficial branding does.
+// Larger logo sizes Gjoa carries beyond what unofficial branding does.
 // Used by macOS bundles + as upscale source for hi-DPI surfaces.
 const EXTRA_LOGO_SIZES = [1024];
 

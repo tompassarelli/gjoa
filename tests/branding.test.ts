@@ -5,7 +5,7 @@
 // generated branding tree. This is the test that would have caught the
 // surfer leak we discovered.
 //
-// Runs only if `engine/browser/branding/skiff/` exists — i.e. only after
+// Runs only if `engine/browser/branding/gjoa/` exists — i.e. only after
 // `bun run init`. CI can either run init first OR skip these tests in
 // environments without network/disk for a full mozilla-central download.
 
@@ -46,7 +46,7 @@ describe.skipIf(!HAS_ENGINE)("branding regression", () => {
     expect(hits.map((h) => h.path)).toEqual([]);
   });
 
-  test("no nightly.mozilla.org references (we replaced these in skiff.json)", () => {
+  test("no nightly.mozilla.org references (we replaced these in gjoa.json)", () => {
     const hits = allText.filter(({ text }) => text.includes("nightly.mozilla.org"));
     expect(hits.map((h) => h.path)).toEqual([]);
   });
@@ -67,13 +67,13 @@ describe.skipIf(!HAS_ENGINE)("branding regression", () => {
     );
   });
 
-  test("update URLs point to skiff.json's configured target", () => {
+  test("update URLs point to gjoa.json's configured target", () => {
     const branding = allText.find((f) => f.path.endsWith("firefox-branding.js"));
     expect(branding).toBeDefined();
     expect(branding!.text).toContain(cfg.urls.updateManual);
   });
 
-  test("configure.sh display name matches skiff.json", () => {
+  test("configure.sh display name matches gjoa.json", () => {
     const cfgsh = allText.find((f) => f.path.endsWith("configure.sh"));
     expect(cfgsh).toBeDefined();
     expect(cfgsh!.text).toContain(`MOZ_APP_DISPLAYNAME=${cfg.branding.displayName}`);

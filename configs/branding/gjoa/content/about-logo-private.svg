@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Skiff logo — Lucide sailboat icon (https://lucide.dev/icons/sailboat),
+  Gjoa logo — Lucide sailboat icon (https://lucide.dev/icons/sailboat),
   MIT licensed. Single-color line art, designed for UI use at 16-24px.
-  Stroke is currentColor in source; rendered as #1e1e2e (skiff dark slate)
+  Stroke is currentColor in source; rendered as #1e1e2e (gjoa dark slate)
   in PNG export via tools/icons/generate.ts.
 -->
 <svg

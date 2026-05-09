@@ -1,0 +1,38 @@
+{
+  "$schema": "./tools/prep/schema.json",
+  "name": "Gjoa",
+  "binaryName": "gjoa",
+  "appId": "gjoa",
+  "vendor": "tompassarelli",
+  "displayVersion": "0.1.0",
+  "license": "MPL-2.0",
+  "github": "tompassarelli/gjoa",
+
+  "firefox": {
+    "version": "150.0",
+    "candidate": "150.0",
+    "candidateBuild": 1
+  },
+
+  "branding": {
+    "shortName": "Gjoa",
+    "shorterName": "Gjoa",
+    "fullName": "Gjoa",
+    "productName": "Gjoa",
+    "vendorName": "tompassarelli",
+    "backgroundColor": "#1e1e2e",
+    "displayName": "Gjoa"
+  },
+
+  "urls": {
+    "homepageOverride": "",
+    "welcome": "",
+    "welcomeAdditional": "",
+    "updateManual": "https://github.com/tompassarelli/gjoa/releases",
+    "updateDetails": "https://github.com/tompassarelli/gjoa/releases",
+    "releaseNotes": "https://github.com/tompassarelli/gjoa/releases",
+    "releaseNotesAboutDialog": "https://github.com/tompassarelli/gjoa/releases",
+    "releaseNotesPrompt": "https://github.com/tompassarelli/gjoa/releases",
+    "updateHostname": "updates.gjoa.invalid"
+  }
+}

@@ -1,0 +1,17 @@
+Add the new browser/components/gjoa/ subdir to the build. Single-line
+DIRS entry, alphabetical placement between "genai" and "ipprotection".
+
+Gjoa component owns chrome:// registration and the chrome JS/CSS
+loader (GjoaLoader.sys.mjs) that replaces the fx-autoconfig pattern.
+
+diff --git a/browser/components/moz.build b/browser/components/moz.build
+--- a/browser/components/moz.build
++++ b/browser/components/moz.build
+@@ -43,6 +43,7 @@ DIRS += [
+     "extensions",
+     "firefoxview",
+     "genai",
++    "gjoa",
+     "ipprotection",
+     "messagepreview",
+     "migration",

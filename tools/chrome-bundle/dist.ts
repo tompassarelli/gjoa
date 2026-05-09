@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 // Build the chrome distribution at dist/. Composes:
 //
-//   1. bundle JS:   src/skiff/chrome/src/{hello,drawer,tabs}/index.ts
+//   1. bundle JS:   src/gjoa/chrome/src/{hello,drawer,tabs}/index.ts
 //                     → dist/chrome/JS/*.uc.js
-//   2. stage CSS:   src/skiff/chrome/css/*    → dist/chrome/CSS/
+//   2. stage CSS:   src/gjoa/chrome/css/*    → dist/chrome/CSS/
 //
 // Output is consumed by `bun run chrome:install` which symlinks
-// dist/chrome/ into <install_root>/skiff-dev/. Skiff's native loader
-// (browser/components/skiff/SkiffLoader.sys.mjs) reads from there at
+// dist/chrome/ into <install_root>/gjoa-dev/. Gjoa's native loader
+// (browser/components/gjoa/GjoaLoader.sys.mjs) reads from there at
 // startup when the dev-mode directory is present.
 //
 // No fx-autoconfig step. The loader is baked into omni.ja by the one-time
@@ -18,7 +18,7 @@ import { mkdir, copyFile, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const REPO_ROOT = resolve(import.meta.dir, "..", "..");
-const SRC_CHROME = join(REPO_ROOT, "src", "skiff", "chrome");
+const SRC_CHROME = join(REPO_ROOT, "src", "gjoa", "chrome");
 const DIST = join(REPO_ROOT, "dist");
 const DIST_CHROME = join(DIST, "chrome");
 

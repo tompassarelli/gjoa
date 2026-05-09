@@ -6,11 +6,11 @@ import { log } from "./log";
 
 // Apply *.patch files from patches/ in alphabetical order. Idempotency:
 // engine/ has its own .git initialized inside it (see ensureEngineGit), and
-// we record applied patches in engine/.skiff-applied-patches so re-runs skip.
+// we record applied patches in engine/.gjoa-applied-patches so re-runs skip.
 //
 // We use git apply rather than git am because mozilla-central's tree isn't
 // commit-aware in the way we'd need — we just want a plain patch application.
-const APPLIED_LOG = ".skiff-applied-patches";
+const APPLIED_LOG = ".gjoa-applied-patches";
 
 async function ensureEngineGit(): Promise<void> {
   if (existsSync(join(ENGINE_DIR, ".git"))) return;
@@ -18,7 +18,7 @@ async function ensureEngineGit(): Promise<void> {
   // mach falls back, but having the repo lets us use git apply cleanly.
   await $`git init -q`.cwd(ENGINE_DIR);
   await $`git add -A`.cwd(ENGINE_DIR).quiet();
-  await $`git -c user.email=prep@skiff -c user.name=prep commit -q -m "vanilla mozilla-central"`.cwd(ENGINE_DIR);
+  await $`git -c user.email=prep@gjoa -c user.name=prep commit -q -m "vanilla mozilla-central"`.cwd(ENGINE_DIR);
 }
 
 async function readApplied(): Promise<Set<string>> {

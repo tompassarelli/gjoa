@@ -7,16 +7,16 @@ import { ENGINE_DIR } from "./paths";
 import { log } from "./log";
 
 const USAGE = `
-skiff prep — Firefox source preparation pipeline
+gjoa prep — Firefox source preparation pipeline
 
 Commands:
   download    Fetch + verify + extract mozilla-central into engine/
-  import      Apply src/skiff/ overlays, patches/, and branding to engine/
+  import      Apply src/gjoa/ overlays, patches/, and branding to engine/
   clean       Remove engine/ (forces fresh download next time)
   help        Show this message
 
 Cold start: \`bun run init\` (= download + import).
-After editing src/skiff/ or skiff.json: \`bun run import\`.
+After editing src/gjoa/ or gjoa.json: \`bun run import\`.
 `.trim();
 
 async function main(): Promise<void> {

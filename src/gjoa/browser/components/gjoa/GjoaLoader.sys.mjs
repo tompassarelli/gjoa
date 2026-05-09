@@ -1,4 +1,4 @@
-// Skiff chrome JS/CSS loader.
+// Gjoa chrome JS/CSS loader.
 //
 // Replaces fx-autoconfig with a Firefox-native loader that lives inside
 // omni.ja (install-root-owned) instead of bouncing through profile-side
@@ -8,14 +8,14 @@
 // SECURITY MODEL
 // =============================================================================
 //
-// PRODUCTION (no <install_root>/skiff-dev/ directory present):
+// PRODUCTION (no <install_root>/gjoa-dev/ directory present):
 //   Scripts and styles load from omni.ja via chrome:// URLs. Same trust
 //   boundary as Firefox itself — if you trust the install, you trust the
 //   chrome JS. No user-writable script directory exists; no hash-pinning
 //   needed because there's nothing to tamper with.
 //
-// DEV MODE (<install_root>/skiff-dev/ directory present):
-//   The loader reads .uc.js / .uc.css files from <install_root>/skiff-dev/
+// DEV MODE (<install_root>/gjoa-dev/ directory present):
+//   The loader reads .uc.js / .uc.css files from <install_root>/gjoa-dev/
 //   directly at startup. Used for sub-second iteration on chrome JS without
 //   re-running mach build. Trust boundary: anyone who can write to the
 //   install root (typically root, or the dev who owns the build tree) can
@@ -25,10 +25,10 @@
 //
 // PRODUCTION HARDENING (deferred — see Stretch goal):
 //   For shipped release builds, dev mode should be compiled out via a
-//   build flag (e.g. MOZ_SKIFF_DEV_LOADER=0). Even though the dev path
-//   only triggers when <install_root>/skiff-dev/ exists, defense-in-depth
+//   build flag (e.g. MOZ_GJOA_DEV_LOADER=0). Even though the dev path
+//   only triggers when <install_root>/gjoa-dev/ exists, defense-in-depth
 //   says don't compile in code paths your release doesn't need. Open issue:
-//   add MOZ_SKIFF_DEV_LOADER preprocessor define + #ifdef around dev block.
+//   add MOZ_GJOA_DEV_LOADER preprocessor define + #ifdef around dev block.
 //
 // =============================================================================
 // IMPLEMENTATION
@@ -59,12 +59,12 @@ let observerRegistered = false;
 
 /**
  * Returns the dev-mode source directory if it exists, else null.
- * Convention: <install_root>/skiff-dev/{JS,CSS}/*.uc.{js,css}
+ * Convention: <install_root>/gjoa-dev/{JS,CSS}/*.uc.{js,css}
  */
 function devModeDir() {
   // GreD = Gecko runtime directory = the install root containing the binary.
   const dir = Services.dirsvc.get("GreD", Ci.nsIFile);
-  dir.append("skiff-dev");
+  dir.append("gjoa-dev");
   if (dir.exists() && dir.isDirectory()) return dir;
   return null;
 }
@@ -91,9 +91,9 @@ function loadScriptInto(window, file) {
       target: window,
       ignoreCache: true,
     });
-    console.log(`skiff-loader: loaded script ${file.leafName}`);
+    console.log(`gjoa-loader: loaded script ${file.leafName}`);
   } catch (e) {
-    console.error(`skiff-loader: script ${file.leafName} threw at load time`, e);
+    console.error(`gjoa-loader: script ${file.leafName} threw at load time`, e);
   }
 }
 
@@ -104,9 +104,9 @@ function registerStyleSheet(file) {
     const uri = Services.io.newURI(url);
     STYLE_SHEET_SERVICE.loadAndRegisterSheet(uri, STYLE_SHEET_SERVICE.AGENT_SHEET);
     loadedSheets.add(url);
-    console.log(`skiff-loader: registered stylesheet ${file.leafName}`);
+    console.log(`gjoa-loader: registered stylesheet ${file.leafName}`);
   } catch (e) {
-    console.error(`skiff-loader: stylesheet ${file.leafName} threw at register time`, e);
+    console.error(`gjoa-loader: stylesheet ${file.leafName} threw at register time`, e);
   }
 }
 
@@ -114,7 +114,7 @@ function loadIntoChromeWindow(window) {
   const dev = devModeDir();
   if (!dev) {
     // Production: nothing yet. Future commit will load from
-    // chrome://skiff/content/scripts/*.uc.js and chrome://skiff/content/styles/*.uc.css.
+    // chrome://gjoa/content/scripts/*.uc.js and chrome://gjoa/content/styles/*.uc.css.
     // For now, no-op — production builds simply ship without the chrome layer.
     return;
   }
@@ -154,16 +154,16 @@ const observer = {
   },
 };
 
-export const SkiffLoader = {
+export const GjoaLoader = {
   start() {
     if (observerRegistered) return;
     observerRegistered = true;
     Services.obs.addObserver(observer, "chrome-document-loaded");
     const dev = devModeDir();
     if (dev) {
-      console.log(`skiff-loader: dev mode active — sourcing chrome from ${dev.path}`);
+      console.log(`gjoa-loader: dev mode active — sourcing chrome from ${dev.path}`);
     } else {
-      console.log("skiff-loader: production mode (no skiff-dev/ override; chrome scripts not loaded)");
+      console.log("gjoa-loader: production mode (no gjoa-dev/ override; chrome scripts not loaded)");
     }
   },
 };
