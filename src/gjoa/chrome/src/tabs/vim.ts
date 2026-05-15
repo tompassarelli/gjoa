@@ -1291,15 +1291,40 @@ export function makeVim(deps: VimDeps): VimAPI {
     if (e.key !== "J" && e.key !== "K") selectionAnchor = null;
 
     // --- Ctrl+W pane chords ---
+    // Ctrl+W must fire its Firefox default (close-tab) immediately when not
+    // followed by a chord completion key (h/l/w). The old behavior unconditionally
+    // armed pendingCtrlW and ate the keystroke even if no follow-up came —
+    // diverging from webpage-focus behavior, where Ctrl+W just closes the tab.
+    //
+    // New behavior:
+    //   - On Ctrl+W: arm the chord AND let the next keystroke decide.
+    //     If it's a chord completion (h/l/w) → paneSwitch, consume it.
+    //     Otherwise → fall back to default (close current tab) and let the
+    //     misfit key pass through normally.
+    //   - If chord times out with no follow-up → also fire the default
+    //     close-tab. The keystroke isn't lost.
     if (pendingCtrlW) {
       pendingCtrlW = false;
       clearTimeout(chordTimer);
-      paneSwitch(e.key);
-      return true;
+      if (
+        e.key === "h" || e.key === "H" ||
+        e.key === "l" || e.key === "L" ||
+        e.key === "w" || e.key === "W"
+      ) {
+        paneSwitch(e.key);
+        return true;
+      }
+      if (gBrowser.selectedTab) gBrowser.removeTab(gBrowser.selectedTab);
+      return false;
     }
     if (e.ctrlKey && (e.key === "w" || e.code === "KeyW")) {
       pendingCtrlW = true;
-      chordTimer = setTimeout(() => { pendingCtrlW = false; }, CHORD_TIMEOUT);
+      chordTimer = setTimeout(() => {
+        if (pendingCtrlW) {
+          pendingCtrlW = false;
+          if (gBrowser.selectedTab) gBrowser.removeTab(gBrowser.selectedTab);
+        }
+      }, CHORD_TIMEOUT);
       return true;
     }
 

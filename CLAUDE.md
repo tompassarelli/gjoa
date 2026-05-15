@@ -48,7 +48,36 @@ Before making any change, declare which lane it belongs to:
 Pending Lane 3 changes get tracked here (or in TaskCreate). Empty when no work is pending. User reviews and approves before any rebuild runs.
 
 ```
-[ pending Lane 3 changes — currently empty ]
+LANE 2 — bun run import; and gj build faster (~30s, omni.ja re-zip)
+─────────────────────────────────────────────────────────────────────
+3. patches/0003-default-bookmarks-toolbar-never.patch — default
+   browser.toolbars.bookmarks.visibility to "never" instead of
+   Firefox's "newtab" default. Touches browser/app/profile/firefox.js
+   (omni.ja).
+4. patches/0004-default-menubar-visible.patch — flip menu bar
+   autohide from "true" to "false" so File/Edit/View/… are visible
+   by default. Touches browser/base/content/navigator-toolbox.inc.xhtml
+   (omni.ja).
+5. patches/0005-strip-default-toolbar-buttons.patch — remove
+   fxa-toolbar-menu-button, firefox-view-button, alltabs-button from
+   default placements. Touches
+   browser/components/customizableui/CustomizableUI.sys.mjs (omni.ja).
+6. patches/0006-migrate-existing-profiles-strip-buttons-and-menubar.patch
+   — bumps CustomizableUI kVersion 23 → 24; new migration block
+   strips the three buttons from saved profile placements and clears
+   the persisted menubar `autohide` attribute from xulStore. Carries
+   patches 0004/0005 forward into pre-existing profiles (not just
+   fresh ones).
+
+LANE 3 — nix build .#gjoa --impure   (or full mach build for #2)
+─────────────────────────────────────────────────────────────────────
+1. flake.nix — unpackPhase: `rm -f source/mozconfig` before mach
+   configure (removes --without-wasm-sandboxed-libraries / --with-wasi-sysroot
+   conflict that blocks nix builds). nix-only; mach loop already works.
+2. assets/gjoa.svg — switch icon from Lucide outline to sailboat
+   emoji (⛵). Requires `bun run icons && bun run import` to push new
+   PNGs into engine/.../branding/gjoa/; full build to bake them into
+   default<N>.png install-tree icons.
 ```
 
 When the user says "kick off the build" / "run the full rebuild now" / equivalent: flush the queue into one rebuild covering all queued changes.
@@ -75,11 +104,52 @@ and is no longer developed. Gjoa is the successor.
 - ✅ Repo scaffold (gjoa.json, flake.nix, tools/prep, dir tree)
 - ✅ Build pipeline owned end-to-end (no surfer dependency)
 - ✅ First successful `nix build .#gjoa` — produces working binary
-- ⬜ Bake the hash-pinned loader from palefox's `program/config.template.js`
-     into omni.ja as a JSWindowActor
-- ⬜ Port palefox tabs sidebar to `src/gjoa/browser/components/`
-- ⬜ Port palefox vim keymap
-- ⬜ Distribution + release pipeline + update mechanism
+- ✅ **Native chrome loader** — `src/gjoa/browser/components/gjoa/GjoaLoader.sys.mjs`
+     replaces fx-autoconfig. Production path loads chrome JS/CSS from
+     omni.ja (`chrome://gjoa/content/`); dev path reads
+     `<install_root>/gjoa-dev/{JS,CSS}/` directly for sub-second
+     iteration. Wired via two patches: `0001-` (browser/components/moz.build
+     include) + `0002-` (browser/glue import). Obsoletes the
+     hash-pinned-loader item — omni.ja-baked scripts share Firefox's
+     trust boundary; no user-writable script dir exists in production.
+- ✅ **Chrome bundle pipeline** — `tools/chrome-bundle/build.ts` +
+     `build.config.ts` compile `src/gjoa/chrome/src/{module}/index.ts`
+     IIFE bundles into `dist/chrome/JS/<module>.uc.js`.
+     `tools/chrome-bundle/install.ts` deploys them to `<install_root>/gjoa-dev/`.
+     `bun run chrome:bundle` / `chrome:install` / `chrome:watch` /
+     `chrome:dist` are the user-facing commands.
+- ✅ **Ported palefox TypeScript modules** (src/gjoa/chrome/src/):
+     - `drawer/` (8 modules: banner, compact, drag-overlay, layout,
+       sidebar-button, timing, urlbar, index)
+     - `firefox/` (Firefox-internals abstraction: dom, files, observers,
+       prefs, tabs, window)
+     - `platform/` (state primitives: cross-window-tabs, history,
+       scheduler, tabs-reconciler, window, window-tabs, index)
+     - `tabs/` (18 modules: state, rows, events, picker, content-focus,
+       menu, helpers, history, drag, snapshot, layout, log, constants,
+       types, **vim** (~88KB — vim keymap is part of tabs, not a
+       separate module), index, plus two `.test.ts`). Wired into
+       `tools/chrome-bundle/build.config.ts` as the `tabs/index.ts` entry
+       — output `dist/chrome/JS/palefox-tabs.uc.js`.
+     - `hello/` (smoke-test bundle confirming the loader works)
+     - `types/chrome.d.ts` (Firefox chrome ambient types)
+     - `test/harness.ts` (bun:test infra)
+- ✅ **Palefox CSS lifted** — `src/gjoa/chrome/css/{palefox,palefox-tabs,palefox-which-key}.uc.css`.
+     Names still `palefox-*` per a documented post-Batch-1 stretch
+     decision; gjoa-rename is deferred until the port stabilizes.
+- 🟡 **Runtime verification — not done** in this session. Files are in
+     place, bundle config is wired, but neither (a) `bun run chrome:bundle`
+     producing clean `dist/chrome/JS/*.uc.js` nor (b) the running gjoa
+     binary actually loading them has been confirmed. First sanity check
+     before adding more features.
+- ⬜ **Prefs pipeline** — `prefs/gjoa/` directory exists but is empty;
+     not yet wired into `tools/prep/` (the import phases don't currently
+     apply anything from this dir). Either drop, or scaffold integration
+     so default prefs can be shipped declaratively.
+- ⬜ **Distribution + release pipeline** — `flake.nix` exposes
+     `packages.gjoa-release` (PGO + LTO) but there's no signing,
+     versioning workflow, update channel, or release-cut script. Open
+     design question, not just impl.
 
 ## Repo layout
 

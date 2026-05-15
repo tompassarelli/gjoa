@@ -292,3 +292,64 @@ export function buildGroupContextMenu(deps: GroupMenuDeps): HTMLElement {
   document.getElementById("mainPopupSet")!.appendChild(menu);
   return menu;
 }
+
+// =============================================================================
+// PANEL CONTEXT MENU (empty space)
+// =============================================================================
+
+export type PanelMenuDeps = {
+  readonly createGroupRow: (name: string, level: number) => Row;
+  readonly startRename: (row: Row) => void;
+  readonly setCursor: (row: Row) => void;
+  readonly updateVisibility: () => void;
+  readonly scheduleSave: () => void;
+};
+
+/** Build the panel-empty-space context menu. Operates on no specific row —
+ *  the user right-clicked the spacer / empty area below all tabs. Items
+ *  here are creation actions, not tab/group manipulations. */
+export function buildPanelContextMenu(deps: PanelMenuDeps): HTMLElement {
+  const { createGroupRow, startRename, setCursor, updateVisibility, scheduleSave } = deps;
+
+  const menu = document.createXULElement("menupopup") as HTMLElement;
+  menu.id = "pfx-panel-menu";
+
+  function mi(label: string, handler: () => void): HTMLElement {
+    const item = document.createXULElement("menuitem") as HTMLElement;
+    item.setAttribute("label", label);
+    item.addEventListener("command", handler);
+    return item;
+  }
+  const sep = () => document.createXULElement("menuseparator") as HTMLElement;
+
+  const newGroupItem = mi("New Tab Group", () => {
+    const grp = createGroupRow("New Group", 0);
+    state.panel.insertBefore(grp, state.spacer);
+    setCursor(grp);
+    updateVisibility();
+    scheduleSave();
+    startRename(grp);
+  });
+
+  const newTabItem = mi("New Tab", () => {
+    // BrowserCommands.openTab() is the same call the (+) button uses —
+    // opens about:newtab in the foreground.
+    if (typeof BrowserCommands?.openTab === "function") {
+      BrowserCommands.openTab();
+    } else {
+      gBrowser.addTab("about:newtab", {
+        triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+        inBackground: false,
+      });
+    }
+  });
+
+  const undoCloseItem = mi("Undo Close Tab", () => {
+    if (typeof undoCloseTab === "function") undoCloseTab();
+  });
+
+  menu.append(newTabItem, newGroupItem, sep(), undoCloseItem);
+
+  document.getElementById("mainPopupSet")!.appendChild(menu);
+  return menu;
+}

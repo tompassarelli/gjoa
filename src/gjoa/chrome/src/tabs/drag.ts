@@ -293,9 +293,26 @@ export function makeDrag(deps: DragDeps): DragAPI {
       if (!dragSource || dragSource._tab?.pinned) return;
       // Only handle drops landing directly on the container, not on a child row.
       if (e.target !== container) return;
+
+      // The pinned container has a 12px y-margin and a ::after divider
+      // pseudo-element below the last row. Mouse events in that margin
+      // strip target the container — but the user's intent is "drop
+      // below pinned, onto the top of unpinned", not "drop into pinned".
+      // Reject the drop when the cursor is below the last actual row so
+      // the event falls through to the panel/top-group dragover.
+      const lastRow = container.querySelector<HTMLElement>(".pfx-tab-row:last-of-type") as Row | null;
+      if (lastRow) {
+        const lastRect = lastRow.getBoundingClientRect();
+        const y = (e as MouseEvent).clientY;
+        if (y > lastRect.bottom) {
+          // Below the last pinned row → user is aiming at the unpinned
+          // section. Don't claim the drop here.
+          return;
+        }
+      }
+
       e.preventDefault();
       (e as DragEvent).dataTransfer!.dropEffect = "move";
-      const lastRow = container.querySelector<HTMLElement>(".pfx-tab-row:last-of-type") as Row | null;
       if (lastRow) {
         dropTarget = lastRow;
         dropPosition = "after";
@@ -494,8 +511,18 @@ export function makeDrag(deps: DragDeps): DragAPI {
       return;
     }
 
-    const srcPinned = !!srcRow._tab?.pinned;
-    const tgtPinned = !!tgtRow._tab?.pinned;
+    // Groups don't have a "pinned" attribute — pinned-ness is determined by
+    // which container holds them. A group in state.pinnedContainer is in the
+    // pinned context (and its tabs are pinned); same logic for the source.
+    // Without this:
+    //   - dropping unpinned tab on pinned group → Firefox clamps the
+    //     targetIdx to unpinned range; tab "ends up in pinned tabs"
+    //   - dragging pinned group out → the group's DOM moves but its tabs
+    //     stay pinned (in pinnedContainer), so the moved group looks empty
+    const srcPinned = !!srcRow._tab?.pinned
+      || (!!srcRow._group && srcRow.parentNode === state.pinnedContainer);
+    const tgtPinned = !!tgtRow._tab?.pinned
+      || (!!tgtRow._group && tgtRow.parentNode === state.pinnedContainer);
     const isCrossContainer = srcPinned !== tgtPinned;
 
     log("executeDrop:enter", {
@@ -508,7 +535,18 @@ export function makeDrag(deps: DragDeps): DragAPI {
 
     let movedRows: Row[];
     if (isCrossContainer) {
-      movedRows = srcRow._tab ? [srcRow] : [];
+      // For a tab source, move just the dragged tab (subtree stays put on
+      // the original side). For a group source, move the group + every row
+      // in its subtree — the cross-container pin/unpin loop below will
+      // pin/unpin every tab in movedTabs, keeping group and its members
+      // together across the pinned/unpinned boundary.
+      if (srcRow._tab) {
+        movedRows = [srcRow];
+      } else if (srcRow._group) {
+        movedRows = subtreeRows(srcRow);
+      } else {
+        movedRows = [];
+      }
     } else if (selection.size > 1 && selection.has(srcRow)) {
       movedRows = [...allRows()].filter(r => selection.has(r));
     } else {
@@ -538,8 +576,34 @@ export function makeDrag(deps: DragDeps): DragAPI {
         ? treeData(tgtRow._tab).id
         : treeData(tgtRow._tab).parentId;
     } else if (tgtRow._group) {
-      parentBranch = "group→groupId";
-      newParentForSource = findGroupContextParent(tgtRow);
+      if (position === "child") {
+        // Drop INTO group: tab becomes a member of the group.
+        parentBranch = "group/child→groupId";
+        newParentForSource = findGroupContextParent(tgtRow);
+      } else {
+        // Drop BEFORE/AFTER group: tab is a SIBLING of the group, not a
+        // member of it. Walk back through previous siblings to find the
+        // closest group at strictly lower level — that's what encloses
+        // this group, so tabs at the same level have the same parent.
+        // null when the target group is at the root (level 0).
+        const groupLevel = tgtRow._group?.level || 0;
+        parentBranch = `group/${position}→siblingOfGroup(level=${groupLevel})`;
+        if (groupLevel <= 0) {
+          newParentForSource = null;
+        } else {
+          let prev: Element | null = tgtRow.previousElementSibling;
+          let enclosing: string | null = null;
+          while (prev) {
+            const prevRow = prev as Row;
+            if (prevRow._group && (prevRow._group.level || 0) < groupLevel) {
+              enclosing = prevRow._group.id;
+              break;
+            }
+            prev = prev.previousElementSibling;
+          }
+          newParentForSource = enclosing;
+        }
+      }
     } else {
       parentBranch = "no-tab-no-group→null";
     }

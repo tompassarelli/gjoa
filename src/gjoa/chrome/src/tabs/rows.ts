@@ -94,6 +94,18 @@ export function makeRows(deps: RowsDeps): RowsAPI {
     const chevron = document.createXULElement("image") as HTMLElement;
     chevron.className = "pfx-tab-chevron";
 
+    // Clicking the chevron toggles the tree-collapse state for this row
+    // instead of activating the tab. The chevron is only visually present
+    // when the row has [pfx-collapsed] (CSS-gated), so this is the "click
+    // the right caret to expand" affordance. stopPropagation prevents the
+    // general row click from also firing (which would re-select the tab).
+    chevron.addEventListener("click", (e) => {
+      const me = e as MouseEvent;
+      if (me.button !== 0) return;
+      e.stopPropagation();
+      toggleCollapse(row);
+    });
+
     row.append(icon, label, chevron);
     row._tab = tab;
     rowOf.set(tab, row);
@@ -198,7 +210,30 @@ export function makeRows(deps: RowsDeps): RowsAPI {
     label.className = "pfx-tab-label";
     label.textContent = group.name;
 
-    row.append(marker, label);
+    // Mirror the tab-row chevron: shown only when this group has
+    // children and is collapsed (CSS-gated via [pfx-collapsed]). Click
+    // toggles the group's collapsed state. stopPropagation so the
+    // row-level click handler (which activates vim) doesn't fire too.
+    const chevron = document.createXULElement("image") as HTMLElement;
+    chevron.className = "pfx-tab-chevron";
+    chevron.addEventListener("click", (e) => {
+      const me = e as MouseEvent;
+      if (me.button !== 0) return;
+      e.stopPropagation();
+      toggleCollapse(row);
+    });
+
+    // Clicking the group marker (●) also toggles collapse — it's the
+    // most obvious "this is a group, click here to fold it" target. The
+    // chevron above is the "I'm folded, click to unfold" affordance.
+    marker.addEventListener("click", (e) => {
+      const me = e as MouseEvent;
+      if (me.button !== 0) return;
+      e.stopPropagation();
+      toggleCollapse(row);
+    });
+
+    row.append(marker, label, chevron);
 
     row.addEventListener("click", (e) => {
       if ((e as MouseEvent).button === 0) activateVim(row);

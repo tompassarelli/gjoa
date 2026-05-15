@@ -131,12 +131,33 @@ export function makeLayout(deps: LayoutDeps): LayoutAPI {
   // and window resize. Self-correcting against whatever Firefox decides
   // — including future upgrades — without us noticing.
   function syncSymmetricFooter(): void {
-    const navBar = document.getElementById("nav-bar");
-    if (!navBar) return;
-    const cs = getComputedStyle(navBar);
-    const marginTop = parseFloat(cs.marginTop) || 0;
-    const padding = Math.max(0, marginTop * 2 - 1);
-    document.documentElement.style.setProperty("--pfx-symmetric-footer", padding + "px");
+    // Directly measure the actual top gap: distance from #sidebar-main's
+    // top edge to the first toolbar button's top edge. That's the visual
+    // "how far below the chrome top is the first button" that the user
+    // perceives. Mirror it as bottom padding so the last footer button
+    // sits the same distance off the bottom edge.
+    //
+    // Previous formula `2 * marginTop - 1` was a guess that doubled the
+    // gap on the bottom. Direct measurement is exact regardless of which
+    // theme / Firefox version is in play.
+    const sidebarMainEl = document.getElementById("sidebar-main");
+    if (!sidebarMainEl) return;
+    const firstBtn = sidebarMainEl.querySelector<HTMLElement>(
+      "#nav-bar toolbarbutton, #nav-bar toolbaritem",
+    );
+    let topGap: number;
+    if (firstBtn) {
+      const sidebarRect = sidebarMainEl.getBoundingClientRect();
+      const btnRect = firstBtn.getBoundingClientRect();
+      topGap = Math.max(0, btnRect.top - sidebarRect.top);
+    } else {
+      // Fallback before #nav-bar is reparented into sidebar-main: use the
+      // nav-bar's own margin-top as a proxy.
+      const navBar = document.getElementById("nav-bar");
+      const cs = navBar ? getComputedStyle(navBar) : null;
+      topGap = cs ? (parseFloat(cs.marginTop) || 0) : 6;
+    }
+    document.documentElement.style.setProperty("--pfx-symmetric-footer", topGap + "px");
   }
 
   function expand(): void {

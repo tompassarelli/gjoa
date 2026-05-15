@@ -286,7 +286,18 @@ export function makeEvents(deps: EventsDeps): EventsAPI {
     const position = Services.prefs.getCharPref("pfx.tabs.newTabPosition", "root");
     const anchor = tab.owner || (gBrowser.selectedTab !== tab ? gBrowser.selectedTab : null);
 
-    if (position === "child" && anchor) {
+    // Heuristic for "this is a duplicate of `anchor`": Firefox's duplicateTab()
+    // sets `tab.owner` to the source AND the new tab inherits the source's URL
+    // before navigation. A regular middle-click new-tab has an owner but a
+    // different (or empty) URL. We special-case duplicates so they (a) become
+    // a tree-child of their source and (b) stay adjacent to the source in
+    // Firefox's strip order instead of being yanked to the bottom by the
+    // position=root logic below.
+    const isDuplicate = !!(anchor && tabUrl(tab) && tabUrl(tab) === tabUrl(anchor));
+
+    if (isDuplicate && anchor) {
+      td.parentId = treeData(anchor).id;
+    } else if (position === "child" && anchor) {
       td.parentId = treeData(anchor).id;
     } else if (position === "sibling" && anchor) {
       td.parentId = treeData(anchor).parentId;
@@ -301,7 +312,7 @@ export function makeEvents(deps: EventsDeps): EventsAPI {
       placeRowInFirefoxOrder(tab, row);
     }
 
-    if (position === "root") {
+    if (position === "root" && !isDuplicate) {
       const tabsArr = [...gBrowser.tabs];
       const lastIdx = tabsArr.length - 1;
       if (tabsArr.indexOf(tab) !== lastIdx) {

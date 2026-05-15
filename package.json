@@ -15,5 +15,8 @@
     "chrome:dist": "bun tools/chrome-bundle/dist.ts",
     "chrome:install": "bun tools/chrome-bundle/install.ts",
     "test": "bun test"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.9.0"
   }
 }

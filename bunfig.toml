@@ -1,6 +1,21 @@
-# Constrain `bun test` discovery to our tests/ directory. Without this,
-# bun walks the entire repo (including engine/, which is 5GB of
-# mozilla-central source containing thousands of *.test.js files for
-# Firefox internals — none of which we want to run).
+# Bun config.
+#
+# `bun test` walks the repo root by default. We can't let it walk
+# engine/ — that's 5GB of mozilla-central source containing thousands
+# of *.test.js files for Firefox internals none of which are ours.
+#
+# Previous version pinned discovery to `tests/`, which had the
+# side-effect of burying our per-module test files at
+# src/gjoa/chrome/src/{drawer,tabs}/*.test.ts. Replaced with explicit
+# ignore patterns so discovery covers both tests/ and src/gjoa/.
+
 [test]
-root = "tests"
+pathIgnorePatterns = [
+  "engine/**",
+  "dist/**",
+  "node_modules/**",
+  ".direnv/**",
+  ".devenv/**",
+  "target/**",
+  ".cache/**",
+]

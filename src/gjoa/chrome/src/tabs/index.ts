@@ -19,7 +19,7 @@
 //   - the factory wiring (drag↔rows↔vim cycle handled with let-bindings)
 //   - init() bootstrap
 
-import { buildContextMenu, buildGroupContextMenu } from "./menu.ts";
+import { buildContextMenu, buildGroupContextMenu, buildPanelContextMenu } from "./menu.ts";
 import { makeDrag } from "./drag.ts";
 import { makeEvents } from "./events.ts";
 import { makeLayout } from "./layout.ts";
@@ -379,6 +379,13 @@ const pfxLog = createLogger("tabs");
       updateVisibility: Rows.updateVisibility,
       scheduleSave,
     });
+    const panelMenu = buildPanelContextMenu({
+      createGroupRow: Rows.createGroupRow,
+      startRename: vim.startRename,
+      setCursor: vim.setCursor,
+      updateVisibility: Rows.updateVisibility,
+      scheduleSave,
+    });
     vim.createModeline();
     vim.setupVimKeys();
     vim.setupGlobalKeys();
@@ -393,6 +400,16 @@ const pfxLog = createLogger("tabs");
     state.spacer.addEventListener("click", () => {
       const visible = allRows().filter(r => !r.hidden);
       if (visible.length) vim.activateVim(visible[visible.length - 1]!);
+    });
+
+    // Right-click on the empty area below all tabs (the spacer) → panel
+    // context menu. Tab-row and group-row right-clicks already have their
+    // own listeners with stopPropagation, so this never fires for them.
+    state.spacer.addEventListener("contextmenu", (e) => {
+      const me = e as MouseEvent;
+      e.preventDefault();
+      e.stopPropagation();
+      (panelMenu as any).openPopupAtScreen(me.screenX, me.screenY, true);
     });
 
     window.addEventListener("unload", teardownEvents, { once: true });
