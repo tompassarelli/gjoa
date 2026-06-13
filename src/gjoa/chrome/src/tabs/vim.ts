@@ -1803,7 +1803,7 @@ export function makeVim(deps: VimDeps): VimAPI {
             if (!arg) {
               picker.show({
                 prompt: "restore ›",
-                items: tagged.map((e) => ({ display: summarizeEvent(e), data: e })),
+                items: tagged.map((e) => sessionPickerItem(e)),
                 onSelect: async (item) => {
                   const ev = item.data as import("./history.ts").HistoryEvent;
                   try {
@@ -1832,7 +1832,6 @@ export function makeVim(deps: VimDeps): VimAPI {
         break;
       }
       case "sessions": {
-        // :sessions [<query>] — picker over tagged points (with optional FTS pre-filter).
         const q = args.slice(1).join(" ").trim();
         (async () => {
           try {
@@ -1845,7 +1844,7 @@ export function makeVim(deps: VimDeps): VimAPI {
             }
             picker.show({
               prompt: "sessions ›",
-              items: evs.map((e) => ({ display: summarizeEvent(e), data: e })),
+              items: evs.map((e) => sessionPickerItem(e)),
               onSelect: async (item) => {
                 const ev = item.data as import("./history.ts").HistoryEvent;
                 try {
@@ -1983,7 +1982,6 @@ export function makeVim(deps: VimDeps): VimAPI {
         break;
       }
       case "history": {
-        // :history [<query>] — picker over ALL events, tagged or not.
         const q = args.slice(1).join(" ").trim();
         (async () => {
           try {
@@ -1996,7 +1994,7 @@ export function makeVim(deps: VimDeps): VimAPI {
             }
             picker.show({
               prompt: "history ›",
-              items: evs.map((e) => ({ display: summarizeEvent(e), data: e })),
+              items: evs.map((e) => historyPickerItem(e)),
               onSelect: async (item) => {
                 const ev = item.data as import("./history.ts").HistoryEvent;
                 try {
@@ -2021,47 +2019,79 @@ export function makeVim(deps: VimDeps): VimAPI {
 
   // ---------- History helpers ----------------------------------------------
 
-  /** Strip the "session:" / "checkpoint:" prefix off an event's tag. */
   function labelOf(tag: string | null): string | null {
     if (!tag) return null;
     const i = tag.indexOf(":");
     return i >= 0 ? tag.slice(i + 1) : tag;
   }
 
-  /** Compact one-event summary for modeline display. Format:
-   *    [tag-label-or-time]  Nt  hostname-or-name
-   *  Tagged:    "[checkpoint:research] 12t github.com"
-   *  Untagged:  "10:42 4t example.com"
-   *  Empty:     "10:42 0t" */
-  function summarizeEvent(e: import("./history.ts").HistoryEvent): string {
-    const t = labelOf(e.tag);
-    const head = t ? `[${t}]` : new Date(e.timestamp).toLocaleTimeString([], {
-      hour: "2-digit", minute: "2-digit",
-    });
-    const tabs = (e.snapshot.nodes ?? []).filter((n) => n.type !== "group");
-    const sample = pickSample(tabs);
-    return sample ? `${head} ${tabs.length}t ${sample}` : `${head} ${tabs.length}t`;
+  function tagKind(tag: string | null): "checkpoint" | "session" | null {
+    if (!tag) return null;
+    return tag.startsWith("checkpoint:") ? "checkpoint" : "session";
   }
 
-  /** Pick a representative URL/name to differentiate similar events.
-   *  Prefer the most recent tab's user-given name if set; otherwise the
-   *  hostname of its URL; otherwise the first tab's hostname. Truncated. */
-  function pickSample(tabs: ReadonlyArray<import("./types.ts").SavedNode>): string {
-    const tail = tabs[tabs.length - 1];
-    const head = tabs[0];
-    const tryNode = (n: import("./types.ts").SavedNode | undefined): string => {
-      if (!n) return "";
-      if (n.name) return n.name;
-      const url = n.url || "";
-      try {
-        const host = new URL(url).hostname;
-        if (host) return host;
-      } catch {}
-      // about: URLs and others without a hostname — show a short suffix.
-      return url.slice(0, 24);
-    };
-    const out = tryNode(tail) || tryNode(head);
-    return out.length > 24 ? out.slice(0, 22) + "…" : out;
+  function relativeTime(ts: number): string {
+    const now = Date.now();
+    const delta = now - ts;
+    const mins = Math.floor(delta / 60_000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days === 1) return "yesterday";
+    if (days < 7) return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks}w ago`;
+    return new Date(ts).toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+
+  function topHosts(nodes: ReadonlyArray<import("./types.ts").SavedNode>, max = 3): string[] {
+    const seen = new Set<string>();
+    const hosts: string[] = [];
+    for (const n of nodes) {
+      if (n.type === "group" || !n.url) continue;
+      let host = "";
+      try { host = new URL(n.url).hostname.replace(/^www\./, ""); } catch {}
+      if (!host || host === "newtab" || seen.has(host)) continue;
+      seen.add(host);
+      hosts.push(host);
+      if (hosts.length >= max) break;
+    }
+    return hosts;
+  }
+
+  function tabCount(nodes: ReadonlyArray<import("./types.ts").SavedNode>): number {
+    return nodes.filter((n) => n.type !== "group").length;
+  }
+
+  function historyPickerItem(e: import("./history.ts").HistoryEvent): PickerItem {
+    const nodes = e.snapshot.nodes ?? [];
+    const count = tabCount(nodes);
+    const hosts = topHosts(nodes);
+    const tag = labelOf(e.tag);
+    const when = relativeTime(e.timestamp);
+    const display = tag
+      ? `${tag}  —  ${hosts.join(", ") || "empty"}`
+      : hosts.join(", ") || "(empty)";
+    const parts = [when, `${count} tab${count !== 1 ? "s" : ""}`];
+    if (tag) parts.unshift(tagKind(e.tag) === "checkpoint" ? "checkpoint" : "session");
+    return { display, secondary: parts.join(" · "), data: e };
+  }
+
+  function sessionPickerItem(e: import("./history.ts").HistoryEvent): PickerItem {
+    const nodes = e.snapshot.nodes ?? [];
+    const count = tabCount(nodes);
+    const hosts = topHosts(nodes, 4);
+    const kind = tagKind(e.tag);
+    const label = labelOf(e.tag) ?? "untitled";
+    const when = relativeTime(e.timestamp);
+    const display = label;
+    const parts: string[] = [];
+    if (kind === "checkpoint") parts.push("checkpoint");
+    parts.push(when, `${count} tab${count !== 1 ? "s" : ""}`);
+    if (hosts.length) parts.push(hosts.join(", "));
+    return { display, secondary: parts.join(" · "), data: e };
   }
 
   /** Restore a saved event into the live workspace as a subtree under a

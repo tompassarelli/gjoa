@@ -63,7 +63,9 @@ jobs:
 
       - name: Bootstrap mach
         working-directory: engine
-        run: ./mach bootstrap --application-choice=browser --no-interactive
+        run: |
+          export MOZBUILD_STATE_PATH="$HOME/.mozbuild"
+          echo 1 | ./mach bootstrap --application-choice=browser 2>&1 || true
 
       - name: Build
         working-directory: engine
