@@ -31,9 +31,7 @@ jobs:
             libcups2-dev libdrm-dev \
             nasm yasm m4 unzip zip \
             python3 python3-pip \
-            mercurial clang llvm lld \
-            libclang-dev pkg-config \
-            nodejs
+            mercurial pkg-config nodejs
 
       - name: Download Firefox source
         run: |
@@ -46,15 +44,13 @@ jobs:
         run: |
           mkdir -p engine
           tar -xJf ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz -C engine --strip-components=1
-          ls engine/mach
 
       - name: Apply overlays and patches
         run: bun run import
 
       - name: Write mozconfig
         run: |
-          LIBCLANG=$(find /usr/lib/llvm-*/lib -name 'libclang*.so*' -print -quit 2>/dev/null | xargs dirname)
-          cat > engine/mozconfig <<MOZCONFIG
+          cat > engine/mozconfig <<'MOZCONFIG'
           ac_add_options --with-branding=browser/branding/gjoa
           ac_add_options --with-distribution-id=org.gjoa
           ac_add_options --with-app-name=gjoa
@@ -64,9 +60,6 @@ jobs:
           ac_add_options --disable-tests
           ac_add_options --enable-optimize
           ac_add_options --enable-release
-          export CC=clang
-          export CXX=clang++
-          ac_add_options --with-libclang-path=${LIBCLANG}
           MOZCONFIG
           sed -i 's/^          //' engine/mozconfig
           cat engine/mozconfig

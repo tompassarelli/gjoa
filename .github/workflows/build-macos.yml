@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     env:
       FF_VERSION: "151.0.1"
@@ -20,9 +20,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Install system deps
-        run: brew install llvm@19 nasm yasm mercurial
-
       - name: Download Firefox source
         run: |
           mkdir -p ~/.cache/gjoa/sources
@@ -34,11 +31,8 @@ jobs:
         run: |
           mkdir -p engine
           tar -xJf ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz -C engine --strip-components=1
-          ls engine/mach
 
       - name: Apply overlays and patches
-        env:
-          LIBCLANG_PATH: /opt/homebrew/opt/llvm@19/lib
         run: bun run import
 
       - name: Write mozconfig
@@ -53,10 +47,6 @@ jobs:
           ac_add_options --disable-tests
           ac_add_options --enable-optimize
           ac_add_options --enable-release
-          ac_add_options --target=aarch64-apple-darwin
-          export CC=/opt/homebrew/opt/llvm@19/bin/clang
-          export CXX=/opt/homebrew/opt/llvm@19/bin/clang++
-          ac_add_options --with-libclang-path=/opt/homebrew/opt/llvm@19/lib
           MOZCONFIG
           sed -i '' 's/^          //' engine/mozconfig
           cat engine/mozconfig
