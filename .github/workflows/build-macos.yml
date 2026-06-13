@@ -7,6 +7,8 @@ jobs:
   build:
     runs-on: macos-14
     timeout-minutes: 180
+    env:
+      FF_VERSION: "151.0.1"
     steps:
       - uses: actions/checkout@v4
 
@@ -19,19 +21,28 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install system deps
-        run: |
-          brew install llvm@19 nasm yasm mercurial
+        run: brew install llvm@19 nasm yasm mercurial
 
-      - name: Download and prepare source
+      - name: Download Firefox source
+        run: |
+          mkdir -p ~/.cache/gjoa/sources
+          curl -L -o ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz \
+            "https://archive.mozilla.org/pub/firefox/releases/${FF_VERSION}/source/firefox-${FF_VERSION}.source.tar.xz"
+          ls -lh ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz
+
+      - name: Extract source
+        run: |
+          mkdir -p engine
+          tar -xJf ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz -C engine --strip-components=1
+          ls engine/mach
+
+      - name: Apply overlays and patches
         env:
           LIBCLANG_PATH: /opt/homebrew/opt/llvm@19/lib
-        run: |
-          bun run init
-          ls -la engine/ | head -5
+        run: bun run import
 
       - name: Write mozconfig
         run: |
-          rm -f engine/mozconfig
           cat > engine/mozconfig <<'MOZCONFIG'
           ac_add_options --with-branding=browser/branding/gjoa
           ac_add_options --with-distribution-id=org.gjoa
@@ -48,6 +59,7 @@ jobs:
           ac_add_options --with-libclang-path=/opt/homebrew/opt/llvm@19/lib
           MOZCONFIG
           sed -i '' 's/^          //' engine/mozconfig
+          cat engine/mozconfig
 
       - name: Bootstrap mach
         working-directory: engine

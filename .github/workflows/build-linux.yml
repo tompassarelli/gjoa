@@ -7,6 +7,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    env:
+      FF_VERSION: "151.0.1"
     steps:
       - uses: actions/checkout@v4
 
@@ -33,14 +35,24 @@ jobs:
             libclang-dev pkg-config \
             nodejs
 
-      - name: Download and prepare source
+      - name: Download Firefox source
         run: |
-          bun run init
-          ls -la engine/ | head -5
+          mkdir -p ~/.cache/gjoa/sources
+          curl -L -o ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz \
+            "https://archive.mozilla.org/pub/firefox/releases/${FF_VERSION}/source/firefox-${FF_VERSION}.source.tar.xz"
+          ls -lh ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz
+
+      - name: Extract source
+        run: |
+          mkdir -p engine
+          tar -xJf ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz -C engine --strip-components=1
+          ls engine/mach
+
+      - name: Apply overlays and patches
+        run: bun run import
 
       - name: Write mozconfig
         run: |
-          rm -f engine/mozconfig
           LIBCLANG=$(find /usr/lib/llvm-*/lib -name 'libclang*.so*' -print -quit 2>/dev/null | xargs dirname)
           cat > engine/mozconfig <<MOZCONFIG
           ac_add_options --with-branding=browser/branding/gjoa
@@ -57,6 +69,7 @@ jobs:
           ac_add_options --with-libclang-path=${LIBCLANG}
           MOZCONFIG
           sed -i 's/^          //' engine/mozconfig
+          cat engine/mozconfig
 
       - name: Bootstrap mach
         working-directory: engine
