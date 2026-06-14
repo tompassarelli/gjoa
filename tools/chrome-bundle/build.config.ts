@@ -95,4 +95,15 @@ export const entries: Entry[] = [
       "// ==/UserScript==",
     ].join("\n"),
   },
+  {
+    out: "gjoa-dark-mode.uc.js",
+    files: [`${B}/dark-mode/index.js`],
+    banner: [
+      "// ==UserScript==",
+      "// @name           Gjoa Dark Mode",
+      "// @description    Chrome-level dark mode: native color-scheme override + optional CSS inversion filter",
+      "// @include        main",
+      "// ==/UserScript==",
+    ].join("\n"),
+  },
 ];
