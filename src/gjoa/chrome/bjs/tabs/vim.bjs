@@ -47,7 +47,7 @@
    {:name "restore"    :description "Restore a saved session or checkpoint"              :takesArgs true}
    {:name "history"    :description "Browse auto-save timeline (`:history space` = current workspace)" :takesArgs true}
    {:name "blacklist"  :description "Disable gjoa keys on a site (`list` / `remove`)"   :takesArgs true}
-   {:name "spc"        :description "Workspaces: new / rename / delete / switch (`:space`)" :takesArgs true}
+   {:name "space"      :description "Workspaces: new / rename / delete / switch"            :takesArgs true}
    {:name "tabpos"     :description "Where new tabs open: sibling | root | child"       :takesArgs true}
    {:name "help"       :description "Show the keymap cheatsheet"                         :takesArgs false}])
 (js/export (defn make-vim [deps :- Any] :- Any
@@ -1216,7 +1216,7 @@
                             "gjoa.tabs.newTabPosition" arg)
                           (modeline-msg (str ":tabpos -> " arg) 2500)))))
 
-                (or (= name "spc") (= name "space"))
+                (or (= name "space") (= name "spc"))
                 (let [sub (.toLowerCase (or (aget args 1) "list"))
                       rest (.trim (.join (.slice args 2) " "))]
                   (cond
