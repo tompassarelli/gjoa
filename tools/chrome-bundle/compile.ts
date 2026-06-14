@@ -48,10 +48,17 @@ for (const src of allFiles.sort()) {
     stderr: "pipe",
   });
 
-  const code = await proc.exited;
+  // Drain both pipes concurrently with awaiting exit. Otherwise a chatty build
+  // (e.g. beagle's `unused declare-extern` lint warnings) fills the pipe buffer,
+  // the child blocks/SIGPIPEs (exit 141), and it looks like a spurious compile
+  // failure. Only the captured stderr/stdout is surfaced, and only on failure.
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
   if (code !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    console.error(`✗ ${rel}: ${stderr.trim()}`);
+    console.error(`✗ ${rel}: ${stderr.trim() || stdout.trim()}`);
     failed++;
   } else {
     console.log(`  ${rel}`);
