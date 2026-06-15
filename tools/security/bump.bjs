@@ -24,7 +24,7 @@
       nil)
     (js/await (.json r))))
 
-(defn main [] :- Any
+(defn main! [] :- Any
   (let [esrMode (.includes (.-argv process) "--esr")
         checkOnly (.includes (.-argv process) "--check")
         versions (js/await (fetchVersions))
@@ -68,7 +68,7 @@
     (.error console "If the new version breaks something, restore the pin from git:")
     (.error console "  git checkout gjoa.json")))
 
-(.catch (main)
+(.catch (main!)
   (fn [err]
     (.error console (str "[bump] failed: " (.-message err)))
     (.exit process 1)))

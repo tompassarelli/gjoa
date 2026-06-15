@@ -59,7 +59,7 @@
 
 (def log :- Any (create-logger "history"))
 (def state :- Any {:conn nil :lastHash nil :instanceId nil})
-(defn load-instance-id [] :- String
+(defn load-instance-id! [] :- String
   (or (.-instanceId state)
       (let [id-from-pref (pref-str INSTANCE-ID-PREF "")]
         (if (not= id-from-pref "")
@@ -148,7 +148,7 @@
                  (-> (execute-stmts conn stmts 0)
                      (.then (fn []
                        (when (= v 1)
-                         (let [id (load-instance-id)]
+                         (let [id (load-instance-id!)]
                            (-> (.execute conn
                                  "UPDATE events SET instance_id = ? WHERE instance_id IS NULL"
                                  [id])
@@ -265,7 +265,7 @@
                (.then (fn [hash]
                  (when (not= hash (.-lastHash state))
                    (let [ts (.now Date)
-                         inst-id (load-instance-id)
+                         inst-id (load-instance-id!)
                          result {:insertedId nil}]
                      (.then
                       (.executeTransaction %
@@ -398,7 +398,7 @@
    (fn [] (.-lastHash state))
 
    :instanceId
-   (fn [] (load-instance-id))
+   (fn [] (load-instance-id!))
 
    :close
    (fn []

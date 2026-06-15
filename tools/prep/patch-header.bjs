@@ -135,7 +135,7 @@
 
 ;; CLI entrypoint. The .ts used `import.meta.main`; under bun the compiled
 ;; module is invoked directly, so dispatch on process.argv.
-(defn main [] :- Any
+(defn main! [] :- Any
   (let [cmd (aget (.-argv process) 2)]
     (cond
       (= cmd "check")
@@ -151,4 +151,4 @@
         (.exit process 1)))))
 
 ;; CLI dispatch runs only when invoked directly, never on import.
-(when (.-main (js/import-meta)) (main))
+(when (.-main (js/import-meta)) (main!))

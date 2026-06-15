@@ -58,7 +58,7 @@
       (when (not= (.-exitCode result) 0)
         (.error console "WARN: failed to drop caches (not root?). Use --skip-cache-drop or run with sudo.")))))
 
-(defn measureColdStart [binary :- String windowPattern :- String] :- Any
+(defn measureColdStart! [binary :- String windowPattern :- String] :- Any
   ;; Create a temporary profile directory
   (let [profileDir (str (join (.cwd process) "tools" "bench") "/.bench-profile-" (.now Date))]
     (.spawnSync Bun ["mkdir" "-p" profileDir])
@@ -108,13 +108,13 @@
         ;; Clean up profile
         (.spawnSync Bun ["rm" "-rf" profileDir])))))
 
-(defn runBenchmark [binary :- String label :- String windowPattern :- String] :- Any
+(defn runBenchmark! [binary :- String label :- String windowPattern :- String] :- Any
   (let [times (atom [])]
     (.log console (str "\n  Running " label " (" NUM-RUNS " runs)..."))
     (.log console (str "  Binary: " binary))
 
     (doseq [i (range NUM-RUNS)]
-      (let [t (js/await (measureColdStart binary windowPattern))]
+      (let [t (js/await (measureColdStart! binary windowPattern))]
         (swap! times conj t)
         (.write (.-stdout process) (str "    Run " (+ i 1) "/" NUM-RUNS ": " (.toFixed t 1) " ms\n"))
         ;; Brief pause between runs
@@ -142,8 +142,8 @@
 (.log console (str "  Gjoa:    " GJOA-BIN))
 (.log console (str "  Firefox: " FIREFOX-BIN))
 
-(def gjoaTimes :- Any (js/await (runBenchmark GJOA-BIN "Gjoa" "Gjoa|gjoa")))
-(def firefoxTimes :- Any (js/await (runBenchmark FIREFOX-BIN "Firefox" "Mozilla Firefox|Firefox")))
+(def gjoaTimes :- Any (js/await (runBenchmark! GJOA-BIN "Gjoa" "Gjoa|gjoa")))
+(def firefoxTimes :- Any (js/await (runBenchmark! FIREFOX-BIN "Firefox" "Mozilla Firefox|Firefox")))
 
 (.log console "\n=== Comparison ===\n")
 (.log console (formatResult "Cold Start (time to window visible)" gjoaTimes firefoxTimes))

@@ -27,7 +27,7 @@
 (def BRANDING-OUT :- String (join ENGINE-BRANDING-DIR (.-binaryName cfg)))
 (def HAS-ENGINE :- Any (existsSync BRANDING-OUT))
 
-(defn walk [dir :- String] :- Any
+(defn walk! [dir :- String] :- Any
   (let [out []]
     (doseq [name (readdirSync dir)]
       (let [path (join dir name)]
@@ -35,7 +35,7 @@
         ;; concat the recursive result rather than looping a push (a doseq in a
         ;; branch emits a statement-block that breaks the surrounding `? :`).
         (if (.isDirectory (statSync path))
-          (set! out (.concat out (walk path)))
+          (set! out (.concat out (walk! path)))
           (.push out path))))
     out))
 
@@ -52,7 +52,7 @@
   (suite "branding regression"
     (fn []
       (let [all-text (if HAS-ENGINE
-                       (.map (.filter (walk BRANDING-OUT) isText)
+                       (.map (.filter (walk! BRANDING-OUT) isText)
                              ;; let-wrap forces a block body so the map literal
                              ;; emits as `return {...}`; a bare concise-arrow
                              ;; object body emits invalid `=> {path: p, ...}`.

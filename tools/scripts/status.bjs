@@ -103,7 +103,7 @@
       (or (.trim out) nil))
     (catch Any e nil)))
 
-(defn loadOracles [pinned :- String] :- Any
+(defn loadOracles! [pinned :- String] :- Any
   (let [errors []]
     ;; Run all the network probes in parallel.
     (let [probes (js/await (.all Promise
@@ -256,13 +256,13 @@
 (defn row [label :- Any value :- Any] :- Any
   (.log console (str "  " (.padEnd label 22) " " value)))
 
-(defn main [] :- Any
+(defn main! [] :- Any
   (let [jsonMode (.includes (.-argv process) "--json")
         gjoa (.parse JSON (readFileSync GJOA-JSON "utf8"))
         pinned (.-version (.-firefox gjoa))]
 
     (.write (.-stderr process) (dim "probing oracles…\r"))
-    (let [oracles (js/await (loadOracles pinned))]
+    (let [oracles (js/await (loadOracles! pinned))]
       (.write (.-stderr process) "                  \r")
 
       (if jsonMode
@@ -369,4 +369,4 @@
 ;; Entry point: run via `bun run`. Gated on import.meta.main so the CLI runs
 ;; only when invoked directly, never on import.
 (when (.-main (js/import-meta))
-  (.catch (main) (fn [e] (.error console e) (.exit process 1))))
+  (.catch (main!) (fn [e] (.error console e) (.exit process 1))))

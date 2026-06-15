@@ -98,7 +98,7 @@
      [(RegExp. "^!define CompanyName \".*?\"$" "m")
       (str "!define CompanyName \"" (.-vendorName b) "\"")]]))
 
-(defn apply-substitutions [text :- String cfg :- Any] :- String
+(defn apply-substitutions! [text :- String cfg :- Any] :- String
   (let [out (atom text)]
     (doseq [pair (substitutions cfg)]
       (let [re (nth pair 0)
@@ -142,7 +142,7 @@
           (js/await (mkdir (dirname dst) {:recursive true}))
           (if (is-text-file src)
             (let [text (js/await (readFile src "utf8"))]
-              (js/await (writeFile dst (apply-substitutions text cfg)))
+              (js/await (writeFile dst (apply-substitutions! text cfg)))
               (reset! text-count (+ @text-count 1)))
             ;; Binary copy — preserves icon bytes etc.
             (do

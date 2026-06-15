@@ -49,7 +49,7 @@
 (def FIREFOX-BIN :- Any (or (get values "firefox-bin") (findBinary "firefox")))
 
 ;; Get all PIDs in the process tree rooted at the given PID.
-(defn getProcessTree [rootPid :- Any] :- Any
+(defn getProcessTree! [rootPid :- Any] :- Any
   (let [pids (atom [rootPid])
         result (.spawnSync Bun ["pgrep" "-P" (String rootPid)])]
     (when (= (.-exitCode result) 0)
@@ -57,15 +57,15 @@
         (doseq [child children]
           (let [childPid (parseInt child 10)]
             (when (not (isNaN childPid))
-              (reset! pids (.concat @pids (getProcessTree childPid))))))))
+              (reset! pids (.concat @pids (getProcessTree! childPid))))))))
     @pids))
 
 ;; Sum PSS (in KB) from /proc/<pid>/smaps_rollup across all processes in the
 ;; tree. PSS divides each shared page among the processes that map it, so the
 ;; tree-wide sum reflects unique physical memory without double-counting
 ;; shared pages (unlike VmRSS).
-(defn getTreePssKB [rootPid :- Any] :- Any
-  (let [pids (getProcessTree rootPid)
+(defn getTreePssKB! [rootPid :- Any] :- Any
+  (let [pids (getProcessTree! rootPid)
         totalKB (atom 0)
         re (RegExp. "^Pss:\\s+(\\d+)\\s+kB" "m")]
     (doseq [pid pids]
@@ -79,7 +79,7 @@
         (catch Error e nil)))
     @totalKB))
 
-(defn measureMemory [binary :- String label :- String windowPattern :- String] :- Any
+(defn measureMemory! [binary :- String label :- String windowPattern :- String] :- Any
   (let [profileDir (str (join (.cwd process) "tools" "bench") "/.bench-profile-mem-" (.now Date))]
     (.spawnSync Bun ["mkdir" "-p" profileDir])
     (try
@@ -126,7 +126,7 @@
           (js/await (.sleep Bun SETTLE-MS))
 
           ;; Measure PSS (proportional set size) across the process tree.
-          (let [pssKB (getTreePssKB pid)
+          (let [pssKB (getTreePssKB! pid)
                 totalMB (/ pssKB 1024)
                 perTabMB (/ totalMB NUM-TABS)]
             (.log console (str "  Total RSS: " (.toFixed totalMB 1) " MB"))
@@ -141,11 +141,11 @@
         (.spawnSync Bun ["rm" "-rf" profileDir])))))
 
 ;; Multiple samples for statistical significance
-(defn runBenchmark [binary :- String label :- String windowPattern :- String runs :- Any] :- Any
+(defn runBenchmark! [binary :- String label :- String windowPattern :- String runs :- Any] :- Any
   (let [results (atom [])]
     (doseq [i (range runs)]
       (.log console (str "\n  --- " label " run " (+ i 1) "/" runs " ---"))
-      (let [res (js/await (measureMemory binary label windowPattern))]
+      (let [res (js/await (measureMemory! binary label windowPattern))]
         (swap! results conj (.-totalMB res))
         ;; Pause between runs
         (js/await (.sleep Bun 2000))))
@@ -165,8 +165,8 @@
 (.log console (str "  Firefox: " FIREFOX-BIN))
 
 (def RUNS :- Any 3)
-(def gjoaResults :- Any (js/await (runBenchmark GJOA-BIN "Gjoa" "Gjoa|gjoa" RUNS)))
-(def firefoxResults :- Any (js/await (runBenchmark FIREFOX-BIN "Firefox" "Mozilla Firefox|Firefox" RUNS)))
+(def gjoaResults :- Any (js/await (runBenchmark! GJOA-BIN "Gjoa" "Gjoa|gjoa" RUNS)))
+(def firefoxResults :- Any (js/await (runBenchmark! FIREFOX-BIN "Firefox" "Mozilla Firefox|Firefox" RUNS)))
 
 (.log console "\n=== Comparison ===\n")
 (.log console (formatResult (str "Memory (" NUM-TABS " tabs, total PSS MB)") gjoaResults firefoxResults "MB"))

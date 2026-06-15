@@ -59,7 +59,7 @@
       (throw (MarionetteError. (str "could not connect to Marionette at " host ":" port " within timeout")
                                (.-lastErr scan)))
       nil)
-    (js/await (initClient (.-socket scan))))))
+    (js/await (initClient! (.-socket scan))))))
 
 (defn openSocket [host :- String port :- Any] :- Any
   (Promise. (fn [resolve reject]
@@ -67,7 +67,7 @@
                 (.once s "connect" (fn [] (resolve s)))
                 (.once s "error" (fn [e] (reject e)))))))
 
-(defn initClient [socket :- Any] :- Any
+(defn initClient! [socket :- Any] :- Any
   (let [;; nextId is a monotonically increasing message-id counter; inflight maps
         ;; pending msgIds to their { resolve, reject }.
         idState {:nextId 1}

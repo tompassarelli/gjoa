@@ -69,7 +69,7 @@
 ;;
 ;;  We extract each (version, advisory id, severity, link) tuple from
 ;;  the page, then the caller filters by "newer than our pin".
-(defn fetchAdvisories [] :- Any
+(defn fetchAdvisories! [] :- Any
   (let [r (js/await (fetch KNOWN-VULNS-URL {:signal (.timeout AbortSignal 10000)}))]
     (if (not (.-ok r))
       (throw (Error. (str "known-vulns HTTP " (.-status r))))
@@ -165,7 +165,7 @@
         (set! (.-netError state) (str "version probe failed: " (.-message e)))))
     (when (.-versions state)
       (try
-        (set! (.-advisories state) (js/await (fetchAdvisories)))
+        (set! (.-advisories state) (js/await (fetchAdvisories!)))
         (catch Error e
           ;; Treat as partial: we have version info but not advisories.
           (set! (.-netError state) (str "advisory probe failed: " (.-message e))))))
@@ -250,7 +250,7 @@
     (= status "CRITICAL") 3
     :else 1)) ; UNKNOWN
 
-(defn main [] :- Any
+(defn main! [] :- Any
   (let [jsonMode (.includes (.-argv process) "--json")
         quietMode (.includes (.-argv process) "--quiet")
         r (js/await (check))]
@@ -270,7 +270,7 @@
 ;; Run the CLI only when invoked directly — cli.bjs imports `check` as a library
 ;; and must not trigger the CLI (or its process.exit) on import.
 (when (.-main (js/import-meta))
-  (.catch (main)
+  (.catch (main!)
     (fn [err]
       (.error console (str "[security] check threw: " (.-message err)))
       (.exit process 1))))

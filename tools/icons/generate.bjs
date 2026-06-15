@@ -46,7 +46,7 @@
 (defn renderPng [size :- Any dest :- String] :- Any
   (run-quiet ["rsvg-convert" "-w" (String size) "-h" (String size) SOURCE-SVG "-o" dest]))
 
-(defn main [] :- Any
+(defn main! [] :- Any
   (if (not (existsSync SOURCE-SVG))
     (throw (Error. (str "source SVG not found at " SOURCE-SVG)))
     nil)
@@ -92,7 +92,7 @@
   (.ok log "done — run `bun run import` to push these into engine/"))
 
 ;; Entry point: run main, surfacing errors and exiting non-zero on failure.
-(.catch (main)
+(.catch (main!)
   (fn [err]
     (.error log (or (.-message err) (String err)))
     (if (.-DEBUG (.-env process))

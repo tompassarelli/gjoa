@@ -5,7 +5,7 @@
 
 (declare-extern [console window getComputedStyle create-logger] Any)
 
-(defn install [sidebar-button :- Any sidebar-main :- Any compact :- Any] :- Any
+(defn install! [sidebar-button :- Any sidebar-main :- Any compact :- Any] :- Any
   (let [og-icon (q sidebar-button ".toolbarbutton-icon")
         og-icon-style (if og-icon
                         (.-listStyleImage (getComputedStyle og-icon))
@@ -134,6 +134,6 @@
         sidebar-main sidebarMain
         native (by-id "sidebar-button")]
     (if native
-      (install native sidebar-main compact)
+      (install! native sidebar-main compact)
       (do (log "init:no native #sidebar-button (vertical-tabs+revamp mode) — skipping custom-button swap")
           {:destroy #(do nil)})))))

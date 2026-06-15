@@ -295,7 +295,7 @@
             (str (.-length loaderScripts) " script + " (.-length loaderStyles) " style bundles agree across loader / jar.mn / chrome-bake.bjs")))))))
 
 ;; ── Run + render ──────────────────────────────────────────────────────────
-(defn main [] :- Any
+(defn main! [] :- Any
   (.log console (bold "gjoa preflight"))
   (.log console (dim "Mandatory gate before any nix or full-mach build (CLAUDE.md Rule #0)."))
   (.log console "")
@@ -333,4 +333,4 @@
 ;; Errors abort with exit 1, matching the original `.catch` handler. Guarded so
 ;; the CLI runs only when invoked directly, never on import.
 (when (.-main (js/import-meta))
-  (.catch (main) (fn [e] (.error console e) (.exit process 1))))
+  (.catch (main!) (fn [e] (.error console e) (.exit process 1))))

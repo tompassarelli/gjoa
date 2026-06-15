@@ -32,7 +32,7 @@
 
 (def state :- Any {:quitting false})
 
-(defn quit-stale [my-version :- String latest-version :- String] :- Any
+(defn quit-stale! [my-version :- String latest-version :- String] :- Any
   (when (not (.-quitting state))
     (set! (.-quitting state) true)
     (try
@@ -58,7 +58,7 @@
       (catch Any e
         (.error console "[security] startup.quit failed" e)))))
 
-(defn probe [] :- Any
+(defn probe! [] :- Any
   (let [my-version (.-version (.-appinfo Services))]
     (-> (fetch PRODUCT-DETAILS-URL {:signal (.timeout AbortSignal FETCH-TIMEOUT-MS)})
         (.then (fn [r]
@@ -80,7 +80,7 @@
                         (str "[security] CRITICAL: running " my-version
                              ", latest is " latest
                              " (" major-behind " major(s) behind) — quitting"))
-                      (quit-stale my-version latest))
+                      (quit-stale! my-version latest))
                     (.warn console
                       (str "[security] STALE: running " my-version
                            ", latest is " latest
@@ -89,12 +89,12 @@
           (.log console "[security] probe failed — fail-open (offline?):" (.-message e)))))))
 
 ;; init
-(defn init- [] :- Any
+(defn init-! [] :- Any
   (if (= (get-env "GJOA_ALLOW_INSECURE") "1")
     (.log console "[security] GJOA_ALLOW_INSECURE=1 — gate disabled for this process")
     (when (not (.-__gjoaSecurityRunning Services))
       (set! (.-__gjoaSecurityRunning Services) true)
-      (setTimeout probe 2000)
-      (setInterval probe RECHECK-INTERVAL-MS))))
+      (setTimeout probe! 2000)
+      (setInterval probe! RECHECK-INTERVAL-MS))))
 
-(init-)
+(init-!)

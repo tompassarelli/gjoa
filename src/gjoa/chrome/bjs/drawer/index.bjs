@@ -5,7 +5,7 @@
 
 (declare-extern [document console window make-layout make-drag-overlay make-compact make-urlbar make-sidebar-button make-banner] Any)
 
-(defn init [] :- Any
+(defn init! [] :- Any
   (let [sidebar-main (by-id "sidebar-main")
         navigator-toolbox (by-id "navigator-toolbox")
         urlbar-container (by-id "urlbar-container")
@@ -53,4 +53,4 @@
 
           (.log console "gjoa-drawer: initialized"))))))
 
-(init)
+(init!)

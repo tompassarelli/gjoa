@@ -7,7 +7,7 @@
 
 ;; Walk siblings from `start` using `dir` (e.g. .-nextElementSibling),
 ;; return the first node satisfying `pred`, or nil.
-(defn find-sib [start :- Any pred :- Any dir :- Any] :- Any
+(defn find-sib! [start :- Any pred :- Any dir :- Any] :- Any
   (let [box :- Any {:v nil}
         walk (fn [n]
                (when n
@@ -63,20 +63,20 @@
              :groupLevel (or (some-> group .-_group .-level) 0)})
     id))
 
-;; Closest preceding tab in DOM. Skips groups. Uses find-sib.
-(defn find-closest-tab-before [row :- Any] :- Any
-  (let [hit (find-sib (.-previousElementSibling row)
+;; Closest preceding tab in DOM. Skips groups. Uses find-sib!.
+(defn find-closest-tab-before! [row :- Any] :- Any
+  (let [hit (find-sib! (.-previousElementSibling row)
                       #(.-_tab %)
                       #(.-previousElementSibling %))]
     (and hit (.-_tab hit))))
 
 ;; Last tab inside the group's visual subtree, or -- if the group has no
 ;; tabs in its subtree -- the closest preceding tab before the group.
-(defn find-last-tab-in-group-or-before [group :- Any] :- Any
+(defn find-last-tab-in-group-or-before! [group :- Any] :- Any
   (let [subtree-tabs (tabs-of (.slice (subtree-rows group) 1))]
     (if (.-length subtree-tabs)
       (aget subtree-tabs (- (.-length subtree-tabs) 1))
-      (find-closest-tab-before group))))
+      (find-closest-tab-before! group))))
 (js/export (defn make-drag [deps :- Any] :- Any
   (let [clear-selection (.-clearSelection deps)
         schedule-tree-resync (.-scheduleTreeResync deps)
@@ -252,7 +252,7 @@
                                          group-level ")"))
                               (if (<= group-level 0)
                                 (set! (.-value parent-result) nil)
-                                (let [enc (find-sib
+                                (let [enc (find-sib!
                                             (.-previousElementSibling tgt-row)
                                             (fn [prev]
                                               (and (.-_group prev)
@@ -341,7 +341,7 @@
                                              (- idx 1))))
                                     ;; Empty group
                                     (let [first-after-row
-                                          (find-sib
+                                          (find-sib!
                                             (.-nextElementSibling tgt-row)
                                             #(.-_tab %)
                                             #(.-nextElementSibling %))
@@ -359,8 +359,8 @@
                                 ;; Drop BEFORE/AFTER group
                                 (let [anchor-tab
                                       (if (= position "before")
-                                        (find-closest-tab-before tgt-row)
-                                        (find-last-tab-in-group-or-before
+                                        (find-closest-tab-before! tgt-row)
+                                        (find-last-tab-in-group-or-before!
                                           tgt-row))]
                                   (if anchor-tab
                                     (set-idx! idx-result

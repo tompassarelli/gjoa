@@ -8,7 +8,7 @@
 (js/import create-logger "../tabs/log.js" create_logger)
 (js/import collapse-protection-duration-ms "./timing.js" collapse_protection_duration_ms)
 
-(defn make-mode-ops [cfg :- Any] :- Any
+(defn make-mode-ops! [cfg :- Any] :- Any
   (let [st       (.-st cfg)
         elem     (.-elem cfg)
         check-el (.-check-el cfg)
@@ -182,7 +182,7 @@
                     (q document ".tabbrowser-tab[multiselected]")
                     (q document "[gjoa-dragging]"))))
 
-        vops (make-mode-ops {:st vstate :elem sidebar-main :check-el sidebar-main
+        vops (make-mode-ops! {:st vstate :elem sidebar-main :check-el sidebar-main
                              :attr "data-gjoa-compact" :shared shared
                              :dbg dbg :dbg1 dbg1
                              :reconcile-counter reconcile-counter-if-stale
@@ -194,7 +194,7 @@
         reconcile-compact-state (.-reconcile vops)
         schedule-hide-watchdog (.-schedule-watchdog vops)
 
-        hops (make-mode-ops {:st hstate :elem navigator-toolbox
+        hops (make-mode-ops! {:st hstate :elem navigator-toolbox
                              :check-el doc-el
                              :attr "data-gjoa-compact-horizontal" :shared shared
                              :dbg dbg :dbg1 dbg1

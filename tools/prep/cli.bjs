@@ -68,7 +68,7 @@ After editing src/gjoa/ or gjoa.json: `bun run import`.
             (.error console (str "[33m" bar "[0m"))))
         (.error console "")))))
 
-(defn main [] :- Any
+(defn main! [] :- Any
   (let [cmd (aget (.-argv process) 2)]
     (cond
       (= cmd "download")
@@ -106,7 +106,7 @@ After editing src/gjoa/ or gjoa.json: `bun run import`.
             (err (str "unknown command: " cmd))))
         (.exit process (if cmd 1 0))))))
 
-(-> (main)
+(-> (main!)
     (.catch (fn [err]
               (let [err-fn (.-error log)]
                 (err-fn (or (.-message err) (String err))))

@@ -38,7 +38,7 @@
 (def INSTALL-ROOT :- String (join MOZ-OBJDIR "dist" "bin"))
 (def GJOA-DEV :- String (join INSTALL-ROOT "gjoa-dev"))
 
-(defn main [] :- Any
+(defn main! [] :- Any
   (when (not (existsSync DIST-CHROME))
     (.error console "✗ dist/chrome/ not built — run `bun run chrome:dist` first")
     (.exit process 1))
@@ -58,4 +58,4 @@
   (.log console (str "  " INSTALL-ROOT "/gjoa --no-remote --profile <profile_dir>"))
   (.log console "\nDaily loop: edit src/gjoa/chrome/bjs/* → `bun run chrome:dist` → restart gjoa."))
 
-(js/await (main))
+(js/await (main!))

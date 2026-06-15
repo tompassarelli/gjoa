@@ -39,7 +39,7 @@
 ;; Walk a directory recursively, collecting every regular file path.
 ;; (The original used a generator; beagle has no generators, so we
 ;; accumulate into an array via .push and return it.)
-(defn walk [root :- String] :- Any
+(defn walk! [root :- String] :- Any
   (let [out []]
     (letfn [(recurse [dir :- String] :- Any
               (doseq [name (readdirSync dir)]
@@ -90,6 +90,6 @@
     (do
       (.step log "rewriting Firefox-isms in browser locales")
       ;; Rewrite every text file, then sum the per-file change flags (0/1).
-      (let [results (js/await (.all Promise (.map (walk LOCALE-DIR) rewrite-one)))
+      (let [results (js/await (.all Promise (.map (walk! LOCALE-DIR) rewrite-one)))
             changed (.reduce results (fn [a b] (+ a b)) 0)]
         (.ok log (str "locales: rewrote " changed " file" (if (= changed 1) "" "s"))))))))

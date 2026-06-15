@@ -40,7 +40,7 @@
     (doseq [name names]
       (js/await (copyFile (join src name) (join dst name))))))
 
-(defn main [] :- Any
+(defn main! [] :- Any
   (do
     (when (existsSync DIST)
       (js/await (rm DIST {:recursive true})))
@@ -76,4 +76,4 @@
     (.log console "\n✓ chrome distribution ready at dist/")
     (.log console "  install: bun run chrome:install")))
 
-(js/await (main))
+(js/await (main!))
