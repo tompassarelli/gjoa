@@ -38,18 +38,23 @@
         deadline (+ (.now Date) (or (.-connectTimeoutMs o) 30000))
         ;; Mutable scan state — `socket`/`lastErr` accumulate across poll attempts.
         scan {:socket nil :lastErr nil}]
-    (loop []
-      (if (and (< (.now Date) deadline) (not (.-socket scan)))
-        (do
-          (try
-            (set! (.-socket scan) (js/await (openSocket host port)))
-            (catch Error e
-              (do
-                (set! (.-lastErr scan) e)
-                (js/await (sleep 150)))))
-          ;; Re-check: keep polling until a socket connects or the deadline passes.
-          (if (.-socket scan) nil (recur)))
-        nil))
+    ;; Both the loop and the inner try contain js/await, so beagle wraps each in
+    ;; an async IIFE — they MUST be js/await'd or they run fire-and-forget and the
+    ;; loop spins synchronously without ever waiting for the socket.
+    (js/await
+      (loop []
+        (if (and (< (.now Date) deadline) (not (.-socket scan)))
+          (do
+            (js/await
+              (try
+                (set! (.-socket scan) (js/await (openSocket host port)))
+                (catch Error e
+                  (do
+                    (set! (.-lastErr scan) e)
+                    (js/await (sleep 150))))))
+            ;; Re-check: keep polling until a socket connects or the deadline passes.
+            (if (.-socket scan) nil (recur)))
+          nil)))
     (if (not (.-socket scan))
       (throw (MarionetteError. (str "could not connect to Marionette at " host ":" port " within timeout")
                                (.-lastErr scan)))
