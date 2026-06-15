@@ -34,3 +34,4 @@ result-*
 *.mar
 *.dmg
 *.tar.bz2
+.beagle/
