@@ -16,7 +16,7 @@
    :observer nil
    :log nil})
 
-(defn update [] :- Any
+(defn update! [] :- Any
   (let [ov (.-overlay st)
         asb (.-arrowscrollbox st)]
     (when (and ov asb)
@@ -37,7 +37,7 @@
         (set! (.-height (.-style ov)) (str height "px"))
         (set! (.-display (.-style ov)) (if (> height 0) "" "none"))))))
 
-(defn enable [] :- Any
+(defn enable! [] :- Any
   (when (not (.-overlay st))
     (let [el (xul-new "box")
           asb (.-arrowscrollbox st)
@@ -46,16 +46,16 @@
       (.appendChild (.-sidebar-main st) el)
       (set! (.-overlay st) el)
       (when asb
-        (let [ro (ResizeObserver. update)]
+        (let [ro (ResizeObserver. update!)]
           (.observe ro asb)
           (set! (.-resize-obs st) ro))
-        (let [mo (MutationObserver. update)]
+        (let [mo (MutationObserver. update!)]
           (.observe mo asb {:childList true})
           (set! (.-mutation-obs st) mo)))
-      (update)
+      (update!)
       (log "enable"))))
 
-(defn disable [] :- Any
+(defn disable! [] :- Any
   (when (.-overlay st)
     (let [log (.-log st)]
       (when (.-resize-obs st) (.disconnect (.-resize-obs st)))
@@ -66,23 +66,23 @@
       (set! (.-overlay st) nil)
       (log "disable"))))
 
-(defn destroy [] :- Any
+(defn destroy! [] :- Any
   (try (.removeObserver (.-prefs Services) PREF (.-observer st))
     (catch Any e nil))
-  (disable))
+  (disable!))
 
 (js/export (defn make-drag-overlay [deps] :- Any
   (set! (.-log st) (create-logger "drawer/drag-overlay"))
   (set! (.-sidebar-main st) (.-sidebarMain deps))
   (set! (.-arrowscrollbox st) (by-id "tabbrowser-arrowscrollbox"))
 
-  (when (pref-bool PREF true) (enable))
+  (when (pref-bool PREF true) (enable!))
 
   (let [obs {:observe (fn []
               (if (pref-bool PREF true)
-                (enable)
-                (disable)))}]
+                (enable!)
+                (disable!)))}]
     (set! (.-observer st) obs)
     (.addObserver (.-prefs Services) PREF obs))
 
-  {:destroy destroy}))
+  {:destroy destroy!}))

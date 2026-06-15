@@ -5,6 +5,7 @@ firefox-*/
 __pycache__/
 dist/
 .beagle-out/
+.beagle-tools/
 target/
 mozconfig
 
@@ -33,3 +34,4 @@ result-*
 *.mar
 *.dmg
 *.tar.bz2
+.beagle/

@@ -14,7 +14,7 @@
       :else (recur (- i 1)))))
 
 ;; Re-nest descendants after restore (walks nextElementSibling chain)
-(defn renest-descendants [n :- Any expected :- Any
+(defn renest-descendants! [n :- Any expected :- Any
                           old-parent-id :- Any new-id :- Any] :- Any
   (when (and n (not= n (.-spacer state)))
     (when (.-_tab n)
@@ -22,11 +22,11 @@
         (when (and (.has expected (.-id ntd))
                    (= (.-parentId ntd) old-parent-id))
           (set! (.-parentId ntd) new-id))))
-    (renest-descendants (.-nextElementSibling n)
+    (renest-descendants! (.-nextElementSibling n)
                         expected old-parent-id new-id)))
 
 ;; Reparent children after a tab closes (walks nextElementSibling)
-(defn reparent-children [next :- Any closing-id :- Any
+(defn reparent-children! [next :- Any closing-id :- Any
                          new-parent-id :- Any my-level :- Int
                          rows :- Any] :- Any
   (when (and next (not= next (.-spacer state)))
@@ -37,7 +37,7 @@
           (when (= (.-parentId ntd) closing-id)
             (set! (.-parentId ntd) new-parent-id)
             (.syncTabRow rows (.-_tab next))))
-        (reparent-children (.-nextElementSibling next)
+        (reparent-children! (.-nextElementSibling next)
                            closing-id new-parent-id my-level rows))
 
       (.-_group next)
@@ -46,11 +46,11 @@
           (set! (.-level (.-_group next))
                 (.max Math 0 (- g-lv 1)))
           (.syncGroupRow rows next)
-          (reparent-children (.-nextElementSibling next)
+          (reparent-children! (.-nextElementSibling next)
                              closing-id new-parent-id my-level rows)))
 
       :else
-      (reparent-children (.-nextElementSibling next)
+      (reparent-children! (.-nextElementSibling next)
                          closing-id new-parent-id my-level rows))))
 
 ;; True iff Firefox considers this tab pinned right now
@@ -312,7 +312,7 @@
                 (let [closing-id (.-id td)
                       new-parent-id (undef-or (.-parentId td) nil)
                       my-level (level-of tab)]
-                  (reparent-children (.-nextElementSibling row)
+                  (reparent-children! (.-nextElementSibling row)
                                      closing-id new-parent-id
                                      my-level rows))
                 (when (= (.-cursor state) row)
@@ -436,7 +436,7 @@
                                 (.forEach (.-descendantIds entry)
                                   #(.add s %))
                                 s)]
-                          (renest-descendants
+                          (renest-descendants!
                             (.-nextElementSibling row)
                             expected
                             (undef-or (.-parentId entry) nil)

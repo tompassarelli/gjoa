@@ -48,7 +48,7 @@
 
 ;; --- buildPanel — removes children before spacer, creates rows ---
 
-(defn build-panel [rows-api :- Any] :- Any
+(defn build-panel! [rows-api :- Any] :- Any
   (clear-all-rows!)
   (.forEach (tabs!)
     (fn [tab]
@@ -166,7 +166,7 @@
 ;; --- loadFromHistory — promise chain ---
 
 ;; Recursive pairwise matching of saved nodes to live tabs
-(defn match-tabs-loop [tab-nodes :- Any tabs :- Any ni :- Int li-ref :- Any
+(defn match-tabs-loop! [tab-nodes :- Any tabs :- Any ni :- Int li-ref :- Any
                        applied :- Any apply-fn :- Any] :- Any
   (when (and (< ni (.-length tab-nodes)) (< (.-v li-ref) (.-length tabs)))
     (let [s (aget tab-nodes ni)
@@ -176,7 +176,7 @@
       (if (or (= live-url (.-url s)) pending)
         (do (apply-fn live s ni)
             (set! (.-v li-ref) (+ (.-v li-ref) 1))
-            (match-tabs-loop tab-nodes tabs (+ ni 1) li-ref applied apply-fn))
+            (match-tabs-loop! tab-nodes tabs (+ ni 1) li-ref applied apply-fn))
         (let [off (loop [j 1]
                     (cond
                       (or (> j 5) (>= (+ (.-v li-ref) j) (.-length tabs))) 0
@@ -186,7 +186,7 @@
           (when (> off 0)
             (apply-fn (aget tabs (+ (.-v li-ref) off)) s ni)
             (set! (.-v li-ref) (+ (.-v li-ref) off 1)))
-          (match-tabs-loop tab-nodes tabs (+ ni 1) li-ref applied apply-fn))))))
+          (match-tabs-loop! tab-nodes tabs (+ ni 1) li-ref applied apply-fn))))))
 
 (def loaded-nodes-ref :- Any {:v nil})
 
@@ -242,7 +242,7 @@
                         li-ref {:v 0}]
 
                     ;; Pairwise matching
-                    (match-tabs-loop tab-nodes tabs 0 li-ref applied apply-fn)
+                    (match-tabs-loop! tab-nodes tabs 0 li-ref applied apply-fn)
 
                     (.log console
                       (str "gjoa-tabs: loaded " (.-length tab-nodes) " saved tab nodes, "
@@ -271,7 +271,7 @@
 
 ;; --- buildFromSaved — groups + tab order from saved data ---
 
-(defn build-from-saved [] :- Bool
+(defn build-from-saved! [] :- Bool
   (let [loaded-nodes (.-v loaded-nodes-ref)]
     (if (or (not loaded-nodes) (not (.-panel state)))
       false
@@ -404,8 +404,8 @@
                   {:observe #(.positionPanel layout)})
 
                 ;; Build from saved or fresh
-                (when (not (build-from-saved))
-                  (build-panel rows-api))
+                (when (not (build-from-saved!))
+                  (build-panel! rows-api))
 
                 ;; Context menus
                 (build-context-menu

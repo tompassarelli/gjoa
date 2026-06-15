@@ -1,0 +1,104 @@
+#lang beagle/js
+;; Chrome-level dark mode — a Lane 1 module (no rebuild; hot-reloads via
+;; `gjoa sync`). No compositor work, no content-script injection. Two
+;; Gecko-native mechanisms:
+;;   - forces content `prefers-color-scheme: dark` via the native pref
+;;     `layout.css.prefers-color-scheme.content-override` (0 = dark, 2 = none),
+;;     so sites with native dark CSS activate it — no agent stylesheet;
+;;   - a chrome CSS `filter: invert()` on the <browser> frame, for sites
+;;     without native dark support.
+;; Modes (pref gjoa.darkmode.mode): "auto" (color-scheme only), "filter"
+;; (also the inversion filter), "off".
+(ns gjoa.dark-mode.index
+  (:require [gjoa.macros :refer [html-new attr! rmattr! pref-bool pref-str
+                                 set-pref-bool! set-pref-str! set-pref-int! on1!]]))
+(define-mode strict)
+
+(declare-extern [document window Services console] Any)
+
+(def PREF-ENABLED :- String "gjoa.darkmode.enabled")
+(def PREF-MODE :- String "gjoa.darkmode.mode")
+(def PREF-CONTENT-OVERRIDE :- String "layout.css.prefers-color-scheme.content-override")
+
+(def FILTER-CSS-ID :- String "gjoa-darkmode-filter-style")
+(def FILTER-CSS :- String
+  (str "#tabbrowser-tabpanels browser { filter: invert(0.9) hue-rotate(180deg) !important; } "
+       "#tabbrowser-tabpanels browser img, #tabbrowser-tabpanels browser video, "
+       "#tabbrowser-tabpanels browser canvas, #tabbrowser-tabpanels browser svg "
+       "{ filter: invert(1) hue-rotate(180deg) !important; }"))
+
+(def state :- Any {:filter-el nil :unsub nil})
+
+;; Force (or release) dark color-scheme on web content. 0 = dark, 2 = no override.
+(defn force-content-scheme [on :- Boolean] :- Any
+  (set-pref-int! PREF-CONTENT-OVERRIDE (if on 0 2)))
+
+(defn apply-filter! [] :- Any
+  (when (not (.-filter-el state))
+    (let [style (html-new "style")]
+      (set! (.-id style) FILTER-CSS-ID)
+      (set! (.-textContent style) FILTER-CSS)
+      (.appendChild (.-documentElement document) style)
+      (set! (.-filter-el state) style))))
+
+(defn remove-filter! [] :- Any
+  (when (.-filter-el state)
+    (.remove (.-filter-el state))
+    (set! (.-filter-el state) nil)))
+
+(defn set-chrome-scheme! [dark :- Boolean] :- Any
+  (let [root (.-documentElement document)]
+    (if dark
+      (do (set! (.-colorScheme (.-style root)) "dark")
+          (attr! root "gjoa-darkmode" "true"))
+      (do (.removeProperty (.-style root) "color-scheme")
+          (rmattr! root "gjoa-darkmode")))))
+
+(defn enabled? [] :- Boolean (pref-bool PREF-ENABLED false))
+(defn mode- [] :- String (pref-str PREF-MODE "auto"))
+
+(defn apply! [] :- Any
+  (let [en (enabled?)
+        m (mode-)]
+    (if (or (not en) (= m "off"))
+      (do (set-chrome-scheme! false)
+          (force-content-scheme false)
+          (remove-filter!))
+      (do (set-chrome-scheme! true)
+          (force-content-scheme true)
+          (if (= m "filter") (apply-filter!) (remove-filter!))))))
+
+;; Public toggle API (for a future toolbar button), exposed on window.
+(defn toggle [] :- Boolean
+  (let [new-state (not (enabled?))]
+    (set-pref-bool! PREF-ENABLED new-state)
+    new-state))
+
+(defn cycle-mode [] :- String
+  (let [cur (mode-)
+        nxt (cond (= cur "auto") "filter" (= cur "filter") "off" :else "auto")]
+    (set-pref-str! PREF-MODE nxt)
+    nxt))
+
+(defn destroy! [] :- Any
+  (let [u (.-unsub state)]
+    (when u (u)))
+  (set! (.-unsub state) nil)
+  (set-chrome-scheme! false)
+  (remove-filter!))
+
+(defn init-! [] :- Any
+  (apply!)
+  (let [observer {:observe (fn [_s _t _d] (apply!))}]
+    (.addObserver (.-prefs Services) PREF-ENABLED observer)
+    (.addObserver (.-prefs Services) PREF-MODE observer)
+    (set! (.-unsub state)
+      (fn []
+        (.removeObserver (.-prefs Services) PREF-ENABLED observer)
+        (.removeObserver (.-prefs Services) PREF-MODE observer))))
+  (set! (.-gjoaDarkMode window)
+    {:toggle toggle :cycleMode cycle-mode :isEnabled enabled? :getMode mode-})
+  (on1! window "unload" destroy!)
+  (.log console (str "gjoa-darkmode: initialized (enabled=" (enabled?) ", mode=" (mode-) ")")))
+
+(init-!)
