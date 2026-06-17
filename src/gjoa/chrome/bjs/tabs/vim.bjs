@@ -430,9 +430,15 @@
 
 
         leader-key (fn []
-          (when (pref-bool "gjoa.keys.useLeader" false)
+          ;; Must return nil (not undefined) when leader mode is off: the keydown
+          ;; handler gates on `(not= leader nil)`, which compiles to `!== null`.
+          ;; A bare `when` falls through to `undefined`, and `undefined !== null`
+          ;; is true — that wrongly routes every key into leader mode (where
+          ;; `e.key === undefined` never matches), silently killing all hotkeys.
+          (if (pref-bool "gjoa.keys.useLeader" false)
             (let [v (pref-str "gjoa.keys.leader" " ")]
-              (if (= (.-length v) 0) nil v))))
+              (if (= (.-length v) 0) nil v))
+            nil))
 
         leader-timeout-ms (fn [] :- Int
           (pref-int "gjoa.keys.leader_timeout" 1500))

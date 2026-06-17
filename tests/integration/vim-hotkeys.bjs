@@ -1,0 +1,61 @@
+#lang beagle/js
+;; Regression: vim hotkeys must fire with the DEFAULT config (leader off).
+;;
+;; Bug (found 2026-06-17): `leader-key` was `(when useLeader …)`, which falls
+;; through to `undefined` when leader mode is off (the default). The keydown
+;; handler gates on `(not= leader nil)` → compiled `leader !== null`, and
+;; `undefined !== null` is TRUE — so every keystroke was routed into leader
+;; mode with `leader === undefined`, where `e.key === undefined` never matches.
+;; Result: ALL direct vim hotkeys silently did nothing. Fix: return `nil`
+;; explicitly. This test drives REAL key events (trusted, via Marionette
+;; PerformActions) on a neutral page and asserts the hotkeys open their pickers.
+(ns gjoa.tests.integration.vim-hotkeys
+  (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for sleep]]))
+(define-mode strict)
+
+(declare-extern [Error] Any)
+
+(def setup-js :- String
+  "
+  // Neutral content page; focus the gjoa panel (chrome, allowed by the handler).
+  const tab = gBrowser.addTab('about:blank', {
+    triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+  });
+  gBrowser.selectedTab = tab;
+  // Default config: leader OFF (the regressing case).
+  Services.prefs.setBoolPref('gjoa.keys.useLeader', false);
+  const panel = document.getElementById('gjoa-tab-panel');
+  if (panel) { panel.setAttribute('tabindex', '0'); panel.focus(); }
+  return !!panel;
+")
+
+(def pickerOpen-js :- String
+  "return !!document.querySelector('[class*=picker], [id*=picker], .gjoa-search-input');")
+
+(def closePicker-js :- String
+  "try { document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})); } catch(e){} return 1;")
+
+(defn key-action [ch :- String] :- Any
+  [{:type "key" :id "kbd"
+    :actions [{:type "keyDown" :value ch} {:type "keyUp" :value ch}]}])
+
+(js/export (def tests :- Any
+  [(deftest "vim 't' (tabs) fires with leader off" [mn]
+     (await-true "return !!document.querySelector(\"#gjoa-tab-panel\");" 10000)
+     (js/await (sleep 600))
+     (expect (chrome-eval setup-js) "no #gjoa-tab-panel to focus")
+     (chrome-eval closePicker-js)
+     (js/await (.performActions mn (key-action "t")))
+     (await-true pickerOpen-js 4000)
+     (expect (chrome-eval pickerOpen-js) "real 't' did not open the tabs picker (leader_key regression)"))
+
+   (deftest "vim ':' (ex-command) fires with leader off" [mn]
+     (await-true "return !!document.querySelector(\"#gjoa-tab-panel\");" 10000)
+     (js/await (sleep 200))
+     (chrome-eval setup-js)
+     (chrome-eval closePicker-js)
+     (js/await (.performActions mn (key-action ":")))
+     (await-true pickerOpen-js 4000)
+     (expect (chrome-eval pickerOpen-js) "real ':' did not open the ex-command picker (leader_key regression)"))]))
+
+(js/export-default tests)
