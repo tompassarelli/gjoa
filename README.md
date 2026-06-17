@@ -53,18 +53,25 @@ Firefox-plus-extensions setup people actually run, gjoa is dramatically lighter.
 **NixOS / Nix (the primary path):**
 
 ```sh
-bun run init                       # download mozilla-central + apply overlays
-nix build .#gjoa --impure          # dev variant — fast, no LTO, CPU-portable
-nix build .#gjoa-release --impure  # release — O3 + LTO + march=native (this CPU only)
+bun run init                    # download mozilla-central + apply overlays
+nix build .#gjoa --impure       # personal build — LTO + -march=native (THIS CPU only)
+nix build .#gjoa-dev --impure   # dev variant — fast, no LTO, CPU-portable
 ./result/bin/gjoa
 ```
 
-**Other platforms.** `.github/workflows/` builds portable artifacts with mach on
-GitHub Actions — a Linux x86_64 tarball and a macOS (`macos-26`) `.dmg`/`.app`.
-For a self-contained Linux executable that runs on any glibc distro with **no Nix
-on the target**, `nix bundle .#gjoa --impure` emits a single relocatable file.
-(CI needs the [Beagle](https://github.com/tompassarelli/beagle) compiler as a
-sibling checkout — the workflows clone it and install Racket before `import`.)
+`.#gjoa` is tuned to the building machine's CPU (`-march=native`) — fastest at
+runtime, but **not portable** (it SIGILLs on a different chip), so it's the
+maintainer's local daily driver, never a thing you hand out. `.#gjoa-dev` is the
+portable, fast-to-build variant for iteration.
+
+**Builds for other people.** Portable, distributable builds are the CI artifacts,
+not a nix package: `.github/workflows/` builds with mach on GitHub Actions — a
+Linux x86_64 tarball and a macOS (`macos-26`, Apple Silicon) `.dmg`/`.app`, none
+of them `-march=native`. For a self-contained Linux executable that runs on any
+glibc distro with **no Nix on the target**, `nix bundle .#gjoa-dev --impure`
+emits a single relocatable file. (CI needs the
+[Beagle](https://github.com/tompassarelli/beagle) compiler as a sibling checkout
+— the workflows clone it and install Racket before `import`.)
 
 ## Dev loop
 

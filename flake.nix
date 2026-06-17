@@ -78,12 +78,14 @@
         # mozilla-central to ./engine/ then overlays src/gjoa/, branding,
         # patches. Nix imports ./engine/ as the derivation source.
         #
-        # TWO BUILD VARIANTS:
-        #   gjoa         = dev quality (no PGO, no LTO, no crashreporter)
-        #                   what `nix build .#gjoa` produces — fast iteration
-        #   gjoa-release = release quality (full PGO + LTO + everything)
-        #                   what we ship — same correctness, longer build,
-        #                   ~5-15% faster runtime. Use only for distribution.
+        # TWO BUILD VARIANTS (both LOCAL/personal — portable builds for OTHER
+        # people are the CI artifacts in .github/workflows/, NOT a nix package):
+        #   gjoa-dev = no PGO/LTO, portable. Fast to build — the dev loop, and
+        #              the portable target for `nix bundle`. `.#gjoa-dev`.
+        #   gjoa     = LTO + -march=native, tuned for THIS machine's CPU. The
+        #              maintainer's daily driver (what the rofi/drun "gjoa" entry
+        #              launches). Fastest at runtime, but NOT portable — it
+        #              SIGILLs on a different CPU, so never hand it to anyone.
         #
         # buildMozillaMach has TWO arg lists:
         #   1. user args (pname, version, src, branding, ...) → passed directly
@@ -253,20 +255,24 @@
           crashreporterSupport = false;
         };
 
-        # Release variant — LTO + aggressive perf flags. What we ship.
+        # Native variant — LTO + -march=native, tuned for THE BUILDING machine's
+        # CPU. The maintainer's personal daily build: fastest, but NOT portable
+        # (perfFlags sets -march=native, so it SIGILLs on a different CPU). Do
+        # NOT distribute this — other people get the portable CI builds
+        # (.github/workflows/, mach --enable-optimize, no -march=native).
+        #
         # PGO TEMPORARILY DROPPED (2026-06-15): nixpkgs PGO runs the instrumented
         # browser for profiling, and gjoa's history-sqlite feature deadlocks the
         # profile-before-change AsyncShutdown barrier on that fast start→quit
         # (Sqlite stops processing statements once the barrier engages, so the
-        # in-flight migration can't finish — builds #2 and #3 both died here). The
-        # history fix needs verification on the dev binary's fast loop, not via
-        # 2–3h nix builds. Re-enable pgoSupport once history shutdown is clean.
-        # PGO's gjoa-vs-stock-Firefox delta is marginal anyway (stock FF is PGO'd).
-        gjoa-release-unwrapped = mkGjoa {
+        # in-flight migration can't finish — builds #2 and #3 both died here).
+        # Re-enable pgoSupport once history shutdown is clean. PGO's
+        # gjoa-vs-stock-Firefox delta is marginal anyway (stock FF is already PGO'd).
+        gjoa-native-unwrapped = mkGjoa {
           pgoSupport = false;
           ltoSupport = true;
           crashreporterSupport = false;  # would need dump_syms; not yet wired
-          suffix = "-release";
+          suffix = "-native";
           perfFlags = true;
         };
 
@@ -282,19 +288,29 @@
         # through from the unwrapped derivation — `wrapFirefox { }` reads them
         # from there.
         gjoa-dev = pkgs.wrapFirefox gjoa-dev-unwrapped { };
-        gjoa-release = pkgs.wrapFirefox gjoa-release-unwrapped { };
+        gjoa-native = pkgs.wrapFirefox gjoa-native-unwrapped { };
       in
       {
-        # Defaults: `nix build .#gjoa` is the wrapped DEV variant — the thing
-        # you actually install. The `*-unwrapped` outputs are the raw
-        # buildMozillaMach derivations, exposed for downstream consumers that
-        # want to do their own wrapping (and for our `mach build`-driven dev
-        # iteration which doesn't go through wrapFirefox at all).
-        packages.default = gjoa-dev;
-        packages.gjoa = gjoa-dev;
-        packages.gjoa-unwrapped = gjoa-dev-unwrapped;
-        packages.gjoa-release = gjoa-release;
-        packages.gjoa-release-unwrapped = gjoa-release-unwrapped;
+        # `.gjoa` / `.default` = the NATIVE personal build — what your nixos
+        # config installs (modules/gjoa → packages.<sys>.gjoa), so the rofi/drun
+        # "gjoa" entry launches it. -march=native ⇒ a nixos-rebuild that touches
+        # this input is a ~1.5–2h LTO compile (cache it once and you're fine).
+        #
+        # `.gjoa-dev` = the fast, no-opt, PORTABLE variant — the dev loop and the
+        # target for `nix bundle .#gjoa-dev` (a relocatable Linux executable).
+        #
+        # There is intentionally NO nix "release": portable builds for other
+        # people are the cross-platform CI artifacts (.github/workflows/).
+        #
+        # The `*-unwrapped` outputs are the raw buildMozillaMach derivations,
+        # exposed for downstream consumers that want to do their own wrapping.
+        packages.default = gjoa-native;
+        packages.gjoa = gjoa-native;
+        packages.gjoa-unwrapped = gjoa-native-unwrapped;
+        packages.gjoa-native = gjoa-native;
+        packages.gjoa-native-unwrapped = gjoa-native-unwrapped;
+        packages.gjoa-dev = gjoa-dev;
+        packages.gjoa-dev-unwrapped = gjoa-dev-unwrapped;
 
         # ===================================================================
         # Dev shells — split into two intentionally:
