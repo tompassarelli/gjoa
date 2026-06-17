@@ -37,9 +37,9 @@
         # The block is dead weight (but harmless) once nixpkgs has
         # permanently outpaced minNssVersion; safe to delete the
         # let-bindings + the if-branch then.
-        minNssVersion = "3.123.1";
-        nssUrl = "https://github.com/nss-dev/nss/archive/NSS_3_123_1_RTM.tar.gz";
-        nssHash = "sha256-VHlcr/B04ijcZgt9XPLkBsnoJmuHjWZkdrOBYSqyYMg=";
+        minNssVersion = "3.124";
+        nssUrl = "https://github.com/nss-dev/nss/archive/NSS_3_124_RTM.tar.gz";
+        nssHash = "sha256-bMUMyb/4qkiucbkvzSY5aNS3nfaJ4XWyqf2lKnVmXfU=";
 
         basePkgs = import nixpkgs { inherit system; };
         nssOverlayNeeded =

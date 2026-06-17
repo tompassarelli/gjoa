@@ -6,11 +6,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 300
     env:
-      FF_VERSION: "151.0.1"
+      FF_VERSION: "152.0"
     steps:
       - uses: actions/checkout@v4
+
+      # Firefox's objdir is ~30GB; the runner ships ~14GB free on /. The Jun-13
+      # build stalled 34 min then SIGTERM (143) — disk exhaustion. Reclaim ~25GB
+      # of preinstalled toolchains we don't use before anything else.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+            /usr/lib/jvm /usr/share/swift "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
+          sudo docker image prune --all --force || true
+          df -h /
 
       - name: Install bun
         uses: oven-sh/setup-bun@v2
@@ -18,7 +29,7 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Install system deps
         run: |
@@ -36,7 +47,8 @@ jobs:
       - name: Maximize build space
         run: |
           sudo swapoff -a
-          sudo fallocate -l 10G /swapfile
+          sudo rm -f /swapfile
+          sudo fallocate -l 16G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
@@ -54,6 +66,23 @@ jobs:
           mkdir -p engine
           tar -xJf ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz -C engine --strip-components=1
 
+      # gjoa's build tooling is written in beagle (a Racket compiler), invoked
+      # as a sibling at ../beagle. CI only checks out gjoa, so without these two
+      # steps `bun run import` dies with "../beagle/bin/beagle-build: No such
+      # file or directory" (exit 127). beagle-build runs standalone with just
+      # Racket + the repo (no raco-pkg-install / direnv setup needed).
+      - name: Install Racket (beagle compiler runtime)
+        uses: Bogdanp/setup-racket@v1.15
+        with:
+          version: 'stable'
+      - name: Checkout beagle (sibling compiler)
+        run: git clone --depth 1 https://github.com/tompassarelli/beagle.git ../beagle
+      # beagle-build resolves modules from the 'beagle' Racket collection, which
+      # is provided by beagle-lib (info.rkt: collection "beagle", deps just base).
+      # Register it as a linked package so `(require beagle/...)` resolves.
+      - name: Register beagle collection
+        run: raco pkg install --link --batch --no-docs ../beagle/beagle-lib
+
       - name: Apply overlays and patches
         run: bun run import
 
@@ -69,6 +98,11 @@ jobs:
           ac_add_options --disable-tests
           ac_add_options --enable-optimize
           ac_add_options --enable-release
+          # Debug symbols dominate link-time RAM, objdir size, and final binary
+          # size. A distribution build doesn't need them — dropping them is what
+          # keeps the link inside the runner's memory + disk envelope. (lld is the
+          # toolchain's default linker on clang/Linux, so it's used without a flag.)
+          ac_add_options --disable-debug-symbols
           MOZCONFIG
           sed -i 's/^          //' engine/mozconfig
           cat engine/mozconfig
