@@ -6,11 +6,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 300
     env:
-      FF_VERSION: "151.0.1"
+      FF_VERSION: "152.0"
     steps:
       - uses: actions/checkout@v4
+
+      # Firefox's objdir is ~30GB; the runner ships ~14GB free on /. The Jun-13
+      # build stalled 34 min then SIGTERM (143) — disk exhaustion. Reclaim ~25GB
+      # of preinstalled toolchains we don't use before anything else.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+            /usr/lib/jvm /usr/share/swift "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
+          sudo docker image prune --all --force || true
+          df -h /
 
       - name: Install bun
         uses: oven-sh/setup-bun@v2
@@ -36,7 +47,8 @@ jobs:
       - name: Maximize build space
         run: |
           sudo swapoff -a
-          sudo fallocate -l 10G /swapfile
+          sudo rm -f /swapfile
+          sudo fallocate -l 16G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
@@ -69,6 +81,12 @@ jobs:
           ac_add_options --disable-tests
           ac_add_options --enable-optimize
           ac_add_options --enable-release
+          # lld links libxul far faster and with less peak RAM than bfd/gold.
+          ac_add_options --enable-linker=lld
+          # Debug symbols dominate link-time RAM, objdir size, and final binary
+          # size. A distribution build doesn't need them — dropping them is what
+          # keeps the link inside the runner's memory + disk envelope.
+          ac_add_options --disable-debug-symbols
           MOZCONFIG
           sed -i 's/^          //' engine/mozconfig
           cat engine/mozconfig

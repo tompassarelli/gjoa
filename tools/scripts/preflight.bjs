@@ -258,7 +258,7 @@
 
 ;; ── Gate I: chrome bundle three-way alignment ─────────────────────────────
 (defn gateI [] :- Any
-  (let [loaderPath (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "GjoaLoader.sys.mjs")
+  (let [loaderPath (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "GjoaLoader.bjs")
         jarPath (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "jar.mn")
         bakePath (join REPO-ROOT "tools" "prep" "chrome-bake.bjs")]
     (if (not (.every [loaderPath jarPath bakePath] existsSync))

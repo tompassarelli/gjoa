@@ -5,10 +5,13 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
-    timeout-minutes: 180
+    # macos-26 (Tahoe) ships the macOS 26 SDK, which has NSGlassEffectView — the
+    # Jun-13 build on macos-15 failed with "use of undeclared identifier
+    # 'NSGlassEffectView'" because FF 151+ uses macOS 26's Liquid Glass API.
+    runs-on: macos-26
+    timeout-minutes: 300
     env:
-      FF_VERSION: "151.0.1"
+      FF_VERSION: "152.0"
     steps:
       - uses: actions/checkout@v4
 
@@ -34,10 +37,13 @@ jobs:
 
       - name: Patch macOS SDK version check
         run: |
-          # Mozilla's TaskCluster-hosted macOS SDK (26.4) returns 403 for
-          # external CI. The Xcode SDK on the runner works fine — just
-          # lower the floor so configure accepts it.
-          sed -i '' 's/return "26.4"/return "15.0"/' \
+          # FF 152 wants the macOS 26.4 SDK; the macos-26 runner ships a 26.x
+          # Xcode SDK that may be slightly older (26.0–26.3). Lower the floor to
+          # 26.0 — still new enough to provide NSGlassEffectView (the symbol the
+          # old 15.0 floor removed, breaking the Jun-13 build), low enough that
+          # the runner's SDK is accepted. Print the SDK actually present for the log.
+          xcrun --sdk macosx --show-sdk-version || true
+          sed -i '' 's/return "26.4"/return "26.0"/' \
             engine/build/moz.configure/toolchain.configure
 
       - name: Apply overlays and patches
@@ -55,6 +61,9 @@ jobs:
           ac_add_options --disable-tests
           ac_add_options --enable-optimize
           ac_add_options --enable-release
+          # Debug symbols dominate link RAM, disk, and binary size; a distribution
+          # build doesn't need them and macOS runners have limited disk.
+          ac_add_options --disable-debug-symbols
           MOZCONFIG
           sed -i '' 's/^          //' engine/mozconfig
           cat engine/mozconfig
