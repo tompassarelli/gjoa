@@ -53,7 +53,7 @@ jobs:
       # beagle-build runs standalone with just Racket + the repo (verified: no
       # raco-pkg-install / direnv / PLTCOLLECTS setup needed).
       - name: Install Racket (beagle compiler runtime)
-        uses: Bogdanp/setup-racket@v1
+        uses: Bogdanp/setup-racket@v1.15
         with:
           version: 'stable'
       - name: Checkout beagle (sibling compiler)
