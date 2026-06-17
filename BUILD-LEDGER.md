@@ -242,3 +242,33 @@ Linux+macOS builds online for 152 took a chain of config fixes (stale lockfile �
 missing beagle sibling → setup-racket@v1.15 → raco-link beagle-lib for the
 collection). The free Linux runner is expected to OOM at link regardless (Zen uses
 paid Blacksmith/self-hosted) — popos fallback is `nix bundle` off this local build.
+
+## 2026-06-17 — vim hotkeys fix + variant rename + native build — SUCCESS (native in progress)
+
+**Trigger:** user reported vim hotkeys (t / : / tab-search) dead on the 152 build.
+Diagnosed by driving `result/bin/gjoa` headless via Marionette (real key events) —
+NOT by rebuilding to guess. Root cause: `leader-key` was `(when useLeader …)`,
+which returns `undefined` when leader mode is off (the default); the keydown
+handler gates on `(not= leader nil)` → compiled `!== null`, and `undefined !== null`
+is `true`, so every key was routed into leader mode with `leader === undefined`
+and nothing ever matched. ALL direct hotkeys silently dead. Fix: explicit `nil`
+else (PR #10). A nil-vs-undefined emit mismatch, not a 152 change.
+
+**Verification (the point of the Marionette harness):** added
+`tests/integration/vim-hotkeys.bjs` (real keys → pickers open with leader off).
+Rebuilt nix dev binary → regression suite **9/9 green** on the compiled binary:
+`t`→tabs picker, `:`→ex picker. Fix proven end-to-end, no guessing.
+
+**Flake variant rename (PR #11):** `gjoa-release` was misnamed — it set
+`-march=native` (un-shippable; SIGILLs on other CPUs). Renamed → `gjoa-native`;
+`.#gjoa` is now the native personal build (what the nixos config installs → rofi
+"gjoa"). `.#gjoa-dev` = fast/portable (dev loop + `nix bundle` target). "Release"
+for other people = the CI artifacts, not a nix package.
+
+**Builds this session:**
+- nix dev variant (vim-fix verification) — SUCCESS, vim 9/9.
+- nix `.#gjoa` (= gjoa-native, LTO + -march=native) — IN PROGRESS (first native
+  build to completion in this repo; prior release builds died on PGO, now disabled).
+- mach dev build (`gjoa dev`) — queued after native (sequential; no concurrent
+  Firefox compiles — thermal/OOM).
+- CI linux + macos re-triggered on main with the fix — in progress.
