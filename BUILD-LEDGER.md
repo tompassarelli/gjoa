@@ -380,3 +380,27 @@ state (transient `layoutCollapsed`, active-space-scoped, never persisted).
 **Persistence:** `patches/0009` regenerated to include the P2 END hook
 (apply-clean on pristine). Chrome/newtab/loader are src/gjoa overlays. Batch is a
 **minor v0.3.0** (adds the new-tab feature) — release held for user sign-off.
+
+---
+
+## 2026-06-18 — Full list-driven scriptlet engine (uBlock +js parity) — SUCCESS
+
+**Lane 3** full `./mach build` (~25 min, 0 warnings) for the general scriptlet
+path: Rust FFI `content_classifier_engine_use_resources` → `Engine::use_resources`
+(+ `serde_json`); C++ `ContentClassifierEngine::UseResources`; new IDL
+`nsIContentClassifierService.setScriptletResources` (uuid bumped) applied to each
+block engine at build time. All in `patches/0008` (regenerated — reverse- AND
+forward-apply clean vs vanilla).
+
+**Resources:** a 163-entry uBO scriptlet library vendored to
+`src/gjoa/.../scriptlet-resources.json` (harvested from `~/code/reference/uBlock`
+by a generator, schema-verified against adblock-rust 0.12.1; Brave's pre-built
+`dist/resources.json` was only the 17 redirect resources, not the scriptlets, so
+the harvest was required). Packaged via `FINAL_TARGET_FILES.modules`, loaded by
+the RS client + 6 uBO filter lists.
+
+**Validated on the real binary:** `scriptlet-engine.bjs` — setScriptletResources
++ `youtube.com##+js(json-prune,...)` → non-empty `injected_script`. Curated
+`youtube-scriptlet.bjs` + `group-drag-above.bjs` (drag fix) also green in
+isolation. Full suite 58/62 (the 4 fails: documented adblock-smoke discrepancy +
+test order/flake, all non-code; engine/youtube/drag pass in isolation).
