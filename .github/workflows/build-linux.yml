@@ -66,6 +66,18 @@ jobs:
           mkdir -p engine
           tar -xJf ~/.cache/gjoa/sources/firefox-${FF_VERSION}.source.tar.xz -C engine --strip-components=1
 
+      # gjoa's build tooling is written in beagle (a Racket compiler), invoked
+      # as a sibling at ../beagle. CI only checks out gjoa, so without these two
+      # steps `bun run import` dies with "../beagle/bin/beagle-build: No such
+      # file or directory" (exit 127). beagle-build runs standalone with just
+      # Racket + the repo (no raco-pkg-install / direnv setup needed).
+      - name: Install Racket (beagle compiler runtime)
+        uses: Bogdanp/setup-racket@v1
+        with:
+          version: 'stable'
+      - name: Checkout beagle (sibling compiler)
+        run: git clone --depth 1 https://github.com/tompassarelli/beagle.git ../beagle
+
       - name: Apply overlays and patches
         run: bun run import
 
