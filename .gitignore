@@ -40,3 +40,6 @@ artifacts/
 *.tar.bz2
 .beagle/
 gjoa-arx
+
+# Private, never-commit strategy/vision docs
+private-docs/
