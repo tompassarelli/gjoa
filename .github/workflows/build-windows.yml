@@ -109,12 +109,15 @@ jobs:
           # Visual Studio + Windows SDK (+ App SDK) via Mozilla's fetcher
           ./mach python --virtualenv build taskcluster/scripts/misc/get_vs.py build/vs/vs2026.yaml ~/win-cross/vs2026
           chmod -R +x ~/win-cross/vs2026 || true
-          # Put the NATIVE d3dcompiler_47.dll next to fxc.exe so wine (with the
-          # WINEDLLOVERRIDES in the mozconfig) loads it instead of builtin vkd3d.
+          # Ensure the NATIVE d3dcompiler_47.dll sits next to fxc.exe so wine (with
+          # the WINEDLLOVERRIDES in the mozconfig) loads it instead of builtin vkd3d.
+          # In this SDK it's already there — only copy if it lives elsewhere.
           FXC_DIR="$(dirname "$(find ~/win-cross/vs2026 -name fxc.exe -path '*x64*' | head -1)")"
           DCDLL="$(find ~/win-cross/vs2026 -name d3dcompiler_47.dll -path '*x64*' | head -1)"
           echo "fxc dir: $FXC_DIR ; d3dcompiler: $DCDLL"
-          test -n "$FXC_DIR" && test -n "$DCDLL" && cp "$DCDLL" "$FXC_DIR/" || { echo "::error::could not place d3dcompiler next to fxc"; exit 1; }
+          test -n "$FXC_DIR" || { echo "::error::fxc.exe not found"; exit 1; }
+          test -n "$DCDLL" || { echo "::error::d3dcompiler_47.dll not found"; exit 1; }
+          [ "$(dirname "$DCDLL")" != "$FXC_DIR" ] && cp "$DCDLL" "$FXC_DIR/" || echo "d3dcompiler already next to fxc"
           ls ~/win-cross
 
       - name: Write mozconfig (cross)
