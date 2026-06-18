@@ -11,7 +11,23 @@
 // Native-dark sites get "inactive" — kept native, never double-darkened.
 
 export class GjoaDarkmodeChild extends JSWindowActorChild {
+  constructor() {
+    super();
+    this._sheetUri = null;
+    this._injected = false;
+  }
+
   async handleEvent(event) {
+    if (event.type === "DOMWindowCreated") {
+      // document-start: before the page reads its theme config, ask the parent
+      // for a per-site inject scriptlet (e.g. YouTube's html[dark]) and run it
+      // in the page main world so the FIRST cascade is native-dark.
+      if (this.browsingContext !== this.browsingContext.top) {
+        return;
+      }
+      await this.#maybeInject();
+      return;
+    }
     if (event.type !== "DOMContentLoaded") {
       return;
     }
@@ -26,6 +42,39 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     );
   }
 
+  async #maybeInject() {
+    if (this._injected) {
+      return;
+    }
+    const win = this.contentWindow;
+    const doc = this.document;
+    if (!win || !doc) {
+      return;
+    }
+    const url = doc.documentURI || "";
+    if (!/^https?:/.test(url)) {
+      return;
+    }
+    let resp;
+    try {
+      resp = await this.sendQuery("Darkmode:GetInject", {});
+    } catch (e) {
+      return;
+    }
+    if (!resp || !resp.inject) {
+      return;
+    }
+    this._injected = true;
+    // Run in the page's MAIN world at document-start (before the app boots),
+    // same channel discipline as GjoaCosmeticChild.injectScriptlets.
+    try {
+      const script = doc.createElement("script");
+      script.textContent = resp.inject;
+      (doc.documentElement || doc).appendChild(script);
+      script.remove();
+    } catch (e) {}
+  }
+
   async #measureAndApply() {
     const doc = this.document;
     const win = this.contentWindow;
@@ -36,6 +85,9 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     if (!/^https?:/.test(url)) {
       return;
     }
+    // Measure up front (cheap sync getComputedStyle). The parent IGNORES it when
+    // a fix or pref matches (those branches return before reading hasNativeDark),
+    // so "skip measurement when a fix exists" holds with a SINGLE round-trip.
     const hasNativeDark = this.#pageIsDark(win, doc);
     let resp;
     try {
@@ -43,12 +95,46 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     } catch (e) {
       return;
     }
-    if (!resp || !resp.override) {
+    if (!resp) {
       return;
     }
+    // Fix CSS (Tier 1/2): inject as a page-CSS-proof USER_SHEET, same mechanism
+    // as GjoaCosmeticChild.rebuildSheet.
+    if (resp.css) {
+      this.#injectSheet(win, resp.css);
+    }
+    if (resp.override) {
+      try {
+        this.browsingContext.colorInversionOverride = resp.override;
+      } catch (e) {}
+    }
+  }
+
+  #injectSheet(win, css) {
+    if (!win.windowUtils || !css) {
+      return;
+    }
+    const utils = win.windowUtils;
+    const uri = "data:text/css;charset=utf-8," + encodeURIComponent(css);
     try {
-      this.browsingContext.colorInversionOverride = resp.override;
+      if (this._sheetUri) {
+        try {
+          utils.removeSheetUsingURIString(this._sheetUri, utils.USER_SHEET);
+        } catch (e) {}
+      }
+      utils.loadSheetUsingURIString(uri, utils.USER_SHEET);
+      this._sheetUri = uri;
     } catch (e) {}
+  }
+
+  didDestroy() {
+    if (this._sheetUri) {
+      try {
+        const utils = this.contentWindow?.windowUtils;
+        utils?.removeSheetUsingURIString(this._sheetUri, utils.USER_SHEET);
+      } catch (e) {}
+      this._sheetUri = null;
+    }
   }
 
   // Effective page background: body, then documentElement; first OPAQUE color

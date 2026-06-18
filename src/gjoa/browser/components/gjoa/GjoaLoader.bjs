@@ -195,7 +195,10 @@
     (.registerWindowActor ChromeUtils "GjoaDarkmode"
       {:parent {:esModuleURI "resource://gre/modules/GjoaDarkmodeParent.sys.mjs"}
        :child {:esModuleURI "resource://gre/modules/GjoaDarkmodeChild.sys.mjs"
-               :events {:DOMContentLoaded {:mozSystemGroup true}}}
+               :events {:DOMContentLoaded {:mozSystemGroup true}
+                        ;; document-start: run per-site inject scriptlets (e.g.
+                        ;; YouTube html[dark]) before the page reads its theme.
+                        :DOMWindowCreated {:mozSystemGroup true}}}
        :allFrames false
        :messageManagerGroups ["browsers"]})
     (.log console "gjoa-loader: registered GjoaDarkmode window actor")

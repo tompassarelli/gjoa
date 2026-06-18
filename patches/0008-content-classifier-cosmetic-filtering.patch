@@ -460,10 +460,10 @@ index 295b3bfd8b..88ad661a1c 100644
  
  impl adblock::url_parser::ResolvesDomain for SchemelessSiteResolver {
 diff --git a/toolkit/components/content-classifier/moz.build b/toolkit/components/content-classifier/moz.build
-index e65d3eebce..11f7b2c3a7 100644
+index e65d3eebce..4b5b68ccda 100644
 --- a/toolkit/components/content-classifier/moz.build
 +++ b/toolkit/components/content-classifier/moz.build
-@@ -28,6 +28,18 @@ LOCAL_INCLUDES += [
+@@ -28,6 +28,19 @@ LOCAL_INCLUDES += [
  
  EXTRA_JS_MODULES += [
      "ContentClassifierRemoteSettingsClient.sys.mjs",
@@ -478,6 +478,7 @@ index e65d3eebce..11f7b2c3a7 100644
 +# the engine can expand `+js(...)` rules. Lands at
 +# resource://gre/modules/scriptlet-resources.json.
 +FINAL_TARGET_FILES.modules += [
++    "darkmode-fixes.json",
 +    "scriptlet-resources.json",
  ]
  
