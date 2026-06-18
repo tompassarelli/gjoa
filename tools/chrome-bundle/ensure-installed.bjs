@@ -1,0 +1,136 @@
+#lang beagle/js
+;; Idempotent guard around `chrome:dist` + `chrome:install`.
+;;
+;; The integration test loop reruns `bun run chrome:dist && bun run
+;; chrome:install` before EVERY test invocation — a full beagle recompile +
+;; bundle + CSS stage + symlink, even when nothing under src/gjoa/chrome
+;; changed. That's pure waste for the inner feedback loop.
+;;
+;; This tool fingerprints the chrome-bundle INPUT set (chrome .bjs minus
+;; macros/test, chrome CSS, the bundler tools themselves) plus the resolved
+;; gjoa-dev symlink target, and writes a stamp. On the next run, if the
+;; fingerprint matches the stamp AND the symlink still resolves, it prints
+;; "up to date" and skips the rebuild. Otherwise it runs dist+install and
+;; rewrites the stamp.
+;;
+;; Escape hatch: GJOA_CHROME_FORCE=1 always rebuilds (e.g. after touching
+;; ../beagle, whose changes this fingerprint can't see).
+(ns gjoa.tools.chrome-bundle.ensure-installed
+  (:require [fs :refer [existsSync statSync readdirSync readFileSync
+                        writeFileSync mkdirSync readlinkSync]]
+            [path :refer [join dirname relative]]
+            [crypto :refer [createHash]]
+            [child_process :refer [spawnSync]]))
+(define-mode strict)
+(declare-extern [process console RegExp] Any)
+
+(def REPO-ROOT :- String (.cwd process))
+(def BJS-ROOT :- String (join REPO-ROOT "src" "gjoa" "chrome" "bjs"))
+(def CSS-ROOT :- String (join REPO-ROOT "src" "gjoa" "chrome" "css"))
+(def BUNDLE-TOOLS :- String (join REPO-ROOT "tools" "chrome-bundle"))
+(def STAMP :- String (join REPO-ROOT ".cache" "gjoa" "chrome-install.stamp"))
+
+;; Resolved gjoa-dev symlink (mirrors install.bjs target derivation). If the
+;; objdir or symlink is gone, fingerprinting its readlink yields "" → busts
+;; the cache so a fresh objdir re-installs even on a pure source hit.
+(def REPO-OBJDIR :- String (join REPO-ROOT "engine" "obj-x86_64-pc-linux-gnu"))
+(def ENV-OBJDIR :- Any (.-MOZ_OBJDIR (.-env process)))
+(def MOZ-OBJDIR :- Any
+  (if (and ENV-OBJDIR (.startsWith ENV-OBJDIR REPO-ROOT)) ENV-OBJDIR REPO-OBJDIR))
+(def GJOA-DEV :- String (join MOZ-OBJDIR "dist" "bin" "gjoa-dev"))
+
+;; A sentinel OUTPUT bundle that must exist for the install to count as valid.
+;; The input fingerprint alone is NOT enough: if dist/chrome is emptied (a clean,
+;; a `rm -rf dist/chrome`, a failed bake) while the inputs are unchanged, the
+;; stamp still matches and we'd skip the rebuild — leaving the dev binary with NO
+;; chrome (the bug that broke gjoa dev). So we also require the output to exist.
+(def DIST-CHROME :- String (join REPO-ROOT "dist" "chrome"))
+(def OUT-SENTINEL :- String (join DIST-CHROME "JS" "gjoa-tabs.uc.js"))
+(def DEV-SENTINEL :- String (join GJOA-DEV "JS" "gjoa-tabs.uc.js"))
+
+;; Mirror compile.bjs `should-skip`: test-only edits must NOT bust the cache.
+(defn should-skip-rel [rel :- String] :- Bool
+  (cond
+    (= rel "macros.bjs") true
+    (.startsWith rel "test/") true
+    (.endsWith rel ".test.bjs") true
+    :else false))
+
+;; Recursively collect file paths under `dir` (synchronous — small tree).
+(defn walk [dir :- String] :- Any
+  (let [out []]
+    (when (existsSync dir)
+      (let [entries (readdirSync dir {:withFileTypes true})
+            n (.-length entries)]
+        (loop [i 0]
+          (when (< i n)
+            (let [entry (aget entries i)
+                  full (join dir (.-name entry))]
+              (if (.isDirectory entry)
+                (let [sub (walk full)
+                      m (.-length sub)]
+                  (loop [j 0]
+                    (when (< j m)
+                      (.push out (aget sub j))
+                      (recur (+ j 1)))))
+                (.push out full))
+              (recur (+ i 1)))))))
+    out))
+
+;; Collect the fingerprint input file set, filtered.
+(defn input-files [] :- Any
+  (let [out []]
+    ;; chrome .bjs (minus macros/test/*.test.bjs)
+    (doseq [f (walk BJS-ROOT)]
+      (when (and (.endsWith f ".bjs")
+                 (not (should-skip-rel (relative BJS-ROOT f))))
+        (.push out f)))
+    ;; chrome CSS (all of it)
+    (doseq [f (walk CSS-ROOT)] (.push out f))
+    ;; the bundler tools themselves — output changes if they change
+    (doseq [f (walk BUNDLE-TOOLS)]
+      (when (.endsWith f ".bjs") (.push out f)))
+    out))
+
+;; sha256 over sorted `path:mtimeMs:size` lines + the symlink target line.
+(defn fingerprint [] :- String
+  (let [files (.sort (input-files))
+        h (createHash "sha256")
+        link (if (existsSync GJOA-DEV)
+               (try (readlinkSync GJOA-DEV) (catch Any e "")) "")]
+    (doseq [f files]
+      (let [st (statSync f)]
+        (.update h (str (relative REPO-ROOT f) ":" (.-mtimeMs st) ":" (.-size st) "\n"))))
+    (.update h (str "gjoa-dev->" link "\n"))
+    (.digest h "hex")))
+
+;; Run `bun run <script>` synchronously; throw on nonzero exit.
+(defn run-script! [name :- String] :- Any
+  (let [r (spawnSync "bun" ["run" name]
+                     {:cwd REPO-ROOT :stdio "inherit"})]
+    (when (not= (.-status r) 0)
+      (throw (Error. (str "`bun run " name "` failed (exit " (.-status r) ")"))))))
+
+;; The install is valid only if the baked bundle AND the symlinked dev bundle
+;; both exist — guards against a stamp-matches-but-output-missing state.
+(defn outputs-present? [] :- Bool
+  (and (existsSync OUT-SENTINEL) (existsSync DEV-SENTINEL)))
+
+(defn main! [] :- Any
+  (let [h (fingerprint)
+        prev (if (existsSync STAMP) (.trim (readFileSync STAMP "utf8")) "")
+        force (.-GJOA_CHROME_FORCE (.-env process))]
+    (if (and (not force) (= prev h) (outputs-present?))
+      (.log console (str "chrome bundle up to date (stamp " (.slice h 0 8) ") — skipping dist+install"))
+      (do
+        (run-script! "chrome:dist")
+        (run-script! "chrome:install")
+        (mkdirSync (dirname STAMP) {:recursive true})
+        (writeFileSync STAMP h)
+        (.log console (str "chrome bundle installed (stamp " (.slice h 0 8) ")"))))))
+
+(when (.-main (js/import-meta))
+  (try (main!)
+    (catch Any e
+      (.error console (str "ensure-installed failed: " (or (.-message e) e)))
+      (.exit process 1))))

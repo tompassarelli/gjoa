@@ -27,6 +27,7 @@
 ;; were type-only and have no runtime presence — dropped here.
 (ns gjoa.tools.test-driver.runner
   (:require [child_process :refer [spawn]]
+            [fs :refer [existsSync readFileSync]]
             [fs/promises :refer [readdir]]
             [path :refer [join basename]]
             [gjoa.tools.test-driver.marionette :refer [connect-marionette]]
@@ -34,7 +35,7 @@
             [gjoa.tools.test-driver.gjoa-locator :refer [locate-gjoa]]))
 (define-mode strict)
 
-(declare-extern [process JSON Date setTimeout clearTimeout] Any)
+(declare-extern [process JSON Date setTimeout clearTimeout Set Array RegExp console] Any)
 
 ;; SkipError: the original was a `class extends Error` with name "SkipError".
 ;; Beagle has no JS-class form, so this is a factory that builds an Error and
@@ -85,6 +86,60 @@
             (recur (+ i 1))))))
     out))
 
+;; tags.json lives next to the .bjs SOURCE tests (tests/integration/), not in
+;; the compiled .beagle-tools/ mirror. Read it from cwd. Absent/malformed →
+;; empty maps (no filtering) so the runner degrades safely.
+(defn load-tags [] :- Any
+  (let [p (join (.cwd process) "tests" "integration" "tags.json")]
+    (if (existsSync p)
+      (try
+        (.parse JSON (readFileSync p "utf8"))
+        (catch Any e
+          (logErr (str "tags.json parse failed: " (.-message e)))
+          {:subsystems {} :lanes {} :sources {}}))
+      {:subsystems {} :lanes {} :sources {}})))
+
+(defn strip-ext [f :- String] :- String
+  (.replace f (RegExp. "\\.[^.]+$") ""))
+
+;; Resolve --files/--subsystem/--lane/--exclude-lane into a directive describing
+;; which suite basenames to keep. Returns:
+;;   nil                        no file-level filter requested → keep all
+;;   {:keep <Set>}              keep only these basenames (positive selection)
+;;   {:exclude <Set>}           keep everything NOT in this set (exclude-only)
+;; A positive selection always wins; any --exclude-lane is subtracted from it.
+(defn suite-keepset [tags :- Any opts :- Any] :- Any
+  (let [subs (or (.-subsystems tags) {})
+        lanes (or (.-lanes tags) {})
+        keep (Set.)
+        excl (Set.)
+        ;; A positive selection was requested iff any of these flags is present.
+        any (boolean (or (.-files opts) (.-subsystem opts) (.-lane opts)))]
+    ;; --files a,b (explicit basenames)
+    (when (.-files opts)
+      (doseq [n (.split (.-files opts) ",")]
+        (when (.trim n) (.add keep (.trim n)))))
+    ;; --subsystem name(s) (comma-joined)
+    (when (.-subsystem opts)
+      (doseq [s (.split (.-subsystem opts) ",")]
+        (doseq [n (or (get subs (.trim s)) [])] (.add keep n))))
+    ;; --lane name(s) → keep union of those lanes
+    (when (.-lane opts)
+      (doseq [l (.split (.-lane opts) ",")]
+        (doseq [n (or (get lanes (.trim l)) [])] (.add keep n))))
+    ;; --exclude-lane name(s) → drop those
+    (when (.-excludeLane opts)
+      (doseq [l (.split (.-excludeLane opts) ",")]
+        (doseq [n (or (get lanes (.trim l)) [])] (.add excl n))))
+    (cond
+      ;; explicit keep set wins; subtract excludes from it
+      any
+      (do (doseq [n (.from Array excl)] (.delete keep n))
+          {:keep keep})
+      ;; exclude-only → keep everything NOT excluded (caller filters the full list)
+      (> (.-size excl) 0) {:exclude excl}
+      :else nil)))
+
 (defn spawnGjoa [opts :- Any] :- Any
   ;; --remote-allow-system-access is required for privileged ("chrome")
   ;; context script eval — landed in Firefox 128+ as a safety gate.
@@ -123,7 +178,19 @@
     (when (.-headed opts)
       (logErr "WARNING: --headed mode will pop a real gjoa window on your display."))
 
-    (let [suites (js/await (loadTests testDir))]
+    (let [allSuites (js/await (loadTests testDir))
+          ;; FILE-LEVEL lane/subsystem filter (additive; nil keep = no filter).
+          tags (load-tags)
+          keep (suite-keepset tags opts)
+          suites (if keep
+                   (.filter allSuites
+                     (fn [s]
+                       (let [base (strip-ext (.-file s))]
+                         (if (.-exclude keep)
+                           (not (.has (.-exclude keep) base))
+                           (.has (.-keep keep) base)))))
+                   allSuites)]
+      ;; --grep composes on top: a test-name filter within the surviving files.
       (when (.-grep opts)
         (let [needle (.toLowerCase (.-grep opts))]
           (doseq [s suites]
@@ -268,7 +335,7 @@
                       (try (js/await (.cleanup (deref profile))) (catch Any _ nil))))))))
 
             (emit {:type "summary" :pass (deref pass) :fail (deref fail) :skip (deref skip)
-                   :durationMs (- (.now Date) start)})
+                   :durationMs (- (.now Date) start) :binary gjoaBin})
             {:pass (deref pass) :fail (deref fail) :skip (deref skip)})))))))
 
 ;; CLI entrypoint. The original guarded this with `import.meta.main`; beagle
@@ -291,11 +358,61 @@
           :else
           (recur (+ i 1) grep))))))
 
+;; Generic `--flag <value>` / `--flag=value` reader. Single value per flag;
+;; package.json passes comma-joined for repeatable lanes/subsystems.
+(defn cli-val [args :- Any flag :- String] :- Any
+  (loop [i 0]
+    (if (>= i (.-length args))
+      nil
+      (let [a (aget args i)]
+        (cond
+          (and (= a flag) (aget args (+ i 1))) (aget args (+ i 1))
+          (.startsWith a (str flag "=")) (.slice a (+ (.-length flag) 1))
+          :else (recur (+ i 1)))))))
+
+(def cliSubsystem :- Any (cli-val cliArgs "--subsystem"))
+(def cliLane :- Any (cli-val cliArgs "--lane"))
+(def cliExcludeLane :- Any (cli-val cliArgs "--exclude-lane"))
+(def cliFiles :- Any (cli-val cliArgs "--files"))
+(def cliListLanes :- Any (.includes cliArgs "--list-lanes"))
+
+;; --list-lanes: resolve the keep-set against tags.json + the on-disk suite
+;; list and print it WITHOUT booting gjoa. Cheap manifest sanity-check.
+(defn list-lanes! [opts :- Any] :- Any
+  (let [testDir (join (.cwd process) ".beagle-tools" "gjoa" "tests" "integration")
+        suites (js/await (loadTests testDir))
+        tags (load-tags)
+        keep (suite-keepset tags opts)
+        bases (.map suites (fn [s] (strip-ext (.-file s))))
+        kept (if keep
+               (.filter bases
+                 (fn [b]
+                   (if (.-exclude keep)
+                     (not (.has (.-exclude keep) b))
+                     (.has (.-keep keep) b))))
+               bases)]
+    (.log console (.stringify JSON
+                    {:filter (cond (.-files opts) (str "--files " (.-files opts))
+                                   (.-subsystem opts) (str "--subsystem " (.-subsystem opts))
+                                   (.-lane opts) (str "--lane " (.-lane opts))
+                                   (.-excludeLane opts) (str "--exclude-lane " (.-excludeLane opts))
+                                   :else "none (all)")
+                     :total (.-length bases)
+                     :kept (.-length (.sort (.slice kept)))
+                     :files (.sort (.slice kept))}
+                    nil 2))))
+
 ;; Run the suite only when invoked directly (tests import this module for types).
 (when (.-main (js/import-meta))
-  (.catch
-    (.then (run-all! {:verbose cliVerbose :grep cliGrep :headed cliHeaded})
-           (fn [res] (.exit process (if (> (.-fail res) 0) 1 0))))
-    (fn [e]
-      (logErr (str "fatal: " (or (.-stack e) e)))
-      (.exit process 1))))
+  (let [opts {:verbose cliVerbose :grep cliGrep :headed cliHeaded
+              :subsystem cliSubsystem :lane cliLane
+              :excludeLane cliExcludeLane :files cliFiles}]
+    (if cliListLanes
+      (.catch (list-lanes! opts)
+        (fn [e] (logErr (str "fatal: " (or (.-stack e) e))) (.exit process 1)))
+      (.catch
+        (.then (run-all! opts)
+               (fn [res] (.exit process (if (> (.-fail res) 0) 1 0))))
+        (fn [e]
+          (logErr (str "fatal: " (or (.-stack e) e)))
+          (.exit process 1))))))

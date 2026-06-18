@@ -1,0 +1,124 @@
+#lang beagle/js
+;; `test:changed` — run only the tests impacted by the working-tree diff.
+;;
+;; Changed set = (committed since merge-base with main) ∪ (uncommitted).
+;; Each path maps via tests/integration/tags.json `sources`:
+;;   - tests/integration/<x>.bjs          → run <x> directly (--files)
+;;   - src/gjoa/chrome/bjs/<dir>/**        → the subsystem(s) for that dir
+;;   - shared infra (runner, bundler, dsl, marionette, tags.json) → can't
+;;     scope safely, fall back to the full FAST lane (--exclude-lane slow,network)
+;;
+;; Spawns the runner with the resolved flags, inheriting stdio so the
+;; package.json pipe into record-metrics.js still works.
+(ns gjoa.tools.test-driver.changed
+  (:require [fs :refer [existsSync readFileSync]]
+            [path :refer [join]]
+            [child_process :refer [spawnSync]]))
+(define-mode strict)
+(declare-extern [process console JSON Set Array RegExp] Any)
+
+(def REPO-ROOT :- String (.cwd process))
+(def RUNNER :- String (join REPO-ROOT ".beagle-tools" "gjoa" "tools" "test-driver" "runner.js"))
+(def TAGS :- String (join REPO-ROOT "tests" "integration" "tags.json"))
+
+;; Shared-infra prefixes: any change here invalidates the whole suite, so
+;; we can't safely scope — run the full fast lane instead.
+(def INFRA-PREFIXES :- Any
+  ["tools/test-driver/" "tools/chrome-bundle/" "tests/dsl"
+   "tests/integration/marionette" "tests/integration/tags.json"])
+
+(defn git [args :- Any] :- Any
+  (try
+    (let [r (spawnSync "git" args {:cwd REPO-ROOT :encoding "utf8"})]
+      (if (= (.-status r) 0) (.-stdout r) ""))
+    (catch Any e "")))
+
+(defn lines [s :- Any] :- Any
+  (.filter (.split (or s "") "\n") (fn [l] (not= (.trim l) ""))))
+
+;; Union of committed-since-main and uncommitted changes.
+(defn changed-files [] :- Any
+  (let [base (.trim (git ["merge-base" "HEAD" "main"]))
+        committed (if (= base "")
+                    []
+                    (lines (git ["diff" "--name-only" (str base "...HEAD")])))
+        ;; porcelain lines are "XY <path>"; slice the status prefix
+        dirty (.map (lines (git ["status" "--porcelain"]))
+                (fn [l] (.trim (.slice l 3))))
+        set (Set.)]
+    (doseq [f committed] (.add set f))
+    (doseq [f dirty] (.add set f))
+    (.from Array set)))
+
+(defn load-tags [] :- Any
+  (if (existsSync TAGS)
+    (try (.parse JSON (readFileSync TAGS "utf8")) (catch Any e {:sources {}}))
+    {:sources {}}))
+
+(defn infra? [path :- String] :- Bool
+  (let [hit (.find INFRA-PREFIXES (fn [p] (.startsWith path p)))]
+    (boolean hit)))
+
+(defn strip-ext [f :- String] :- String
+  (.replace f (RegExp. "\\.[^.]+$") ""))
+
+;; Resolve the changed set → {:files <Set> :subs <Set> :infra <bool>}.
+(defn resolve-impacted [files :- Any tags :- Any] :- Any
+  (let [sources (or (.-sources tags) {})
+        srcKeys (.keys Object sources)
+        fileSet (Set.)
+        subSet (Set.)
+        ;; infra is a pure predicate over the changed set — no mutation needed.
+        infra (boolean (.some files (fn [f] (infra? f))))]
+    (doseq [f files]
+      (cond
+        ;; a test file changed → run it directly
+        (and (.startsWith f "tests/integration/") (.endsWith f ".bjs"))
+        (.add fileSet (strip-ext (.replace f "tests/integration/" "")))
+        ;; shared infra is handled by `infra` above — skip here
+        (infra? f) nil
+        ;; chrome source dir → subsystem(s)
+        :else
+        (doseq [k srcKeys]
+          (when (.startsWith f k)
+            (let [v (get sources k)]
+              (if (.isArray Array v)
+                (doseq [s v] (.add subSet s))
+                (.add subSet v)))))))
+    {:files fileSet :subs subSet :infra infra}))
+
+(defn run-runner! [args :- Any] :- Any
+  (let [r (spawnSync "bun" (.concat [RUNNER] args) {:cwd REPO-ROOT :stdio "inherit"})]
+    (.exit process (or (.-status r) 0))))
+
+(defn main! [] :- Any
+  (let [tags (load-tags)
+        files (changed-files)
+        impacted (resolve-impacted files tags)
+        fset (.-files impacted)
+        sset (.-subs impacted)]
+    (cond
+      ;; infra change OR nothing resolved → full fast lane
+      (or (.-infra impacted)
+          (and (= (.-size fset) 0) (= (.-size sset) 0)))
+      (do
+        (.write (.-stderr process)
+          (str "[changed] "
+               (if (.-infra impacted)
+                 "shared infra changed → full fast lane\n"
+                 "no impacted subsystem resolved → full fast lane\n")))
+        (run-runner! ["--exclude-lane" "slow,network"]))
+      :else
+      (let [args []]
+        (when (> (.-size fset) 0)
+          (.push args "--files")
+          (.push args (.join (.from Array fset) ",")))
+        (when (> (.-size sset) 0)
+          (.push args "--subsystem")
+          (.push args (.join (.from Array sset) ",")))
+        (.write (.-stderr process)
+          (str "[changed] running: " (.join args " ") "\n"))
+        (run-runner! args)))))
+
+(when (.-main (js/import-meta))
+  (main!))
