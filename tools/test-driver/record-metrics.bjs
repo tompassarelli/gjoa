@@ -1,0 +1,108 @@
+#lang beagle/js
+;; Metrics tee for the integration runner.
+;;
+;; Sits on the runner's stdout pipe:
+;;   runner.js ... | record-metrics.js <lane-label>
+;;
+;; Responsibilities:
+;;   1. Pass every stdin line straight to stdout UNCHANGED (preserve the
+;;      live console UX — the runner's NDJSON stays visible/pipeable).
+;;   2. Parse the NDJSON, accumulate per-test {file,name,status,durationMs}
+;;      from test:pass|fail|skip, and capture the `summary` (carries :binary).
+;;   3. On EOF, append ONE run record (binary + git + totals + tests) to
+;;      .test-metrics/runs.jsonl, then re-exit with the runner's fail status
+;;      so a failed run is NOT masked by the pipe (CI safety).
+;;
+;; Run record is one JSON object per line (JSONL-of-runs, not per-test) —
+;; small, atomic, trend-friendly. The window is capped to the last N runs.
+(ns gjoa.tools.test-driver.record-metrics
+  (:require [fs :refer [existsSync statSync mkdirSync readFileSync writeFileSync]]
+            [path :refer [join dirname]]
+            [child_process :refer [spawnSync]]
+            [readline :refer [createInterface]]))
+(define-mode strict)
+(declare-extern [process console JSON Date Math] Any)
+
+(def REPO-ROOT :- String (.cwd process))
+(def LEDGER :- String (join REPO-ROOT ".test-metrics" "runs.jsonl"))
+(def MAX-RUNS :- Any 500)
+
+(def LANE :- Any (or (aget (.-argv process) 2) "fast"))
+
+;; --- git facts (best-effort; each a single spawn) -------------------------
+(defn git [args :- Any] :- Any
+  (try
+    (let [r (spawnSync "git" args {:cwd REPO-ROOT :encoding "utf8"})]
+      (if (= (.-status r) 0) (.trim (.-stdout r)) ""))
+    (catch Any e "")))
+
+(defn git-facts [] :- Any
+  {:branch (git ["rev-parse" "--abbrev-ref" "HEAD"])
+   :sha (git ["rev-parse" "--short" "HEAD"])
+   :dirty (not= (git ["status" "--porcelain"]) "")})
+
+;; --- binary facts ---------------------------------------------------------
+;; kind: a path under result/ is the nix build; anything else is mach.
+(defn binary-facts [path :- Any] :- Any
+  (if (not path)
+    {:path nil :kind "unknown" :mtimeMs nil}
+    (let [kind (if (.includes path "/result/") "nix" "mach")
+          mtime (try (.-mtimeMs (statSync path)) (catch Any e nil))]
+      {:path path :kind kind :mtimeMs mtime})))
+
+;; --- ledger append (capped) ----------------------------------------------
+(defn append-run! [record :- Any] :- Any
+  (mkdirSync (dirname LEDGER) {:recursive true})
+  (let [line (.stringify JSON record)
+        prior (if (existsSync LEDGER) (readFileSync LEDGER "utf8") "")
+        lines (.filter (.split prior "\n") (fn [l] (not= (.trim l) "")))
+        all (.concat lines [line])
+        kept (if (> (.-length all) MAX-RUNS)
+               (.slice all (- (.-length all) MAX-RUNS))
+               all)]
+    (writeFileSync LEDGER (str (.join kept "\n") "\n"))))
+
+(defn main! [] :- Any
+  (let [tests []
+        summary (atom nil)
+        rl (createInterface {:input (.-stdin process) :crlfDelay Infinity})]
+    (.on rl "line"
+      (fn [line]
+        ;; pass through verbatim
+        (.write (.-stdout process) (str line "\n"))
+        ;; parse NDJSON events (ignore non-JSON noise lines)
+        (try
+          (let [ev (.parse JSON line)
+                t (.-type ev)]
+            (cond
+              (or (= t "test:pass") (= t "test:fail") (= t "test:skip"))
+              (.push tests {:file (.-file ev)
+                            :name (.-name ev)
+                            :status (.slice t 5)
+                            :durationMs (or (.-durationMs ev) 0)})
+              (= t "summary") (reset! summary ev)
+              :else nil))
+          (catch Any e nil))))
+    (.on rl "close"
+      (fn []
+        (let [s (deref summary)
+              pass (if s (or (.-pass s) 0) 0)
+              fail (if s (or (.-fail s) 0) 0)
+              skip (if s (or (.-skip s) 0) 0)
+              record {:ts (.toISOString (Date.))
+                      :lane LANE
+                      :binary (binary-facts (if s (.-binary s) nil))
+                      :git (git-facts)
+                      :totals {:pass pass :fail fail :skip skip
+                               :durationMs (if s (or (.-durationMs s) 0) 0)
+                               :count (.-length tests)}
+                      :tests tests}]
+          (try (append-run! record)
+            (catch Any e
+              (.error console (str "[record-metrics] ledger write failed: " (or (.-message e) e)))))
+          ;; Re-exit with the runner's fail status so the pipe doesn't mask
+          ;; test failures (CI would otherwise green on a failed run).
+          (.exit process (if (> fail 0) 1 0)))))))
+
+(when (.-main (js/import-meta))
+  (main!))

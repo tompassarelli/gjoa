@@ -30,6 +30,9 @@ artifacts/
 # Gjoa prep tool source cache (downloaded firefox tarballs)
 .cache/
 
+# Per-test perf metrics ledger (test:report reads this)
+.test-metrics/
+
 # IDE / OS
 .vscode/
 .DS_Store

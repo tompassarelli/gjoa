@@ -1,0 +1,175 @@
+#lang beagle/js
+;; `test:report` — read .test-metrics/runs.jsonl and surface the perf picture:
+;;   - this run's totals + slowest tests
+;;   - a duration trend over the last N same-lane + same-binary-kind runs
+;;     (mach vs nix numbers aren't comparable — binary.kind is the gate)
+;;   - per-test regressions vs the rolling median across the window
+;;
+;; --json emits the computed object (CI can gate on totals.durationMs).
+;; --all prints the full slowest list rather than the top 10.
+(ns gjoa.tools.test-driver.report
+  (:require [fs :refer [existsSync readFileSync]]
+            [path :refer [join]]))
+(define-mode strict)
+(declare-extern [process console JSON Math Number Map] Any)
+
+(def REPO-ROOT :- String (.cwd process))
+(def LEDGER :- String (join REPO-ROOT ".test-metrics" "runs.jsonl"))
+(def WINDOW :- Any 10)
+(def TOP :- Any 10)
+
+(def argv :- Any (.slice (.-argv process) 2))
+(def jsonMode :- Any (.includes argv "--json"))
+(def showAll :- Any (.includes argv "--all"))
+
+(def tty :- Any (.-isTTY (.-stdout process)))
+(defn c [s :- Any code :- String] :- Any
+  (if tty (str "[" code "m" s "[0m") s))
+(defn dim [s :- Any] :- Any (c s "2"))
+(defn bold [s :- Any] :- Any (c s "1"))
+(defn red [s :- Any] :- Any (c s "31"))
+(defn yellow [s :- Any] :- Any (c s "33"))
+(defn green [s :- Any] :- Any (c s "32"))
+
+(defn load-runs [] :- Any
+  (if (not (existsSync LEDGER))
+    []
+    (let [text (readFileSync LEDGER "utf8")
+          out []]
+      (doseq [line (.split text "\n")]
+        (when (.trim line)
+          (try (.push out (.parse JSON line)) (catch Any e nil))))
+      out)))
+
+(defn secs [ms :- Any] :- Any
+  (str (.toFixed (/ (or ms 0) 1000) 2) "s"))
+
+(defn median [nums :- Any] :- Any
+  (if (= (.-length nums) 0)
+    0
+    (let [sorted (.sort (.slice nums) (fn [a b] (- a b)))
+          mid (.floor Math (/ (.-length sorted) 2))]
+      (if (= (mod (.-length sorted) 2) 1)
+        (aget sorted mid)
+        (/ (+ (aget sorted (- mid 1)) (aget sorted mid)) 2)))))
+
+;; Per-test rolling median across the window (keyed by file::name).
+;; Uses a Map so the per-key array can be appended in place — no rebind.
+(defn test-medians [runs :- Any] :- Any
+  (let [acc (Map.)]
+    (doseq [r runs]
+      (doseq [t (or (.-tests r) [])]
+        (let [k (str (.-file t) "::" (.-name t))]
+          (when (not (.has acc k)) (.set acc k []))
+          (.push (.get acc k) (or (.-durationMs t) 0)))))
+    acc))
+
+(defn compute [runs :- Any] :- Any
+  (let [last (aget runs (- (.-length runs) 1))
+        lane (.-lane last)
+        kind (.-kind (.-binary last))
+        ;; same-lane + same-binary-kind window (mach/nix not comparable)
+        same (.filter runs
+               (fn [r] (and (= (.-lane r) lane)
+                            (= (.-kind (.-binary r)) kind))))
+        window (.slice same (.max Math 0 (- (.-length same) WINDOW)))
+        excluded (- (.-length runs) (.-length same))
+        durations (.map window (fn [r] (.-durationMs (.-totals r))))
+        slowest (.sort (.slice (or (.-tests last) []))
+                  (fn [a b] (- (or (.-durationMs b) 0) (or (.-durationMs a) 0))))
+        meds (test-medians window)
+        regressions []]
+    ;; per-test regression: current > 1.5x its window median (and > 250ms abs)
+    (doseq [t (or (.-tests last) [])]
+      (let [k (str (.-file t) "::" (.-name t))
+            m (median (or (.get meds k) []))
+            d (or (.-durationMs t) 0)]
+        (when (and (> m 0) (> d (* m 1.5)) (> d 250))
+          (.push regressions {:file (.-file t) :name (.-name t)
+                              :durationMs d :medianMs m
+                              :pct (.round Math (* 100 (- (/ d m) 1)))}))))
+    {:lane lane
+     :binaryKind kind
+     :ts (.-ts last)
+     :totals (.-totals last)
+     :slowest slowest
+     :trend durations
+     :trendMedian (median durations)
+     :excludedFromTrend excluded
+     :regressions regressions}))
+
+;; ▁▂▃▄▅▆▇█ sparkline over the trend series.
+(defn sparkline [nums :- Any] :- Any
+  (if (= (.-length nums) 0)
+    ""
+    (let [bars ["▁" "▂" "▃" "▄" "▅" "▆" "▇" "█"]
+          mn (.apply (.-min Math) nil nums)
+          mx (.apply (.-max Math) nil nums)
+          range (.max Math 1 (- mx mn))
+          out []]
+      (doseq [v nums]
+        (let [idx (.min Math 7 (.floor Math (* (/ (- v mn) range) 7)))]
+          (.push out (aget bars idx))))
+      (.join out ""))))
+
+(defn render [rep :- Any] :- Any
+  (let [tot (.-totals rep)]
+    (.log console (str (bold "gjoa integration test report") "  "
+                       (dim (str "(lane: " (.-lane rep) " · binary: " (.-binaryKind rep)
+                                 " · " (.slice (or (.-ts rep) "") 0 19) ")"))))
+    (.log console (str "  Total: " (secs (.-durationMs tot)) " · "
+                       (.-count tot) " tests · "
+                       (green (str (.-pass tot) " pass")) " / "
+                       (if (> (.-fail tot) 0) (red (str (.-fail tot) " fail")) (str (.-fail tot) " fail")) " / "
+                       (.-skip tot) " skip"))
+    (.log console "")
+    (.log console (bold "  Slowest (this run)"))
+    (let [slow (.-slowest rep)
+          n (if showAll (.-length slow) (.min Math TOP (.-length slow)))]
+      (loop [i 0]
+        (when (< i n)
+          (let [t (aget slow i)]
+            (.log console (str "    " (.padStart (secs (.-durationMs t)) 8) "  "
+                               (.padEnd (or (.-file t) "") 26) " " (or (.-name t) ""))))
+          (recur (+ i 1))))
+      (when (and (not showAll) (> (.-length slow) TOP))
+        (.log console (dim (str "    … " (- (.-length slow) TOP) " more (--all for full)")))))
+    (.log console "")
+    (let [trend (.-trend rep)]
+      (.log console (bold (str "  Trend — " (.-lane rep) " lane, " (.-binaryKind rep)
+                              " (last " (.-length trend) " runs, oldest→newest)")))
+      (if (< (.-length trend) 2)
+        (.log console (dim "    (need ≥2 runs for a trend)"))
+        (.log console (str "    " (secs (aget trend (- (.-length trend) 1))) "  "
+                           (sparkline trend) "   "
+                           (dim (str "median " (secs (.-trendMedian rep)))))))
+      (when (> (.-excludedFromTrend rep) 0)
+        (.log console (dim (str "    ⚠ " (.-excludedFromTrend rep)
+                               " run(s) on a different lane/binary excluded from trend")))))
+    (.log console "")
+    (let [regs (.-regressions rep)]
+      (when (> (.-length regs) 0)
+        (.log console (bold (yellow (str "  Regressions (>1.5× " (.-length (.-trend rep)) "-run median)"))))
+        (doseq [r regs]
+          (.log console (str "    " (yellow (.-file r)) " / " (.-name r) "   "
+                             (secs (.-durationMs r)) " "
+                             (dim (str "(median " (secs (.-medianMs r)) ", +" (.-pct r) "%)")))))))))
+
+(defn main! [] :- Any
+  (let [runs (load-runs)]
+    (if (= (.-length runs) 0)
+      (do
+        (if jsonMode
+          (.log console (.stringify JSON {:error "no runs recorded yet"}))
+          (.log console (dim "no test runs recorded yet — run `bun run test:integration` first")))
+        nil)
+      (let [rep (compute runs)]
+        (if jsonMode
+          (.log console (.stringify JSON rep nil 2))
+          (render rep))))))
+
+(when (.-main (js/import-meta))
+  (try (main!)
+    (catch Any e
+      (.error console (str "report failed: " (or (.-stack e) e)))
+      (.exit process 1))))
