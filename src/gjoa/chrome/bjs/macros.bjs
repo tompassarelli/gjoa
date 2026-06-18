@@ -116,3 +116,8 @@
 (defmacro quiet! [fallback & body]
   `(try (do ,@body)
         (catch Any _e ,fallback)))
+;; ---- array ----
+;; last element without the hand-rolled `(- (.-length x) 1)` off-by-one math.
+;; Evaluates the array once (so it's also safe on a side-effecting expression).
+(defmacro last-of [arr]
+  `(let [_a ,arr] (aget _a (- (.-length _a) 1))))
