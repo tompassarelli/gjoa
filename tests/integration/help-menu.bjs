@@ -1,0 +1,28 @@
+#lang beagle/js
+;; #52: the help overlay (leader `?` / `:help`) must list the `:` EX-COMMANDS,
+;; not just the leader keymap — so the command set is self-documenting. We run
+;; the `help` ex-command (which builds + toggles #gjoa-which-key) and assert the
+;; overlay text contains the ": commands" section and representative commands.
+(ns gjoa.tests.integration.help-menu
+  (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect]]))
+(define-mode strict)
+
+(def TRIGGER :- String
+  (str "const win=Services.wm.getMostRecentWindow('navigator:browser');"
+       " if (!win.gjoaTest || !win.gjoaTest.vim) return 'NO-API';"
+       " win.gjoaTest.vim.runExCommand('help');"
+       " const wk=win.document.getElementById('gjoa-which-key');"
+       " return wk ? wk.textContent : 'NO-WK';"))
+
+(js/export (def tests :- Any
+  [(deftest "help overlay lists the : ex-commands" [mn ctx]
+     (js/await (.setContext mn "chrome"))
+     (let [txt (chrome-eval TRIGGER)]
+       (expect (not= txt "NO-API") "gjoaTest.vim must be exposed (gjoa.test.exposeAPI)")
+       (expect (not= txt "NO-WK") "the #gjoa-which-key help overlay should exist after :help")
+       (expect (.includes txt ": commands") "help overlay should have a ': commands' section")
+       (expect (.includes txt ":tabpos") "help overlay should list :tabpos")
+       (expect (.includes txt ":space") "help overlay should list :space")
+       (expect (.includes txt ":checkpoint") "help overlay should list :checkpoint")))]))
+
+(js/export-default tests)

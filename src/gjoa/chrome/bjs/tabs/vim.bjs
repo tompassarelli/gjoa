@@ -468,6 +468,20 @@
                     (.appendChild row k)
                     (.appendChild row d)
                     (.appendChild el row)))))
+              ;; The ": commands" section — make the ex-command set as
+              ;; self-documenting as the leader keymap (same ? / :help overlay).
+              (let [exHeader (htm "div" "gjoa-wk-header gjoa-wk-section")]
+                (set! (.-textContent exHeader) ": commands")
+                (.appendChild el exHeader))
+              (.forEach EX-COMMANDS (fn [c]
+                (let [row (htm "div" "gjoa-wk-row")
+                      k (htm "span" "gjoa-wk-cmd")
+                      d (htm "span" "gjoa-wk-desc")]
+                  (set! (.-textContent k) (str ":" (.-name c) (if (.-takesArgs c) " …" "")))
+                  (set! (.-textContent d) (.-description c))
+                  (.appendChild row k)
+                  (.appendChild row d)
+                  (.appendChild el row))))
               (.appendChild (.-documentElement document) el)
               (set! (.-which-key-el vs) el)
               el)))
