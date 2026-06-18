@@ -104,6 +104,10 @@ jobs:
           ac_add_options --with-distribution-id=org.gjoa
           ac_add_options --with-app-name=gjoa
           ac_add_options --with-app-basename=Gjoa
+          # Auto-fetch missing Mozilla toolchains (Windows App SDK, nasm, clang,
+          # …) instead of hand-installing each one — bootstrap_path() in
+          # build/moz.configure/bootstrap.configure pulls them on demand.
+          ac_add_options --enable-bootstrap
           ac_add_options --without-wasm-sandboxed-libraries
           ac_add_options --disable-updater
           ac_add_options --disable-tests
