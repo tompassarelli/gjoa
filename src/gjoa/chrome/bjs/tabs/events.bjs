@@ -1,6 +1,6 @@
 #lang beagle/js
 (ns gjoa.tabs.events
-  (:require [gjoa.macros :refer [q on! bool rmattr! undef-or toggle! tabs!]]))
+  (:require [gjoa.macros :refer [q on! bool rmattr! undef-or toggle! tabs! last-of]]))
 (define-mode strict)
 
 (declare-extern [Services gBrowser console Math Object create-logger! CLOSED-MEMORY SPACE-ATTR all-rows group-by-id is-horizontal level-of parent-of-tab pin-tab-id read-pinned-id subtree-rows tab-by-id tab-url tree-data! pop-saved-by-url pop-saved-for-tab closed-tabs moving-tabs row-of saved-tab-queue state tree-of] Any)
@@ -118,7 +118,7 @@
                 (let [prev-row (.get row-of prev-sib-tab)]
                   (if (and prev-row (not= prev-row row))
                     (let [st (subtree-rows prev-row)
-                          anchor (aget st (- (.-length st) 1))]
+                          anchor (last-of st)]
                       (if (not= (.-nextElementSibling anchor) row)
                         (do (.after anchor row) true)
                         false))
@@ -143,11 +143,11 @@
     (cond
       (and sib-row same-parent)
       (let [st (subtree-rows sib-row)]
-        (.after (aget st (- (.-length st) 1)) row))
+        (.after (last-of st) row))
 
       (and prev-sibling-id parent-row)
       (let [st (subtree-rows parent-row)]
-        (.after (aget st (- (.-length st) 1)) row))
+        (.after (last-of st) row))
 
       (and prev-sibling-id (not parent-row))
       (.insertBefore (.-panel state) row (.-spacer state))

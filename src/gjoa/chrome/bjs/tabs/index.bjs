@@ -1,6 +1,6 @@
 #lang beagle/js
 (ns gjoa.tabs.index
-  (:require [gjoa.macros :refer [q by-id xul-new xul-id attr! pref-bool on! on1! has? bool rmattr! tabs!]]))
+  (:require [gjoa.macros :refer [q by-id xul-new xul-id attr! pref-bool on! on1! has? bool rmattr! tabs! last-of]]))
 (define-mode strict)
 
 ;; Browser globals
@@ -479,7 +479,7 @@
                       (fn []
                         (let [visible (.filter (all-rows) #(not (.-hidden %)))]
                           (when (> (.-length visible) 0)
-                            (.activateVim vim-api (aget visible (- (.-length visible) 1)))))))
+                            (.activateVim vim-api (last-of visible))))))
 
                     ;; Spacer right-click -> panel context menu
                     (on! (.-spacer state) "contextmenu"
