@@ -29,5 +29,9 @@ echo "  profile: $PROFILE"
 echo "  log:     $LOG"
 echo
 
+# Opt into dev chrome loading (F4 gate: GjoaLoader sources gjoa-dev/ only when
+# GJOA_DEV_LOADER=1; otherwise it falls back to baked omni.ja chrome).
+export GJOA_DEV_LOADER=1
+
 # tee so the user sees output live AND it's captured to the log.
 "$BIN" --no-remote --profile "$PROFILE" 2>&1 | tee "$LOG"

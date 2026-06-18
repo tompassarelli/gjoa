@@ -156,7 +156,10 @@
         ;; quit the test browser. The test environment runs against
         ;; whatever Firefox version the local build is at — that's
         ;; unrelated to "is this build safe to ship to users."
-        env (.assign Object {} (.-env process) {"GJOA_ALLOW_INSECURE" "1"})
+        ;; GJOA_DEV_LOADER=1: the F4 opt-in gate means the dev chrome bundles
+        ;; (the gjoa-dev/ symlink) only load when this is set. The suite drives
+        ;; the dev build, so it must opt in or no gjoa chrome loads at all.
+        env (.assign Object {} (.-env process) {"GJOA_ALLOW_INSECURE" "1" "GJOA_DEV_LOADER" "1"})
         child (spawn (.-gjoaBin opts) args
                      {:stdio (if verbose "inherit" "pipe")
                       :env env})]

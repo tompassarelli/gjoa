@@ -32,5 +32,10 @@
 (pref "gjoa.contentblock.enabled" true)
 (pref "gjoa.contentblock.user.allow-hosts" "")
 
+;; Curated-only scriptlet policy (security finding F2). When false (default), only
+;; gjoa's hand-vetted curated scriptlets run; the engine's general list-driven
+;; `+js()` expansion (arbitrary uBO-list JS into the page main world) stays OFF.
+(pref "gjoa.contentblock.scriptlets.listDriven.enabled" false)
+
 ;; Keep the overlay's logging quiet by default (Error/Warn only).
 (pref "privacy.trackingprotection.content.remote_settings.loglevel" "Warn")
