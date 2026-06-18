@@ -99,21 +99,21 @@
     (or (.get (.-env Services) name) "")
     (catch Any _e "")))
 
-;; F4 defense-in-depth: a dev-source dir is trustworthy only if it is NOT group-
-;; or other-writable, so another local user can't drop/redirect scripts into the
-;; dev tree. The mach dev loop deliberately makes gjoa-dev a user-owned SYMLINK
-;; to dist/chrome (tools/chrome-bundle/install.bjs), so we must not reject
-;; symlinks outright — instead we check both the resolved target's mode (STAT, via
-;; .permissions) AND the link node's own mode (LSTAT, via .permissionsOfLink), so
-;; an attacker-writable symlink node is refused even if its current target looks
-;; safe. nsIFile exposes no scriptable owner uid, so we approximate "owned by the
-;; running user" by refusing any non-user-writable mode bits. Any read throwing →
-;; treat as unsafe. (Full belt = the deferred MOZ_GJOA_DEV_LOADER compile-out.)
+;; F4 defense-in-depth: the resolved dev-source dir must not be group/other-
+;; writable, so another local user can't drop/redirect scripts into the dev tree.
+;; `.permissions` is the STAT mode of the *resolved* dir, so this works whether
+;; gjoa-dev is a real dir or the user-owned symlink the mach dev loop creates
+;; (tools/chrome-bundle/install.bjs). We deliberately do NOT check the symlink
+;; node's own mode: on Linux a symlink is always 0777 (the kernel ignores link
+;; mode bits), so an LSTAT check would both break the legit dev symlink AND add
+;; no security — who can REPLACE the link is gated by the parent dir's bits, not
+;; the link's. The opt-in GJOA_DEV_LOADER=1 gate above is the primary defense;
+;; this is belt on the target. (Full belt = the deferred MOZ_GJOA_DEV_LOADER
+;; compile-out.) Any read throwing → treat as unsafe.
 (defn dev-dir-safe? [dir :- Any] :- Boolean
   (try
     ;; 0o022 = group-write | other-write.
-    (and (= (bit-and (.-permissions dir) 0o022) 0)        ;; resolved target (STAT)
-         (= (bit-and (.-permissionsOfLink dir) 0o022) 0)) ;; link node itself (LSTAT)
+    (= (bit-and (.-permissions dir) 0o022) 0)
     (catch Any _e false)))
 
 ;; Returns the dev-mode source directory if dev loading is explicitly enabled

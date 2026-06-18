@@ -238,9 +238,12 @@ export class GjoaCosmeticParent extends JSWindowActorParent {
         // process could otherwise send huge arrays of huge strings to stall the
         // parent main thread and contend the cross-tab engine lock (DoS). Drop
         // non-strings, cap per-element length and total count.
+        // 1024-char cap (not 256): class/id tokens are short, but a legitimate
+        // exception SELECTOR can be long, and dropping one silently over-blocks
+        // (hides an element meant to stay visible). 1024 x 4096 is still bounded.
         const clamp = a =>
           (Array.isArray(a) ? a : [])
-            .filter(s => typeof s === "string" && s.length <= 256)
+            .filter(s => typeof s === "string" && s.length <= 1024)
             .slice(0, 4096);
         const selectors = {};
         try {

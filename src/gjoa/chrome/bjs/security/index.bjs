@@ -105,7 +105,7 @@
                     (.warn console
                       (str "[security] STALE: running " my-version
                            ", latest is " latest
-                           " (same major, point behind) — gjoa status will show STALE; queue a rebuild for next Sunday"))))))))))
+                           " (same major, point behind) — gjoa status will show STALE; rebuild when convenient"))))))))))
         (.catch (fn [e]
           (if (= (.-confirmed-at state) 0)
             (.warn console

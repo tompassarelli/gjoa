@@ -294,6 +294,22 @@
           (pass "I" "chrome bundle three-way alignment"
             (str (.-length loaderScripts) " script + " (.-length loaderStyles) " style bundles agree across loader / jar.mn / chrome-bake.bjs")))))))
 
+;; ── Gate J: vendored scriptlet bundle matches its pinned SHA-256 ──────────
+;; scriptlet-resources.json is base64-encoded JS run via evalInSandbox on the
+;; privileged side of the content classifier; a swapped/tampered bundle injects
+;; attacker JS into pages. Assert it still matches the digest recorded in
+;; scriptlet-resources.PROVENANCE.md (security finding F10).
+(defn gateJ [] :- Any
+  (let [script (join REPO-ROOT "tools" "prep" "verify-scriptlet-resources.sh")]
+    (if (not (existsSync script))
+      (fail "J" "scriptlet bundle integrity" "verify-scriptlet-resources.sh missing" "restore the F10 verifier")
+      (let [r (sh (str "bash " script) {})]
+        (if (.-ok r)
+          (pass "J" "scriptlet bundle integrity" "scriptlet-resources.json matches the pinned SHA-256")
+          (fail "J" "scriptlet bundle integrity"
+            (.trim (or (.-out r) "digest mismatch"))
+            "if you refreshed the bundle from a pinned uBO commit, update the SHA-256 in verify-scriptlet-resources.sh AND scriptlet-resources.PROVENANCE.md"))))))
+
 ;; ── Run + render ──────────────────────────────────────────────────────────
 (defn main! [] :- Any
   (.log console (bold "gjoa preflight"))
@@ -302,7 +318,7 @@
 
   (let [gates [["A" gateA] ["B" gateB] ["C" gateC] ["D" gateD]
                ["E" gateE] ["F" gateF] ["G" gateG] ["H" gateH]
-               ["I" gateI]]]
+               ["I" gateI] ["J" gateJ]]]
     (doseq [gate gates]
       (let [fn (aget gate 1)]
         (try (fn)

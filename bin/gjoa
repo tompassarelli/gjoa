@@ -71,5 +71,11 @@ echo "→ refreshing chrome bundle" >&2
 bun run chrome:dist >&2
 bun run chrome:install >&2
 
+# Dev chrome loads from the gjoa-dev/ symlink (refreshed just above) only when
+# the F4 opt-in gate is set (GjoaLoader.dev-mode-dir). This IS the dev launcher,
+# so opt in — otherwise the binary silently falls back to baked omni.ja chrome
+# and the `gjoa sync` hot-reload loop stops working.
+export GJOA_DEV_LOADER=1
+
 echo "→ launching $BIN" >&2
 exec "$BIN" "$@"
