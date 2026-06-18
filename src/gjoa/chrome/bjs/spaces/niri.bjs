@@ -1,0 +1,153 @@
+#lang beagle/js
+;; OS (niri) virtual-workspace → gjoa space name-binding (#41).
+;; OS→gjoa, one-way (v1): we only READ niri's event-stream and WRITE gjoa spaces,
+;; so no feedback loop is possible. Spawns `niri msg event-stream`, frames the
+;; newline-delimited JSON itself (readString() yields arbitrary chunks, not
+;; lines), and on each focus-change switches to (or creates) the gjoa space of
+;; the same name. Lane 1 — Subprocess ships in the engine, no rebuild.
+(ns gjoa.spaces.niri
+  (:require [gjoa.macros :refer [pref-bool pref-int on1!]]))
+(define-mode strict)
+
+(declare-extern [window console Services ChromeUtils JSON Map Promise Math setTimeout clearTimeout] Any)
+
+;; Resolved lazily (inside spawn!) so the module imports cleanly in a unit test
+;; where ChromeUtils doesn't exist — reduce-event/switch-to-space stay pure.
+(defn get-subprocess [] :- Any
+  (.-Subprocess (.importESModule ChromeUtils "resource://gre/modules/Subprocess.sys.mjs")))
+
+;; --- Pure reducer (UNIT-TESTABLE: no subprocess, no niri) --------------------
+;; cache : Map<id, workspaceObj>. Returns {:cache cache :focused <name|nil>}.
+;;   WorkspacesChanged          → full cache replace (no switch).
+;;   WorkspaceActivated{focused} → the global focus switch; resolve name by id.
+;; Everything else (per-output WorkspaceActivated{focused:false}, Ok acks,
+;; WindowsChanged, unnamed workspaces) yields focused=nil = "no actionable change".
+(js/export (defn reduce-event [cache :- Any ev :- Any] :- Any
+  (cond
+    (.-WorkspacesChanged ev)
+    (let [next (Map.)
+          arr (.-workspaces (.-WorkspacesChanged ev))]
+      (.forEach arr #(.set next (.-id %) %))
+      {:cache next :focused nil})
+
+    (.-WorkspaceActivated ev)
+    (let [a (.-WorkspaceActivated ev)]
+      (if (not (.-focused a))
+        {:cache cache :focused nil}
+        (let [ws (.get cache (.-id a))]
+          {:cache cache :focused (and ws (.-name ws))})))
+
+    :else {:cache cache :focused nil})))
+
+;; --- gjoa spaces driver ------------------------------------------------------
+;; Case-insensitive name match over Spaces.list(); create if absent; setActive.
+;; setActive no-ops when already active, and onActivated re-selects a tab in the
+;; target space — we never touch the selected tab or delete (protected "Main").
+(js/export (defn switch-to-space [spaces :- Any name :- String] :- Any
+  (when (and spaces name (> (.-length name) 0))
+    (let [match (.find (.list spaces)
+                  #(= (.toLowerCase (.-name %)) (.toLowerCase name)))]
+      (if match
+        (.setActive spaces (.-id match))
+        (let [created (.create spaces name)]
+          (.setActive spaces (.-id created))))))))
+
+;; --- Lifecycle / streaming ---------------------------------------------------
+(def st :- Any {:proc nil :alive false :debounce-id nil
+                :cache (Map.) :pending nil :backoff 500})
+
+(defn apply-focus! [name :- String] :- Any
+  ;; Debounce rapid niri switches: only the last focus in the window is applied.
+  (let [delay (pref-int "gjoa.niri.debounceMs" 120)]
+    (set! (.-pending st) name)
+    (when (.-debounce-id st) (clearTimeout (.-debounce-id st)))
+    (set! (.-debounce-id st)
+      (setTimeout
+        (fn []
+          (set! (.-debounce-id st) nil)
+          (let [n (.-pending st)
+                spaces (.-Spaces window)]
+            (set! (.-pending st) nil)
+            (when (and n spaces)
+              ;; Mark niri-originated so a future gjoa→niri reflector won't ping-pong.
+              (set! (.-__niriDriving st) true)
+              (try
+                (switch-to-space spaces n)
+                (catch Any e (.error console "gjoa-niri: switch failed" e))
+                (finally (set! (.-__niriDriving st) false))))))
+        delay))))
+
+(defn handle-line! [line :- String] :- Any
+  (let [ev (try (.parse JSON line) (catch Any _e nil))]
+    (when ev
+      (let [r (reduce-event (.-cache st) ev)]
+        (set! (.-cache st) (.-cache r))
+        (when (.-focused r) (apply-focus! (.-focused r)))))))
+
+;; Async read→frame→dispatch loop; the returned promise resolves on child EOF
+;; (niri exited / killed). Self-recursive at top level to avoid a nested defn.
+(defn pump-step! [proc :- Any buf :- Any] :- Any
+  (-> (.readString (.-stdout proc))
+      (.then (fn [chunk]
+        (if (= chunk "")
+          nil
+          (do
+            (set! (.-s buf) (str (.-s buf) chunk))
+            (loop []
+              (let [nl (.indexOf (.-s buf) "\n")]
+                (when (>= nl 0)
+                  (let [line (.slice (.-s buf) 0 nl)]
+                    (set! (.-s buf) (.slice (.-s buf) (+ nl 1)))
+                    (when (> (.-length line) 0) (handle-line! line))
+                    (recur)))))
+            (pump-step! proc buf)))))))
+
+(defn pump! [proc :- Any] :- Any
+  (pump-step! proc {:s ""}))
+
+(defn schedule-respawn! [] :- Any
+  (let [b (.-backoff st)]
+    (set! (.-backoff st) (Math/min (* b 2) 30000))
+    (setTimeout #(when (.-alive st) (spawn!)) b)))
+
+(defn spawn! [] :- Any
+  (let [sp (get-subprocess)]
+  (-> (.pathSearch sp "niri")
+      (.then (fn [niri]
+        (-> (.call sp
+              {:command niri :arguments ["msg" "event-stream"] :stderr "stdout"})
+            (.then (fn [proc]
+              (set! (.-proc st) proc)
+              (set! (.-alive st) true)
+              (set! (.-backoff st) 500)
+              (.log console "gjoa-niri: event-stream attached")
+              (-> (pump! proc)
+                  (.then (fn [_]
+                    (set! (.-proc st) nil)
+                    (when (.-alive st) (schedule-respawn!))))))))))
+      (.catch (fn [e]
+        (.error console "gjoa-niri: spawn failed (niri on PATH?)" e)
+        (when (.-alive st) (schedule-respawn!)))))))
+
+(defn teardown! [] :- Any
+  (set! (.-alive st) false)
+  (when (.-debounce-id st) (clearTimeout (.-debounce-id st)))
+  (let [p (.-proc st)] (when p (try (.kill p) (catch Any _e nil))))
+  (set! (.-proc st) nil))
+
+;; --- Entry point -------------------------------------------------------------
+;; Called per browser window from tabs/index.bjs after window.Spaces is set.
+(js/export (defn make-niri-binding! [] :- Any
+  (let [enabled (pref-bool "gjoa.niri.enabled" true)
+        sock (try (.get (.-env Services) "NIRI_SOCKET") (catch Any _e ""))]
+    (cond
+      (not enabled)
+      (.log console "gjoa-niri: disabled via pref")
+      (or (not sock) (= sock ""))
+      (.log console "gjoa-niri: NIRI_SOCKET unset — not a niri session, skipping")
+      :else
+      (do
+        (set! (.-alive st) true)
+        (spawn!)
+        (on1! window "unload" teardown!)
+        (.log console "gjoa-niri: started"))))))

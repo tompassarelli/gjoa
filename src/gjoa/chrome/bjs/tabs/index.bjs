@@ -4,7 +4,7 @@
 (define-mode strict)
 
 ;; Browser globals
-(declare-extern [window document gBrowser gBrowserInit Services requestAnimationFrame setTimeout setInterval clearInterval console Promise Array Set Math MutationObserver RegExp build-context-menu! build-group-context-menu! build-panel-context-menu! make-drag! make-events! make-layout! make-rows! make-vim! all-rows all-tabs pin-tab-id tab-url tree-data! try-register-pin-attr! create-logger! make-history! make-content-focus! ensure-vertical-tabs-default migrate-legacy-prefs migrate-toolbar-defaults apply-menubar-default make-spaces! make-gjoa! make-saver! closed-tabs row-of saved-tab-queue selection state tree-of] Any)
+(declare-extern [window document gBrowser gBrowserInit Services requestAnimationFrame setTimeout setInterval clearInterval console Promise Array Set Math MutationObserver RegExp build-context-menu! build-group-context-menu! build-panel-context-menu! make-drag! make-events! make-layout! make-rows! make-vim! all-rows all-tabs pin-tab-id tab-url tree-data! try-register-pin-attr! create-logger! make-history! make-content-focus! ensure-vertical-tabs-default migrate-legacy-prefs migrate-toolbar-defaults apply-menubar-default make-spaces! make-niri-binding! make-gjoa! make-saver! closed-tabs row-of saved-tab-queue selection state tree-of] Any)
 
 ;; Module deps — no import, declared extern
 (def pfx-log :- Any (create-logger! "tabs"))
@@ -96,6 +96,11 @@
                (set! (.-selectedTab gBrowser) (aget in-next 0)))))))}))
 
 (set! (.-Spaces window) spaces)
+
+;; Mirror the OS (niri) virtual-workspace name onto the active gjoa space. No-ops
+;; off niri (NIRI_SOCKET unset) or when gjoa.niri.enabled is false. Must run
+;; after window.Spaces exists.
+(make-niri-binding!)
 
 ;; Write-on-every-change saver
 (def schedule-save :- Any

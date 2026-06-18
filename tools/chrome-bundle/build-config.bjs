@@ -59,6 +59,7 @@
             (str B "/spaces/types.js")
             (str B "/spaces/visibility.js")
             (str B "/spaces/manager.js")
+            (str B "/spaces/niri.js")
             (str B "/platform/scheduler.js")
             (str B "/platform/window-tabs.js")
             (str B "/platform/window.js")
