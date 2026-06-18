@@ -62,6 +62,24 @@
   font-weight: 600 !important;
 }
 
+/* Second-section header (": commands") gets breathing room above it. */
+#gjoa-which-key .gjoa-wk-section {
+  margin-top: 10px !important;
+}
+
+/* Ex-command pill: like a key, but left-aligned with a fixed column so the
+ * descriptions line up across the varying `:command` widths. */
+#gjoa-which-key .gjoa-wk-cmd {
+  display: inline-block !important;
+  min-width: 7em !important;
+  padding: 0 6px !important;
+  background-color: color-mix(in srgb, var(--gjoa-fg) 8%, transparent) !important;
+  border-radius: 3px !important;
+  color: var(--gjoa-accent) !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+}
+
 #gjoa-which-key .gjoa-wk-desc {
   color: var(--gjoa-fg) !important;
 }
