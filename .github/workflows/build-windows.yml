@@ -124,10 +124,26 @@ jobs:
           export MOZBUILD_STATE_PATH="$HOME/.mozbuild"
           echo 1 | ./mach bootstrap --application-choice=browser 2>&1 || true
 
+      # Firefox's `mach build` on Windows hard-requires MozillaBuild (the MSYS2
+      # environment with make + the unix build tools) at C:\mozilla-build. The
+      # windows-2022 runner doesn't ship it, so mach asserts and dies. Install it
+      # silently (NSIS `/S` → default C:\mozilla-build). The `//S` double-slash
+      # stops Git Bash from rewriting `/S` into a path.
+      - name: Install MozillaBuild
+        run: |
+          curl -L -o "$RUNNER_TEMP/MozillaBuildSetup.exe" \
+            https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-Latest.exe
+          MSYS2_ARG_CONV_EXCL='*' "$RUNNER_TEMP/MozillaBuildSetup.exe" //S
+          for i in $(seq 1 30); do [ -f /c/mozilla-build/start-shell.bat ] && break; sleep 2; done
+          test -f /c/mozilla-build/start-shell.bat \
+            && echo "MozillaBuild installed at C:\\mozilla-build" \
+            || { echo "MozillaBuild install failed"; ls -la /c/mozilla-build 2>&1 || true; exit 1; }
+
       - name: Build
         working-directory: engine
         run: |
           export MOZBUILD_STATE_PATH="$HOME/.mozbuild"
+          export MOZILLABUILD="C:\\mozilla-build"
           ./mach build
 
       - name: Package
