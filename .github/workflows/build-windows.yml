@@ -159,8 +159,15 @@ jobs:
           # overriding moz.configure's check_prog which would pick the SDK fxc.exe
           # → builtin vkd3d → can't compile FF's HLSL.
           export FXC="$HOME/win-cross/fxc2/bin/fxc2.exe"
-          # Make wine load fxc2's BUNDLED native d3dcompiler_47.dll (sitting next to
-          # fxc2.exe) rather than its builtin vkd3d, which can't compile FF's HLSL.
+          # Make wine load fxc2's BUNDLED native d3dcompiler_47.dll (next to fxc2.exe)
+          # rather than builtin vkd3d, which can't compile FF's HLSL. Use
+          # mk_add_options so these land in the MAKE environment and reach the
+          # genshaders subprocess that actually runs wine — a plain `export` is
+          # configure-time only and does NOT propagate to the build. (The diagnostic
+          # step proved fxc2 compiles the shader cleanly with this override set;
+          # Mozilla's mingwclang uses mk_add_options for its fxc2 PATH for the same reason.)
+          mk_add_options "export WINEDLLOVERRIDES=d3dcompiler_47=n"
+          mk_add_options "export WINEPREFIX=$HOME/.wine"
           export WINEDLLOVERRIDES="d3dcompiler_47=n"
           export MOZ_STUB_INSTALLER=1
           export MOZ_PKG_FORMAT=TAR
