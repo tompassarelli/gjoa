@@ -11,6 +11,7 @@ name: Windows build (x86_64)
 # zen-browser/.github/workflows/windows-release-build.yml + configs/windows/mozconfig.
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build:

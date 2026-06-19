@@ -2,6 +2,7 @@ name: macOS build (Apple Silicon)
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build:

@@ -1,0 +1,62 @@
+name: Release
+
+# Tag-driven release pipeline. Push a version tag and this builds all three
+# platforms (on Blacksmith) and assembles a DRAFT GitHub release with the binaries
+# attached, named gjoa-<version>-<platform>.<ext>. The draft is deliberate: a human
+# writes the release notes and clicks Publish — CI never publishes on its own.
+#
+#   git tag v0.3.3 && git push origin v0.3.3
+#
+# The three build-*.yml workflows are reused (workflow_call), so the build steps
+# stay defined in exactly one place.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  linux:
+    uses: ./.github/workflows/build-linux.yml
+  macos:
+    uses: ./.github/workflows/build-macos.yml
+  windows:
+    uses: ./.github/workflows/build-windows.yml
+
+  release:
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Assemble release assets
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          echo "version: $VER"
+          mkdir -p release
+          find artifacts/gjoa-linux-x86_64   -name '*.tar.xz'   -exec cp {} "release/gjoa-${VER}-linux-x86_64.tar.xz" \;
+          find artifacts/gjoa-macos-arm64     -name '*.dmg'      -exec cp {} "release/gjoa-${VER}-macos-arm64.dmg" \;
+          find artifacts/gjoa-windows-x86_64  -name '*.win64.zip' -exec cp {} "release/gjoa-${VER}-windows-x86_64.zip" \;
+          echo "=== assembled ==="
+          ls -la release/
+          # Fail loudly if any platform asset is missing or trivially small.
+          n=$(find release -type f | wc -l)
+          small=$(find release -type f -size -1M | wc -l)
+          if [ "$n" -ne 3 ] || [ "$small" -ne 0 ]; then
+            echo "::error::expected 3 non-trivial assets, got $n ($small under 1MB)"; exit 1
+          fi
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: "_Draft assembled by CI. Replace this with hand-written release notes, then publish._"
+          files: release/*
+          fail_on_unmatched_files: true
