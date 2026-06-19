@@ -2,7 +2,16 @@ name: macOS build (Apple Silicon)
 
 on:
   workflow_dispatch:
+    inputs:
+      fast:
+        description: "Use the Blacksmith fast runner (paid) instead of free GitHub-hosted"
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      fast:
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -11,7 +20,7 @@ jobs:
     # macos-26 image ships Xcode 26.0-26.4 but DEFAULTS to 26.2, whose SDK lacks
     # `prf` (verified: 26.0-26.3 fail to compile it, 26.4 succeeds) — so the
     # "Select newest Xcode" step below is required on this runner.
-    runs-on: blacksmith-6vcpu-macos-26
+    runs-on: ${{ inputs.fast && 'blacksmith-6vcpu-macos-26' || 'macos-26' }}
     timeout-minutes: 300
     env:
       FF_VERSION: "152.0"
@@ -22,6 +31,7 @@ jobs:
       # ASAuthorization `prf` API FF 152's dom/webauthn references (26.0-26.3
       # fail to compile it; 26.4 compiles). Select the newest installed Xcode.
       - name: Select newest Xcode (needs SDK 26.4+ for webauthn prf)
+        if: ${{ inputs.fast }}
         run: |
           NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
           echo "selecting $NEWEST"

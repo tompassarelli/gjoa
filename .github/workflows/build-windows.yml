@@ -11,11 +11,20 @@ name: Windows build (x86_64)
 # zen-browser/.github/workflows/windows-release-build.yml + configs/windows/mozconfig.
 on:
   workflow_dispatch:
+    inputs:
+      fast:
+        description: "Use the Blacksmith fast runner (paid) instead of free GitHub-hosted"
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      fast:
+        type: boolean
+        default: false
 
 jobs:
   build:
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ${{ inputs.fast && 'blacksmith-16vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 360
     env:
       FF_VERSION: "152.0"
@@ -23,6 +32,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Free disk space
+        if: ${{ !inputs.fast }}
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
@@ -50,6 +60,7 @@ jobs:
             pkg-config nodejs
 
       - name: Maximize build space
+        if: ${{ !inputs.fast }}
         run: |
           sudo swapoff -a
           sudo rm -f /swapfile
@@ -203,7 +214,7 @@ jobs:
           # Headless: fxc2 runs under wine with the NULL display driver selected in
           # Setup (~/.wine), so no X server is needed — its window/OLE init is a
           # no-op and the shader compile proceeds.
-          ./mach build -j$(nproc)
+          ./mach build -j${{ inputs.fast && '16' || '2' }}
 
       - name: Package
         working-directory: engine
