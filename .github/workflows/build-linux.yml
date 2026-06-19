@@ -2,11 +2,20 @@ name: Linux build (x86_64)
 
 on:
   workflow_dispatch:
+    inputs:
+      fast:
+        description: "Use the Blacksmith fast runner (paid) instead of free GitHub-hosted"
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      fast:
+        type: boolean
+        default: false
 
 jobs:
   build:
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ${{ inputs.fast && 'blacksmith-16vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 300
     env:
       FF_VERSION: "152.0"
@@ -17,6 +26,7 @@ jobs:
       # build stalled 34 min then SIGTERM (143) — disk exhaustion. Reclaim ~25GB
       # of preinstalled toolchains we don't use before anything else.
       - name: Free disk space
+        if: ${{ !inputs.fast }}
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
@@ -46,6 +56,7 @@ jobs:
             mercurial pkg-config nodejs
 
       - name: Maximize build space
+        if: ${{ !inputs.fast }}
         run: |
           sudo swapoff -a
           sudo rm -f /swapfile
@@ -135,7 +146,7 @@ jobs:
 
       - name: Build
         working-directory: engine
-        run: ./mach build -j$(nproc)
+        run: ./mach build -j${{ inputs.fast && '16' || '2' }}
 
       # Dark-mode contrast verification — runs the WCAG-AA harness against the
       # freshly-built binary in a clean xvfb env (the agent shell can't launch the
