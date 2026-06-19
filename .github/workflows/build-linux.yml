@@ -136,6 +136,29 @@ jobs:
         working-directory: engine
         run: ./mach build -j2
 
+      # Dark-mode contrast verification — runs the WCAG-AA harness against the
+      # freshly-built binary in a clean xvfb env (the agent shell can't launch the
+      # browser). NON-FATAL + time-bounded: baselines are record-only and an infra
+      # hiccup must never red the build; the per-fixture scores land in the
+      # uploaded contrast-results.log regardless.
+      - name: Dark-mode contrast verification (non-fatal)
+        run: |
+          sudo apt-get install -y xvfb >/dev/null 2>&1 || true
+          bun tools/test-driver/contrast-fixture-server.mjs > /tmp/fix.log 2>&1 &
+          sleep 2
+          GJOA_BIN="$PWD/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa" \
+            timeout 600 xvfb-run -a bun run test:contrast > contrast-results.log 2>&1 || true
+          echo "=== dark-mode contrast scores ==="
+          grep "\[contrast\]" contrast-results.log || echo "(no scores captured — see contrast-results.log artifact)"
+
+      - name: Upload contrast results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contrast-results
+          path: contrast-results.log
+          if-no-files-found: warn
+
       - name: Package
         working-directory: engine
         run: ./mach package
