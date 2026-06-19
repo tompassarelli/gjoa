@@ -25,6 +25,13 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     this._sheetUri = null;
     this._explicitApplied = false;
     this._explicitPromise = null;
+    // Async pass-2 image-analysis state (gjoa.darkmode.image-analysis.enabled,
+    // default OFF). Per-src verdict cache so repeats are free, the injected
+    // <style> id, and a debounce handle for the optional one re-run.
+    this._imgVerdictCache = new Map();
+    this._imgStyleEl = null;
+    this._imgPassScheduled = false;
+    this._imgRerunTimer = null;
   }
 
   async handleEvent(event) {
@@ -107,6 +114,10 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this.browsingContext.colorInversionOverride = resp.override;
       } catch (e) {}
     }
+    // Pass-2 polish (pref-gated, default off): a curated site may force-invert,
+    // in which case the image pass should refine its backdrops too. #maybeRun is
+    // a no-op unless the pref is on AND the engine is inverting this document.
+    this.#maybeRunImagePass(win, doc);
   }
 
   // Synchronous, pre-layout explicit-override decision (no IPC). Mirrors the
@@ -252,6 +263,9 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this.browsingContext.colorInversionOverride = resp.override;
       } catch (e) {}
     }
+    // Pass-2 polish (pref-gated, default off): the refiner has settled the
+    // inversion state, so the image pass can now read it the right way round.
+    this.#maybeRunImagePass(win, doc);
   }
 
   #injectSheet(win, css) {
@@ -279,6 +293,438 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       } catch (e) {}
       this._sheetUri = null;
     }
+    if (this._imgRerunTimer !== null) {
+      try {
+        this.contentWindow?.clearTimeout(this._imgRerunTimer);
+      } catch (e) {}
+      this._imgRerunTimer = null;
+    }
+    try {
+      this._imgStyleEl?.remove();
+    } catch (e) {}
+    this._imgStyleEl = null;
+  }
+
+  // ── Pass 2: async image-luminance analysis (pref-gated, DEFAULT OFF) ────────
+  //
+  // This is unverified POLISH on top of the engine-level dark scrim, which is the
+  // correctness floor. When gjoa.darkmode.image-analysis.enabled is false this
+  // whole subsystem is a NO-OP — the engine scrim must never be disturbed by it.
+  // When on (and the engine is actually inverting this document) it ports Dark
+  // Reader's image track: rasterize each visible background-image url() to a 32x32
+  // canvas, classify its brightness, and refine per-image via a single injected
+  // <style> (hide large light backdrops, invert small dark transparent ones,
+  // replace near-solid light ones with a darkened solid). Everything is wrapped so
+  // a failure never throws out of the actor or breaks the page.
+
+  #imagePassEnabled() {
+    try {
+      return Services.prefs.getBoolPref(
+        "gjoa.darkmode.image-analysis.enabled",
+        false
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Gate + schedule. No-op unless the pref is on AND the engine is inverting this
+  // document (otherwise there's nothing to refine — the page reads light-on-light
+  // natively). Runs at most once per document on the idle queue; the optional
+  // debounced re-run is scheduled from there, never a hot MutationObserver.
+  #maybeRunImagePass(win, doc) {
+    try {
+      if (this._imgPassScheduled) {
+        return;
+      }
+      if (!win || !doc || !doc.documentElement) {
+        return;
+      }
+      if (!this.#imagePassEnabled()) {
+        return; // unverified polish — off by default, engine scrim is the floor
+      }
+      if (!this.#inversionActive(win, doc)) {
+        return; // engine isn't inverting this doc; nothing for pass-2 to refine
+      }
+      this._imgPassScheduled = true;
+      const idle =
+        typeof win.requestIdleCallback === "function"
+          ? cb => win.requestIdleCallback(cb, { timeout: 2000 })
+          : cb => win.setTimeout(cb, 200);
+      idle(() => this.#runImagePass(win, doc));
+    } catch (e) {}
+  }
+
+  #runImagePass(win, doc) {
+    try {
+      const targets = this.#collectImageTargets(win, doc);
+      const rules = [];
+      for (const t of targets) {
+        let verdict = this._imgVerdictCache.get(t.src);
+        if (verdict === undefined) {
+          verdict = this.#analyzeImage(win, doc, t.src);
+          this._imgVerdictCache.set(t.src, verdict); // null = tainted/failed/skip
+        }
+        if (!verdict) {
+          continue;
+        }
+        const rule = this.#decideImageRule(win, t, verdict);
+        if (rule) {
+          rules.push(rule);
+        }
+      }
+      if (rules.length) {
+        this.#applyImageRules(win, doc, rules);
+      }
+      // OPTIONAL one debounced re-run to catch images that streamed in after the
+      // initial pass (lazy-loaded heroes). NOT a per-mutation observer.
+      if (this._imgRerunTimer === null) {
+        this._imgRerunTimer = win.setTimeout(() => {
+          this._imgRerunTimer = null;
+          try {
+            const more = this.#collectImageTargets(win, doc);
+            const extra = [];
+            for (const t of more) {
+              let v = this._imgVerdictCache.get(t.src);
+              if (v === undefined) {
+                v = this.#analyzeImage(win, doc, t.src);
+                this._imgVerdictCache.set(t.src, v);
+              }
+              if (!v) {
+                continue;
+              }
+              const r = this.#decideImageRule(win, t, v);
+              if (r) {
+                extra.push(r);
+              }
+            }
+            if (extra.length) {
+              this.#applyImageRules(win, doc, extra);
+            }
+          } catch (e) {}
+        }, 1500);
+      }
+    } catch (e) {}
+  }
+
+  // Enumerate elements whose computed background-image resolves to a url() (skip
+  // gradients), that are currently visible, capped at the first ~32. Each target
+  // carries the element, its resolved src, and the element's natural-ish box so
+  // the decision tree can read isLarge from the rendered footprint.
+  #collectImageTargets(win, doc) {
+    const CAP = 32;
+    const out = [];
+    let all;
+    try {
+      all = doc.querySelectorAll("*");
+    } catch (e) {
+      return out;
+    }
+    let scanned = 0;
+    let capped = false;
+    for (const el of all) {
+      let bg = "";
+      try {
+        bg = win.getComputedStyle(el).backgroundImage || "";
+      } catch (e) {
+        continue;
+      }
+      if (!bg || bg === "none") {
+        continue;
+      }
+      // url("...") only — gradients (linear-/radial-/conic-) are not rasterizable
+      // here and the engine already inverts their color stops.
+      const src = this.#firstUrl(bg);
+      if (!src) {
+        continue;
+      }
+      if (!this.#isVisible(win, el)) {
+        continue;
+      }
+      out.push({ el, src });
+      if (++scanned >= CAP) {
+        capped = true;
+        break;
+      }
+    }
+    if (capped) {
+      try {
+        Services.console.logStringMessage(
+          "[gjoa darkmode] image-analysis pass capped at " +
+            CAP +
+            " visible background images"
+        );
+      } catch (e) {}
+    }
+    return out;
+  }
+
+  // Extract the first url() target from a computed background-image, ignoring
+  // gradient layers. Returns null for gradient-only / data-less values.
+  #firstUrl(bgImage) {
+    const m = bgImage.match(/url\(\s*(["']?)([^"')]+)\1\s*\)/);
+    if (!m) {
+      return null;
+    }
+    const u = m[2].trim();
+    if (!u || u === "none") {
+      return null;
+    }
+    return u;
+  }
+
+  #isVisible(win, el) {
+    try {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) {
+        return false;
+      }
+      const vw = win.innerWidth || 0;
+      const vh = win.innerHeight || 0;
+      // Intersects the viewport (loose — heroes can extend beyond it).
+      if (r.bottom < 0 || r.top > vh || r.right < 0 || r.left > vw) {
+        return false;
+      }
+      const cs = win.getComputedStyle(el);
+      if (cs.visibility === "hidden" || cs.display === "none") {
+        return false;
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Rasterize an image src to a 32x32 offscreen canvas and classify it with Dark
+  // Reader's exact thresholds. Returns a verdict object, or null on any failure
+  // (cross-origin / tainted canvas / load error) so the caller skips that image.
+  // Cross-origin images taint the canvas; getImageData then throws — caught here.
+  #analyzeImage(win, doc, src) {
+    try {
+      const img = new win.Image();
+      // crossOrigin="anonymous" lets CORS-enabled hosts produce a clean canvas;
+      // for non-CORS images the canvas taints and getImageData throws (caught).
+      try {
+        img.crossOrigin = "anonymous";
+      } catch (e) {}
+      img.src = src;
+      // The image must already be decoded for a synchronous draw. Background
+      // images visible on screen are loaded by the time the idle pass runs; if
+      // not complete we skip (cached as null) rather than block on async decode.
+      if (!img.complete || !img.naturalWidth || !img.naturalHeight) {
+        return null;
+      }
+      const sw = img.naturalWidth;
+      const sh = img.naturalHeight;
+
+      const MAX = 32 * 32; // MAX_ANALYSIS_PIXELS_COUNT
+      const LARGE = 512 * 512; // LARGE_IMAGE_PIXELS_COUNT
+      const isLarge = sw * sh > LARGE;
+
+      const k = Math.min(1, Math.sqrt(MAX / (sw * sh)));
+      const width = Math.max(1, Math.ceil(sw * k));
+      const height = Math.max(1, Math.ceil(sh * k));
+
+      const canvas = doc.createElement("canvas");
+      canvas.width = 32;
+      canvas.height = 32;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) {
+        return null;
+      }
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, sw, sh, 0, 0, width, height);
+
+      let data;
+      try {
+        data = ctx.getImageData(0, 0, width, height).data; // throws if tainted
+      } catch (e) {
+        return null; // cross-origin / tainted — skip gracefully
+      }
+
+      // Dark Reader thresholds (image.ts), verbatim.
+      const TRANSPARENT_ALPHA_THRESHOLD = 0.05;
+      const DARK_LIGHTNESS_THRESHOLD = 0.4;
+      const LIGHT_LIGHTNESS_THRESHOLD = 0.7;
+      const DARK_IMAGE_THRESHOLD = 0.7;
+      const LIGHT_IMAGE_THRESHOLD = 0.7;
+      const TRANSPARENT_IMAGE_THRESHOLD = 0.1;
+      const SOLID_LIGHTNESS_DIFF_THRESHOLD = 0.1;
+
+      let transparentPixelsCount = 0;
+      let darkPixelsCount = 0;
+      let lightPixelsCount = 0;
+      let minLightness = 1;
+      let maxLightness = 0;
+      let sumR = 0;
+      let sumG = 0;
+      let sumB = 0;
+      let sumA = 0;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = 4 * (y * width + x);
+          const r = data[i + 0];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const a = data[i + 3];
+          sumR += r;
+          sumG += g;
+          sumB += b;
+          sumA += a;
+          if (a / 255 < TRANSPARENT_ALPHA_THRESHOLD) {
+            transparentPixelsCount++;
+          } else {
+            // getSRGBLightness: luma-weighted average normalized to [0,1].
+            const l = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+            if (l < DARK_LIGHTNESS_THRESHOLD) {
+              darkPixelsCount++;
+            }
+            if (l > LIGHT_LIGHTNESS_THRESHOLD) {
+              lightPixelsCount++;
+            }
+            if (l < minLightness) {
+              minLightness = l;
+            }
+            if (l > maxLightness) {
+              maxLightness = l;
+            }
+          }
+        }
+      }
+
+      const totalPixelsCount = width * height;
+      const opaquePixelsCount = totalPixelsCount - transparentPixelsCount || 1;
+
+      const isSolid =
+        sumA === totalPixelsCount * 255 &&
+        maxLightness - minLightness < SOLID_LIGHTNESS_DIFF_THRESHOLD;
+      const solidColor = isSolid
+        ? {
+            r: Math.round(sumR / opaquePixelsCount),
+            g: Math.round(sumG / opaquePixelsCount),
+            b: Math.round(sumB / opaquePixelsCount),
+          }
+        : null;
+
+      return {
+        isDark: darkPixelsCount / opaquePixelsCount >= DARK_IMAGE_THRESHOLD,
+        isLight: lightPixelsCount / opaquePixelsCount >= LIGHT_IMAGE_THRESHOLD,
+        isTransparent:
+          transparentPixelsCount / totalPixelsCount >=
+          TRANSPARENT_IMAGE_THRESHOLD,
+        isLarge,
+        width: sw,
+        solidColor,
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Dark Reader's getBgImageValue tree (modify-css.ts), ORDER MATTERS. We're only
+  // ever called when the engine is inverting (theme.mode === 1 equivalent), so the
+  // light-mode branch is omitted. Returns { sel, decl } for the injected sheet, or
+  // null to LEAVE the image (the engine scrim handles dark heroes).
+  #decideImageRule(win, target, v) {
+    const sel = this.#selectorFor(win, target.el);
+    if (!sel) {
+      return null;
+    }
+    // 1) large + light + opaque → HIDE the image; give the container a dark bg so
+    //    the engine inversion/scrim owns the backdrop.
+    if (v.isLarge && v.isLight && !v.isTransparent) {
+      return {
+        sel,
+        decl: "background-image: none !important; background-color: #1a1a1a !important;",
+      };
+    }
+    // 2) dark + transparent + small (width > 2) → INVERT this element's bg image.
+    if (v.isDark && v.isTransparent && v.width > 2) {
+      return {
+        sel,
+        decl: "filter: invert(1) hue-rotate(180deg) !important;",
+      };
+    }
+    // 3) light + opaque (small) → near-solid? replace with a darkened solid color.
+    //    Without a solid read, LEAVE it (we don't ship an SVG-invert filter URL in
+    //    this pass; the engine scrim still covers the hero).
+    if (v.isLight && !v.isTransparent) {
+      if (v.solidColor) {
+        const dark = this.#darkenSolid(v.solidColor);
+        return {
+          sel,
+          decl:
+            "background-image: none !important; background-color: " +
+            dark +
+            " !important;",
+        };
+      }
+      return null;
+    }
+    // 4) otherwise (incl. dark opaque heroes) → LEAVE; engine scrim handles it.
+    return null;
+  }
+
+  // Approximate Dark Reader's modifyBackgroundColor: pull a light solid toward a
+  // dark equivalent by inverting lightness while keeping hue. Cheap HSL flip — the
+  // exact result isn't load-bearing (the engine scrim is the floor); this just
+  // avoids a bright solid block under inversion.
+  #darkenSolid({ r, g, b }) {
+    const rn = r / 255;
+    const gn = g / 255;
+    const bn = b / 255;
+    const max = Math.max(rn, gn, bn);
+    const min = Math.min(rn, gn, bn);
+    const lOld = (max + min) / 2;
+    // Map lightness L -> ~0.85*(1-L) so a near-white solid becomes near-black,
+    // clamped to a comfortable dark band.
+    const lNew = Math.max(0.08, Math.min(0.22, 0.85 * (1 - lOld)));
+    const scale = lOld > 0 ? lNew / lOld : 0;
+    const dr = Math.round(Math.min(255, rn * scale * 255));
+    const dg = Math.round(Math.min(255, gn * scale * 255));
+    const db = Math.round(Math.min(255, bn * scale * 255));
+    return "rgb(" + dr + ", " + dg + ", " + db + ")";
+  }
+
+  // A stable, idempotent selector for the element. Prefer #id; else stamp a
+  // data-attribute we own so re-runs target the SAME element without growing the
+  // class list or colliding with page selectors.
+  #selectorFor(win, el) {
+    try {
+      if (el.id && win.CSS && typeof win.CSS.escape === "function") {
+        return "#" + win.CSS.escape(el.id);
+      }
+      let stamp = el.getAttribute("data-gjoa-dm-img");
+      if (!stamp) {
+        stamp =
+          "i" + (this._imgVerdictCache.size + 1) + "-" + (Date.now() % 100000);
+        el.setAttribute("data-gjoa-dm-img", stamp);
+      }
+      return '[data-gjoa-dm-img="' + stamp + '"]';
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Apply the decided rules via ONE id'd <style> appended once (idempotent,
+  // removable in didDestroy). Append-only across re-runs so prior verdicts stick.
+  #applyImageRules(win, doc, rules) {
+    try {
+      if (!this._imgStyleEl || !this._imgStyleEl.isConnected) {
+        const style = doc.createElement("style");
+        style.id = "gjoa-darkmode-image-pass";
+        style.setAttribute("type", "text/css");
+        (doc.head || doc.documentElement).appendChild(style);
+        this._imgStyleEl = style;
+      }
+      let css = this._imgStyleEl.textContent || "";
+      for (const r of rules) {
+        css += r.sel + " { " + r.decl + " }\n";
+      }
+      this._imgStyleEl.textContent = css;
+    } catch (e) {}
   }
 
   // Coarse "is this page's AUTHORED background dark?" check for the refiner. The

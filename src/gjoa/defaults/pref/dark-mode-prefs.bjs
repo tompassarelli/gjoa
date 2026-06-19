@@ -49,3 +49,19 @@
 (pref "gjoa.darkmode.user.force-native" "")
 (pref "gjoa.darkmode.user.force-invert" "")
 (pref "gjoa.darkmode.user.off" "")
+
+;; Dark-mode scrim opacity (0-255 alpha). When the engine flags an element as a
+;; full-bleed image backdrop (a hero photo) under inversion, the paint stage lays
+;; a translucent black scrim over its background images so preserved (un-inverted)
+;; authored text reads against the still-bright photo. ~0.55 alpha. Read in C++ via
+;; Preferences::GetInt at display-list build, so it's live-tunable (re-render to apply).
+(pref "gjoa.darkmode.scrim.alpha" 140)
+
+;; Async pass-2 image-analysis refinement, applied by GjoaDarkmodeChild AFTER the
+;; engine scrim has already made the page correct. When ON, the content actor
+;; rasterizes visible background-image url()s to a 32x32 canvas, classifies their
+;; brightness (Dark Reader thresholds), and refines per-image: hides large light
+;; opaque backdrops, inverts small dark transparent ones, replaces near-solid light
+;; ones with a darkened solid. DEFAULT OFF — this is unverified polish on top of the
+;; engine scrim (the correctness floor); off means the actor does NOTHING here.
+(pref "gjoa.darkmode.image-analysis.enabled" false)
