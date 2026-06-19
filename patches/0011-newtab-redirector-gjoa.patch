@@ -1,0 +1,91 @@
+# gjoa-patch:
+#   baseline-firefox: 152.0
+#   touches:
+#     - browser/components/newtab/AboutNewTabRedirector.sys.mjs
+#
+gjoa new-tab page — route about:home + about:newtab to chrome://gjoa-newtab.
+
+FF152 replaced the legacy AboutNewTab.newTabURL override with
+AboutNewTabRedirector, whose newChannel() hardcodes the built-in
+activity-stream addon (defaultURL) and ignores newTabURL entirely. Both the
+parent/base and privileged-child newChannel paths now return a channel to
+the gjoa forced-dark navigator page for home + newtab, bypassing the
+activity-stream addon and the about:home startup cache.
+
+--- a/browser/components/newtab/AboutNewTabRedirector.sys.mjs
++++ b/browser/components/newtab/AboutNewTabRedirector.sys.mjs
+@@ -537,15 +537,23 @@
+   }
+ 
+   newChannel(uri, loadInfo) {
+-    let chromeURI = this.getChromeURI(uri);
+-
++    // gjoa: serve the custom forced-dark newtab page for home + newtab, never the
++    // built-in activity-stream addon. FF152 removed the AboutNewTab.newTabURL
++    // hook, so this redirector is the only override point. Returned directly (not
++    // suspended on addon init) since the gjoa page has no built-in-addon dependency.
+     if (
+       uri.spec.startsWith("about:home") ||
+-      (uri.spec.startsWith("about:newtab") && lazy.BUILTIN_NEWTAB_ENABLED)
++      uri.spec.startsWith("about:newtab")
+     ) {
+-      chromeURI = Services.io.newURI(this.defaultURL);
++      let gjoaChannel = Services.io.newChannelFromURIWithLoadInfo(
++        Services.io.newURI("chrome://gjoa-newtab/content/newtab.html"),
++        loadInfo
++      );
++      gjoaChannel.originalURI = uri;
++      return gjoaChannel;
+     }
+ 
++    let chromeURI = this.getChromeURI(uri);
+     let resultChannel = Services.io.newChannelFromURIWithLoadInfo(
+       chromeURI,
+       loadInfo
+@@ -592,33 +600,23 @@
+       );
+     }
+ 
+-    let pageURI;
+-
+-    if (uri.spec.startsWith("about:home")) {
+-      let cacheChannel = AboutHomeStartupCacheChild.maybeGetCachedPageChannel(
+-        uri,
++    // gjoa: serve the custom forced-dark newtab page for home + newtab, never the
++    // built-in activity-stream addon or the (activity-stream) about:home startup
++    // cache. disqualifyCache() drops any stale cached activity-stream document.
++    if (
++      uri.spec.startsWith("about:home") ||
++      uri.spec.startsWith("about:newtab")
++    ) {
++      AboutHomeStartupCacheChild.disqualifyCache();
++      let gjoaChannel = Services.io.newChannelFromURIWithLoadInfo(
++        Services.io.newURI("chrome://gjoa-newtab/content/newtab.html"),
+         loadInfo
+       );
+-      if (cacheChannel) {
+-        return cacheChannel;
+-      }
+-      pageURI = Services.io.newURI(this.defaultURL);
+-    } else {
+-      // The only other possibility is about:newtab.
+-      //
+-      // If about:newtab is being requested, then any subsequent request for
+-      // about:home should _never_ request the cache (which might be woefully
+-      // out of date compared to about:newtab), so we disqualify the cache if
+-      // it still happens to be around.
+-      AboutHomeStartupCacheChild.disqualifyCache();
+-
+-      if (lazy.BUILTIN_NEWTAB_ENABLED) {
+-        pageURI = Services.io.newURI(this.defaultURL);
+-      } else {
+-        pageURI = this.getChromeURI(uri);
+-      }
++      gjoaChannel.originalURI = uri;
++      return gjoaChannel;
+     }
+ 
++    let pageURI = this.getChromeURI(uri);
+     let resultChannel = Services.io.newChannelFromURIWithLoadInfo(
+       pageURI,
+       loadInfo
