@@ -392,7 +392,7 @@ index 7ed8c2c7a1..54ffa6f483 100644
 diff --git a/servo/components/style/values/specified/color.rs b/servo/components/style/values/specified/color.rs
 --- a/servo/components/style/values/specified/color.rs
 +++ b/servo/components/style/values/specified/color.rs
-@@ -860,6 +860,41 @@
+@@ -860,6 +860,60 @@
      }
  }
  
@@ -431,10 +431,29 @@ diff --git a/servo/components/style/values/specified/color.rs b/servo/components
 +    AbsoluteColor::from_nscolor(nc)
 +}
 +
++/// gjoa dark mode: WCAG relative luminance (0..1) of a color, used to decide
++/// whether inherited text under an image-backdrop hero is already light (preserve
++/// it) or dark (let it invert to light) — so hero text always reads on the scrim.
++fn color_relative_luminance(color: &AbsoluteColor) -> f32 {
++    let c = color.to_nscolor();
++    let r = (c & 0xff) as u8;
++    let g = ((c >> 8) & 0xff) as u8;
++    let b = ((c >> 16) & 0xff) as u8;
++    let compute = |u: u8| -> f32 {
++        let f = u as f32 / 255.0;
++        if f <= 0.03928 {
++            f / 12.92
++        } else {
++            ((f + 0.055) / 1.055).powf(2.4)
++        }
++    };
++    0.2126 * compute(r) + 0.7152 * compute(g) + 0.0722 * compute(b)
++}
++
  impl Color {
      /// Converts this Color into a ComputedColor.
      ///
-@@ -885,7 +920,7 @@
+@@ -885,7 +939,7 @@
              }};
          }
  
@@ -443,7 +462,7 @@ diff --git a/servo/components/style/values/specified/color.rs b/servo/components
              Color::CurrentColor => ComputedColor::CurrentColor,
              Color::Absolute(ref absolute) => {
                  let mut color = absolute.color;
-@@ -931,7 +966,32 @@
+@@ -931,7 +985,33 @@
              Color::InheritFromBodyQuirk => {
                  ComputedColor::Absolute(context.ok_or(())?.device().body_text_color())
              },
@@ -455,22 +474,23 @@ diff --git a/servo/components/style/values/specified/color.rs b/servo/components
 +        // just explicit colors). currentColor / color-mix / unresolved
 +        // color-functions stay symbolic and resolve against these already-
 +        // inverted values.
-+        // gjoa dark mode: invert resolved absolute colors — EXCEPT an INHERITED
-+        // color (color / text-shadow / border-color, i.e. !for_non_inherited_property)
-+        // on an element under a full-bleed image backdrop, where the authored text
-+        // was chosen for the image and must be preserved (the paint-stage dark
-+        // scrim supplies its contrast). Reset properties like background-color
-+        // still invert, so solid backgrounds go dark normally.
-+        let invert = context.map_or(false, |c| {
-+            c.device().color_inversion()
-+                && !(!c.for_non_inherited_property
-+                    && c.builder.get_parent_flags().contains(
-+                        crate::computed_value_flags::ComputedValueFlags::SELF_OR_ANCESTOR_HAS_IMAGE_BACKDROP,
-+                    ))
-+        });
-+        if invert {
++        // gjoa dark mode: under an image-backdrop hero the paint stage lays a DARK
++        // scrim, so hero text must end up LIGHT to read on it. PRESERVE an inherited
++        // color (color / text-shadow / border-color) that is ALREADY light —
++        // inverting it would darken it onto the scrim. Let DARK inherited text invert
++        // to light as usual, and let everything else (non-hero text, reset props like
++        // background-color, system colors) invert normally so solid bgs go dark.
++        if context.map_or(false, |c| c.device().color_inversion()) {
 +            if let ComputedColor::Absolute(ref abs) = computed {
-+                return Ok(ComputedColor::Absolute(invert_color_luminance(abs)));
++                let preserve_under_hero = context.map_or(false, |c| {
++                    !c.for_non_inherited_property
++                        && c.builder.get_parent_flags().contains(
++                            crate::computed_value_flags::ComputedValueFlags::SELF_OR_ANCESTOR_HAS_IMAGE_BACKDROP,
++                        )
++                }) && color_relative_luminance(abs) > 0.5;
++                if !preserve_under_hero {
++                    return Ok(ComputedColor::Absolute(invert_color_luminance(abs)));
++                }
 +            }
 +        }
 +        Ok(computed)
