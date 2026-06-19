@@ -1,0 +1,58 @@
+#lang beagle/js
+;; tools/projector/test-projector.bjs — CI gate for the JS projector + claim-doc.
+;; Self-contained (needs only engine/, present after import): no reference checkout.
+;;   GATE A — reflector round-trips a corpus of engine .sys.mjs byte-identically.
+;;   GATE B — the committed 0011 claim-doc, replayed onto pristine (derived by
+;;            reverse-applying the textual patch to the engine file), reproduces the
+;;            engine file exactly — i.e. the claim-doc stays equivalent to patch 0011.
+;;   bun run projector:test
+(ns gjoa.tools.projector.test-projector
+  (:require [child_process :refer [execSync]]
+            [fs :refer [readFileSync]]
+            [path :refer [join dirname]]
+            [gjoa.tools.projector.reflector :refer [round-trips?]]
+            [gjoa.tools.projector.claims :refer [json->doc replay]]))
+(define-mode strict)
+(declare-extern [process console] Any)
+
+(def REPO :- String (.cwd process))
+(def ENGINE :- String (join REPO "engine"))
+
+(defn sh [cmd :- String] :- String
+  (.toString (execSync cmd {:encoding "utf8" :maxBuffer (* 64 1024 1024)})))
+
+(defn fail! [msg :- String] :- Any
+  (console/error (str "FAIL: " msg))
+  (.exit process 1))
+
+(defn main! [] :- Any
+  ;; GATE A — reflector round-trip over a corpus
+  (let [files (.filter (.split (sh (str "find " ENGINE "/browser/components " ENGINE "/toolkit/modules -name '*.sys.mjs' 2>/dev/null | head -40")) "\n")
+                       (fn [s :- String] :- Bool (> (.-length s) 0)))]
+    (loop [i 0 bad 0]
+      (if (< i (.-length files))
+        (let [src (readFileSync (aget files i) "utf8")]
+          (recur (+ i 1) (if (round-trips? src) bad (+ bad 1))))
+        (do
+          (console/error (str "GATE A  reflector round-trip: " (- (.-length files) bad) "/" (.-length files) " byte-identical"))
+          (when (> bad 0) (fail! (str bad " file(s) failed round-trip")))))))
+  ;; GATE B — committed claim-doc reproduces the textual patch's output
+  (let [artifact (join REPO "patches" "0011-newtab-redirector-gjoa.claims.json")
+        patch (join REPO "patches" "0011-newtab-redirector-gjoa.patch")
+        doc (json->doc (readFileSync artifact "utf8"))
+        rel (.-file doc)
+        engine-target (join ENGINE rel)
+        tmp "/tmp/gjoa-projtest"]
+    (sh (str "rm -rf " tmp " && mkdir -p " (join tmp (dirname rel))))
+    (sh (str "cp " engine-target " " (join tmp rel)))
+    (sh (str "cd " tmp " && patch -R -p1 < " patch))   ; engine - 0011 = pristine
+    (let [pristine (readFileSync (join tmp rel) "utf8")
+          patched (readFileSync engine-target "utf8")
+          r (replay (.-edits doc) pristine)]
+      (if (and (.-ok r) (= (.-src r) patched))
+        (console/error "GATE B  claim-doc equivalence: replay(pristine) == engine (patch 0011) [byte-for-byte]")
+        (fail! (if (.-ok r) "claim-doc replay does not reproduce the engine file" (.-reason r))))))
+  (console/error "projector tests PASSED"))
+
+(when (.-main (js/import-meta))
+  (main!))
