@@ -12,7 +12,7 @@
             [gjoa.tools.prep.patch-header :refer [check-all]]
             [gjoa.tools.prep.log :refer [log]]))
 (define-mode strict)
-(declare-extern [Bun] Any)
+(declare-extern [Bun process] Any)
 
 (def APPLIED-LOG :- String ".gjoa-applied-patches")
 
@@ -64,12 +64,27 @@
 
 ;; Apply a single patch by name. Throws (with the patch name) on failure so
 ;; the caller surfaces exactly which patch broke.
+;;
+;; FALLBACK: if `git apply` fails AND a sibling claim-doc artifact exists
+;; (patches/<name>.claims.json), replay it via the JS projector. The claim-doc is
+;; anchored to (class, method) identity, so it survives upstream reflow that `.rej`s
+;; the line-anchored textual patch. `git apply` is atomic, so on failure the tree is
+;; untouched and the replay runs on pristine source.
 (defn applyOne [name :- String] :- Any
   (.step log (str "applying patch " name))
   (let [path (join PATCHES-DIR name)
         code (js/await (run-git ["git" "apply" "--whitespace=nowarn" path] ENGINE-DIR))]
     (if (not= code 0)
-      (throw (Error. (str "failed to apply patch " name ": git apply exited " code)))
+      (let [claims-path (join PATCHES-DIR (.replace name ".patch" ".claims.json"))]
+        (if (existsSync claims-path)
+          (let [repo (.cwd process)
+                applier (join repo ".beagle-tools" "gjoa" "tools" "projector" "apply-claims.js")
+                rc (js/await (run-git ["bun" applier claims-path ENGINE-DIR] repo))]
+            (if (= rc 0)
+              (.ok log (str "  " name ": textual patch .rej'd — recovered via claim-doc replay (identity-anchored)"))
+              (throw (Error. (str "failed to apply patch " name ": git apply exited " code
+                                  "; claim-doc fallback exited " rc)))))
+          (throw (Error. (str "failed to apply patch " name ": git apply exited " code)))))
       nil)))
 
 (js/export (defn patches [] :- Any

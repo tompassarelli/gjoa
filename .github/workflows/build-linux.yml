@@ -117,6 +117,9 @@ jobs:
       - name: Apply overlays and patches
         run: bun run import
 
+      - name: Verify JS projector + claim-docs
+        run: bun run projector:test
+
       - name: Write mozconfig
         run: |
           cat > engine/mozconfig <<'MOZCONFIG'

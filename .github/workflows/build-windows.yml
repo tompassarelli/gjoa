@@ -104,6 +104,9 @@ jobs:
       - name: Apply overlays and patches
         run: bun run import
 
+      - name: Verify JS projector + claim-docs
+        run: bun run projector:test
+
       # --- Windows cross toolchain (adapted from zen windows-release-build.yml) ---
       - name: Setup Windows cross toolchain
         working-directory: engine
