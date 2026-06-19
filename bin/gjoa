@@ -41,7 +41,11 @@ cd "$REPO"
 #   0 = OK, 1 = UNKNOWN (network), 2 = STALE, 3 = CRITICAL
 echo "→ checking firefox version freshness" >&2
 SEC_EXIT=0
-bun tools/security/check.ts >&2 || SEC_EXIT=$?
+# check.ts was migrated to check.bjs (.ts→.bjs cutover); bun can't run .bjs, so
+# compile (cached, ~instant) then run the emitted JS. Pointing at the dead .ts
+# silently disabled the gate (module-not-found → exit 1 → treated as UNKNOWN).
+bun run tools:compile >/dev/null 2>&1 || true
+bun .beagle-tools/gjoa/tools/security/check.js >&2 || SEC_EXIT=$?
 
 if [ "${GJOA_ALLOW_INSECURE:-}" = "1" ]; then
   if [ "$SEC_EXIT" -ge 2 ]; then

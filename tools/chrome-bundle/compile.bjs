@@ -2,7 +2,8 @@
 ;; Compile all .bjs source files to JS in .beagle-out/ via beagle-build.
 ;; Skips macros.bjs (compile-time only) and test files.
 (ns gjoa.tools.chrome-bundle.compile
-  (:require [fs/promises :refer [readdir mkdir]]
+  (:require [fs :refer [existsSync statSync]]
+            [fs/promises :refer [readdir mkdir]]
             [path :refer [join resolve relative]]))
 (define-mode strict)
 (declare-extern [process Bun Promise Response console RegExp] Any)
@@ -12,6 +13,9 @@
 (def REPO-ROOT :- String (.cwd process))
 (def BJS-ROOT :- String (join REPO-ROOT "src" "gjoa" "chrome" "bjs"))
 (def OUT-ROOT :- String (join REPO-ROOT ".beagle-out"))
+;; macros.bjs is inlined at compile time, so a change to it invalidates EVERY
+;; compiled file's cache (any file may expand its macros).
+(def MACROS-PATH :- String (join BJS-ROOT "macros.bjs"))
 ;; beagle-build is a bash script (no shebang support on Windows) — launched via
 ;; `bash` at the :cmd site; forward-slash the path so bash accepts it on Windows.
 ;; (.fromCharCode String 92) is a backslash; no-op on *nix.
@@ -54,48 +58,62 @@
     (.endsWith rel ".test.bjs") true
     :else false))
 
+;; Incremental cache: a file is up to date when its .beagle-out/ output exists and
+;; is newer than BOTH the source and macros.bjs. Skipping these is what turns a
+;; `gjoa sync` from ~3 min (recompile-all: Racket startup × ~45 files) into ~1 s.
+(defn up-to-date? [src :- String out :- String] :- Bool
+  (if (not (existsSync out))
+    false
+    (let [out-m (.-mtimeMs (statSync out))]
+      (and (>= out-m (.-mtimeMs (statSync src)))
+           (or (not (existsSync MACROS-PATH))
+               (>= out-m (.-mtimeMs (statSync MACROS-PATH))))))))
+
 (defn run-compile [] :- (Promise Any)
   (let [all-files (js/await (find-bjs-files BJS-ROOT))
         sorted (.sort all-files)
         n (.-length sorted)]
     (loop [i 0
-           failed 0]
+           failed 0
+           skipped 0
+           compiled 0]
       (if (< i n)
         (let [src (aget sorted i)
               rel (relative BJS-ROOT src)]
           (if (should-skip rel)
-            (recur (+ i 1) failed)
+            (recur (+ i 1) failed skipped compiled)
             (let [out-rel (.replace rel (RegExp. "\\.bjs$") ".js")
-                  out-path (join OUT-ROOT out-rel)
-                  _ (js/await (mkdir (join out-path "..") {:recursive true}))
-                  proc (.spawn Bun {:cmd ["bash" BEAGLE-BUILD src out-path]
-                                    :cwd REPO-ROOT
-                                    :stdout "pipe"
-                                    :stderr "pipe"})
-                  ;; Drain both pipes concurrently with awaiting exit. Otherwise a
-                  ;; chatty build (e.g. beagle's `unused declare-extern` lint
-                  ;; warnings) fills the pipe buffer, the child blocks/SIGPIPEs
-                  ;; (exit 141), and it looks like a spurious compile failure. Only
-                  ;; the captured stderr/stdout is surfaced, and only on failure.
-                  results (js/await (.all Promise [(.text (Response. (.-stdout proc)))
-                                                   (.text (Response. (.-stderr proc)))
-                                                   (.-exited proc)]))
-                  stdout (aget results 0)
-                  stderr (aget results 1)
-                  code (aget results 2)]
-              (if (not= code 0)
-                (do
-                  (.error console (str "✗ " rel ": " (or (.trim stderr) (.trim stdout))))
-                  (recur (+ i 1) (+ failed 1)))
-                (do
-                  (.log console (str "  " rel))
-                  (recur (+ i 1) failed))))))
+                  out-path (join OUT-ROOT out-rel)]
+              (if (up-to-date? src out-path)
+                (recur (+ i 1) failed (+ skipped 1) compiled)
+                (let [_ (js/await (mkdir (join out-path "..") {:recursive true}))
+                      proc (.spawn Bun {:cmd ["bash" BEAGLE-BUILD src out-path]
+                                        :cwd REPO-ROOT
+                                        :stdout "pipe"
+                                        :stderr "pipe"})
+                      ;; Drain both pipes concurrently with awaiting exit. A chatty
+                      ;; build fills the pipe buffer, the child blocks/SIGPIPEs (exit
+                      ;; 141), and it looks like a spurious compile failure. Only the
+                      ;; captured stderr/stdout is surfaced, and only on failure.
+                      results (js/await (.all Promise [(.text (Response. (.-stdout proc)))
+                                                       (.text (Response. (.-stderr proc)))
+                                                       (.-exited proc)]))
+                      stdout (aget results 0)
+                      stderr (aget results 1)
+                      code (aget results 2)]
+                  (if (not= code 0)
+                    (do
+                      (.error console (str "✗ " rel ": " (or (.trim stderr) (.trim stdout))))
+                      (recur (+ i 1) (+ failed 1) skipped compiled))
+                    (do
+                      (.log console (str "  " rel))
+                      (recur (+ i 1) failed skipped (+ compiled 1)))))))))
         ;; loop done — report and return total count
         (do
           (when (> failed 0)
             (.error console (str "\n✗ " failed " file(s) failed to compile"))
             (.exit process 1))
-          (.log console (str "\n✓ " (- n failed) " files compiled to .beagle-out/"))
+          (.log console (str "\n✓ " compiled " compiled, " skipped " cached → .beagle-out/"))
           failed)))))
 
 (js/await (run-compile))
