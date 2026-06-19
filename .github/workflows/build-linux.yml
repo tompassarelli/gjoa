@@ -2,6 +2,7 @@ name: Linux build (x86_64)
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build:

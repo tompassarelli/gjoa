@@ -1,0 +1,7 @@
+# Custom self-hosted runner labels (Blacksmith) so actionlint doesn't flag them
+# as unknown. These are real, proven runners — see BUILD-LEDGER (Blacksmith
+# migration: Linux/Windows 16vcpu ~5x, macOS 6vcpu+xcode-select-26.4 ~3x).
+self-hosted-runner:
+  labels:
+    - blacksmith-16vcpu-ubuntu-2404
+    - blacksmith-6vcpu-macos-26
