@@ -221,6 +221,19 @@
       ;; no longer serve; with the activity-stream uninitialized it throws at
       ;; startup (AboutHomeStartupCache: activityStream is null). Disable it.
       (.setBoolPref d "browser.startup.homepage.abouthome_cache.enabled" false)
+      ;; FF152 "nova" UI reserves a content margin + window gap (see
+      ;; browser/themes/shared/sidebar.css @media browser.nova.enabled) that crops
+      ;; every page and exposes the desktop behind the inset — gjoa supplies its own
+      ;; chrome, so force nova OFF: default false AND drop any stray user/experiment
+      ;; value (runs every launch, so a Normandy flip can't re-crop the content).
+      (.setBoolPref d "browser.nova.enabled" false)
+      (when (.prefHasUserValue (.-prefs Services) "browser.nova.enabled")
+        (.clearUserPref (.-prefs Services) "browser.nova.enabled"))
+      ;; ...and replace it with gjoa's OWN contextual floating cards (gjoa.uc.css
+      ;; #region floating cards): a static sidebar + content render as two rounded
+      ;; cards with a gap; a floating/hidden sidebar lets content fill the window.
+      ;; Unlike nova's all-or-nothing inset, this is gated on the live sidebar state.
+      (.setBoolPref d "gjoa.layout.floatingCards" true)
       ;; sovereignty: the maximal-egress-lockdown meta-pref, default OFF (see apply-lockdown!).
       (.setBoolPref d "gjoa.sovereignty.maximalLockdown" false)
       ;; privacy: the curated-profile selector. Default "minimal" (gjoa defaults;
