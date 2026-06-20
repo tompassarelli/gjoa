@@ -16,12 +16,21 @@ on:
       - "v*"
 
 jobs:
+  # Releases build on Blacksmith (fast runners) — a release is infrequent and worth
+  # the credits for a ~5x Linux/Windows, ~3x macOS cut. (build-*.yml default to free
+  # GitHub-hosted runners for everyday/PR builds; only the release forces fast.)
   linux:
     uses: ./.github/workflows/build-linux.yml
+    with:
+      fast: true
   macos:
     uses: ./.github/workflows/build-macos.yml
+    with:
+      fast: true
   windows:
     uses: ./.github/workflows/build-windows.yml
+    with:
+      fast: true
 
   release:
     needs: [linux, macos, windows]
