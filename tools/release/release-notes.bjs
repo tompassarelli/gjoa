@@ -44,8 +44,8 @@
     (doseq [p rows] (console/log (fmt-row p)))
     (console/log "")))
 
-(defn generate! [prev :- String] :- Any
-  (let [range (if (= prev "") "HEAD" (str prev "..HEAD"))
+(defn generate! [prev :- String end :- String] :- Any
+  (let [range (str (if (= prev "") "" (str prev "..")) end)
         raw (sh (str "git log " range " --no-merges --pretty=format:%s") {:quiet true})
         subjects (.filter (.split raw "\n") (fn [s :- String] :- Bool (> (.-length (.trim s)) 0)))
         parsed (.map subjects parse-subject)]
@@ -75,7 +75,9 @@
   (let [argv (.-argv process) cmd (aget argv 2)]
     (cond
       (= cmd "check") (gate! (or (aget argv 3) ""))
-      :else (generate! (or cmd (last-tag))))))
+      ;; release-notes [<prev-tag> [<end-ref>]] — defaults: last tag .. HEAD.
+      ;; e.g. `release-notes v0.3.2 v0.3.3` regenerates a past release's notes.
+      :else (generate! (or cmd (last-tag)) (or (aget argv 3) "HEAD")))))
 
 (when (.-main (js/import-meta))
   (main!))
