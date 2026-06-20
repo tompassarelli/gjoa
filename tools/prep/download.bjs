@@ -91,18 +91,16 @@
         (.warn log "gpg not available; skipping SHA256SUMS.asc signature check (pinned in-repo hash still enforced)")
         false)
       (let [ascRes (js/await (fetch (signatureUrl version)))]
-        (if (not (.-ok ascRes))
-          (throw (Error. (str "failed to fetch SHA256SUMS.asc: " (.-status ascRes))))
-          nil)
+        (when-not (.-ok ascRes)
+          (throw (Error. (str "failed to fetch SHA256SUMS.asc: " (.-status ascRes)))))
         (let [asc (js/await (.text ascRes))
               tmpDir (join SOURCES-CACHE ".gpg-verify")
               keyPath (join tmpDir "mozilla.key")
               sumsPath (join tmpDir "SHA256SUMS")
               ascPath (join tmpDir "SHA256SUMS.asc")
               keyRes (js/await (fetch (str "https://archive.mozilla.org/pub/firefox/releases/" version "/KEY")))]
-          (if (not (.-ok keyRes))
-            (throw (Error. (str "failed to fetch Mozilla KEY: " (.-status keyRes))))
-            nil)
+          (when-not (.-ok keyRes)
+            (throw (Error. (str "failed to fetch Mozilla KEY: " (.-status keyRes)))))
           (mkdirSync tmpDir {:recursive true})
           (js/await (.write Bun keyPath (js/await (.text keyRes))))
           (js/await (.write Bun sumsPath sumsText))
@@ -112,43 +110,38 @@
           (let [kr (join tmpDir "keyring.gpg")
                 imp (.spawnSync Bun ["gpg" "--no-default-keyring" "--keyring" kr "--import" keyPath]
                                 {:stdout "ignore" :stderr "ignore"})]
-            (if (not (.-success imp))
-              (throw (Error. "gpg: failed to import Mozilla KEY"))
-              nil)
+            (when-not (.-success imp)
+              (throw (Error. "gpg: failed to import Mozilla KEY")))
             ;; --status-fd 1 prints machine-readable VALIDSIG <fpr> ... lines.
             (let [ver (.spawnSync Bun ["gpg" "--no-default-keyring" "--keyring" kr
                                        "--status-fd" "1" "--verify" ascPath sumsPath]
                                   {:stdout "pipe" :stderr "ignore"})
                   out (.toString (.-stdout ver))]
-              (if (not (.includes out (str "VALIDSIG " MOZILLA-SIGNING-FPR)))
+              (when-not (.includes out (str "VALIDSIG " MOZILLA-SIGNING-FPR))
                 (throw (Error. (str "SHA256SUMS.asc not signed by pinned Mozilla key "
-                                    MOZILLA-SIGNING-FPR "\n  gpg --status output:\n" out)))
-                nil)
+                                    MOZILLA-SIGNING-FPR "\n  gpg --status output:\n" out))))
               (.ok log (str "SHA256SUMS.asc GPG-verified against pinned Mozilla key " MOZILLA-SIGNING-FPR))
               true)))))))
 
 (defn fetchSha256 [version :- String] :- Any
   (.step log (str "fetching upstream SHA256SUMS for firefox " version))
   (let [res (js/await (fetch (checksumUrl version)))]
-    (if (not (.-ok res))
-      (throw (Error. (str "failed to fetch SHA256SUMS: " (.-status res))))
-      nil)
+    (when-not (.-ok res)
+      (throw (Error. (str "failed to fetch SHA256SUMS: " (.-status res)))))
     (let [text (js/await (.text res))
           liveHash (hashFromSums text version)]
-      (if (not liveHash)
-        (throw (Error. (str "SHA256SUMS does not list " (tarballName version))))
-        nil)
+      (when-not liveHash
+        (throw (Error. (str "SHA256SUMS does not list " (tarballName version)))))
       ;; F9 trust anchor: the live SHA256SUMS comes from the SAME origin as the
       ;; tarball, so it can't be the sole authority. Assert it against the
       ;; in-repo pinned hash — a backdoored tarball + matching same-origin
       ;; SHA256SUMS can't move this committed value.
       (let [pinned (pinnedSha256 version)]
-        (if (not= liveHash pinned)
+        (when (not= liveHash pinned)
           (throw (Error. (str "live SHA256SUMS disagrees with pinned checksum for firefox " version
                               ".\n  pinned: " pinned
                               "\n  live:   " liveHash
-                              "\n  refusing to trust same-origin checksum over the committed pin.")))
-          nil))
+                              "\n  refusing to trust same-origin checksum over the committed pin.")))))
       ;; Defense-in-depth: verify the detached signature when gpg is present.
       (js/await (verifySignature version text))
       liveHash)))
@@ -163,13 +156,11 @@
 (defn downloadTo [url :- String dest :- String] :- Any
   (.step log (str "downloading " url))
   (let [res (js/await (fetch url))]
-    (if (not (.-ok res))
-      (throw (Error. (str "download failed (" (.-status res) "): " url)))
-      nil)
+    (when-not (.-ok res)
+      (throw (Error. (str "download failed (" (.-status res) "): " url))))
     (let [total (Number (or (.get (.-headers res) "content-length") 0))]
-      (if total
-        (.info log (str "expecting " (.toFixed (/ total 1024 1024) 1) " MB"))
-        nil)
+      (when total
+        (.info log (str "expecting " (.toFixed (/ total 1024 1024) 1) " MB")))
       (js/await (.write Bun dest res)))))
 
 (js/export (defn download! [] :- Any
@@ -189,10 +180,9 @@
         (js/await (downloadTo (tarballUrl version) tarball)))
       ;; Verify post-download (also catches partial writes / network corruption).
       (let [actualHash (js/await (sha256OfFile tarball))]
-        (if (not= actualHash expectedHash)
+        (when (not= actualHash expectedHash)
           (throw (Error. (str "tarball SHA256 mismatch.\n  expected: " expectedHash
-                              "\n  got:      " actualHash)))
-          nil))
+                              "\n  got:      " actualHash)))))
       (.ok log (str "tarball verified (" (.toFixed (/ (.-size (statSync tarball)) 1024 1024) 1) " MB)"))
       ;; Extract into engine/. mozilla-central tarballs unpack as firefox-VERSION/
       ;; — strip that level so engine/ holds the source tree directly.
@@ -208,7 +198,6 @@
                                   :stdout "inherit"
                                   :stderr "inherit"})
                 code (js/await (.-exited proc))]
-            (if (not= code 0)
-              (throw (Error. (str "tar extraction failed (exit " code ")")))
-              nil))
+            (when (not= code 0)
+              (throw (Error. (str "tar extraction failed (exit " code ")")))))
           (.ok log "engine/ ready")))))))

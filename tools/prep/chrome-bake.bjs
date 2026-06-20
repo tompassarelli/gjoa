@@ -49,9 +49,8 @@
                               :stdout "inherit"
                               :stderr "inherit"})
             code (js/await (.-exited proc))]
-        (if (not= code 0)
-          (throw (Error. (str "chrome:dist failed (exit " code ")")))
-          nil)))))
+        (when (not= code 0)
+          (throw (Error. (str "chrome:dist failed (exit " code ")"))))))))
 
 (defn bakeOne [srcSubdir :- String dstSubdir :- String names :- Any] :- Any
   (let [dstDir (join BAKE-ROOT dstSubdir)
@@ -60,7 +59,7 @@
     ;; Sequential index loop so each copyFile is awaited in order (a `doseq`
     ;; would emit .forEach, which does NOT await its async body).
     (loop [i 0]
-      (if (< i n)
+      (when (< i n)
         (let [fname (aget names i)
               src (join DIST-CHROME srcSubdir fname)]
           (do
@@ -68,8 +67,7 @@
               (throw (Error. (str "chrome-bake: expected " src
                                   " from chrome:dist (declared in jar.mn) — did the bundle list drift?"))))
             (js/await (copyFile src (join dstDir fname)))
-            (recur (+ i 1))))
-        nil))))
+            (recur (+ i 1))))))))
 
 (js/export (defn chrome-bake [] :- Any
   (js/await (ensureChromeDist))
