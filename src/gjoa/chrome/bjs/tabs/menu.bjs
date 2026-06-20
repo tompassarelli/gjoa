@@ -26,8 +26,15 @@
                                       (let [tab-level (level-of-row row)
                                             grp (createGroupRow "New Group" tab-level)]
                                         (.before row grp)
-                                        (let [td (tree-data! (.-contextTab state))]
-                                          (set! (.-parentId td) (.-id (.-_group grp))))
+                                        ;; Adopt the whole multiselection into the new
+                                        ;; group (not just the context tab), so "select
+                                        ;; tabs → create group" folds them all in.
+                                        (let [ctx (.-contextTab state)
+                                              sel (or (.-selectedTabs gBrowser) [])
+                                              adoptees (if (and (> (.-length sel) 1) (.includes sel ctx)) sel [ctx])
+                                              gid (.-id (.-_group grp))]
+                                          (.forEach adoptees
+                                            (fn [t :- Any] :- Any (set! (.-parentId (tree-data! t)) gid))))
                                         (scheduleTreeResync)
                                         (setCursor grp)
                                         (updateVisibility)
