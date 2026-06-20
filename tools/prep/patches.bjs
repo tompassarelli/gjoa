@@ -56,9 +56,8 @@
 (defn runLint [] :- Any
   (try
     (let [problems (js/await (check-all))]
-      (if (> problems 0)
-        (.warn log (str problems " patch(es) missing the gjoa-patch header"))
-        nil))
+      (when (> problems 0)
+        (.warn log (str problems " patch(es) missing the gjoa-patch header"))))
     (catch Error e
       (.warn log (str "patch-header lint failed (non-fatal): " (.-message e))))))
 
@@ -74,7 +73,7 @@
   (.step log (str "applying patch " name))
   (let [path (join PATCHES-DIR name)
         code (js/await (run-git ["git" "apply" "--whitespace=nowarn" path] ENGINE-DIR))]
-    (if (not= code 0)
+    (when (not= code 0)
       (let [claims-path (join PATCHES-DIR (.replace name ".patch" ".claims.json"))]
         (if (existsSync claims-path)
           (let [repo (.cwd process)
@@ -84,8 +83,7 @@
               (.ok log (str "  " name ": textual patch .rej'd — recovered via claim-doc replay (identity-anchored)"))
               (throw (Error. (str "failed to apply patch " name ": git apply exited " code
                                   "; claim-doc fallback exited " rc)))))
-          (throw (Error. (str "failed to apply patch " name ": git apply exited " code)))))
-      nil)))
+          (throw (Error. (str "failed to apply patch " name ": git apply exited " code))))))))
 
 (js/export (defn patches [] :- Any
   (if (not (existsSync PATCHES-DIR))

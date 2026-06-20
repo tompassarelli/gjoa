@@ -196,24 +196,22 @@
       (or (.startsWith lower "rgb(") (.startsWith lower "rgba("))
       (let [body (.slice s (+ (.indexOf s "(") 1) (.lastIndexOf s ")"))
             parts (split-args body)]
-        (if (>= (.-length parts) 3)
+        (when (>= (.-length parts) 3)
           [(clamp (Math.round (parse-component (aget parts 0) 255)) 0 255)
            (clamp (Math.round (parse-component (aget parts 1) 255)) 0 255)
            (clamp (Math.round (parse-component (aget parts 2) 255)) 0 255)
-           (if (>= (.-length parts) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)]
-          nil))
+           (if (>= (.-length parts) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)]))
 
       (or (.startsWith lower "hsl(") (.startsWith lower "hsla("))
       (let [body (.slice s (+ (.indexOf s "(") 1) (.lastIndexOf s ")"))
             parts (split-args body)]
-        (if (>= (.-length parts) 3)
+        (when (>= (.-length parts) 3)
           (let [h (parseFloat (aget parts 0))
                 sat (/ (parse-component (aget parts 1) 100) 100)
                 lit (/ (parse-component (aget parts 2) 100) 100)
                 rgb (hsl->rgb h (clamp sat 0 1) (clamp lit 0 1))]
             [(aget rgb 0) (aget rgb 1) (aget rgb 2)
-             (if (>= (.-length parts) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)])
-          nil))
+             (if (>= (.-length parts) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)])))
 
       ;; bare hex without '#', e.g. ${fff}
       (.test (RegExp. "^[0-9a-fA-F]{3,8}$") s)
@@ -277,9 +275,8 @@
 ;; text is not a parseable color (e.g. `transparent`, or a var() — handled earlier).
 (defn resolve-token [inner :- String] :- Any
   (let [parsed (parse-color inner)]
-    (if parsed
-      (rgba->css (flip-rgba parsed))
-      nil)))
+    (when parsed
+      (rgba->css (flip-rgba parsed)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Dark Reader runtime theme variables.
