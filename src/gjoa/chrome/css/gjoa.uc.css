@@ -152,6 +152,13 @@
   --gjoa-gap: 6px;
   --gjoa-sidebar-inset: 10px;
   --gjoa-compact-trigger-width: 8px;
+  /* Contextual floating cards (gjoa.layout.floatingCards). A STATIC, in-flow
+   * sidebar + the content render as two rounded cards inset from the window
+   * edges with a gap between; a FLOATING (compact) or hidden (zen/fullscreen)
+   * sidebar lets content fill the whole window. */
+  --gjoa-card-gap: 6px;
+  --gjoa-card-radius: 8px;
+  --gjoa-card-shadow: 0 1px 6px rgba(0, 0, 0, 0.22);
   --gjoa-transition-duration: 0.25s;
   --gjoa-transition-easing: linear(
     0 0%, 0.003 1%, 0.011 2%, 0.023 3%, 0.039 4%, 0.058 5%, 0.08 6%,
@@ -834,3 +841,57 @@ Preserve these (security warnings):
 }
 
 /* #endregion split view */
+
+
+/* #region floating cards — contextual layout (gjoa.layout.floatingCards)
+ *
+ * The user's design: a STATIC sidebar (in the #browser flex flow, visible)
+ * renders the sidebar and the content as two rounded cards, inset from the
+ * window edges with a gap between them. A FLOATING sidebar (data-gjoa-compact,
+ * which is position:fixed → out of flow) or a hidden one (zen / horizontal /
+ * DOM-fullscreen) lets the content fill the whole window.
+ *
+ * #browser is `hbox > #sidebar-main … #tabbrowser-tabbox`; the splitters and
+ * #sidebar-box between them are display:none when hidden, so when only the
+ * launcher + content are visible they are adjacent flex items and a single
+ * `gap` spaces exactly the two cards. Symmetric padding+gap is position-
+ * agnostic, so static-left and static-right both work without a position_start
+ * branch. The rules self-gate via :has(): when the sidebar is compact or
+ * hidden the static selector simply doesn't match, so content fills. */
+
+@media -moz-pref("gjoa.layout.floatingCards") {
+
+  /* STATIC: launcher visible AND in-flow → inset the row, gap the cards. */
+  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) {
+    gap: var(--gjoa-card-gap) !important;
+    padding: var(--gjoa-card-gap) !important;
+  }
+
+  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-main,
+  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox {
+    border-radius: var(--gjoa-card-radius) !important;
+    box-shadow: var(--gjoa-card-shadow) !important;
+  }
+
+  /* Content card: clip web content to the rounded corners + give it a card
+   * background so the rounding reads even before a page paints. */
+  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox {
+    overflow: hidden !important;
+    background-color: var(--gjoa-bg) !important;
+  }
+
+  /* FILL: DOM-fullscreen always takes the whole window — defeat any card inset
+   * that an open sidebar would otherwise leave behind. (Compact + hidden
+   * sidebars already fall through to fill because the static selector above
+   * does not match them.) */
+  :root[inDOMFullscreen="true"] #browser,
+  :root[inDOMFullscreen="true"] #browser > #tabbrowser-tabbox {
+    gap: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
+/* #endregion floating cards */
