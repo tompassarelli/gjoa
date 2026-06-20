@@ -31,6 +31,12 @@ browser.jar:
   content/gjoa/sovereignty/sovereignty.css (content/sovereignty/sovereignty.css)
   content/gjoa/sovereignty/sovereignty.js (content/sovereignty/sovereignty.js)
   content/gjoa/sovereignty/manifest.json (content/sovereignty/manifest.json)
+# about:knobs — reversible-feature dashboard. PRIVILEGED (reads + flips prefs),
+# registered as about:knobs at runtime by GjoaLoader.
+  content/gjoa/knobs/knobs.html (content/knobs/knobs.html)
+  content/gjoa/knobs/knobs.css (content/knobs/knobs.css)
+  content/gjoa/knobs/knobs.js (content/knobs/knobs.js)
+  content/gjoa/knobs/registry.json (content/knobs/registry.json)
 
 # The new-tab page is the only gjoa chrome that loads as a *content* document
 # (via AboutNewTab.newTabURL in GjoaLoader). It gets its own package marked

@@ -222,7 +222,9 @@
       ;; startup (AboutHomeStartupCache: activityStream is null). Disable it.
       (.setBoolPref d "browser.startup.homepage.abouthome_cache.enabled" false)
       ;; sovereignty: the maximal-egress-lockdown meta-pref, default OFF (see apply-lockdown!).
-      (.setBoolPref d "gjoa.sovereignty.maximalLockdown" false))
+      (.setBoolPref d "gjoa.sovereignty.maximalLockdown" false)
+      ;; knobs: profile meta-prefs, default OFF (see PROFILES / apply-profile!).
+      (.setBoolPref d "gjoa.profile.librewolf-mode.enabled" false))
     (catch Any e
       (console/error "gjoa-loader: setDefaults failed" e))))
 
@@ -296,24 +298,55 @@
 (def lockdown-observer :- Any
   {:observe (fn [_subject :- Any _topic :- Any _data :- Any] :- Any (apply-lockdown!))})
 
-;; --- about:sovereignty -------------------------------------------------------
-;; Register the egress trust panel as a real about: page at runtime (no rebuild,
-;; no Mozilla-source patch). It maps to the privileged chrome page, so the panel
-;; can read build-provenance prefs + the lockdown toggle and render the verifiable
-;; truth. (NOTE: about-module flag/principal semantics are FF-version-sensitive;
-;; this needs one in-browser confirmation on the next build — wrapped so a failure
-;; only logs and never blocks startup.)
-(def SOVEREIGNTY-URL :- String "chrome://gjoa/content/sovereignty/sovereignty.html")
-(def SOVEREIGNTY-CLASS-ID :- String "{6a7c1e90-5b3d-4c2a-9f81-7e0d3a6b2c54}")
-(def SOVEREIGNTY-CONTRACT :- String "@mozilla.org/network/protocol/about;1?what=sovereignty")
+;; --- knob profiles -----------------------------------------------------------
+;; A profile is a named meta-pref (gjoa.profile.<id>.enabled, default false) that
+;; batch-overrides a set of leaf prefs when ON. Same machine as apply-lockdown!,
+;; generalized: each leaf is [name on-value off-value type] — when the profile is on
+;; we set on-value, when off we set off-value (the gjoa/Firefox default), so toggling
+;; is cleanly reversible and nothing is ever destroyed. The about:knobs dashboard
+;; reads the live state; see private-docs/plan-knobs-debloat-librewolf.md.
+;; #79(a): "LibreWolf-grade DEFAULTS as one toggle" — NOT "as secure as LibreWolf".
+(def PROFILES :- Any
+  [{:pref "gjoa.profile.librewolf-mode.enabled"
+    :leaves [["privacy.resistFingerprinting" true false "bool"]
+             ["privacy.resistFingerprinting.letterboxing" true false "bool"]
+             ["network.http.referer.XOriginPolicy" 2 0 "int"]
+             ["network.http.referer.XOriginTrimmingPolicy" 2 0 "int"]
+             ["browser.search.suggest.enabled" false true "bool"]
+             ["browser.urlbar.suggest.searches" false true "bool"]
+             ["extensions.update.enabled" false true "bool"]
+             ["privacy.donottrackheader.enabled" true false "bool"]]}])
 
-(defn register-about-sovereignty! [] :- Any
+(defn apply-profile! [profile :- Any] :- Any
+  (try
+    (let [d (.getDefaultBranch (.-prefs Services) "")
+          on (.getBoolPref (.-prefs Services) (.-pref profile) false)]
+      (doseq [leaf (.-leaves profile)]
+        (let [name (aget leaf 0) v (if on (aget leaf 1) (aget leaf 2))]
+          (if (= (aget leaf 3) "int") (.setIntPref d name v) (.setBoolPref d name v))))
+      (console/log (str "gjoa-loader: profile " (.-pref profile) " " (if on "ON" "off"))))
+    (catch Any e
+      (console/error "gjoa-loader: apply-profile failed" e))))
+
+(defn apply-all-profiles! [] :- Any
+  (doseq [p PROFILES] (apply-profile! p)))
+
+(def profile-observer :- Any
+  {:observe (fn [_subject :- Any _topic :- Any _data :- Any] :- Any (apply-all-profiles!))})
+
+;; --- about: pages (sovereignty + knobs) --------------------------------------
+;; Register a privileged chrome page as a real about:<what> page at runtime (no
+;; rebuild, no Mozilla-source patch). The page reads build-provenance prefs + toggles
+;; and renders the verifiable truth. (NOTE: about-module flag/principal semantics are
+;; FF-version-sensitive — needs one in-browser confirmation; wrapped so a failure only
+;; logs and never blocks startup.)
+(defn register-about! [what :- String url :- String class-id :- String] :- Any
   (try
     (let [about-module
           {:QueryInterface (.generateQI ChromeUtils ["nsIAboutModule"])
            :newChannel (fn [uri :- Any load-info :- Any] :- Any
                          (let [ch (.newChannelFromURIWithLoadInfo (.-io Services)
-                                    (.newURI (.-io Services) SOVEREIGNTY-URL) load-info)]
+                                    (.newURI (.-io Services) url) load-info)]
                            (set! (.-originalURI ch) uri)
                            ch))
            :getURIFlags (fn [_uri :- Any] :- Any (.-ALLOW_SCRIPT (.-nsIAboutModule Ci)))}
@@ -321,11 +354,17 @@
           {:QueryInterface (.generateQI ChromeUtils ["nsIFactory"])
            :createInstance (fn [iid :- Any] :- Any (.QueryInterface about-module iid))}
           registrar (.QueryInterface (.-manager Components) (.-nsIComponentRegistrar Ci))]
-      (.registerFactory registrar (.ID Components SOVEREIGNTY-CLASS-ID)
-        "about:sovereignty" SOVEREIGNTY-CONTRACT factory)
-      (console/log "gjoa-loader: registered about:sovereignty"))
+      (.registerFactory registrar (.ID Components class-id)
+        (str "about:" what) (str "@mozilla.org/network/protocol/about;1?what=" what) factory)
+      (console/log (str "gjoa-loader: registered about:" what)))
     (catch Any e
-      (console/error "gjoa-loader: register about:sovereignty failed" e))))
+      (console/error (str "gjoa-loader: register about:" what " failed") e))))
+
+(defn register-about-pages! [] :- Any
+  (register-about! "sovereignty" "chrome://gjoa/content/sovereignty/sovereignty.html"
+                   "{6a7c1e90-5b3d-4c2a-9f81-7e0d3a6b2c54}")
+  (register-about! "knobs" "chrome://gjoa/content/knobs/knobs.html"
+                   "{b3d8f1a2-4c5e-4a9b-8f02-1e7d6c3b9a40}"))
 
 (js/export (def GjoaLoader :- Any
   {:start (fn [] :- Any
@@ -334,7 +373,9 @@
       (set-defaults)
       (apply-lockdown!)
       (.addObserver (.-prefs Services) LOCKDOWN-PREF lockdown-observer)
-      (register-about-sovereignty!)
+      (apply-all-profiles!)
+      (.addObserver (.-prefs Services) "gjoa.profile." profile-observer)
+      (register-about-pages!)
       (set-new-tab-url!)
       (register-cosmetic-actor)
       (register-darkmode-actor)
