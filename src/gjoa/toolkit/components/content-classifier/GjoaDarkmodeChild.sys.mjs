@@ -67,7 +67,10 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       } catch (e) {}
     }
     if (this._explicitApplied) {
-      return; // a curated fix / user pref already decided at document-start
+      // A curated fix / user pref already decided the inversion at document-start —
+      // the refiner is skipped, but the contrast normalization backstop still runs.
+      this.#maybeNormalizeContrast(this.contentWindow, this.document);
+      return;
     }
     const win = this.contentWindow;
     if (!win) {
@@ -266,6 +269,99 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     // Pass-2 polish (pref-gated, default off): the refiner has settled the
     // inversion state, so the image pass can now read it the right way round.
     this.#maybeRunImagePass(win, doc);
+    // Pass-3 (pref-gated): backdrop-aware APCA contrast normalization. Runs after
+    // the inversion state is settled so we measure + correct the FINAL colors.
+    this.#maybeNormalizeContrast(win, doc);
+  }
+
+  // Schedule the contrast-normalization pass after the override's re-cascade paints.
+  #maybeNormalizeContrast(win, doc) {
+    if (!Services.prefs.getBoolPref("gjoa.darkmode.normalize.enabled", false)) {
+      return;
+    }
+    win.requestAnimationFrame(() =>
+      win.requestAnimationFrame(() => this.#normalizeContrast(win, doc))
+    );
+  }
+
+  // Walk visible text, tag each node (data-gjoa-cn), and ask the parent — which can
+  // drawSnapshot the REAL composited content — for corrective colors against each
+  // element's true backdrop. Apply the returned correctives. Single pass (no re-tag).
+  async #normalizeContrast(win, doc) {
+    if (!doc || !doc.body) {
+      return;
+    }
+    const parse = s => {
+      const m = s && s.match(/[\d.]+/g);
+      return m && m.length >= 3 ? [+m[0], +m[1], +m[2]] : null;
+    };
+    const W = win.innerWidth,
+      H = win.innerHeight;
+    // Is the engine inverting THIS doc? A black probe renders light if so — which
+    // tells the parent whether to pre-invert the correctives.
+    let inverted = false;
+    try {
+      const pr = doc.createElement("span");
+      pr.style.cssText = "color:#000;position:fixed;left:-9999px;top:0;";
+      doc.body.appendChild(pr);
+      const pc = parse(win.getComputedStyle(pr).color);
+      inverted = !!(pc && 0.2126 * pc[0] + 0.7152 * pc[1] + 0.0722 * pc[2] > 40);
+      pr.remove();
+    } catch (e) {}
+    const els = [];
+    let cn = 0;
+    const sel =
+      "h1,h2,h3,h4,h5,h6,p,a,span,li,td,th,div,button,label,strong,em,blockquote,figcaption,dt,dd";
+    for (const el of doc.body.querySelectorAll(sel)) {
+      let hasText = false;
+      for (const n of el.childNodes) {
+        if (n.nodeType === 3 && n.textContent.trim().length > 1) {
+          hasText = true;
+          break;
+        }
+      }
+      if (!hasText) {
+        continue;
+      }
+      const r = el.getBoundingClientRect();
+      if (r.width < 10 || r.height < 8 || r.top >= H || r.left >= W || r.bottom <= 0 || r.right <= 0) {
+        continue;
+      }
+      const cs = win.getComputedStyle(el);
+      if (cs.visibility === "hidden" || cs.display === "none" || +cs.opacity === 0) {
+        continue;
+      }
+      const fg = parse(cs.color);
+      if (!fg) {
+        continue;
+      }
+      el.setAttribute("data-gjoa-cn", cn);
+      els.push({
+        cn,
+        x: Math.round(r.left),
+        y: Math.round(r.top),
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        fg,
+      });
+      cn++;
+    }
+    if (!els.length) {
+      return;
+    }
+    let resp;
+    try {
+      resp = await this.sendQuery("Darkmode:Normalize", { w: W, h: H, inverted, els });
+    } catch (e) {
+      return;
+    }
+    const correctives = (resp && resp.correctives) || [];
+    for (const c of correctives) {
+      const el = doc.querySelector(`[data-gjoa-cn="${c.cn}"]`);
+      if (el) {
+        el.style.setProperty("color", c.color, "important");
+      }
+    }
   }
 
   #injectSheet(win, css) {

@@ -65,3 +65,16 @@
 ;; ones with a darkened solid. DEFAULT OFF — this is unverified polish on top of the
 ;; engine scrim (the correctness floor); off means the actor does NOTHING here.
 (pref "gjoa.darkmode.image-analysis.enabled" false)
+
+;; Backdrop-aware APCA contrast normalization (GjoaDarkmode actor pass-3). After the
+;; inversion state settles, the content actor walks visible text, the parent
+;; drawSnapshots the REAL composited content and computes a corrective tone for any
+;; text that fails the APCA floor against its true backdrop (re-polarized, hue held,
+;; pre-inverted when the engine is inverting this doc), and the child applies it. This
+;; is the guarantee that NO text renders below the readability floor — the
+;; "no black-on-black ever" backstop. Validated by tools/darkmode-regress (the suite
+;; measures with the same APCA math). DEFAULT OFF until the build is verified.
+(pref "gjoa.darkmode.normalize.enabled" false)
+;; APCA Lc floor the normalizer enforces (45 ≈ large/secondary text; raise toward 60
+;; for stricter body-text contrast). Below this, text gets re-toned.
+(pref "gjoa.darkmode.normalize.floor" 45)

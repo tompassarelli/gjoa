@@ -45,6 +45,23 @@ function correct(fg, bg, T) {
   return best;
 }
 
+/* Pre-inversion: the engine luminance-inverts EVERY computed color (patch 0009,
+ * RelativeLuminanceUtils::Adjust to 1−lum — an involution). So a color we author in
+ * content gets inverted before paint; to make the painted result equal `target` we
+ * must author invertLum(target). This is the EXACT engine math, replicated. Gated by
+ * GJOA_DM_PREINVERT (the suite runs engine mode = inversion on). */
+function invertLum(rgb) {
+  const compute = (u) => { const f = u / 255; return f <= 0.03928 ? f / 12.92 : Math.pow((f + 0.055) / 1.055, 2.4); };
+  const decompute = (x) => { const s = x <= 0.03928 / 12.92 ? x * 12.92 : 1.055 * Math.pow(x, 1 / 2.4) - 0.055; return Math.min(255, Math.max(0, Math.round(s * 255))); };
+  const lr = compute(rgb[0]), lg = compute(rgb[1]), lb = compute(rgb[2]);
+  const lum = 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+  const target = 1 - lum;
+  const factor = (target + 0.05) / (lum + 0.05);
+  const adj = (l) => decompute(Math.max(0, (l + 0.05) * factor - 0.05));
+  return [adj(lr), adj(lg), adj(lb)];
+}
+const PREINVERT = arguments[3] || false;
+
 (async () => {
   try {
     const win = Services.wm.getMostRecentWindow("navigator:browser");
@@ -74,7 +91,11 @@ function correct(fg, bg, T) {
         fails.push({ lc: Math.round(Lc), fg: el.fg, bg, tag: el.tag, text: el.text, x: el.x, y: el.y, cn: el.cn });
         if (NORMALIZE && el.cn != null) {
           const c = correct(el.fg, bg, THRESHOLD);
-          correctives.push({ cn: el.cn, color: "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")" });
+          // pre-invert ONLY when the engine is actually inverting this document
+          // (meta.inverted) — native-dark sites are left un-inverted, so applying a
+          // pre-inverted color there would render the inverse of what we want.
+          const a = (PREINVERT && meta.inverted) ? invertLum(c) : c;
+          correctives.push({ cn: el.cn, color: "rgb(" + a[0] + "," + a[1] + "," + a[2] + ")" });
         }
       }
     }
