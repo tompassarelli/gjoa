@@ -383,10 +383,17 @@
 
                               ;; target is a tab, "after" or "child"
                               :else
+                              ;; In VERTICAL, anchor "after" on the LAST tab of the
+                              ;; target's subtree, so a parent's whole block is jumped.
+                              ;; In HORIZONTAL the grid is column-major (children stack
+                              ;; BELOW the parent in its column), so that walk resolves to
+                              ;; the column head and the moved tab lands leftmost — the
+                              ;; move-skip bug. There, anchor on the target's OWN index.
                               (let [tgt-subtree
-                                    (.reverse (.slice (subtree-rows tgt-row)))
+                                    (when (not (is-horizontal))
+                                      (.reverse (.slice (subtree-rows tgt-row))))
                                     tgt-sub-row
-                                    (.find tgt-subtree #(.-_tab %))
+                                    (when tgt-subtree (.find tgt-subtree #(.-_tab %)))
                                     tgt-sub-tab
                                     (some-> tgt-sub-row .-_tab)
                                     idx (+ (if tgt-sub-tab
