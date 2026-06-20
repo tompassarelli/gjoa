@@ -24,15 +24,30 @@
 (def RAF-JS :- String
   "const d=arguments[arguments.length-1];requestAnimationFrame(()=>requestAnimationFrame(()=>d(true)));")
 
+;; content-context: wait (event-driven, rAF-poll) until the in-engine actor signals
+;; it finished its async normalize pass (data-gjoa-normalized on <html>), so we
+;; measure the FINAL normalized contrast — not a fixed timer, with a 6s backstop.
+(def WAIT-NORMALIZED-JS :- String
+  "const d=arguments[arguments.length-1];const t0=Date.now();(function p(){if(document.documentElement.hasAttribute('data-gjoa-normalized')){d(true);return;}if(Date.now()-t0>6000){d(false);return;}requestAnimationFrame(p);})();")
+
 (defn make-profile! [] :- String
   (let [dir (.mkdtempSync fs (.join path (.tmpdir os) "gjoa-dmregress-"))
         mode (or (get (.-env process) "GJOA_DM_MODE") "hybrid")
-        enabled (if (= mode "off") "false" "true")]
+        enabled (if (= mode "off") "false" "true")
+        ;; GJOA_DM_NORMALIZE_PREF=1 turns the in-engine GjoaDarkmode actor's contrast
+        ;; normalization ON, so the BINARY fixes contrast live and the harness just
+        ;; measures the result (use with GJOA_DM_NORMALIZE=0 to avoid double-applying).
+        normpref (if (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "1") "true" "false")
+        ;; GJOA_DM_NOVA=1 turns FF152's nova content-card inset ON, to reproduce the
+        ;; "content not full width + wallpaper margin" report and prove the cause.
+        nova (or (get (.-env process) "GJOA_DM_NOVA") "false")]
     (.writeFileSync fs (.join path dir "prefs.js")
       (str "user_pref(\"marionette.port\", 2828);\n"
            "user_pref(\"marionette.enabled\", true);\n"
            "user_pref(\"gjoa.darkmode.enabled\", " enabled ");\n"
-           "user_pref(\"gjoa.darkmode.mode\", \"" mode "\");\n"))
+           "user_pref(\"gjoa.darkmode.mode\", \"" mode "\");\n"
+           "user_pref(\"gjoa.darkmode.normalize.enabled\", " normpref ");\n"
+           "user_pref(\"browser.nova.enabled\", " (if (= nova "1") "true" "false") ");\n"))
     dir))
 
 (defn host-of [url :- String] :- String
@@ -53,22 +68,29 @@
 ;; re-measure (chrome). Returns the RESIDUAL fail count — or pre-fails unchanged when
 ;; not normalizing / nothing to apply. This is what validates the correction math:
 ;; pre-fails should drop toward 0 after correctives land.
-(defn normalize-pass! [client :- Any meta :- Any threshold :- Any snap-js :- String
-                       apply-js :- String normalize? :- Any correctives :- Any
-                       pre-fails :- Any] :- Any
+(defn normalize-pass! [client :- Any meta :- Any threshold :- Any refresh-js :- String
+                       snap-js :- String apply-js :- String normalize? :- Any
+                       correctives :- Any pre-fails :- Any] :- Any
   (if (or (not normalize?) (= (.-length correctives) 0))
     pre-fails
     (let [_c (js/await (.setContext client "content"))
           _ap (js/await (.executeScript client apply-js [correctives]))
           _raf (js/await (.executeAsyncScript client RAF-JS []))
+          ;; RE-READ the current computed colors of the SAME tagged elements (no
+          ;; re-tag, so cn stays stable on dynamic pages) — the apply + the engine's
+          ;; re-inversion of it changed each fg, so measure against fresh foregrounds.
+          fresh (js/await (.executeScript client refresh-js []))
           _c2 (js/await (.setContext client "chrome"))
-          res2 (js/await (.executeAsyncScript client snap-js [meta threshold false]))]
+          res2 (js/await (.executeAsyncScript client snap-js [fresh threshold false]))]
+      (when (and (get (.-env process) "GJOA_DM_DEBUG") (> (or (.-total res2) 0) 0))
+        (.error console (str "  residual " (.-total res2) ": "
+                             (JSON/stringify (.slice (or (.-fails res2) []) 0 6)))))
       (or (.-total res2) 0))))
 
 ;; Navigate + measure one site. Per-site try so one bad site can't kill the run.
 (defn process-site! [client :- Any url :- String threshold :- Any
-                     rects-js :- String snap-js :- String apply-js :- String
-                     normalize? :- Any outdir :- String] :- Any
+                     rects-js :- String refresh-js :- String snap-js :- String apply-js :- String
+                     normalize? :- Any preinvert? :- Any outdir :- String] :- Any
   (let [host (host-of url)]
     (try
       ;; content context FIRST — WebDriver:Navigate + the DOM scripts are
@@ -76,17 +98,28 @@
       (let [_c0 (js/await (.setContext client "content"))
             navwarn (js/await (safe-nav! client url))
             _raf (js/await (.executeAsyncScript client RAF-JS []))
+            ;; when verifying the in-engine actor, wait (event-driven) for its async
+            ;; normalize pass to finish before measuring — closes the race where the
+            ;; harness measured a complex page before the actor had applied.
+            _wait (when (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "1")
+                    ;; non-fatal: a site that client-side-redirects mid-wait unloads the
+                    ;; document ("Document was unloaded") — swallow it, don't abort the run.
+                    (try (js/await (.executeAsyncScript client WAIT-NORMALIZED-JS []))
+                         (catch Error e nil)))
+            marker (when (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "1")
+                     (try (js/await (.executeScript client "return document.documentElement.getAttribute('data-gjoa-normalized');" []))
+                          (catch Error e "err")))
             meta (js/await (.executeScript client rects-js []))
             _c2 (js/await (.setContext client "chrome"))
-            res (js/await (.executeAsyncScript client snap-js [meta threshold normalize?]))
+            res (js/await (.executeAsyncScript client snap-js [meta threshold normalize? preinvert?]))
             pre-fails (or (.-total res) 0)
             correctives (or (.-correctives res) [])
-            post-fails (js/await (normalize-pass! client meta threshold snap-js apply-js
+            post-fails (js/await (normalize-pass! client meta threshold refresh-js snap-js apply-js
                                                   normalize? correctives pre-fails))
             shot (js/await (safe-shot client))]
         (when shot (.writeFileSync fs (.join path outdir (str host ".png")) shot {:encoding "base64"}))
         {:url url :host host :checked (or (.-checked res) 0) :fails pre-fails
-         :postFails post-fails :applied (.-length correctives)
+         :postFails post-fails :applied (.-length correctives) :marker marker
          :worst (or (.-fails res) []) :err (or (.-err res) nil) :navwarn navwarn})
       (catch Error e
         {:url url :host host :checked 0 :fails 0 :postFails 0 :applied 0 :worst [] :err (or (.-message e) (str e))}))))
@@ -101,7 +134,11 @@
           rects-js (.readFileSync fs "tools/darkmode-regress/rects.js" "utf8")
           snap-js (.readFileSync fs "tools/darkmode-regress/snap.js" "utf8")
           apply-js (.readFileSync fs "tools/darkmode-regress/apply-correctives.js" "utf8")
+          refresh-js (.readFileSync fs "tools/darkmode-regress/refresh.js" "utf8")
           normalize? (= (get (.-env process) "GJOA_DM_NORMALIZE") "1")
+          ;; pre-invert correctives so the engine's color-inversion renders the
+          ;; intended target (engine/hybrid modes invert content colors).
+          preinvert? (= (get (.-env process) "GJOA_DM_PREINVERT") "1")
           outdir "dist/darkmode-regress"
           _mk (.mkdirSync fs outdir {:recursive true})
           profile (make-profile!)
@@ -120,8 +157,8 @@
           _to (js/await (.setTimeouts client {:pageLoad 30000 :script 30000}))
           results []]
       (doseq [site sites]
-        (let [r (js/await (process-site! client (.-url site) threshold rects-js snap-js
-                                         apply-js normalize? outdir))
+        (let [r (js/await (process-site! client (.-url site) threshold rects-js refresh-js snap-js
+                                         apply-js normalize? preinvert? outdir))
               eff (if normalize? (.-postFails r) (.-fails r))]
           (.push results r)
           (.log console (str (if (.-err r) "ERR  " (if (= eff 0) "PASS " "FAIL "))
@@ -129,7 +166,8 @@
                              (if (.-err r) (.-err r)
                                (if normalize?
                                  (str "(" (.-checked r) " els, " (.-fails r) "->" (.-postFails r)
-                                      " after " (.-applied r) " fixes)")
+                                      " after " (.-applied r) " fixes)"
+                                      (if (.-marker r) (str " [marker=" (.-marker r) "]") " [marker=ABSENT]"))
                                  (str "(" (.-checked r) " text els, " (.-fails r) " low-contrast)")))))))
       (.writeFileSync fs (.join path outdir "report.json")
         (JSON/stringify {:threshold threshold :normalize normalize? :results results} nil 2))

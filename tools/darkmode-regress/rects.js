@@ -5,6 +5,19 @@
  * the value (no IIFE). */
 const W = window.innerWidth, H = window.innerHeight, dpr = window.devicePixelRatio || 1;
 const parseColor = (s) => { const m = s && s.match(/[\d.]+/g); return (m && m.length >= 3) ? [+m[0], +m[1], +m[2]] : null; };
+// Detect whether the engine is luminance-inverting THIS document: a probe authored
+// pure black renders light when inversion is active, stays black when it isn't
+// (native-dark sites the refiner left un-inverted). A corrective must be pre-inverted
+// ONLY when inversion is on — else apply the target color directly.
+let inverted = false;
+try {
+  const pr = document.createElement("span");
+  pr.style.cssText = "color:#000;position:fixed;left:-9999px;top:0;";
+  (document.body || document.documentElement).appendChild(pr);
+  const pc = parseColor(getComputedStyle(pr).color);
+  inverted = !!(pc && (0.2126 * pc[0] + 0.7152 * pc[1] + 0.0722 * pc[2]) > 40);
+  pr.remove();
+} catch (e) {}
 const hasText = (el) => { for (const n of el.childNodes) if (n.nodeType === 3 && n.textContent.trim().length > 1) return true; return false; };
 const out = [];
 const all = document.body ? document.body.querySelectorAll("h1,h2,h3,h4,h5,h6,p,a,span,li,td,th,div,button,label,strong,em,blockquote,figcaption,dt,dd") : [];
@@ -21,4 +34,4 @@ for (const el of all) {
              fg, tag: el.tagName, text: el.textContent.trim().slice(0, 50) });
   cn++;
 }
-return { w: W, h: H, dpr, els: out };
+return { w: W, h: H, dpr, inverted, els: out };
