@@ -179,9 +179,14 @@
             (set! (.-urlbar-toolbar state) nil)
 
             (let [spring2 (by-id "customizableui-special-spring2")
-                  ext-btn (by-id "unified-extensions-button")]
+                  ext-btn (by-id "unified-extensions-button")
+                  sb-btn (by-id "gjoa-sidebar-button")]
               (when spring2 (.after urlbar-container spring2))
-              (when (and spring2 ext-btn) (.after spring2 ext-btn)))
+              (when (and spring2 ext-btn) (.after spring2 ext-btn))
+              ;; keep gjoa's swapped sidebar button immediately after the
+              ;; extensions button through the collapse reflow, so the
+              ;; hamburger → extensions → sidebar order survives compact mode (#92).
+              (when (and ext-btn sb-btn) (.after ext-btn sb-btn)))
 
             (if (and toolbox-next (= (.-parentNode toolbox-next) toolbox-parent))
               (.insertBefore toolbox-parent navigator-toolbox toolbox-next)

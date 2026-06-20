@@ -25,10 +25,18 @@
       (when og-icon-style
         (set! (.-listStyleImage (.-style button)) og-icon-style))
 
+      ;; Order: sidebar button sits AFTER the extension (puzzle) button, so the
+      ;; nav-bar reads hamburger → extension → sidebar (user swap). Fall back to
+      ;; after the hamburger, then after the native sidebar button.
       (let [nav-bar (by-id "nav-bar")
+            ext-btn (by-id "unified-extensions-button")
             panel-ui (by-id "PanelUI-button")]
-        (if (and nav-bar panel-ui (= (.-parentNode panel-ui) nav-bar))
+        (cond
+          (and nav-bar ext-btn (= (.-parentNode ext-btn) nav-bar))
+          (.after ext-btn button)
+          (and nav-bar panel-ui (= (.-parentNode panel-ui) nav-bar))
           (.after panel-ui button)
+          :else
           (.after sidebar-button button)))
 
       (let [on-click #(when (= (.-button %) 0)
