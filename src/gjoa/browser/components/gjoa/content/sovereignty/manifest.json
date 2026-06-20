@@ -1,32 +1,81 @@
 {
   "claim": "This build makes 1 unattended network call: the Firefox version check.",
-  "gjoaVersion": "0.1.1",
-  "auditedCommit": "cd768e2",
+  "gjoaVersion": "0.3.3",
+  "auditedCommit": "adfd706",
   "generated": "2026-06-20",
-  "method": "static AST audit of all authored chrome (.sys.mjs + emitted .bjs), 57 sources, every source parsed",
+  "method": "static AST audit of all authored chrome (.sys.mjs + emitted .bjs + content .js), every source parsed",
   "ownCode": {
     "unattendedExternal": [
-      { "endpoint": "https://product-details.mozilla.org/1.0/firefox_versions.json", "what": "Firefox version freshness check", "file": "security/index.js", "line": 53, "basis": "resolved endpoint" }
+      {
+        "endpoint": "https://product-details.mozilla.org/1.0/firefox_versions.json",
+        "what": "Firefox version freshness check",
+        "file": "src/gjoa/…/security/index.js",
+        "line": 53,
+        "basis": "endpoint"
+      }
     ],
     "userEnabledNetwork": [
-      { "endpoint": "adblock filter lists (https-only)", "what": "filter-list updates when adblock is on", "file": "ContentClassifierRemoteSettingsClient.sys.mjs", "line": 323, "basis": "https scheme guard" }
+      {
+        "endpoint": "(dynamic)",
+        "what": "fetch call",
+        "file": "src/gjoa/toolkit/components/content-classifier/ContentClassifierRemoteSettingsClient.sys.mjs",
+        "line": 323,
+        "basis": "guard(url)"
+      }
     ],
     "local": [
-      { "endpoint": "resource://gre/modules/scriptlet-resources.json", "what": "bundled scriptlet resources", "basis": "resolved endpoint" },
-      { "endpoint": "resource://gre/modules/darkmode-fixes.json", "what": "bundled dark-mode fixes", "basis": "resolved endpoint" },
-      { "endpoint": "page-icon: (local favicon cache)", "what": "quick-open favicon", "file": "tabs/picker.js", "line": 99, "basis": "page-icon scheme guard" }
+      {
+        "endpoint": "resource://gre/modules/scriptlet-resources.json",
+        "what": "fetch call",
+        "file": "src/gjoa/toolkit/components/content-classifier/ContentClassifierRemoteSettingsClient.sys.mjs",
+        "line": 236,
+        "basis": "endpoint"
+      },
+      {
+        "endpoint": "resource://gre/modules/darkmode-fixes.json",
+        "what": "fetch call",
+        "file": "src/gjoa/toolkit/components/content-classifier/GjoaDarkmodeParent.sys.mjs",
+        "line": 47,
+        "basis": "endpoint"
+      },
+      {
+        "endpoint": "chrome://gjoa/content/sovereignty/manifest.json",
+        "what": "fetch call",
+        "file": "src/gjoa/browser/components/gjoa/content/sovereignty/sovereignty.js",
+        "line": 238,
+        "basis": "endpoint"
+      },
+      {
+        "endpoint": "(dynamic)",
+        "what": "resource load",
+        "file": "src/gjoa/…/tabs/picker.js",
+        "line": 99,
+        "basis": "guard(item.icon)"
+      }
     ],
     "unproven": [
-      { "endpoint": "page's own background image", "what": "dark-mode image analysis (re-reads an image the page already loaded)", "file": "GjoaDarkmodeChild.sys.mjs", "line": 510, "basis": "no static guard — flagged for review" }
+      {
+        "endpoint": "(dynamic)",
+        "what": "resource load",
+        "file": "src/gjoa/toolkit/components/content-classifier/GjoaDarkmodeChild.sys.mjs",
+        "line": 510,
+        "basis": "unproven"
+      }
     ]
   },
   "inheritedEgress": {
     "disabled": 15,
     "catalogued": 17,
-    "note": "Firefox built-in egress vectors gjoa disables by default (telemetry, Normandy, Pocket, Contile, sponsored, FxA, ...). SafeBrowsing kept (security).",
+    "note": "Firefox built-in egress vectors gjoa disables by default. SafeBrowsing kept (security).",
     "toggleGated": [
-      { "pref": "network.captive-portal-service.enabled", "what": "captive-portal / 'sign in to wifi' detection" },
-      { "pref": "network.connectivity-service.enabled", "what": "connectivity check" }
+      {
+        "pref": "network.captive-portal-service.enabled",
+        "what": "Captive-portal probe"
+      },
+      {
+        "pref": "network.connectivity-service.enabled",
+        "what": "Connectivity check"
+      }
     ]
   }
 }

@@ -7,13 +7,30 @@
             [gjoa.tools.prep.mozconfig :refer [mozconfig!]]
             [gjoa.tools.prep.overlay :refer [overlay]]
             [gjoa.tools.prep.patches :refer [patches]]
+            [gjoa.tools.prep.sh :refer [sh]]
             [gjoa.tools.prep.log :refer [log]]
-            [fs :refer [writeFileSync]]))
+            [fs :refer [writeFileSync existsSync]]))
 (define-mode strict)
+
+;; Regenerate the about:sovereignty manifest from a FRESH egress audit so its proof
+;; line matches the bytes being built (no stale-by-omission). Guarded: runs only if
+;; the egress tool is compiled here (the maintainer's tree, where releases are cut);
+;; on a checkout without it, the committed manifest ships and the page honestly flags
+;; any commit mismatch. Runs before overlay so the fresh manifest is what gets baked.
+(defn regen-sovereignty-manifest! [] :- Any
+  (let [tool ".beagle-tools/gjoa/tools/sovereignty/egress-scan.js"]
+    (if (not (existsSync tool))
+      (.info log "sovereignty: egress tool not present — keeping committed manifest")
+      (do
+        (.step log "phase 0 — regenerating about:sovereignty egress manifest")
+        (sh (str "bun " tool " manifest") {:quiet true})
+        (.ok log "sovereignty: manifest regenerated for this build")))))
 
 ;; Seven sequential phases. Each is idempotent, so re-running `bun run import`
 ;; after editing src/gjoa/ or gjoa.json picks up the changes correctly.
 (js/export (defn import-sources [] :- Any
+  (js/await (regen-sovereignty-manifest!))
+
   (.step log "phase 1/7 — overlaying src/gjoa/")
   (js/await (overlay))
 
