@@ -125,6 +125,16 @@ jobs:
       - name: Register beagle collection
         run: raco pkg install --link --batch --no-docs ../beagle/beagle-lib
 
+      - name: Link beagle runtime for bun tooling (pinned)
+        # Compiled .bjs tooling imports the $$bc runtime as `beagle/core.js`; bun
+        # resolves it via node_modules/beagle. Point it at the pinned beagle
+        # checkout. MUST run after the beagle checkout — `bun install` earlier
+        # can't see ../beagle yet.
+        run: |
+          mkdir -p node_modules
+          ln -sfn "$BEAGLE_PIN_ROOT/beagle-lib/lib/beagle" node_modules/beagle
+          echo "node_modules/beagle -> $(readlink node_modules/beagle)"
+
       - name: Apply overlays and patches
         run: bun run import
 
