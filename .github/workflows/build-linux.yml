@@ -151,6 +151,18 @@ jobs:
         working-directory: engine
         run: ./mach build -j${{ inputs.fast && '16' || '2' }}
 
+      # Chrome-init smoke — FATAL. The single fastest signal that the bake produced
+      # working gjoa chrome: asserts window.gjoaTest + window.Spaces initialize. A
+      # beagle value-semantics / packaging regression (unresolvable $$bc import, or
+      # $$bc undefined in a userscript bundle) silently kills ALL gjoa chrome in the
+      # bake; without this gate CI would go green on a chrome-dead binary (it cost a
+      # whole session 2026-06-21). No `|| true`: if chrome is dead, the build is red.
+      - name: Chrome-init smoke (FATAL)
+        run: |
+          sudo apt-get install -y xvfb >/dev/null 2>&1 || true
+          GJOA_BIN="$PWD/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa" \
+            timeout 180 xvfb-run -a bun run _itest -- --grep "smoke: gjoa chrome"
+
       # Dark-mode contrast verification — runs the WCAG-AA harness against the
       # freshly-built binary in a clean xvfb env (the agent shell can't launch the
       # browser). NON-FATAL + time-bounded: baselines are record-only and an infra

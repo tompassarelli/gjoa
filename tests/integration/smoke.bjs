@@ -6,7 +6,8 @@
 ;; userscript bundle), which silently kills ALL gjoa chrome in the bake — see
 ;; project_beagle_value_semantics_chrome_break (cost a whole session, 2026-06-21).
 ;; The full suite surfaces it only as a mass timeout; this catches it FIRST, in
-;; seconds, with a clear message. Default lane (no fixture server) so CI always runs it.
+;; seconds, with a clear message. Default lane (no fixture server); wired into a
+;; FATAL CI step (.github/workflows/build-linux.yml "Chrome-init smoke (FATAL)").
 (ns gjoa.tests.integration.smoke
   (:require [gjoa.tests.dsl :refer [deftest expect await-true wait-for]]))
 (define-mode strict)

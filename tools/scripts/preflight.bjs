@@ -479,6 +479,28 @@
         (pass "N" "knobs backed + reversible (knob-not-delete)"
           (str (.-length knob-prefs) " knobs backed by real prefs; privacy presets (" (.-length preset-prefs) " prefs) in sync with the loader"))))))
 
+;; ── Gate O: no bare beagle/ runtime specifier in shipped gjoa .sys.mjs ─────
+;; beagle's value-semantics emit injects `import * as $$bc from 'beagle/core.js'`.
+;; Firefox's chrome ES loader cannot resolve a bare specifier; it must be rewritten
+;; to resource:///modules/gjoa/beagle/ at compile (tools/prep/overlay.bjs sets
+;; BEAGLE_JS_RUNTIME_PREFIX). Today only GjoaLoader compiles with the prefix — a
+;; future .bjs-authored .sys.mjs would silently ship the bare import and kill ALL
+;; gjoa chrome (the 2026-06-21 break). Fail fast, BEFORE the multi-hour build.
+(defn gateO [] :- Any
+  (let [gjoaDir (join REPO-ROOT "engine" "browser" "components" "gjoa")]
+    (if (not (existsSync gjoaDir))
+      (warn "O" "no bare beagle/ import in shipped gjoa .sys.mjs"
+        "engine/ not extracted yet — run after `bun run import`")
+      (let [dirs (str gjoaDir " " (join REPO-ROOT "engine" "toolkit" "components" "content-classifier"))
+            r (sh (str "grep -rlE \"from 'beagle/\" " dirs " --include=*.sys.mjs 2>/dev/null || true") {})
+            hits (.trim (or (.-out r) ""))]
+        (if (= hits "")
+          (pass "O" "no bare beagle/ import in shipped gjoa .sys.mjs"
+            "all $$bc runtime imports resolve to resource:///modules/gjoa/beagle/")
+          (fail "O" "no bare beagle/ import in shipped gjoa .sys.mjs"
+            (str "unresolvable bare `import from 'beagle/...'` in: " (.replaceAll hits "\n" ", "))
+            "compile that .bjs with BEAGLE_JS_RUNTIME_PREFIX=resource:///modules/gjoa/beagle/ (tools/prep/overlay.bjs) + vendor the runtime"))))))
+
 ;; ── Run + render ──────────────────────────────────────────────────────────
 (defn main! [] :- Any
   (console/log (bold "gjoa preflight"))
@@ -488,7 +510,7 @@
   (let [gates [["A" gateA] ["B" gateB] ["C" gateC] ["D" gateD]
                ["E" gateE] ["F" gateF] ["G" gateG] ["H" gateH]
                ["I" gateI] ["J" gateJ] ["K" gateK] ["L" gateL] ["M" gateM]
-               ["N" gateN]]]
+               ["N" gateN] ["O" gateO]]]
     (doseq [gate gates]
       (let [fn (aget gate 1)]
         (try (fn)
