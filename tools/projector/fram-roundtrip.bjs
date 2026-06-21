@@ -3,7 +3,8 @@
 ;; file into the LIVE Fram store, reconstruct byte-identically, and Datalog-query it.
 ;;   bun run projector:fram [<js-file>]
 ;; Steps: gjoa emits claims -> fram store loads + re-extracts (real engine) -> gjoa
-;; renders byte-identically -> Datalog query over gjoa's AST. Needs ~/code/fram.
+;; renders byte-identically -> Datalog query over gjoa's AST. Needs the PINNED
+;; fram worktree (configs/fram.ref @ ~/code/fram-pin), not live ~/code/fram.
 (ns gjoa.tools.projector.fram-roundtrip
   (:require [gjoa.tools.prep.sh :refer [sh]]
             [fs :refer [readFileSync]]
@@ -12,7 +13,13 @@
 (declare-extern [process console] Any)
 
 (def REPO :- String (.cwd process))
-(def FRAM :- String (join (.-HOME (.-env process)) "code" "fram"))
+;; PINNED fram worktree (configs/fram.ref; FRAM_PIN_ROOT, default ~/code/fram-pin) —
+;; NOT live ~/code/fram. Isolates the projector from fram-2's self-host churn (a
+;; separate worktree, not in fram main); fram's claim/AST surface is stable across
+;; it (fram-2 confirmed). Mirrors BEAGLE_PIN_ROOT.
+(def FRAM :- String
+  (or (.-FRAM_PIN_ROOT (.-env process))
+      (join (.-HOME (.-env process)) "code" "fram-pin")))
 (def SELF :- String (join REPO ".beagle-tools" "gjoa" "tools" "projector" "fram-log.js"))
 (def DEFAULT :- String "engine/browser/components/newtab/AboutNewTabRedirector.sys.mjs")
 
