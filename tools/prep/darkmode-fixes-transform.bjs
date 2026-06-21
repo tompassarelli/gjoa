@@ -1,0 +1,513 @@
+#lang beagle/js
+;; tools/prep/darkmode-fixes-transform.bjs — Dark Reader dynamic-theme-fixes →
+;; gjoa curated dark-mode entry generator, FULL-DIRECTIVE edition (M2 tier-2).
+;;
+;; WHAT THIS IS (vs darkmode-registry.bjs)
+;;   darkmode-registry.bjs handles ONLY Dark Reader's CSS section (token-resolve →
+;;   {mode,override,css}). This tool is its richer sibling: it parses the WHOLE
+;;   directive set of each DR block —
+;;     INVERT                → invertSelectors    (filter:invert(1) hue-rotate)
+;;     IGNORE INLINE STYLE   → ignoreInlineStyle  (true / [selectors])
+;;     IGNORE IMAGE ANALYSIS → ignoreImageAnalysis (true / [selectors])
+;;     CSS                   → css                (DR tokens PRE-RESOLVED to consts)
+;;   plus two gjoa-only refinements derived from the CSS body during eyeball:
+;;     noInvertSelectors     → elements to EXCLUDE from engine inversion (curated)
+;;     removeBgSelectors     → elements whose bg-image DR strips (background:none)
+;;   and emits a CANDIDATE expansion of darkmode-fixes.json in the schema the
+;;   actor reads ({host:{mode,override,css,inject, +the new fields}}).
+;;
+;; ⚠ LOSSY — VISUAL QA REQUIRED. DR ${...} tokens are PRE-RESOLVED to fixed dark
+;;   constants here. DR resolves them at runtime against its computed theme +
+;;   var(--darkreader-*) vars; this tool maps those to ONE fixed dark palette.
+;;   So the conversion is an APPROXIMATION, NOT a faithful runtime port. This tool
+;;   prints CANDIDATES for a human to eyeball; it is NOT a blind-convert pipeline.
+;;   It deliberately does NOT --write: the curated entries land via human review.
+;;
+;; WORKFLOW
+;;   bun .beagle-tools/gjoa/tools/prep/darkmode-fixes-transform.js <host> [host...]
+;;     → prints the candidate JSON entry for each host (token-resolved, directives
+;;       expanded), with a per-entry QA report (unresolved tokens, unmapped vars,
+;;       which directives were present). Eyeball, then hand-merge the good ones
+;;       into src/.../darkmode-fixes.json.
+;;   --selftest  → parser + token-resolve assertions; exits nonzero on failure.
+;;
+;; PROVENANCE — Dark Reader is MIT-licensed. Each emitted entry carries
+;;   "_provenance":"darkreader@<pin> MIT" so the registry records where it came from.
+(ns gjoa.tools.prep.darkmode-fixes-transform
+  (:require [fs :refer [existsSync readFileSync]]
+            [path :refer [join]]
+            [gjoa.tools.prep.paths :refer [REPO-ROOT]]
+            [gjoa.tools.prep.log :refer [log]]))
+(define-mode strict)
+(declare-extern [process] Any)
+
+;; ---------------------------------------------------------------------------
+;; Paths + pin (mirror darkmode-registry.bjs — same snapshot, same release).
+;; ---------------------------------------------------------------------------
+
+(def SNAPSHOT-PATH :- String (join REPO-ROOT "tools" "prep" "darkreader-fixes.snapshot"))
+(def DARKREADER-PIN :- String "v4.9.127")
+(def PROVENANCE :- String (str "darkreader@" DARKREADER-PIN " MIT"))
+
+;; ---------------------------------------------------------------------------
+;; Color model + luminance flip — a verbatim re-use of darkmode-registry.bjs's
+;; EXACT engine port (patches/0009 invert_color_luminance). Kept self-contained
+;; here (no cross-tool import of internals) so this generator stands alone, but
+;; byte-identical: white→dark, black→light, single shared factor (hue/sat held),
+;; alpha passthrough. The selftest pins the same invariants.
+;; ---------------------------------------------------------------------------
+
+(def NAMED-COLORS :- Any
+  {"black"     [0 0 0]
+   "white"     [255 255 255]
+   "red"       [255 0 0]
+   "blue"      [0 0 255]
+   "cyan"      [0 255 255]
+   "yellow"    [255 255 0]
+   "orange"    [255 165 0]
+   "purple"    [128 0 128]
+   "gold"      [255 215 0]
+   "goldenrod" [218 165 32]
+   "khaki"     [240 230 140]
+   "gray"      [128 128 128]
+   "grey"      [128 128 128]
+   "lightgray" [211 211 211]
+   "lightgrey" [211 211 211]
+   "darkgray"  [169 169 169]
+   "darkgrey"  [169 169 169]
+   "dimgrey"   [105 105 105]
+   "dimgray"   [105 105 105]
+   "slategray" [112 128 144]
+   "lightblue" [173 216 230]
+   "darkblue"  [0 0 139]
+   "darkred"   [139 0 0]
+   "aliceblue" [240 248 255]})
+
+(defn clamp [x :- Any lo :- Any hi :- Any] :- Any
+  (Math.max lo (Math.min hi x)))
+
+(defn parse-hex [h :- String] :- Any
+  (let [n (.-length h)
+        valid (.test (RegExp. "^[0-9a-fA-F]+$") h)]
+    (cond
+      (not valid) nil
+      (= n 3) [(parseInt (str (aget h 0) (aget h 0)) 16)
+               (parseInt (str (aget h 1) (aget h 1)) 16)
+               (parseInt (str (aget h 2) (aget h 2)) 16)
+               1]
+      (= n 4) [(parseInt (str (aget h 0) (aget h 0)) 16)
+               (parseInt (str (aget h 1) (aget h 1)) 16)
+               (parseInt (str (aget h 2) (aget h 2)) 16)
+               (/ (parseInt (str (aget h 3) (aget h 3)) 16) 255)]
+      (= n 6) [(parseInt (.slice h 0 2) 16)
+               (parseInt (.slice h 2 4) 16)
+               (parseInt (.slice h 4 6) 16)
+               1]
+      (= n 8) [(parseInt (.slice h 0 2) 16)
+               (parseInt (.slice h 2 4) 16)
+               (parseInt (.slice h 4 6) 16)
+               (/ (parseInt (.slice h 6 8) 16) 255)]
+      :else nil)))
+
+(defn split-args [body :- String] :- Any
+  (let [raw (.split (.trim body) (RegExp. "[\\s,/]+"))]
+    (.filter raw (fn [s] (> (.-length s) 0)))))
+
+(defn parse-component [s :- String whole :- Any] :- Any
+  (if (.endsWith s "%")
+    (* (/ (parseFloat (.slice s 0 -1)) 100) whole)
+    (parseFloat s)))
+
+(defn hsl->rgb [h :- Any s :- Any l :- Any] :- Any
+  (let [hh (/ (mod (mod h 360) 360) 360)
+        q (if (< l 0.5) (* l (+ 1 s)) (- (+ l s) (* l s)))
+        p (- (* 2 l) q)
+        hue->rgb (fn [t0 :- Any]
+                   (let [t (cond (< t0 0) (+ t0 1) (> t0 1) (- t0 1) :else t0)]
+                     (cond
+                       (< t (/ 1 6)) (+ p (* (- q p) 6 t))
+                       (< t (/ 1 2)) q
+                       (< t (/ 2 3)) (+ p (* (- q p) (- (/ 2 3) t) 6))
+                       :else p)))]
+    (if (= s 0)
+      [(Math.round (* l 255)) (Math.round (* l 255)) (Math.round (* l 255))]
+      [(Math.round (* (hue->rgb (+ hh (/ 1 3))) 255))
+       (Math.round (* (hue->rgb hh) 255))
+       (Math.round (* (hue->rgb (- hh (/ 1 3))) 255))])))
+
+(defn parse-color [raw :- String] :- Any
+  (let [s (.trim raw)
+        lower (.toLowerCase s)]
+    (cond
+      (.startsWith s "#")
+      (parse-hex (.slice s 1))
+
+      (or (.startsWith lower "rgb(") (.startsWith lower "rgba("))
+      (let [body (.slice s (+ (.indexOf s "(") 1) (.lastIndexOf s ")"))
+            parts (split-args body)]
+        (when (>= (.-length parts) 3)
+          [(clamp (Math.round (parse-component (aget parts 0) 255)) 0 255)
+           (clamp (Math.round (parse-component (aget parts 1) 255)) 0 255)
+           (clamp (Math.round (parse-component (aget parts 2) 255)) 0 255)
+           (if (>= (.-length parts) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)]))
+
+      (or (.startsWith lower "hsl(") (.startsWith lower "hsla("))
+      (let [body (.slice s (+ (.indexOf s "(") 1) (.lastIndexOf s ")"))
+            parts (split-args body)]
+        (when (>= (.-length parts) 3)
+          (let [h (parseFloat (aget parts 0))
+                sat (/ (parse-component (aget parts 1) 100) 100)
+                lit (/ (parse-component (aget parts 2) 100) 100)
+                rgb (hsl->rgb h (clamp sat 0 1) (clamp lit 0 1))]
+            [(aget rgb 0) (aget rgb 1) (aget rgb 2)
+             (if (>= (.-length parts) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)])))
+
+      (.test (RegExp. "^[0-9a-fA-F]{3,8}$") s)
+      (parse-hex s)
+
+      (get NAMED-COLORS lower)
+      (let [rgb (get NAMED-COLORS lower)]
+        [(aget rgb 0) (aget rgb 1) (aget rgb 2) 1])
+
+      :else nil)))
+
+(defn compute [u :- Any] :- Any
+  (let [f (/ u 255)]
+    (if (<= f 0.03928) (/ f 12.92) (Math.pow (/ (+ f 0.055) 1.055) 2.4))))
+
+(defn decompute [x :- Any] :- Any
+  (let [s (if (<= x (/ 0.03928 12.92))
+            (* x 12.92)
+            (- (* 1.055 (Math.pow x (/ 1 2.4))) 0.055))]
+    (clamp (Math.round (* s 255)) 0 255)))
+
+(defn flip-rgba [rgba :- Any] :- Any
+  (let [r (aget rgba 0) g (aget rgba 1) b (aget rgba 2) a (aget rgba 3)
+        lr (compute r) lg (compute g) lb (compute b)
+        lum (+ (* 0.2126 lr) (* 0.7152 lg) (* 0.0722 lb))
+        target (- 1 lum)
+        factor (/ (+ target 0.05) (+ lum 0.05))
+        adj (fn [l :- Any] (decompute (Math.max 0 (- (* (+ l 0.05) factor) 0.05))))]
+    [(adj lr) (adj lg) (adj lb) a]))
+
+(defn luminance [rgba :- Any] :- Any
+  (+ (* 0.2126 (compute (aget rgba 0)))
+     (* 0.7152 (compute (aget rgba 1)))
+     (* 0.0722 (compute (aget rgba 2)))))
+
+(defn byte->hex [n :- Any] :- String
+  (.padStart (.toString (clamp (Math.round n) 0 255) 16) 2 "0"))
+
+(defn rgba->css [rgba :- Any] :- String
+  (let [r (aget rgba 0) g (aget rgba 1) b (aget rgba 2) a (aget rgba 3)]
+    (if (>= a 1)
+      (str "#" (byte->hex r) (byte->hex g) (byte->hex b))
+      (str "rgba(" (clamp (Math.round r) 0 255) ", " (clamp (Math.round g) 0 255) ", "
+           (clamp (Math.round b) 0 255) ", " (Number (.toFixed a 3)) ")"))))
+
+(defn resolve-token [inner :- String] :- Any
+  (let [parsed (parse-color inner)]
+    (when parsed (rgba->css (flip-rgba parsed)))))
+
+;; ---------------------------------------------------------------------------
+;; Dark Reader runtime theme variables → fixed dark palette (lossy; QA flag).
+;; ---------------------------------------------------------------------------
+
+(def DARKREADER-VARS :- Any
+  {"--darkreader-neutral-background"   "#181a1b"
+   "--darkreader-neutral-text"         "#e8e6e3"
+   "--darkreader-neutral-color"        "#e8e6e3"
+   "--darkreader-selection-background" "#0060df"
+   "--darkreader-selection-text"       "#ffffff"})
+
+;; ---------------------------------------------------------------------------
+;; Snapshot parsing — full directive set (extends darkmode-registry's parser).
+;; A block: 1+ URL-pattern lines, then named UPPERCASE sections. Blocks are
+;; separated by a run of '='. The first block (url `*`) is the global default.
+;; ---------------------------------------------------------------------------
+
+(def SEPARATOR :- Any (RegExp. "^=+\\s*$" "m"))
+(def SECTION-HEADER :- Any (RegExp. "^[A-Z][A-Z ]+$"))
+
+;; The directive headers DR uses. A header-shaped line is only a new section if
+;; it is one of these — so a stray uppercase CSS selector isn't misread.
+(def KNOWN-SECTIONS :- Any
+  ["INVERT" "CSS" "IGNORE INLINE STYLE" "IGNORE IMAGE ANALYSIS"
+   "INVERT SIZE" "PLUS"])
+
+(defn parse-snapshot! [text :- String] :- Any
+  (let [blocks (.split text SEPARATOR)
+        out []]
+    (doseq [block blocks]
+      (let [lines (.split (.trimEnd block) "\n")
+            patterns []
+            sections {}
+            cur-name (atom nil)
+            cur-lines (atom [])
+            flush! (fn []
+                     (when @cur-name
+                       (set! (get sections @cur-name) (.trim (.join @cur-lines "\n"))))
+                     (reset! cur-lines []))]
+        (doseq [line lines]
+          (let [trimmed (.trim line)]
+            (cond
+              (and (= trimmed "") (not @cur-name)) nil
+
+              (and (.test SECTION-HEADER trimmed) (.includes KNOWN-SECTIONS trimmed))
+              (do (flush!) (reset! cur-name trimmed))
+
+              (and (not @cur-name) (not= trimmed ""))
+              (.push patterns trimmed)
+
+              :else
+              (.push @cur-lines line))))
+        (flush!)
+        (when (> (.-length patterns) 0)
+          (.push out {:patterns patterns :sections sections}))))
+    out))
+
+;; ---------------------------------------------------------------------------
+;; Host matching (identical semantics to darkmode-registry.bjs).
+;; ---------------------------------------------------------------------------
+
+(defn pattern-host [pat :- String] :- String
+  (let [no-scheme (.replace pat (RegExp. "^[a-z]+://") "")
+        host (aget (.split no-scheme "/") 0)]
+    (.toLowerCase (.trim host))))
+
+(defn host-matches? [pat :- String host :- String] :- Any
+  (let [p (pattern-host pat)
+        h (.toLowerCase host)]
+    (cond
+      (= p "*") false
+      (= p h) true
+      (.startsWith p "*.")
+      (let [base (.slice p 2)]
+        (or (= h base) (.endsWith h (str "." base))))
+      (.endsWith h (str "." p)) true
+      :else false)))
+
+(defn find-block [blocks :- Any host :- String] :- Any
+  (.find blocks
+         (fn [b] (.some (.-patterns b) (fn [pat] (host-matches? pat host))))))
+
+;; ---------------------------------------------------------------------------
+;; CSS resolution: ${...} tokens + var(--darkreader-*) refs.
+;; ---------------------------------------------------------------------------
+
+(defn resolve-tokens [css :- String unresolved :- Any] :- String
+  (.replace css (RegExp. "\\$\\{([^}]*)\\}" "g")
+            (fn [_match inner]
+              (let [trimmed (.trim inner)]
+                (cond
+                  (= (.toLowerCase trimmed) "transparent") "transparent"
+                  :else
+                  (let [resolved (resolve-token trimmed)]
+                    (if resolved resolved (do (.push unresolved trimmed) trimmed))))))))
+
+(defn resolve-dr-vars [css :- String unmapped :- Any] :- String
+  (.replace css (RegExp. "var\\(\\s*(--darkreader-[A-Za-z0-9_-]+)\\s*(?:,[^)]*)?\\)" "g")
+            (fn [_match name]
+              (let [v (get DARKREADER-VARS name)]
+                (if v v (do (.push unmapped name) "#181a1b"))))))
+
+;; Constructs that must NEVER reach the generated USER_SHEET (fail closed).
+(def FORBIDDEN-CSS :- Any
+  (RegExp. "url\\s*\\(|@import\\b|expression\\s*\\(" "i"))
+
+;; ---------------------------------------------------------------------------
+;; Directive → schema-field projection.
+;; ---------------------------------------------------------------------------
+
+;; Split a selector-list directive body (INVERT / IGNORE * with explicit
+;; selectors) into a vector of trimmed, non-empty selector lines. DR lists one
+;; selector per line.
+;; `body` is a parsed-map lookup that may be `undefined` (section absent), so it
+;; is genuinely Any here — guard truthiness before touching String methods.
+(defn selector-lines [body :- Any] :- Any
+  (if (or (not body) (= (.trim body) ""))
+    []
+    (.filter (.map (.split body "\n") (fn [s] (.trim s)))
+             (fn [s] (> (.-length s) 0)))))
+
+;; IGNORE * with a body of exactly `*` means "all elements" → emit boolean true.
+;; A non-`*` body → emit the explicit selector list. Empty → nil (directive absent).
+(defn ignore-field [body :- Any] :- Any
+  (let [sels (selector-lines body)]
+    (cond
+      (= (.-length sels) 0) nil
+      (and (= (.-length sels) 1) (= (aget sels 0) "*")) true
+      :else sels)))
+
+;; Resolve + compact a CSS section to a single line (matches existing entries'
+;; style). Returns {:css ... :unresolved [...] :unmapped [...]} or {:rejected r}.
+(defn build-css [css :- Any] :- Any
+  (if (or (not css) (= (.trim css) ""))
+    {:css "" :unresolved [] :unmapped []}
+    (let [unresolved []
+          unmapped []
+          resolved (resolve-dr-vars (resolve-tokens css unresolved) unmapped)
+          compact (.trim (.replace (.replace resolved (RegExp. "\\s*\\n\\s*" "g") " ")
+                                   (RegExp. "  +" "g") " "))]
+      (if (.test FORBIDDEN-CSS compact)
+        {:rejected "resolved CSS contains a forbidden construct (url()/@import/expression())"}
+        {:css compact :unresolved unresolved :unmapped unmapped}))))
+
+;; Build the candidate gjoa entry from a matched DR block. DR's per-site CSS is a
+;; set of CORRECTIONS layered on its own page inversion, so the faithful default
+;; is override:"active" (engine inverts) + the resolved corrections. A human flips
+;; to "inactive" during eyeball if the block carries a complete hand-authored theme.
+(defn build-entry! [block :- Any] :- Any
+  (let [secs (.-sections block)
+        css-built (build-css (get secs "CSS"))]
+    (if (.-rejected css-built)
+      {:rejected (.-rejected css-built)}
+      (let [invert-sels (selector-lines (get secs "INVERT"))
+            ign-inline (ignore-field (get secs "IGNORE INLINE STYLE"))
+            ign-image (ignore-field (get secs "IGNORE IMAGE ANALYSIS"))
+            entry {:mode "css" :override "active"}]
+        ;; Provenance uses a STRING key so the emitted JSON key is exactly
+        ;; "_provenance" (a keyword :_provenance munges the leading underscore).
+        (set! (get entry "_provenance") PROVENANCE)
+        ;; Only attach non-empty fields so entries stay minimal + diffable.
+        (when (> (.-length (.-css css-built)) 0)
+          (set! (get entry :css) (.-css css-built)))
+        (when (> (.-length invert-sels) 0)
+          (set! (get entry :invertSelectors) invert-sels))
+        (when (not (nil? ign-inline))
+          (set! (get entry :ignoreInlineStyle) ign-inline))
+        (when (not (nil? ign-image))
+          (set! (get entry :ignoreImageAnalysis) ign-image))
+        {:entry entry
+         :unresolved (.-unresolved css-built)
+         :unmapped (.-unmapped css-built)
+         :directives {:invert (> (.-length invert-sels) 0)
+                      :css (> (.-length (.-css css-built)) 0)
+                      :ignoreInline (not (nil? ign-inline))
+                      :ignoreImage (not (nil? ign-image))}}))))
+
+;; ---------------------------------------------------------------------------
+;; Self-test: flip invariants + the directive parser/projection.
+;; ---------------------------------------------------------------------------
+
+(defn selftest! [] :- Any
+  (let [info (.-info log) ok (.-ok log) err (.-error log)
+        failures (atom 0)
+        check! (fn [label :- String pass :- Any detail :- String]
+                 (if pass
+                   (ok (str label " — " detail))
+                   (do (err (str label " FAILED — " detail)) (reset! failures (+ @failures 1)))))
+        white (flip-rgba [255 255 255 1])
+        black (flip-rgba [0 0 0 1])
+        ;; a tiny synthetic block exercising every directive
+        sample (str "*.example.com\n\nINVERT\n.logo\n.brand-mark\n\n"
+                    "CSS\n.box {\n  background: ${#ffffff} !important;\n}\n\n"
+                    "IGNORE INLINE STYLE\n.entry *\n\n"
+                    "IGNORE IMAGE ANALYSIS\n*\n")
+        blocks (parse-snapshot! sample)
+        blk (find-block blocks "example.com")
+        built (and blk (build-entry! blk))
+        e (and built (.-entry built))]
+    (info "darkmode-fixes-transform self-test")
+    (check! "white→dark" (< (luminance white) 0.22) (str "luminance " (.toFixed (luminance white) 4)))
+    (check! "black→light" (> (luminance black) 0.5) (str "luminance " (.toFixed (luminance black) 4)))
+    (check! "block matched" (not (nil? blk)) "example.com block found")
+    (check! "INVERT → invertSelectors[2]"
+            (and e (.-invertSelectors e) (= (.-length (.-invertSelectors e)) 2))
+            (str "got " (JSON/stringify (and e (.-invertSelectors e)))))
+    (check! "CSS token resolved (no ${} left, no #ffffff)"
+            (and e (.-css e) (not (.includes (.-css e) "${")) (not (.includes (.-css e) "#ffffff")))
+            (str "css=" (and e (.-css e))))
+    (check! "IGNORE INLINE STYLE (explicit) → [selectors]"
+            (and e (Array/isArray (.-ignoreInlineStyle e)) (= (.-length (.-ignoreInlineStyle e)) 1))
+            (str "got " (JSON/stringify (and e (.-ignoreInlineStyle e)))))
+    (check! "IGNORE IMAGE ANALYSIS (*) → true"
+            (and e (= (.-ignoreImageAnalysis e) true))
+            (str "got " (JSON/stringify (and e (.-ignoreImageAnalysis e)))))
+    (check! "_provenance stamped"
+            (and e (= (.-_provenance e) PROVENANCE))
+            (str "got " (and e (.-_provenance e))))
+    (if (> @failures 0)
+      (do (err (str @failures " self-test assertion(s) failed")) 1)
+      (do (ok "all self-test assertions passed") 0))))
+
+;; ---------------------------------------------------------------------------
+;; CLI
+;; ---------------------------------------------------------------------------
+
+(def USAGE :- String
+  (.trim "
+gjoa darkmode-fixes-transform — Dark Reader → gjoa curated entry generator (full directives)
+
+Usage:
+  bun .beagle-tools/gjoa/tools/prep/darkmode-fixes-transform.js <host> [host...]
+  bun .beagle-tools/gjoa/tools/prep/darkmode-fixes-transform.js --selftest
+
+Prints CANDIDATE darkmode-fixes.json entries (directives expanded, DR tokens
+PRE-RESOLVED to fixed dark constants — LOSSY, eyeball before committing). Does
+NOT --write: curated entries land via human review + hand-merge.
+"))
+
+(defn read-snapshot! [] :- Any
+  (when (not (existsSync SNAPSHOT-PATH))
+    (let [err (.-error log)]
+      (err (str "snapshot not found at " SNAPSHOT-PATH))
+      (err (str "refresh (pinned): curl -sL https://raw.githubusercontent.com/darkreader/darkreader/"
+                DARKREADER-PIN "/src/config/dynamic-theme-fixes.config -o tools/prep/darkreader-fixes.snapshot"))
+      (.exit process 1)))
+  (readFileSync SNAPSHOT-PATH "utf8"))
+
+(defn generate-for-host! [blocks :- Any host :- String] :- Any
+  (let [block (find-block blocks host)]
+    (if (not block)
+      {:host host :missing true :reason "no matching DR block"}
+      (let [built (build-entry! block)]
+        (cond
+          (.-rejected built)
+          {:host host :missing true :reason (.-rejected built)}
+          :else
+          {:host host :entry (.-entry built)
+           :unresolved (.-unresolved built) :unmapped (.-unmapped built)
+           :directives (.-directives built)
+           :matched-by (.join (.-patterns block) ", ")})))))
+
+(defn print-result! [r :- Any] :- Any
+  (let [warn (.-warn log) step (.-step log)]
+    (if (.-missing r)
+      (warn (str (.-host r) ": skipped — " (.-reason r)))
+      (do
+        (step (str (.-host r) "  (matched DR patterns: " (.-matched-by r) ")"))
+        (let [d (.-directives r)]
+          (.info log (str "  directives: "
+                          (.join (.filter ["INVERT" "CSS" "IGNORE INLINE STYLE" "IGNORE IMAGE ANALYSIS"]
+                                          (fn [name]
+                                            (cond
+                                              (= name "INVERT") (.-invert d)
+                                              (= name "CSS") (.-css d)
+                                              (= name "IGNORE INLINE STYLE") (.-ignoreInline d)
+                                              (= name "IGNORE IMAGE ANALYSIS") (.-ignoreImage d)
+                                              :else false)))
+                                   ", "))))
+        (when (> (.-length (.-unresolved r)) 0)
+          (warn (str "  ⚠ unresolved tokens left literal (QA): " (.join (.-unresolved r) ", "))))
+        (when (> (.-length (.-unmapped r)) 0)
+          (warn (str "  ⚠ unmapped --darkreader vars → fixed dark palette (QA): " (.join (.-unmapped r) ", "))))
+        (console/log (JSON/stringify {(.-host r) (.-entry r)} nil 2))))))
+
+(defn main! [] :- Any
+  (let [argv (.slice (.-argv process) 2)
+        selftest? (.includes argv "--selftest")
+        hosts (.filter argv (fn [a] (not (.startsWith a "--"))))]
+    (cond
+      selftest? (.exit process (selftest!))
+      (= (.-length hosts) 0) (do (console/log USAGE) (.exit process 0))
+      :else
+      (let [snapshot (read-snapshot!)
+            blocks (parse-snapshot! snapshot)
+            results (.map hosts (fn [h] (generate-for-host! blocks h)))]
+        (doseq [r results] (print-result! r))
+        (let [warn (.-warn log)]
+          (warn "candidates only — DR tokens PRE-RESOLVED (lossy). Eyeball + visual QA before merging into darkmode-fixes.json."))
+        0))))
+
+(main!)

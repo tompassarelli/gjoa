@@ -193,16 +193,41 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
     const fix = fixForHost(await loadFixes(), host);
     if (fix) {
       let css = fix.css || "";
-      if (fix.invertSelectors && fix.invertSelectors.length) {
+      // INVERT (Dark-Reader `INVERT`) + NO-INVERT (gjoa-curated) both reduce to
+      // the SAME operation under engine inversion: re-apply invert(1)+hue-rotate
+      // so the element renders as the page authored it (a counter-invert). They
+      // are kept as distinct curated fields for provenance/intent, but emit one
+      // combined rule.
+      const reinvert = [].concat(
+        Array.isArray(fix.invertSelectors) ? fix.invertSelectors : [],
+        Array.isArray(fix.noInvertSelectors) ? fix.noInvertSelectors : []
+      );
+      if (reinvert.length) {
         css +=
           "\n" +
-          fix.invertSelectors.join(",") +
+          reinvert.join(",") +
           "{filter:invert(1) hue-rotate(180deg)!important}\n";
       }
+      // removeBgSelectors (gjoa-curated, mirrors Dark-Reader's `background:none`
+      // corrections): strip a light backdrop image so the engine scrim owns it.
+      if (Array.isArray(fix.removeBgSelectors) && fix.removeBgSelectors.length) {
+        css +=
+          "\n" +
+          fix.removeBgSelectors.join(",") +
+          "{background-image:none!important}\n";
+      }
+      // ignoreImageAnalysis (Dark-Reader `IGNORE IMAGE ANALYSIS`): true = skip the
+      // pass-2 image rasterizer entirely for this host; an array = skip those
+      // selectors. Threaded to the child verbatim so #collectImageTargets honors it
+      // (no CSS — it gates a content-side pass, not a style rule). ignoreInlineStyle
+      // is carried through for parity/forward-use; the engine inversion does not
+      // process inline styles, so it currently emits no rule.
       return {
         override: fix.override || "inactive",
         css,
         inject: fix.inject || "",
+        ignoreImageAnalysis: fix.ignoreImageAnalysis ?? false,
+        ignoreInlineStyle: fix.ignoreInlineStyle ?? false,
       };
     }
     // (2) User per-site prefs.

@@ -32,6 +32,11 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     this._imgStyleEl = null;
     this._imgPassScheduled = false;
     this._imgRerunTimer = null;
+    // Curated `ignoreImageAnalysis` from the explicit decision: `true` skips the
+    // pass-2 image rasterizer for the whole document; an array of selectors skips
+    // matching elements. Set from Darkmode:GetInject in #applyExplicit; read in
+    // #collectImageTargets. Default false = analyze everything.
+    this._ignoreImageAnalysis = false;
   }
 
   async handleEvent(event) {
@@ -103,6 +108,10 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       return; // no curated fix / user pref — engine default-invert + auto decide
     }
     this._explicitApplied = true;
+    // Curated `ignoreImageAnalysis` decision: record it before the image pass is
+    // scheduled below so #collectImageTargets can skip the whole document (true)
+    // or the listed selectors (array). `false`/undefined = analyze everything.
+    this._ignoreImageAnalysis = resp.ignoreImageAnalysis ?? false;
     // Apply the curated decision at document-start, before first paint: the
     // inject scriptlet (page main world), the curated USER_SHEET css, and the
     // inversion override — together, so the site is correct from frame 1.
@@ -548,6 +557,24 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   #collectImageTargets(win, doc) {
     const CAP = 32;
     const out = [];
+    // Curated IGNORE IMAGE ANALYSIS: `true` opts the whole document out of the
+    // rasterizer pass; an array is a selector list whose matches are skipped.
+    const ignore = this._ignoreImageAnalysis;
+    if (ignore === true) {
+      return out;
+    }
+    // Join an array of selectors into one matcher string (a comma list). Invalid
+    // selectors would throw at el.matches(); we validate once and drop a bad list
+    // rather than break the whole pass.
+    let ignoreSel = "";
+    if (Array.isArray(ignore) && ignore.length) {
+      ignoreSel = ignore.join(",");
+      try {
+        doc.querySelector(ignoreSel); // validate the combined selector once
+      } catch (e) {
+        ignoreSel = ""; // malformed curated list — ignore it, analyze normally
+      }
+    }
     let all;
     try {
       all = doc.querySelectorAll("*");
@@ -574,6 +601,14 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       }
       if (!this.#isVisible(win, el)) {
         continue;
+      }
+      // Per-selector IGNORE IMAGE ANALYSIS: skip elements the curated list names.
+      if (ignoreSel) {
+        try {
+          if (el.matches(ignoreSel)) {
+            continue;
+          }
+        } catch (e) {}
       }
       out.push({ el, src });
       if (++scanned >= CAP) {

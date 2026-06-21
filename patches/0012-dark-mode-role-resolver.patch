@@ -1,0 +1,192 @@
+# gjoa-patch:
+#   baseline-firefox: 152.0.1
+#   touches:
+#     - layout/base/nsLayoutUtils.h
+#     - layout/base/nsLayoutUtils.cpp
+#     - layout/generic/nsTextPaintStyle.cpp
+#     - layout/generic/nsTextFrame.cpp
+#     - layout/painting/nsDisplayList.cpp
+#     - layout/svg/SVGGeometryFrame.cpp
+#   depends-on:
+#     - cpp-symbol nsPresContext::ColorInversion
+#     - cpp-symbol nsLayoutUtils::GetTextColor
+#     - cpp-symbol nsLayoutUtils::DarkenColorIfNeeded
+#
+# M1 dark-mode v2: role-aware layout color resolver (precondition for per-role
+# retone in a later milestone; NO pixel change yet).
+#
+# Patch 0009 inverts every resolved absolute color blind at Stylo
+# (Color::to_computed_color). That is role-blind: text fg, solid backgrounds,
+# borders and SVG fill all get the same WCAG Y->1-Y flip. v2 wants to retone each
+# surface differently (freeze a near-paper background, band-solve text fg in tone
+# space, etc.). Before any of that, each per-role layout color resolver must (a)
+# know which role it is resolving and (b) be gated on the existing per-document
+# dark-mode flag mFrame->PresContext()->ColorInversion() (added by 0009).
+#
+# This patch threads a ColorRole tag through every layout-level color resolver and
+# routes each through one choke-point, nsLayoutUtils::ResolveDarkModeRole(frame,
+# color, role). For M1 that function is the IDENTITY whether inversion is off or
+# on -- it changes no pixels. M2 replaces its body with the tone-space per-role
+# retone (mirroring tools/darkmode-regress/colormath.js), keyed on (input color,
+# role, sampled backdrop bucket). Centralising the gate now means M2 is a single-
+# function change instead of a re-hunt of every resolver.
+#
+# Roles wired:
+# - Text:  the GetTextColor<> template tail -- covers ALL 8 callers (text fill,
+#          text-decoration-color, text-emphasis-color, caret, text-overflow
+#          ellipsis, decoration COLOR_OVERRIDE). A defaulted aRole param means
+#          they are gated automatically; the two SVG-text-fill callers pass
+#          SvgFill explicitly.
+# - Background: the DetermineBackgroundColor result at the CreateBackgroundColor
+#          boundary in nsDisplayList (where nsDisplayBackgroundColor::mColor is
+#          stored). Wrapped at the call arg, NOT inside CreateBackgroundColor, so
+#          0010's already-composited dark scrim (which also calls
+#          CreateBackgroundColor) is not double-processed.
+# - SvgFill: SVGGeometryFrame WebRender fill, plus the two SVG-text-fill paths.
+#
+# DELIBERATELY NOT wired in M1 (enumerated for the record, deferred to M2 policy):
+# - Selection / IME / highlight fg+bg (nsTextPaintStyle InitSelectionColorsAndShadow,
+#   GetHighlightColors, GetSelectionColors): these come from LookAndFeel::Color(...)
+#   (already ColorScheme-aware) and ::selection authored styles, NOT through
+#   GetTextColor<>. Retoning them is a separate decision.
+# - Border (nsCSSRendering border draw) and gradient stops: their resolvers are
+#   not touched here; the Border role value exists in the enum so M2 can add them
+#   without re-versioning the surface contract.
+diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
+index 4696715..28c5ca6 100644
+--- a/layout/base/nsLayoutUtils.cpp
++++ b/layout/base/nsLayoutUtils.cpp
+@@ -5294,6 +5294,22 @@ nscolor nsLayoutUtils::DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor) {
+   return ShouldDarkenColors(aFrame) ? DarkenColor(aColor) : aColor;
+ }
+
++// gjoa dark-mode v2 (M1): role-aware choke point for layout color resolvers.
++// Gated on this document's per-document inversion flag (added by patch 0009).
++// M1 is intentionally the identity -- it changes no pixels; its only job is to
++// (a) prove every per-role resolver now flows through one gated function and
++// (b) carry the role tag to the point where the retone will live. M2 replaces
++// the body with the tone-space per-role retone (text fg band-solved in OKLCH,
++// background frozen near paper, etc.) keyed on (aColor, aRole, sampled backdrop).
++nscolor nsLayoutUtils::ResolveDarkModeRole(nsIFrame* aFrame, nscolor aColor,
++                                           ColorRole aRole) {
++  if (!aFrame || !aFrame->PresContext()->ColorInversion()) {
++    return aColor;
++  }
++  (void)aRole;  // M2: dispatch the retone on the role.
++  return aColor;
++}
++
+ gfxFloat nsLayoutUtils::GetMaybeSnappedBaselineY(nsIFrame* aFrame,
+                                                  gfxContext* aContext,
+                                                  nscoord aY, nscoord aAscent) {
+diff --git a/layout/base/nsLayoutUtils.h b/layout/base/nsLayoutUtils.h
+index b453efb..580d60f 100644
+--- a/layout/base/nsLayoutUtils.h
++++ b/layout/base/nsLayoutUtils.h
+@@ -1762,14 +1762,35 @@ class nsLayoutUtils {
+   // Get a suitable foreground color for painting aColor for aFrame.
+   static nscolor DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor);
+
++  // gjoa dark-mode v2 (M1): the surface role a resolved paint color plays, so the
++  // engine inversion can retone each role differently in a later milestone. The
++  // enum and the choke-point below are the frozen contract; M2 fills in the body.
++  enum class ColorRole : uint8_t {
++    Text,
++    Background,
++    Border,
++    SvgFill,
++  };
++
++  // gjoa dark-mode v2 (M1): single role-aware choke point for layout color
++  // resolvers. Gated on this document's per-document inversion flag
++  // (nsPresContext::ColorInversion, added by patch 0009). M1 is the identity
++  // (no pixel change); M2 replaces the body with the tone-space per-role retone
++  // keyed on (aColor, aRole, sampled backdrop). Out-of-line because it needs the
++  // complete nsPresContext, which this header only forward-declares.
++  static nscolor ResolveDarkModeRole(nsIFrame* aFrame, nscolor aColor,
++                                     ColorRole aRole);
++
+   // Get a suitable text foreground color for painting aField for aFrame.
+   // Type of aFrame is made a template parameter because nsIFrame is not
+   // a complete type in the header. Type-safety is not harmed given that
+   // DarkenColorIfNeeded requires an nsIFrame pointer.
+   template <typename Frame, typename T, typename S>
+-  static nscolor GetTextColor(Frame* aFrame, T S::* aField) {
++  static nscolor GetTextColor(Frame* aFrame, T S::* aField,
++                              ColorRole aRole = ColorRole::Text) {
+     nscolor color = aFrame->GetVisitedDependentColor(aField);
+-    return DarkenColorIfNeeded(aFrame, color);
++    return ResolveDarkModeRole(aFrame, DarkenColorIfNeeded(aFrame, color),
++                               aRole);
+   }
+
+   // Get a baseline y position in app units that is snapped to device pixels.
+diff --git a/layout/generic/nsTextFrame.cpp b/layout/generic/nsTextFrame.cpp
+index 6c3615f..8f91341 100644
+--- a/layout/generic/nsTextFrame.cpp
++++ b/layout/generic/nsTextFrame.cpp
+@@ -5484,7 +5484,9 @@ void nsTextFrame::GetTextDecorations(
+         //     for SVG text, and have e.g. text-decoration-color:red to
+         //     override the fill paint of the decoration.
+         color = aColorResolution == eResolvedColors
+-                    ? nsLayoutUtils::GetTextColor(f, &nsStyleSVG::mFill)
++                    ? nsLayoutUtils::GetTextColor(
++                          f, &nsStyleSVG::mFill,
++                          nsLayoutUtils::ColorRole::SvgFill)
+                     : NS_SAME_AS_FOREGROUND_COLOR;
+       } else {
+         color = nsLayoutUtils::GetTextColor(
+diff --git a/layout/generic/nsTextPaintStyle.cpp b/layout/generic/nsTextPaintStyle.cpp
+index 5d1bf44..381c93c 100644
+--- a/layout/generic/nsTextPaintStyle.cpp
++++ b/layout/generic/nsTextPaintStyle.cpp
+@@ -96,7 +96,8 @@ nscolor nsTextPaintStyle::GetTextColor() {
+       case StyleSVGPaintKind::Tag::None:
+         return NS_RGBA(0, 0, 0, 0);
+       case StyleSVGPaintKind::Tag::Color:
+-        return nsLayoutUtils::GetTextColor(mFrame, &nsStyleSVG::mFill);
++        return nsLayoutUtils::GetTextColor(mFrame, &nsStyleSVG::mFill,
++                                           nsLayoutUtils::ColorRole::SvgFill);
+       default:
+         NS_ERROR("cannot resolve SVG paint to nscolor");
+         return NS_RGBA(0, 0, 0, 255);
+diff --git a/layout/painting/nsDisplayList.cpp b/layout/painting/nsDisplayList.cpp
+index f8a4069..32aea4a 100644
+--- a/layout/painting/nsDisplayList.cpp
++++ b/layout/painting/nsDisplayList.cpp
+@@ -3326,9 +3326,16 @@ AppendedBackgroundType nsDisplayBackgroundImage::AppendBackgroundItemsToTop(
+       }
+     }
+
++    // gjoa dark-mode v2 (M1): tag the solid background color with its role at the
++    // CreateBackgroundColor boundary (where nsDisplayBackgroundColor::mColor is
++    // stored). Wrapped here, not inside CreateBackgroundColor, so 0010's already-
++    // composited dark scrim -- which also calls CreateBackgroundColor -- is not
++    // double-processed. M1 identity; M2 freezes the surface tone.
++    const nscolor bgRoleColor = nsLayoutUtils::ResolveDarkModeRole(
++        aFrame, color, nsLayoutUtils::ColorRole::Background);
+     nsDisplayBackgroundColor* bgItem = CreateBackgroundColor(
+         aBuilder, aFrame, aSecondaryReferenceFrame, bgColorRect, bgSC,
+-        drawBackgroundColor ? color : NS_RGBA(0, 0, 0, 0));
++        drawBackgroundColor ? bgRoleColor : NS_RGBA(0, 0, 0, 0));
+
+     if (bgItem) {
+       bgItemList.AppendToTop(bgItem);
+diff --git a/layout/svg/SVGGeometryFrame.cpp b/layout/svg/SVGGeometryFrame.cpp
+index a06d081..9aa3982 100644
+--- a/layout/svg/SVGGeometryFrame.cpp
++++ b/layout/svg/SVGGeometryFrame.cpp
+@@ -780,8 +780,11 @@ bool SVGGeometryFrame::CreateWebRenderCommands(
+     float fillOpacity = SVGUtils::GetOpacity(style->mFillOpacity, contextPaint);
+     float opacity = elemOpacity * fillOpacity;
+
+-    auto color = wr::ToColorF(
+-        ToDeviceColor(StyleSVG()->mFill.kind.AsColor().CalcColor(this)));
++    // gjoa dark-mode v2 (M1): tag the SVG geometry fill with the SvgFill role.
++    nscolor fillColor = nsLayoutUtils::ResolveDarkModeRole(
++        this, StyleSVG()->mFill.kind.AsColor().CalcColor(this),
++        nsLayoutUtils::ColorRole::SvgFill);
++    auto color = wr::ToColorF(ToDeviceColor(fillColor));
+     color.a *= opacity;
+     aBuilder.PushRect(wrRect, wrRect, !aItem->BackfaceIsHidden(), true, false,
+                       color);
