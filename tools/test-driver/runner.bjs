@@ -64,10 +64,15 @@
 ;;   - a stale vim cursor pointing at a removed/foreign row;
 ;;   - leftover tabs AND group rows that inflate the tab tree (groups #11 saw a
 ;;     "Project-A" group left by spaces-scope-groups — the old reset cleared
-;;     tabs but never groups), plus extra spaces.
+;;     tabs but never groups), plus extra spaces;
+;;   - a leaked 2nd browser window (multi-window tests like #89 open one via
+;;     OpenBrowserWindow) — collapse to the marionette-current window first, so a
+;;     test that fails before closing its own window can't pollute the next test
+;;     with an extra navigator:browser (the window-scoped form of the leak above).
 (def RESET-JS :- String
   (str
     "try {\n"
+    "  try { for (var w of [...Services.wm.getEnumerator('navigator:browser')]) { if (w !== window) { try { w.close(); } catch (e) {} } } } catch (e) {}\n"
     "  try { Services.prefs.setBoolPref('sidebar.verticalTabs', true); } catch (e) {}\n"
     "  try { Services.prefs.clearUserPref('gjoa.layout.dynamicOrientation'); } catch (e) {}\n"
     "  try { Services.prefs.clearUserPref('gjoa.layout.narrowThreshold'); } catch (e) {}\n"
