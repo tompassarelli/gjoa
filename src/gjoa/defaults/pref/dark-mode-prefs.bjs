@@ -47,6 +47,26 @@
 ;; per-document BrowsingContext.colorInversionOverride drives inversion instead).
 (pref "gjoa.darkmode.invert.enabled" false)
 
+;; "Darkness" knob — how dark un-themed pages get under engine inversion. This is
+;; the floor of the OKLCH-L band the servo inverter compresses page lightness onto
+;; (nsPresContext::UpdateColorInversion reads it; the cascade hook applies it).
+;; Unit is an intuitive 0-100 perceptual percent == OKLCH lightness * 100. The
+;; brightest page color (white) maps to THIS lightness, so LOWER = darker page
+;; backgrounds. Default 20 -> OKLCH L 0.20 -> a neutral ~#161616: the comfortable
+;; Dark Reader #1a1a1a band, deliberately NOT pure black (the old target=1-luminance
+;; flip mapped white to black, which is why content read too dark). The compression
+;; preserves hue, chroma, and alpha — only lightness moves.
+(pref "gjoa.darkmode.invert.bgLightness" 20)
+
+;; Ceiling of the same OKLCH-L band: the lightest result the inverter produces. The
+;; darkest page color (black) maps to THIS lightness, so this is the brightness of
+;; light text / surfaces on a dark page. Same 0-100 == OKLCH L*100 unit. Default
+;; 92 -> OKLCH L 0.92 -> a neutral ~#e4e4e4: a comfortable light, deliberately NOT
+;; pure white (full white is harsh on a dark backdrop). Raise toward 100 for higher-
+;; contrast text, lower for a softer, dimmer page. Most users only touch bgLightness
+;; ("Darkness"); this is the advanced companion.
+(pref "gjoa.darkmode.invert.fgLightness" 92)
+
 ;; Per-site dark-mode overrides (comma-separated host lists), applied in "hybrid"
 ;; mode by GjoaDarkmodeParent. Precedence: off > force-invert > force-native >
 ;; auto. force-native = keep the site's look (never invert); force-invert =

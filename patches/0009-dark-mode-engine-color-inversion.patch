@@ -15,18 +15,28 @@
 Engine-level dark mode: luminance-invert resolved absolute colors at
 style-resolution time (the performant successor to the compositor filter:invert).
 
-- specified/color.rs: invert_color_luminance() ports gfx RelativeLuminanceUtils
-  ::Adjust (WCAG, hue/sat/alpha-preserving) with target = 1 - luminance. Applied
-  at the END of Color::to_computed_color so it covers EVERY resolved absolute
-  color — explicit colors, resolved color-functions, AND system colors (so the
-  page Canvas/default background goes dark under force-light, not just explicit
-  colors). currentColor / color-mix / unresolved color-functions stay symbolic
-  and resolve against the already-inverted values. Cached in ComputedValues ->
-  zero per-frame cost; raster media untouched.
-- device/gecko.rs: color_inversion() accessor (mirrors forced_colors()).
-- nsPresContext.{h,cpp}: per-document mColorInversion flag + UpdateColorInversion
-  (content-only; chrome excluded), called at construction and on change of the
-  gjoa.darkmode.invert.enabled pref (live toggle via RecascadeSubtree).
+- specified/color.rs: invert_color_luminance() compresses lightness in OKLCH
+  (perceptually uniform, the same space as the 0013 text retone) — NOT a full
+  WCAG flip. The page's OKLCH L in [0,1] is mapped linearly onto a comfortable
+  band [floor, ceiling]: white (L=1) -> floor (a comfortable dark, ~#161616, NOT
+  black — the old target=1-luminance flip is what made content too dark) and
+  black (L=0) -> ceiling (~#e4e4e4, NOT pure white). Only L moves; OKLCH chroma
+  and hue are carried through untouched, and alpha is preserved. floor/ceiling are
+  the live prefs gjoa.darkmode.invert.bgLightness / fgLightness (0-100 percent ==
+  OKLCH L*100), read by Device::color_inversion_floor/ceiling. Applied at the END
+  of Color::to_computed_color so it covers EVERY resolved absolute color — explicit
+  colors, resolved color-functions, AND system colors (so the page Canvas/default
+  background goes dark under force-light, not just explicit colors). currentColor /
+  color-mix / unresolved color-functions stay symbolic and resolve against the
+  already-inverted values. Cached in ComputedValues -> zero per-frame cost; raster
+  media untouched.
+- device/gecko.rs: color_inversion() accessor (mirrors forced_colors()) +
+  color_inversion_floor()/color_inversion_ceiling() reading the cached band.
+- nsPresContext.{h,cpp}: per-document mColorInversion flag + mColorInversionFloorL
+  /mColorInversionCeilL band + UpdateColorInversion (content-only; chrome
+  excluded), called at construction and on change of the
+  gjoa.darkmode.invert.{enabled,bgLightness,fgLightness} prefs (live toggle +
+  live "Darkness" re-tone via RecascadeSubtree).
 
 The "engine" dark-mode mode (src/gjoa chrome) forces prefers-color-scheme:light
 then flips this flag, so sites render light and the engine inverts to dark.
@@ -40,8 +50,10 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
   renders dark with no flash. A page that authored its own dark theme is left
   native. Gated on pref gjoa.darkmode.hybrid.default-invert.
 - DefaultBackgroundColor(): when inverting a light-scheme document, the canvas /
-  inter-page backstop is luminance-inverted too, so no white frame flashes
-  between navigations or behind suppressed paints.
+  inter-page backstop is compressed with the SAME OKLCH-L mapping (neutral color,
+  so OKLCH L == cbrt(WCAG luminance)), so the backstop is the same comfortable
+  dark as the page — no white frame flashes between navigations or behind
+  suppressed paints, and no black frame either.
 - PresShell.cpp: the one call site (ApplyHybridDefaultInvertIfThemeless), placed
   after the root frame is built and before painting is unsuppressed.
 diff --git a/docshell/base/BrowsingContext.cpp b/docshell/base/BrowsingContext.cpp
@@ -196,27 +208,32 @@ index b2394c6106..d4cdbe4398 100644
  }
  
  static const char* gExactCallbackPrefs[] = {
-@@ -340,6 +343,7 @@ static const char* gExactCallbackPrefs[] = {
+@@ -340,6 +343,9 @@ static const char* gExactCallbackPrefs[] = {
      "layout.css.text-autospace.enabled",
      "layout.css.text-transform.uppercase-eszett.enabled",
      "privacy.trackingprotection.enabled",
 +    "gjoa.darkmode.invert.enabled",
++    "gjoa.darkmode.invert.bgLightness",
++    "gjoa.darkmode.invert.fgLightness",
      nullptr,
  };
  
-@@ -532,6 +536,11 @@ void nsPresContext::PreferenceChanged(const char* aPrefName) {
+@@ -532,6 +536,14 @@ void nsPresContext::PreferenceChanged(const char* aPrefName) {
    }
  
    nsDependentCString prefName(aPrefName);
-+  if (prefName.EqualsLiteral("gjoa.darkmode.invert.enabled")) {
-+    // gjoa engine-level dark mode: recompute the flag and restyle this doc.
++  if (prefName.EqualsLiteral("gjoa.darkmode.invert.enabled") ||
++      prefName.EqualsLiteral("gjoa.darkmode.invert.bgLightness") ||
++      prefName.EqualsLiteral("gjoa.darkmode.invert.fgLightness")) {
++    // gjoa engine-level dark mode: recompute the flag + the darkness band and
++    // restyle this doc so a live "Darkness" change reflows without a reload.
 +    UpdateColorInversion();
 +    return;
 +  }
    if (prefName.EqualsLiteral("layout.css.dpi") ||
        prefName.EqualsLiteral("layout.css.devPixelsPerPx")) {
      int32_t oldAppUnitsPerDevPixel = mDeviceContext->AppUnitsPerDevPixel();
-@@ -775,6 +784,82 @@ void nsPresContext::UpdateForcedColors(bool aNotify) {
+@@ -775,6 +784,103 @@ void nsPresContext::UpdateForcedColors(bool aNotify) {
    }
  }
  
@@ -252,7 +269,28 @@ index b2394c6106..d4cdbe4398 100644
 +    }
 +    return Preferences::GetBool("gjoa.darkmode.invert.enabled", false);
 +  }();
-+  if (aNotify && mColorInversion != old) {
++  // gjoa "Darkness" knob: the OKLCH-L band the servo inversion compresses page
++  // lightness onto. bgLightness is the darkest background (white maps here);
++  // fgLightness is the lightest result (black maps here). Both are intuitive
++  // 0-100 perceptual percents == OKLCH L * 100, so 20 -> L 0.20 (~#161616, the
++  // Dark Reader #1a1a1a band, NOT black) and 92 -> L 0.92 (~#e4e4e4, NOT white).
++  float oldFloor = mColorInversionFloorL;
++  float oldCeil = mColorInversionCeilL;
++  auto pctToL = [](int32_t aPct) -> float {
++    return std::max(0, std::min(100, aPct)) / 100.0f;
++  };
++  mColorInversionFloorL =
++      pctToL(Preferences::GetInt("gjoa.darkmode.invert.bgLightness", 20));
++  mColorInversionCeilL =
++      pctToL(Preferences::GetInt("gjoa.darkmode.invert.fgLightness", 92));
++  // Keep the band non-degenerate (floor strictly below ceiling) so the mapping
++  // never collapses or inverts; a bad pref pair just clamps to a thin band.
++  if (mColorInversionFloorL >= mColorInversionCeilL) {
++    mColorInversionCeilL = std::min(1.0f, mColorInversionFloorL + 0.01f);
++  }
++  const bool bandChanged = mColorInversionFloorL != oldFloor ||
++                           mColorInversionCeilL != oldCeil;
++  if (aNotify && (mColorInversion != old || (mColorInversion && bandChanged))) {
 +    MediaFeatureValuesChanged(
 +        MediaFeatureChange::ForPreferredColorSchemeOrForcedColorsChange(),
 +        MediaFeatureChangePropagation::JustThisDocument);
@@ -307,7 +345,7 @@ index b2394c6106..d4cdbe4398 100644
  
    SetInRDMPane(top->GetInRDMPane());
  
-@@ -1638,9 +1724,18 @@ nscolor nsPresContext::DefaultBackgroundColor() const {
+@@ -1638,9 +1724,24 @@ nscolor nsPresContext::DefaultBackgroundColor() const {
    if (!GetBackgroundColorDraw()) {
      return NS_RGB(255, 255, 255);
    }
@@ -318,12 +356,18 @@ index b2394c6106..d4cdbe4398 100644
 +  nscolor bg = PrefSheetPrefs().ColorsFor(scheme).mDefaultBackground;
 +  // gjoa engine dark mode: when this document is being inverted but its default
 +  // scheme is light, the canvas backstop / inter-page blank must be dark too, or
-+  // a white frame flashes between navigations and behind suppressed paints.
-+  // Mirror the servo luminance inversion (Y -> 1 - Y); alpha is preserved (the
-+  // pref default background is opaque).
++  // a white frame flashes between navigations and behind suppressed paints. Match
++  // the servo OKLCH-L compression exactly: the default background is neutral, and
++  // for a neutral color OKLCH L == cbrt(WCAG luminance), so compress L into the
++  // [floor, ceiling] band (white -> floor) and map back through Adjust to the
++  // target WCAG luminance (== L_out^3). Alpha is preserved (the pref background is
++  // opaque). This keeps the inter-page backstop the same dark as the page itself.
 +  if (mColorInversion && scheme == ColorScheme::Light) {
-+    bg = RelativeLuminanceUtils::Adjust(bg,
-+                                        1.0f - RelativeLuminanceUtils::Compute(bg));
++    float lIn = std::pow(RelativeLuminanceUtils::Compute(bg), 1.0f / 3.0f);
++    float lOut = mColorInversionCeilL -
++                 lIn * (mColorInversionCeilL - mColorInversionFloorL);
++    lOut = std::max(0.0f, std::min(1.0f, lOut));
++    bg = RelativeLuminanceUtils::Adjust(bg, lOut * lOut * lOut);
 +  }
 +  return bg;
  }
@@ -359,7 +403,7 @@ index 13aa7141c8..b6ffd4b24d 100644
    float GetFullZoom() { return mFullZoom; }
    /**
     * Device full zoom differs from full zoom because it gets the zoom from
-@@ -1440,6 +1450,12 @@ class nsPresContext : public nsISupports,
+@@ -1440,6 +1450,18 @@ class nsPresContext : public nsISupports,
    FontVisibility mFontVisibility = FontVisibility::Unknown;
    mozilla::dom::PrefersColorSchemeOverride mOverriddenOrEmbedderColorScheme;
    mozilla::StyleForcedColors mForcedColors;
@@ -369,6 +413,12 @@ index 13aa7141c8..b6ffd4b24d 100644
 +  // ApplyHybridDefaultInvertIfThemeless. Durable per-document input to
 +  // UpdateColorInversion so the flip survives later re-derives.
 +  bool mHybridDefaultInvert = false;
++  // gjoa dark mode: the OKLCH-L band the inversion compresses page lightness
++  // onto (white -> floor, black -> ceiling). Derived from the live prefs
++  // gjoa.darkmode.invert.bgLightness / fgLightness in UpdateColorInversion;
++  // read by the servo cascade via Device::color_inversion_floor/ceiling.
++  float mColorInversionFloorL = 0.20f;
++  float mColorInversionCeilL = 0.92f;
  
   protected:
    virtual ~nsPresContext();
@@ -376,7 +426,7 @@ diff --git a/servo/components/style/device/gecko.rs b/servo/components/style/dev
 index 7ed8c2c7a1..54ffa6f483 100644
 --- a/servo/components/style/device/gecko.rs
 +++ b/servo/components/style/device/gecko.rs
-@@ -389,6 +389,14 @@ impl Device {
+@@ -389,6 +389,30 @@ impl Device {
              .map_or(ForcedColors::None, |pc| pc.mForcedColors)
      }
  
@@ -388,49 +438,54 @@ index 7ed8c2c7a1..54ffa6f483 100644
 +        self.pres_context().map_or(false, |pc| pc.mColorInversion)
 +    }
 +
++    /// gjoa dark mode: the OKLCH-L floor (darkest background) the inversion
++    /// compresses page lightness onto. White maps here. Lives as the pref
++    /// gjoa.darkmode.invert.bgLightness; nsPresContext caches the derived L.
++    #[inline]
++    pub fn color_inversion_floor(&self) -> f32 {
++        self.pres_context().map_or(0.20, |pc| pc.mColorInversionFloorL)
++    }
++
++    /// gjoa dark mode: the OKLCH-L ceiling (lightest result) the inversion
++    /// compresses page lightness onto. Black maps here. Lives as the pref
++    /// gjoa.darkmode.invert.fgLightness; nsPresContext caches the derived L.
++    #[inline]
++    pub fn color_inversion_ceiling(&self) -> f32 {
++        self.pres_context().map_or(0.92, |pc| pc.mColorInversionCeilL)
++    }
++
      /// Computes a system color and returns it as an nscolor.
      pub(crate) fn system_nscolor(
          &self,
 diff --git a/servo/components/style/values/specified/color.rs b/servo/components/style/values/specified/color.rs
 --- a/servo/components/style/values/specified/color.rs
 +++ b/servo/components/style/values/specified/color.rs
-@@ -860,6 +860,60 @@
+@@ -860,6 +860,49 @@
      }
  }
  
-+/// gjoa engine-level dark mode: invert a color's WCAG relative luminance
-+/// (Y -> 1 - Y) while preserving hue, saturation, and alpha. Mirrors
-+/// gfx/src/RelativeLuminanceUtils.h::Adjust, operating on the legacy nscolor so
-+/// the result is byte-identical to the C++ primitive.
-+fn invert_color_luminance(color: &AbsoluteColor) -> AbsoluteColor {
-+    let c = color.to_nscolor();
-+    let r = (c & 0xff) as u8;
-+    let g = ((c >> 8) & 0xff) as u8;
-+    let b = ((c >> 16) & 0xff) as u8;
-+    let a = (c >> 24) & 0xff;
-+    let compute = |u: u8| -> f32 {
-+        let f = u as f32 / 255.0;
-+        if f <= 0.03928 {
-+            f / 12.92
-+        } else {
-+            ((f + 0.055) / 1.055).powf(2.4)
-+        }
-+    };
-+    let decompute = |x: f32| -> u32 {
-+        let s = if x <= 0.03928 / 12.92 {
-+            x * 12.92
-+        } else {
-+            1.055 * x.powf(1.0 / 2.4) - 0.055
-+        };
-+        (s * 255.0).round().max(0.0).min(255.0) as u32
-+    };
-+    let (lr, lg, lb) = (compute(r), compute(g), compute(b));
-+    let lum = 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
-+    let target = 1.0 - lum;
-+    let factor = (target + 0.05) / (lum + 0.05);
-+    let adj = |l: f32| -> u32 { decompute(((l + 0.05) * factor - 0.05).max(0.0)) };
-+    let nc = (a << 24) | (adj(lb) << 16) | (adj(lg) << 8) | adj(lr);
-+    AbsoluteColor::from_nscolor(nc)
++/// gjoa engine-level dark mode: invert a color's lightness into a comfortable
++/// dark band while preserving hue, chroma, and alpha. The compression is done in
++/// OKLCH (perceptually uniform, the same space as the 0013 text retone), NOT a
++/// full WCAG luminance flip — a flip maps white to BLACK, which is the
++/// "too dark" defect. Here the page's OKLCH lightness L in [0, 1] is mapped
++/// linearly onto [floor, ceiling]:
++///     L_out = ceiling - L * (ceiling - floor)
++/// so white (L=1) lands on `floor` (a comfortable dark, e.g. L~0.20 => ~#161616,
++/// in the Dark Reader #1a1a1a band, NOT black) and black (L=0) lands on `ceiling`
++/// (a comfortable light, e.g. L~0.92 => ~#e4e4e4, NOT pure white). Only L moves;
++/// the OKLCH chroma (c1) and hue (c2) are carried through untouched, so hue and
++/// saturation are preserved, and alpha is preserved by the conversion. `floor`
++/// and `ceiling` are live prefs surfaced as gjoa.darkmode.invert.bgLightness /
++/// fgLightness (read in nsPresContext::UpdateColorInversion).
++fn invert_color_luminance(color: &AbsoluteColor, floor: f32, ceiling: f32) -> AbsoluteColor {
++    let oklch = color.to_color_space(ColorSpace::Oklch);
++    let l_in = oklch.c0().unwrap_or(0.0);
++    let l_out = (ceiling - l_in * (ceiling - floor)).clamp(0.0, 1.0);
++    // Rebuild in OKLCH holding chroma (c1) and hue (c2); preserve missing
++    // components and alpha. The cascade resolves the OKLCH value like any other
++    // absolute color (serialized/painted via to_color_space(Srgb)).
++    AbsoluteColor::new(ColorSpace::Oklch, l_out, oklch.c1(), oklch.c2(), oklch.alpha())
 +}
 +
 +/// gjoa dark mode: WCAG relative luminance (0..1) of a color, used to decide
@@ -464,7 +519,7 @@ diff --git a/servo/components/style/values/specified/color.rs b/servo/components
              Color::CurrentColor => ComputedColor::CurrentColor,
              Color::Absolute(ref absolute) => {
                  let mut color = absolute.color;
-@@ -931,7 +985,33 @@
+@@ -931,7 +985,41 @@
              Color::InheritFromBodyQuirk => {
                  ComputedColor::Absolute(context.ok_or(())?.device().body_text_color())
              },
@@ -491,7 +546,15 @@ diff --git a/servo/components/style/values/specified/color.rs b/servo/components
 +                        )
 +                }) && color_relative_luminance(abs) > 0.5;
 +                if !preserve_under_hero {
-+                    return Ok(ComputedColor::Absolute(invert_color_luminance(abs)));
++                    // Live darkness band: floor = darkest background (white maps
++                    // here), ceiling = lightest (black maps here), both in OKLCH L.
++                    let (floor, ceiling) = context.map_or((0.20, 0.92), |c| {
++                        (c.device().color_inversion_floor(),
++                         c.device().color_inversion_ceiling())
++                    });
++                    return Ok(ComputedColor::Absolute(invert_color_luminance(
++                        abs, floor, ceiling,
++                    )));
 +                }
 +            }
 +        }

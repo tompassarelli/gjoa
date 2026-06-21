@@ -70,6 +70,7 @@
       "settings": [
         { "pref": "gjoa.darkmode.enabled", "type": "bool", "title": "Dark mode", "default": true },
         { "pref": "gjoa.darkmode.mode", "type": "enum", "title": "Mode", "default": "system", "options": ["system", "hybrid", "auto"], "help": "How pages are darkened. system = match the OS theme (default); hybrid = always dark (per-site native + invert the rest); auto = only sites with their own dark theme (no inversion). The legacy filter/engine modes remain available via about:config." },
+        { "pref": "gjoa.darkmode.invert.bgLightness", "type": "int", "title": "Darkness", "default": 20, "min": 0, "max": 100, "help": "How dark un-themed pages get. 0-100; lower = darker. The default (20) lands a comfortable dark grey (~#161616), not pure black." },
         { "pref": "gjoa.darkmode.scrim.alpha", "type": "int", "title": "Scrim strength", "default": 140, "help": "0-255; higher = darker scrim over un-themed pages." },
         { "pref": "gjoa.darkmode.invert.enabled", "type": "bool", "title": "Allow per-site invert", "default": false },
         { "pref": "gjoa.darkmode.image-analysis.enabled", "type": "bool", "title": "Image-analysis refinement", "default": false, "help": "Optional polish; off by default (unverified refinement on top of the correctness floor)." }

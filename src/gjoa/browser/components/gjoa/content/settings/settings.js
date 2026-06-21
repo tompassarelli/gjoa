@@ -59,7 +59,16 @@
     if (s.type === "int") {
       const inp = document.createElement("input");
       inp.type = "number"; inp.className = "control-num"; inp.value = String(cur);
-      inp.addEventListener("change", () => { setInt(s.pref, parseInt(inp.value, 10)); rerender(); });
+      if (typeof s.min === "number") inp.min = String(s.min);
+      if (typeof s.max === "number") inp.max = String(s.max);
+      inp.addEventListener("change", () => {
+        let v = parseInt(inp.value, 10);
+        if (Number.isNaN(v)) v = (typeof s.min === "number") ? s.min : 0;
+        if (typeof s.min === "number" && v < s.min) v = s.min;
+        if (typeof s.max === "number" && v > s.max) v = s.max;
+        inp.value = String(v);
+        setInt(s.pref, v); rerender();
+      });
       return inp;
     }
     if (s.type === "string") {
