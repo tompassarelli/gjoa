@@ -33,7 +33,7 @@
 (js/export (defn locate-gjoa
   ([] :- Any (locate-gjoa (.cwd process)))
   ([cwd :- String] :- Any
-    (let [gjoa-bin (aget (.-env process) "GJOA_BIN")]
+    (let [gjoa-bin :- (U String Nil) (.-GJOA_BIN (.-env process))]
       (if gjoa-bin
         (do
           (when (not (existsSync gjoa-bin))
@@ -55,7 +55,7 @@
                                (.isDirectory (statSync (join engineDir name))))
                         (join engineDir name)
                         (recur (rest names))))))]
-            (when (not objDir)
+            (when (nil? objDir)
               (throw (Error.
                 (str "gjoa-locator: no engine/obj-* build dir found.\n"
                      "Run `mach build faster` (Lane 2) inside engine/ first."))))

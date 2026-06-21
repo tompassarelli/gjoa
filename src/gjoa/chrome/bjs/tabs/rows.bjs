@@ -370,7 +370,7 @@
         schedule-tree-resync (fn []
           (when (not (.-resync-pending counters))
             (set! (.-resync-pending counters) true)
-            (.then (Promise/resolve) (fn []
+            (.then (Promise/resolve js/undefined) (fn []
               (set! (.-resync-pending counters) false)
               (.forEach (tabs!)
                 #(when (.get row-of %)

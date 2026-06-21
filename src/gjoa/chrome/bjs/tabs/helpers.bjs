@@ -104,7 +104,7 @@
 (js/export (defn level-of [tab :- Any] :- Int
   (let [seen (Set.)]
     (loop [t tab lv 0]
-      (if (or (not t) (.has seen t))
+      (if (or (nil? t) (.has seen t))
         lv
         (do
           (.add seen t)
@@ -113,16 +113,16 @@
               (or (= pid nil) (= pid js/undefined)) lv
               (= (js/typeof pid) "string")
                 (let [group (group-by-id pid)]
-                  (if (not (some-> group .-_group))
+                  (if (nil? (some-> group .-_group))
                     lv
                     (+ lv 1 (or (.-level (.-_group group)) 0))))
               :else
                 (let [p (tab-by-id pid)]
-                  (if (not p) lv (recur p (+ lv 1))))))))))))
+                  (if (nil? p) lv (recur p (+ lv 1))))))))))))
 
 (js/export (defn level-of-row [row :- Any] :- Int
   (cond
-    (not row) 0
+    (nil? row) 0
     (.-_group row) (or (.-level (.-_group row)) 0)
     (.-_tab row) (level-of (.-_tab row))
     :else 0)))
@@ -169,9 +169,11 @@
   (bool (and (.-panel state) (has? (.-panel state) "gjoa-horizontal")))))
 
 (js/export (defn tab-url [tab :- Any] :- String
-  (if (not tab) ""
+  ;; (or … "") coalesces every nilable branch (some-> spec, session url) to ""
+  ;; so the declared String return is provably non-nil under beagle 77df8a9.
+  (if (nil? tab) ""
     (let [spec (some-> tab .-linkedBrowser .-currentURI .-spec)]
-      (if (and spec (not= spec "about:blank")) spec
+      (if (and spec (not= spec "about:blank")) (or spec "")
         (or (when SS
               (try
                 (let [raw (.getTabState SS tab)]

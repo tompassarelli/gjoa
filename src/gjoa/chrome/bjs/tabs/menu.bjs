@@ -88,7 +88,7 @@
                                     (let [url (some-> (.-contextTab state) .-linkedBrowser .-currentURI .-spec)]
                                       (when url
                                         (let [cid "@mozilla.org/widget/clipboardhelper;1"
-                                              helper (.getService (aget Cc cid) (.-nsIClipboardHelper Ci))]
+                                              helper (.getService (.get Reflect Cc cid) (.-nsIClipboardHelper Ci))]
                                           (.copyString helper url)))))))
           close-item     (mi "Close Tab"
                            (fn [] (when (.-contextTab state)

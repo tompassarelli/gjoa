@@ -206,8 +206,8 @@
                         my-level (level-of tab)
                         prev-sib-id (loop [r (.-previousElementSibling row)]
                                       (cond
-                                        (not r) nil
-                                        (not (.-_tab r)) (recur (.-previousElementSibling r))
+                                        (nil? r) nil
+                                        (not (boolean (.-_tab r))) (recur (.-previousElementSibling r))
                                         (< (level-of (.-_tab r)) my-level) nil
                                         (= (level-of (.-_tab r)) my-level)
                                           (.-id (tree-data! (.-_tab r)))
@@ -215,8 +215,8 @@
                         descendant-ids (let [out []]
                                          (loop [n (.-nextElementSibling row)]
                                            (cond
-                                             (or (not n) (= n (.-spacer state))) out
-                                             (not (.-_tab n)) (recur (.-nextElementSibling n))
+                                             (or (nil? n) (= n (.-spacer state))) out
+                                             (not (boolean (.-_tab n))) (recur (.-nextElementSibling n))
                                              (<= (level-of (.-_tab n)) my-level) out
                                              :else (do (.push out (.-id (tree-data! (.-_tab n))))
                                                        (recur (.-nextElementSibling n))))))]

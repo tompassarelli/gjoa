@@ -8,94 +8,98 @@
 
 (def B :- String ".beagle-out")
 
+;; ->Entry is the positional record constructor (out files banner). At
+;; beagle 77df8a9 a bare keyword-map literal infers as (Map Keyword Any),
+;; not the declared (Vec Entry) — construct Entry records explicitly so the
+;; element type is exact and the consumer (build.bjs) keeps its typed entry.
 (js/export (def entries :- (Vec Entry)
-  [{:out "gjoa-hello.uc.js"
-    :files [(str B "/hello/index.js")]
-    :banner (.join ["// ==UserScript=="
+  [(->Entry "gjoa-hello.uc.js"
+            [(str B "/hello/index.js")]
+            (.join ["// ==UserScript=="
                     "// @name           Gjoa Hello"
                     "// @description    Confirms the chrome loader is working"
                     "// @include        main"
                     "// @onlyonce"
                     "// ==/UserScript=="]
-                   "\n")}
-   {:out "gjoa-security.uc.js"
-    :files [(str B "/security/index.js")]
-    :banner (.join ["// ==UserScript=="
+                   "\n"))
+   (->Entry "gjoa-security.uc.js"
+            [(str B "/security/index.js")]
+            (.join ["// ==UserScript=="
                     "// @name           Gjoa Security Gate"
                     "// @description    Refuses to keep running if Firefox pin is stale"
                     "// @include        main"
                     "// ==/UserScript=="]
-                   "\n")}
-   {:out "gjoa-drawer.uc.js"
-    :files [(str B "/tabs/log.js")
-            (str B "/drawer/timing.js")
-            (str B "/drawer/banner.js")
-            (str B "/drawer/compact.js")
-            (str B "/drawer/drag-overlay.js")
-            (str B "/drawer/layout.js")
-            (str B "/drawer/sidebar-button.js")
-            (str B "/drawer/omni-icon.js")
-            (str B "/drawer/urlbar.js")
-            (str B "/drawer/index.js")]
-    :banner (.join ["// ==UserScript=="
+                   "\n"))
+   (->Entry "gjoa-drawer.uc.js"
+            [(str B "/tabs/log.js")
+             (str B "/drawer/timing.js")
+             (str B "/drawer/banner.js")
+             (str B "/drawer/compact.js")
+             (str B "/drawer/drag-overlay.js")
+             (str B "/drawer/layout.js")
+             (str B "/drawer/sidebar-button.js")
+             (str B "/drawer/omni-icon.js")
+             (str B "/drawer/urlbar.js")
+             (str B "/drawer/index.js")]
+            (.join ["// ==UserScript=="
                     "// @name           Gjoa Drawer"
                     "// @description    Manages sidebar layout, compact mode, and toolbar positioning"
                     "// @include        main"
                     "// ==/UserScript=="]
-                   "\n")}
-   {:out "gjoa-tabs.uc.js"
-    :files [(str B "/tabs/log.js")
-            (str B "/tabs/types.js")
-            (str B "/tabs/constants.js")
-            (str B "/tabs/state.js")
-            (str B "/firefox/dom.js")
-            (str B "/firefox/files.js")
-            (str B "/firefox/observers.js")
-            (str B "/firefox/prefs.js")
-            (str B "/firefox/tabs.js")
-            (str B "/firefox/window.js")
-            (str B "/tabs/helpers.js")
-            (str B "/tabs/snapshot.js")
-            (str B "/tabs/history.js")
-            (str B "/spaces/types.js")
-            (str B "/spaces/visibility.js")
-            (str B "/spaces/manager.js")
-            (str B "/spaces/niri.js")
-            (str B "/platform/scheduler.js")
-            (str B "/platform/window-tabs.js")
-            (str B "/platform/window.js")
-            (str B "/platform/history.js")
-            (str B "/platform/tabs-reconciler.js")
-            (str B "/platform/cross-window-tabs.js")
-            (str B "/platform/index.js")
-            (str B "/tabs/layout.js")
-            (str B "/tabs/rows.js")
-            (str B "/tabs/drag.js")
-            (str B "/tabs/menu.js")
-            (str B "/tabs/events.js")
-            (str B "/tabs/picker.js")
-            (str B "/tabs/content-focus.js")
-            (str B "/tabs/vim.js")
-            (str B "/tabs/index.js")]
-    :banner (.join ["// ==UserScript=="
+                   "\n"))
+   (->Entry "gjoa-tabs.uc.js"
+            [(str B "/tabs/log.js")
+             (str B "/tabs/types.js")
+             (str B "/tabs/constants.js")
+             (str B "/tabs/state.js")
+             (str B "/firefox/dom.js")
+             (str B "/firefox/files.js")
+             (str B "/firefox/observers.js")
+             (str B "/firefox/prefs.js")
+             (str B "/firefox/tabs.js")
+             (str B "/firefox/window.js")
+             (str B "/tabs/helpers.js")
+             (str B "/tabs/snapshot.js")
+             (str B "/tabs/history.js")
+             (str B "/spaces/types.js")
+             (str B "/spaces/visibility.js")
+             (str B "/spaces/manager.js")
+             (str B "/spaces/niri.js")
+             (str B "/platform/scheduler.js")
+             (str B "/platform/window-tabs.js")
+             (str B "/platform/window.js")
+             (str B "/platform/history.js")
+             (str B "/platform/tabs-reconciler.js")
+             (str B "/platform/cross-window-tabs.js")
+             (str B "/platform/index.js")
+             (str B "/tabs/layout.js")
+             (str B "/tabs/rows.js")
+             (str B "/tabs/drag.js")
+             (str B "/tabs/menu.js")
+             (str B "/tabs/events.js")
+             (str B "/tabs/picker.js")
+             (str B "/tabs/content-focus.js")
+             (str B "/tabs/vim.js")
+             (str B "/tabs/index.js")]
+            (.join ["// ==UserScript=="
                     "// @name           Gjoa Tabs"
                     "// @description    Tree-style tab panel with vim keybindings"
                     "// @include        main"
                     "// ==/UserScript=="]
-                   "\n")}
-   {:out "gjoa-dark-mode.uc.js"
-    :files [(str B "/dark-mode/index.js")]
-    :banner (.join ["// ==UserScript=="
+                   "\n"))
+   (->Entry "gjoa-dark-mode.uc.js"
+            [(str B "/dark-mode/index.js")]
+            (.join ["// ==UserScript=="
                     "// @name           Gjoa Dark Mode"
                     "// @description    Chrome-level dark mode: native color-scheme override + optional CSS inversion filter"
                     "// @include        main"
                     "// ==/UserScript=="]
-                   "\n")}
-   {:out "gjoa-blocking.uc.js"
-    :files [(str B "/blocking/index.js")]
-    :banner (.join ["// ==UserScript=="
+                   "\n"))
+   (->Entry "gjoa-blocking.uc.js"
+            [(str B "/blocking/index.js")]
+            (.join ["// ==UserScript=="
                     "// @name           Gjoa Blocking"
                     "// @description    Native ad/tracker blocking: engine enable/disable + per-site allow-list"
                     "// @include        main"
                     "// ==/UserScript=="]
-                   "\n")}]))
+                   "\n"))]))

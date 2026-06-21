@@ -1,7 +1,7 @@
 {
   "claim": "This build makes 1 unattended network call: the Firefox version check.",
   "gjoaVersion": "0.4.1",
-  "auditedCommit": "17ba073",
+  "auditedCommit": "29451f9",
   "generated": "2026-06-21",
   "method": "static AST audit of all authored chrome (.sys.mjs + emitted .bjs + content .js), every source parsed",
   "ownCode": {
@@ -42,7 +42,7 @@
         "endpoint": "chrome://gjoa/content/settings/registry.json",
         "what": "fetch call",
         "file": "src/gjoa/browser/components/gjoa/content/settings/settings.js",
-        "line": 215,
+        "line": 217,
         "basis": "endpoint"
       },
       {

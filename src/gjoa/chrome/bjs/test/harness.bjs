@@ -80,31 +80,33 @@
           saved (Map.)]
 
       (.forEach GLOBALS-TO-OVERRIDE
-        #(.set saved % (aget globalThis %)))
+        #(.set saved % (.get Reflect globalThis %)))
 
-      ;; Wire happy-dom into globals
-      (aset globalThis "window" happy-window)
-      (aset globalThis "document" happy-doc)
-      (aset globalThis "Services" services)
-      (aset globalThis "Ci" {})
-      (aset globalThis "Cu" {})
-      (aset globalThis "Cc" {})
-      (aset globalThis "ChromeUtils"
+      ;; Wire happy-dom into globals. (.set Reflect …) is Reflect.set — beagle
+      ;; 77df8a9's aset is Int-indexed only; string property writes go through
+      ;; Reflect.set / Reflect.get / Reflect.deleteProperty.
+      (.set Reflect globalThis "window" happy-window)
+      (.set Reflect globalThis "document" happy-doc)
+      (.set Reflect globalThis "Services" services)
+      (.set Reflect globalThis "Ci" {})
+      (.set Reflect globalThis "Cu" {})
+      (.set Reflect globalThis "Cc" {})
+      (.set Reflect globalThis "ChromeUtils"
         {:importESModule #(let [r {:SessionStore nil}] r)})
-      (aset globalThis "PathUtils"
+      (.set Reflect globalThis "PathUtils"
         {:join (fn [& parts] (.join parts "/"))})
-      (aset globalThis "IOUtils"
+      (.set Reflect globalThis "IOUtils"
         {:writeUTF8 (fn [] nil)
          :readUTF8 #(throw (Error. "no file"))
          :write (fn [] nil)
          :stat #(let [r {:size 0}] r)})
-      (aset globalThis "requestAnimationFrame"
+      (.set Reflect globalThis "requestAnimationFrame"
         (.bind (.-requestAnimationFrame happy-window) happy-window))
-      (aset globalThis "cancelAnimationFrame"
+      (.set Reflect globalThis "cancelAnimationFrame"
         (.bind (.-cancelAnimationFrame happy-window) happy-window))
-      (aset globalThis "getComputedStyle"
+      (.set Reflect globalThis "getComputedStyle"
         (.bind (.-getComputedStyle happy-window) happy-window))
-      (aset globalThis "MutationObserver"
+      (.set Reflect globalThis "MutationObserver"
         (.-MutationObserver happy-window))
 
       ;; Map createXULElement to createElement
@@ -133,8 +135,8 @@
        :cleanup (fn []
          (.forEach GLOBALS-TO-OVERRIDE
            #(if (= (.get saved %) js/undefined)
-              (js/delete (aget globalThis %))
-              (aset globalThis % (.get saved %))))
+              (.deleteProperty Reflect globalThis %)
+              (.set Reflect globalThis % (.get saved %))))
          (try
            (.close happy-window)
            (catch Any _e nil)))}))))

@@ -188,7 +188,7 @@
     (cond
       (not enabled)
       (console/log "gjoa-niri: disabled via pref")
-      (or (not sock) (= sock ""))
+      (or (not (boolean sock)) (= sock ""))
       (console/log "gjoa-niri: NIRI_SOCKET unset — not a niri session, skipping")
       :else
       (do

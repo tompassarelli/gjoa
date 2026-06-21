@@ -27,7 +27,7 @@
             (let [compact-vertical (bool (q document "#sidebar-main[data-gjoa-compact]"))
                   compact-horizontal (has? root "data-gjoa-compact-horizontal")
                   compact-on (or compact-vertical compact-horizontal)
-                  breakout (has? urlbar "breakout-extend")]
+                  breakout (bool (has? urlbar "breakout-extend"))]
               (when (and compact-on (not breakout))
                 (try
                   (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
@@ -57,7 +57,7 @@
                   (try
                     (when (not= (.getAttribute urlbar "popover") "manual")
                       (attr! urlbar "popover" "manual"))
-                    (when (and (not (.matches urlbar ":popover-open")) (.-showPopover urlbar))
+                    (when (and (not (bool (.matches urlbar ":popover-open"))) (.-showPopover urlbar))
                       (.showPopover urlbar))
                     (some-> window .-gURLBar .focus)
                     (some-> window .-gURLBar .select)
@@ -71,7 +71,7 @@
             (setTimeout (fn []
               (when (.-activated state)
                 (let [a (.-activeElement document)]
-                  (when (not (and a (or (= a urlbar) (.contains urlbar a))))
+                  (when (not (bool (and a (or (= a urlbar) (.contains urlbar a)))))
                     (deactivate-floating)))))
               0)))
 
@@ -90,7 +90,7 @@
                       true)))))))
 
         on-keydown (fn [e]
-          (when (and (not (handle-accel e)) (.-activated state))
+          (when (and (not (bool (handle-accel e))) (.-activated state))
               (cond
                 (= (.-key e) "Escape")
                   (setTimeout (fn []

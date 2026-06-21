@@ -30,7 +30,7 @@
         ;; --- inject-sidebar-shadow-overrides ---
         inject-sidebar-shadow-overrides (fn []
           (let [sr (some-> sidebar-main-element .-shadowRoot)]
-            (if (not sr)
+            (if (nil? sr)
               (setTimeout inject-sidebar-shadow-overrides 100)
               (let [s (CSSStyleSheet.)]
                 (.replaceSync s

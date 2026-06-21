@@ -79,7 +79,7 @@
 
           flush (fn []
                   (if (not (.-pendingFlush state))
-                    (Promise/resolve)
+                    (Promise/resolve js/undefined)
                     (.then (.-pendingFlush state)
                       #(when (.-pendingFlush state)
                          (flush)))))

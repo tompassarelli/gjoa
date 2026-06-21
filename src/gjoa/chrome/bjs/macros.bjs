@@ -79,7 +79,9 @@
   `(let [_e (.createXULElement document ,tag)]
      (set! (.-id _e) ,id) _e))
 (defmacro bool [x]
-  `(not (not ,x)))
+  ;; (boolean x) coerces any value to Bool. The old `(not (not x))` re-trips
+  ;; beagle 77df8a9's tightened `not` (rejects Bool?/Nil args), so coerce directly.
+  `(boolean ,x))
 (defmacro has? [el name]
   `(.hasAttribute ,el ,name))
 (defmacro rmattr! [el name]

@@ -204,8 +204,8 @@
                   my-parent-id (.-parentId my-td)]
               (loop [r (.-previousElementSibling row)]
                 (cond
-                  (not r) nil
-                  (not (.-_tab r)) (recur (.-previousElementSibling r))
+                  (nil? r) nil
+                  (not (boolean (.-_tab r))) (recur (.-previousElementSibling r))
                   (< (level-of (.-_tab r)) my-level) nil
                   (and (= (level-of (.-_tab r)) my-level)
                        (= (.-parentId (tree-data! (.-_tab r))) my-parent-id))
@@ -292,7 +292,7 @@
             (let [my-level (level-of-row row)
                   prev (loop [el (.-previousElementSibling row)]
                          (cond
-                           (not el) nil
+                           (nil? el) nil
                            (> (level-of-row el) my-level) (recur (.-previousElementSibling el))
                            :else el))]
               (when (and prev (= (level-of-row prev) my-level))
@@ -327,7 +327,7 @@
           (let [my-level (level-of-row row)]
             (loop [el (.-previousElementSibling row)]
               (cond
-                (not el) nil
+                (nil? el) nil
                 (< (level-of-row el) my-level) el
                 :else (recur (.-previousElementSibling el))))))
 
@@ -860,7 +860,7 @@
         event-has-space (fn [ev space-id]
           (let [snap (.-snapshot ev)
                 ts (and snap (.-spaces snap) (.-tabSpaces (.-spaces snap)))]
-            (if (not ts)
+            (if (nil? ts)
               true
               (.some ts #(= (aget % 1) space-id)))))
 
@@ -964,7 +964,7 @@
                           tgt-label (or (.-name tgt-data)
                                         (some-> target .-_tab .-label)
                                         "tab")]
-                      (modeline-msg (str "Refiled \"" label "\" -> \"" tgt-label "\"")))
+                      (modeline-msg (str "Refiled \"" label "\" -> \"" tgt-label "\"") 3000))
                     (set! (.-refile-source vs) nil)
                     (set! (.-search-matches vs) [])
                     (set! (.-search-idx vs) -1)))))))
@@ -974,7 +974,7 @@
             (set! (.-refile-source vs) nil)
             (set! (.-search-matches vs) [])
             (set! (.-search-idx vs) -1)
-            (modeline-msg "Refile cancelled")))
+            (modeline-msg "Refile cancelled" 3000)))
 
 
         clear-filter (fn []
@@ -1084,8 +1084,8 @@
                             (set! (.-selectedTab gBrowser) (.-_tab fm)))
                           (let [hint (if (.-refile-source vs) "  Enter=refile, n/N=cycle" "")]
                             (modeline-msg
-                              (str "/" q "  [1/" (.-length (.-search-matches vs)) "]" hint)))))
-                    (when (.-refile-source vs) (modeline-msg "No refile targets found"))))
+                              (str "/" q "  [1/" (.-length (.-search-matches vs)) "]" hint) 3000))))
+                    (when (.-refile-source vs) (modeline-msg "No refile targets found" 3000))))
                 (clear-filter)
                 (teardown-search-ui)
                 (when (not (.-v dtc)) (focus-panel))))
@@ -1181,7 +1181,7 @@
                   (set-cursor row)
                   (.updateVisibility rows)
                   (scheduleSave)
-                  (modeline-msg (str ":group " label)))
+                  (modeline-msg (str ":group " label) 3000))
 
                 (or (= name "re") (= name "refile") (= name "rf"))
                 (if (not (.-cursor state))
@@ -1190,19 +1190,19 @@
                       (let [src-label (or (some-> (.-cursor state) data-of! .-name)
                                           (some-> state .-cursor .-_tab .-label)
                                           "tab")]
-                        (modeline-msg (str "Refile: \"" src-label "\" -> search for target...")))
+                        (modeline-msg (str "Refile: \"" src-label "\" -> search for target...") 3000))
                       (setTimeout #(start-search) 0)))
 
                 (or (= name "pin") (= name "unpin"))
                 (let [t (some-> state .-cursor .-_tab)
                       want-pin (= name "pin")]
-                  (if (not t)
+                  (if (nil? t)
                     (modeline-msg "No tab at cursor" 3000)
                     (if (= (.-pinned t) want-pin)
                       (modeline-msg (str (if want-pin "Already pinned" "Not pinned")
                                          ": " (.-label t)) 2000)
                       (do (if want-pin (.pinTab gBrowser t) (.unpinTab gBrowser t))
-                          (modeline-msg (str ":" name " " (.-label t)))))))
+                          (modeline-msg (str ":" name " " (.-label t)) 3000)))))
 
                 (or (= name "checkpoint") (= name "cp"))
                 (let [label (.trim (.join (.slice args 1) " "))]
@@ -1326,7 +1326,7 @@
                       (let [match (.find (.list spaces)
                                     #(= (.toLowerCase (.-name %))
                                         (.toLowerCase rest)))]
-                        (if (not match)
+                        (if (nil? match)
                           (modeline-msg (str "No space named \"" rest "\"") 3000)
                           (do (.setActive spaces (.-id match))
                               (modeline-msg (str ":space -> \"" (.-name match) "\"") 2000)))))
