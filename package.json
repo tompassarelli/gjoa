@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Gjoa — a Firefox fork.",
   "scripts": {
-    "tools:compile": "(test -f .beagle-tools/.boot/build-tools.js && test -z \"$(find tools -name '*.bjs' -newer .beagle-tools/.boot/build-tools.js -print -quit 2>/dev/null)\" || bash ../beagle/bin/beagle-build tools/build-tools.bjs .beagle-tools/.boot/build-tools.js) && bun .beagle-tools/.boot/build-tools.js",
+    "tools:compile": "(test -f .beagle-tools/.boot/build-tools.js && test -z \"$(find tools -name '*.bjs' -newer .beagle-tools/.boot/build-tools.js -print -quit 2>/dev/null)\" || bash \"${BEAGLE_PIN_ROOT:-$HOME/code/beagle-pin}/bin/beagle-build\" tools/build-tools.bjs .beagle-tools/.boot/build-tools.js) && bun .beagle-tools/.boot/build-tools.js",
     "init": "bun run download && bun run import",
     "download": "bun run tools:compile && bun .beagle-tools/gjoa/tools/prep/cli.js download",
     "import": "bun run tools:compile && bun .beagle-tools/gjoa/tools/prep/cli.js import",
@@ -36,7 +36,7 @@
     "projector:fram-log": "bun run tools:compile && bun .beagle-tools/gjoa/tools/projector/fram-log.js",
     "projector:fram": "bun run tools:compile && bun .beagle-tools/gjoa/tools/projector/fram-roundtrip.js",
     "projector:test": "bun run tools:compile && bun .beagle-tools/gjoa/tools/projector/test-projector.js",
-    "check": "BEAGLE_PURITY=error ../beagle/bin/beagle check --profile 3 src/gjoa/chrome/bjs tools tests",
+    "check": "BEAGLE_PURITY=error \"${BEAGLE_PIN_ROOT:-$HOME/code/beagle-pin}/bin/beagle\" check --profile 3 src/gjoa/chrome/bjs tools tests",
     "test": "bun run check && bun run test:unit && bun run tools:compile && bun test ./.beagle-tools/gjoa/tests/branding.test.js && bun run test:functional",
     "test:unit": "bun test tools/darkmode-regress/colormath.test.js",
     "test:functional": "bun run chrome:compile && for f in tools/test-driver/functional/*.functional.mjs; do echo \"--- $f\" && bun \"$f\" || exit 1; done",

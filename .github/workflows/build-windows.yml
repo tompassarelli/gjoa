@@ -28,6 +28,11 @@ jobs:
     timeout-minutes: 360
     env:
       FF_VERSION: "152.0"
+      # Pinned beagle worktree: the build tooling (.bjs + package.json) resolves
+      # beagle-build / beagle from $BEAGLE_PIN_ROOT (default ~/code/beagle-pin).
+      # CI clones the pin SHA into ../beagle and points the build at it, so the
+      # compile is DETERMINISTIC against configs/beagle.ref, not the moving HEAD.
+      BEAGLE_PIN_ROOT: ${{ github.workspace }}/../beagle
     steps:
       - uses: actions/checkout@v4
 
@@ -96,8 +101,14 @@ jobs:
         uses: Bogdanp/setup-racket@v1.15
         with:
           version: 'stable'
-      - name: Checkout beagle (sibling compiler)
-        run: git clone --depth 1 https://github.com/tompassarelli/beagle.git ../beagle
+      - name: Checkout beagle (sibling compiler, pinned to configs/beagle.ref)
+        run: |
+          PIN="$(grep -vE '^\s*#' configs/beagle.ref | grep -vE '^\s*$' | head -1 | tr -d '[:space:]')"
+          echo "Pinning beagle to $PIN"
+          git clone --no-checkout --filter=blob:none https://github.com/tompassarelli/beagle.git ../beagle
+          git -C ../beagle fetch --depth 1 origin "$PIN"
+          git -C ../beagle checkout FETCH_HEAD
+          echo "beagle now at $(git -C ../beagle rev-parse HEAD)"
       - name: Register beagle collection
         run: raco pkg install --link --batch --no-docs ../beagle/beagle-lib
 

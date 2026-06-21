@@ -13,7 +13,15 @@
             [gjoa.tools.prep.paths :refer [ENGINE-DIR REPO-ROOT SRC-DIR]]
             [gjoa.tools.prep.log :refer [log]]))
 (define-mode strict)
-(declare-extern [Bun] Any)
+(declare-extern [Bun process] Any)
+
+;; Pinned beagle worktree root: a DEDICATED checkout (default ~/code/beagle-pin)
+;; held at configs/beagle.ref, so the build never detaches the shared ../beagle
+;; another agent is actively working in. CI overrides BEAGLE_PIN_ROOT to point at
+;; its own fresh pinned checkout. Same resolver as tools/build-tools.bjs.
+(def BEAGLE-PIN-ROOT :- String
+  (or (.-BEAGLE_PIN_ROOT (.-env process))
+      (resolve (.-HOME (.-env process)) "code" "beagle-pin")))
 
 ;; beagle-build compiles the chrome loader (.bjs) to the .sys.mjs that jar.mn
 ;; packages into omni.ja. Same resolution as tools/build-tools.bjs. It's a bash
@@ -21,19 +29,19 @@
 ;; site; forward-slash the path for bash on Windows. (.fromCharCode String 92) is
 ;; a backslash; no-op on *nix.
 (def BEAGLE-BUILD :- String
-  (.replaceAll (resolve REPO-ROOT ".." "beagle" "bin" "beagle-build") (.fromCharCode String 92) "/"))
+  (.replaceAll (resolve BEAGLE-PIN-ROOT "bin" "beagle-build") (.fromCharCode String 92) "/"))
 
 ;; ── Lockstep core.js vendoring ─────────────────────────────────────────────
-;; The chrome (.bjs) is compiled against ../beagle and emits $$bc.<fn>(...)
-;; value-semantics runtime calls. Those resolve to the vendored runtime we ship
-;; at resource:///modules/gjoa/beagle/core.js. If the vendored copy drifts from
-;; the beagle it was compiled against, the emit calls a function the runtime
-;; doesn't export → `$$bc.<fn> is not a function` at chrome load. So we DON'T
-;; hand-copy it: every import re-vendors ../beagle's core.js verbatim, with a
-;; provenance header recording configs/beagle.ref. Gate M (preflight) hard-fails
-;; if ../beagle's HEAD != the pin, so this always vendors the pinned runtime.
+;; The chrome (.bjs) is compiled against the pinned beagle worktree and emits
+;; $$bc.<fn>(...) value-semantics runtime calls. Those resolve to the vendored
+;; runtime we ship at resource:///modules/gjoa/beagle/core.js. If the vendored
+;; copy drifts from the beagle it was compiled against, the emit calls a function
+;; the runtime doesn't export → `$$bc.<fn> is not a function` at chrome load. So
+;; we DON'T hand-copy it: every import re-vendors the pinned worktree's core.js
+;; verbatim, with a provenance header recording configs/beagle.ref. The pin is
+;; held at that ref, so this always vendors the pinned runtime.
 (def BEAGLE-CORE-SRC :- String
-  (resolve REPO-ROOT ".." "beagle" "beagle-lib" "lib" "beagle" "core.js"))
+  (resolve BEAGLE-PIN-ROOT "beagle-lib" "lib" "beagle" "core.js"))
 (def VENDORED-CORE-DST :- String
   (join SRC-DIR "browser" "components" "gjoa" "beagle" "core.js"))
 (def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
@@ -49,11 +57,11 @@
 
 (defn vendor-core-js! [] :- Any
   (if (not (existsSync BEAGLE-CORE-SRC))
-    (throw (Error. (str "vendor-core-js!: " BEAGLE-CORE-SRC " not found — is ../beagle checked out?")))
+    (throw (Error. (str "vendor-core-js!: " BEAGLE-CORE-SRC " not found — is the pinned beagle worktree (" BEAGLE-PIN-ROOT ") checked out?")))
     (let [body (readFileSync BEAGLE-CORE-SRC "utf8")
           ref (pinned-ref)
           header (str "// AUTO-VENDORED by tools/prep/overlay.bjs from "
-                      "../beagle/beagle-lib/lib/beagle/core.js (configs/beagle.ref = " ref ").\n"
+                      "<beagle-pin>/beagle-lib/lib/beagle/core.js (configs/beagle.ref = " ref ").\n"
                       "// DO NOT EDIT BY HAND — re-vendored on every `bun run import` so the\n"
                       "// $$bc value-semantics runtime always matches the beagle the chrome was\n"
                       "// compiled against. Bump configs/beagle.ref + re-import to change it.\n")]

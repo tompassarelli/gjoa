@@ -1,4 +1,4 @@
-// AUTO-VENDORED by tools/prep/overlay.bjs from ../beagle/beagle-lib/lib/beagle/core.js (configs/beagle.ref = 77df8a9343ee).
+// AUTO-VENDORED by tools/prep/overlay.bjs from <beagle-pin>/beagle-lib/lib/beagle/core.js (configs/beagle.ref = 77df8a9343ee).
 // DO NOT EDIT BY HAND — re-vendored on every `bun run import` so the
 // $$bc value-semantics runtime always matches the beagle the chrome was
 // compiled against. Bump configs/beagle.ref + re-import to change it.
@@ -219,94 +219,6 @@ export function format(fmt, ...args) {
   return fmt.replace(/%[sd]/g, () => i < args.length ? String(args[i++]) : '');
 }
 
-// --- HAMT (persistent collection) value-awareness ----------------------------
-// core.js stays IMPORT-FREE: it knows hamt.js's node shapes by structure and
-// never imports it (same discipline as count's _bg branch), so core.js remains
-// tree-shakeable. A HAMT ({_bg:'hamtMap'|'hamtSet', root, count}) and a NATIVE
-// map/set of equal value must be equiv-equal AND hash-equal — the
-// value-indistinguishability invariant that makes per-site native/persistent
-// representation selection sound (a value that becomes a HAMT must still = the
-// same value left native).
-//   entry {t:'e',k,v} | bitmap {t:'n',slots:[...]} | collision {t:'c',bucket:[[k,v]...]}
-function isHamt(x) {
-  return x != null && typeof x === "object" && (x._bg === "hamtMap" || x._bg === "hamtSet");
-}
-function hamtWalk(node, out) {
-  if (node == null) return out;
-  if (node.t === "e") out.push([node.k, node.v]);
-  else if (node.t === "c") { for (const p of node.bucket) out.push(p); }
-  else { for (const s of node.slots) hamtWalk(s, out); }
-  return out;
-}
-// A hamtMap's entries as a NATIVE-object view, IFF every key is scalar (so it is
-// comparable to a plain-object map, whose keys are always strings). null if any
-// key is compound (such a map has no native equivalent). Scalar keys coerce to
-// string exactly like native map emission, so HAMT{1} matches native{"1"}.
-function hamtMapNativeView(m) {
-  const o = {};
-  for (const [k, v] of hamtWalk(m.root, [])) {
-    if (k !== null && typeof k === "object") return null;
-    o[k] = v;
-  }
-  return o;
-}
-function hamtEquiv(a, b) {
-  const aSetH = isHamt(a) && a._bg === "hamtSet", bSetH = isHamt(b) && b._bg === "hamtSet";
-  // SET side: a hamtSet vs (hamtSet | native Set) — element multiset by equiv.
-  if (aSetH || bSetH || a instanceof Set || b instanceof Set) {
-    const ael = hamtElems(a), bel = hamtElems(b);
-    if (ael == null || bel == null || ael.length !== bel.length) return false;
-    const used = new Array(bel.length).fill(false);
-    outer: for (const x of ael) {
-      for (let i = 0; i < bel.length; i++) {
-        if (!used[i] && equiv(x, bel[i])) { used[i] = true; continue outer; }
-      }
-      return false;
-    }
-    return true;
-  }
-  // MAP side.
-  const aMapH = isHamt(a) && a._bg === "hamtMap", bMapH = isHamt(b) && b._bg === "hamtMap";
-  if (aMapH && bMapH) {
-    if (a.count !== b.count) return false;
-    const be = hamtWalk(b.root, []);
-    for (const [k, v] of hamtWalk(a.root, [])) {
-      let found = false;
-      for (const [k2, v2] of be) { if (equiv(k, k2)) { if (!equiv(v, v2)) return false; found = true; break; } }
-      if (!found) return false;
-    }
-    return true;
-  }
-  // hamtMap vs native object: coerce the HAMT to its native view, compare as maps.
-  const hm = aMapH ? a : (bMapH ? b : null);
-  const other = aMapH ? b : a;
-  if (hm == null) return false;
-  if (other == null || typeof other !== "object" || Array.isArray(other) || other instanceof Set) return false;
-  const view = hamtMapNativeView(hm);
-  if (view == null) return false; // compound keys -> no native equivalent
-  return equiv(view, other);
-}
-function hamtElems(x) {
-  if (isHamt(x)) return x._bg === "hamtSet" ? hamtWalk(x.root, []).map(p => p[0]) : null;
-  if (x instanceof Set) return [...x];
-  return null;
-}
-function hamtHash(x) {
-  if (x._bg === "hamtSet") { // mirror the native Set branch (seed 6, order-insensitive).
-    let acc = 0;
-    for (const [e] of hamtWalk(x.root, [])) acc = (acc + hash(e)) | 0;
-    return mix(6, acc);
-  }
-  // hamtMap: mirror the native object-map branch (seed 7). Scalar keys hash via
-  // their native string form so HAMT and native of equal content hash equal.
-  let acc = 0;
-  for (const [k, v] of hamtWalk(x.root, [])) {
-    const hk = (k !== null && typeof k === "object") ? hash(k) : hash(String(k));
-    acc = (acc + mix(hk, hash(v))) | 0;
-  }
-  return mix(7, acc);
-}
-
 export function equiv(a, b) {
   // Clojure = semantics over Beagle EMITTED JS value representations.
   // nil: both null and undefined represent Clojure nil.
@@ -314,9 +226,6 @@ export function equiv(a, b) {
 
   // identical refs are trivially equal.
   if (a === b) return true;
-
-  // persistent (HAMT) operands: compare by VALUE vs HAMTs or native collections.
-  if (isHamt(a) || isHamt(b)) return hamtEquiv(a, b);
 
   const ta = typeof a, tb = typeof b;
 
@@ -365,17 +274,6 @@ export function contains(coll, x) {
   // Crucially, `contains?` tests for a KEY/INDEX, not a value — EXCEPT for
   // sets, where the element IS the key.
   if (coll == null) return false;
-
-  // persistent (HAMT): hamtSet -> element membership by equiv; hamtMap -> key
-  // presence by equiv (contains? tests the KEY, and the element IS the key for sets).
-  if (isHamt(coll)) {
-    if (coll._bg === "hamtSet") {
-      for (const [e] of hamtWalk(coll.root, [])) if (equiv(e, x)) return true;
-      return false;
-    }
-    for (const [k] of hamtWalk(coll.root, [])) if (equiv(k, x)) return true;
-    return false;
-  }
 
   // Set (Clojure set): value membership by EQUIV, not Set.has (which is
   // reference-eq and so misses distinct-but-equiv compound elements). This is
@@ -440,51 +338,6 @@ export function count(x) {
   return Object.keys(x).length;
 }
 
-export function get(coll, k, notFound = null) {
-  // Clojure `get`, rep-dispatched at runtime — the POLYMORPHIC read used when the
-  // collection's rep isn't statically known (an Any/union/type-var/Float/Nil key
-  // type, where a NATIVE scalar map can flow in by Map-key covariance but a HAMT
-  // can too). Handles both reps + native vec/set. Import-free (traverses the HAMT
-  // node structure directly, like equiv/hash/contains). nil-safe.
-  if (coll == null) return notFound;
-  if (isHamt(coll)) {
-    if (coll._bg === "hamtMap") {
-      for (const [kk, vv] of hamtWalk(coll.root, [])) if (equiv(kk, k)) return vv;
-      return notFound;
-    }
-    // hamtSet: (get set x) -> x if present (by value), else notFound.
-    for (const [e] of hamtWalk(coll.root, [])) if (equiv(e, k)) return e;
-    return notFound;
-  }
-  if (Array.isArray(coll)) {
-    return (Number.isInteger(k) && k >= 0 && k < coll.length) ? coll[k] : notFound;
-  }
-  if (coll instanceof Set) {
-    for (const e of coll) if (equiv(e, k)) return e;
-    return notFound;
-  }
-  if (typeof coll === "object") { // native map / record
-    return Object.prototype.hasOwnProperty.call(coll, k) ? coll[k] : notFound;
-  }
-  return notFound;
-}
-
-export function keys(coll) {
-  // map keys, rep-polymorphic: HAMT -> traversed keys; native object map -> own keys.
-  if (coll == null) return [];
-  if (isHamt(coll) && coll._bg === "hamtMap") return hamtWalk(coll.root, []).map(p => p[0]);
-  if (typeof coll === "object" && !Array.isArray(coll) && !(coll instanceof Set)) return Object.keys(coll);
-  return [];
-}
-
-export function vals(coll) {
-  // map values, rep-polymorphic: HAMT -> traversed values; native object map -> own values.
-  if (coll == null) return [];
-  if (isHamt(coll) && coll._bg === "hamtMap") return hamtWalk(coll.root, []).map(p => p[1]);
-  if (typeof coll === "object" && !Array.isArray(coll) && !(coll instanceof Set)) return Object.values(coll);
-  return [];
-}
-
 function mix(h, c) {
   // order-sensitive 32-bit combine.
   return ((h << 5) - h + c) | 0;
@@ -496,9 +349,6 @@ export function hash(x) {
 
   // nil: null and undefined hash the same (equiv treats them equal).
   if (x == null) return 0;
-
-  // persistent (HAMT): hash by content identically to the equal native coll.
-  if (isHamt(x)) return hamtHash(x);
 
   const t = typeof x;
   if (t === "number") {

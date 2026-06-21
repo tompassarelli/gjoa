@@ -4,8 +4,8 @@
 ;; specifiers (./log.js, ../security/check.js) resolve on disk, no bundler.
 ;;
 ;; Bootstrap: package.json's `tools:compile` first compiles THIS file with
-;; ../beagle/bin/beagle-build, then runs it to compile everything else.
-;; mtime-cached — re-runs are near-instant when nothing changed.
+;; the pinned beagle worktree's bin/beagle-build, then runs it to compile
+;; everything else. mtime-cached — re-runs are near-instant when nothing changed.
 (ns gjoa.tools.build-tools
   (:require [fs/promises :refer [mkdir]]
             [fs :refer [existsSync statSync readdirSync]]
@@ -15,12 +15,19 @@
 
 (def REPO-ROOT :- String (.cwd process))
 (def OUT-ROOT :- String (join REPO-ROOT ".beagle-tools" "gjoa"))
+;; Pinned beagle worktree root: a DEDICATED checkout (default ~/code/beagle-pin)
+;; held at configs/beagle.ref, so the build never detaches the shared ../beagle
+;; another agent is actively working in. CI overrides BEAGLE_PIN_ROOT to point at
+;; its own fresh pinned checkout. Same resolver as tools/prep/overlay.bjs.
+(def BEAGLE-PIN-ROOT :- String
+  (or (.-BEAGLE_PIN_ROOT (.-env process))
+      (resolve (.-HOME (.-env process)) "code" "beagle-pin")))
 ;; beagle-build is a `#!/usr/bin/env bash` script. Windows has no shebang support,
 ;; so it can't be exec'd directly there — it's launched via `bash` (Git Bash on the
 ;; runner) at every :cmd site below. Normalize the path to forward slashes so bash
 ;; accepts it on Windows; (String/fromCharCode 92) is a backslash. No-op on *nix.
 (def BEAGLE-BUILD :- String
-  (.replaceAll (resolve REPO-ROOT ".." "beagle" "bin" "beagle-build") (String/fromCharCode 92) "/"))
+  (.replaceAll (resolve BEAGLE-PIN-ROOT "bin" "beagle-build") (String/fromCharCode 92) "/"))
 (def SRC-DIRS :- Any ["tools" "tests"])
 
 ;; Recursively collect every *.bjs path under `dir` (synchronous — small tree).
