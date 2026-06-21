@@ -96,12 +96,12 @@
                 { "label": "engine", "detail": "Forces EVERY site to its light theme first, then the engine inverts all colors into your Darkness band. This is the consistent, Dark-Reader-style mode: Reddit, YouTube, anything — all become dark at exactly your Darkness setting. Pick this if you want uniform dark everywhere." },
                 { "label": "filter", "detail": "Legacy whole-page compositor invert. Superseded by engine; kept as an advanced fallback. Inverts the entire page (re-inverting images so photos look right), but heavier than engine. Use only if engine misbehaves on a specific page." }
               ] },
-            { "pref": "gjoa.darkmode.invert.bgLightness", "type": "int", "title": "Darkness", "default": 20, "min": 0, "max": 100, "slider": true,
-              "help": "How dark inverted (engine-darkened) pages get — the page-background lightness floor every darkened site lands on. 0–100; LOWER = darker. The default ~20 is a comfortable dark grey (about #161616), deliberately not pure black.",
+            { "pref": "gjoa.darkmode.invert.bgLightness", "type": "int", "title": "Darkness", "default": 16, "min": 0, "max": 100, "slider": true,
+              "help": "How dark inverted (engine-darkened) pages get — the page-background lightness floor every darkened site lands on. 0–100; LOWER = darker. The default 16 is a deep low-grey (about #0d0d0d), deliberately not pure black. Raise it if dark feels too stark; lower it toward 8–10 for near-black.",
               "examples": [
-                { "label": "20 (default)", "detail": "Page backgrounds settle on a soft #161616 charcoal — easy on the eyes for long reading." },
-                { "label": "0", "detail": "Pushes backgrounds toward true black (#000) — maximum contrast, can feel harsh." },
-                { "label": "40", "detail": "A lighter, dim-grey page — gentler if pure-dark feels too stark." }
+                { "label": "16 (default)", "detail": "Page backgrounds settle on a deep #0d0d0d — dark and uniform without crushing to black." },
+                { "label": "8", "detail": "Pushes backgrounds toward near-black (#020202) — maximum contrast, can feel harsh." },
+                { "label": "30", "detail": "A lighter, dim-grey page (~#2a2a2a) — gentler if pure-dark feels too stark." }
               ],
               "note": "Only affects pages the engine actually inverts. A site keeping its OWN dark theme (Reddit, or any native-dark site under system/hybrid) ignores this slider — its darkness comes from the site, not gjoa." },
             { "pref": "gjoa.darkmode.invert.fgLightness", "type": "int", "title": "Text brightness ceiling", "default": 92, "min": 0, "max": 100, "slider": true,
