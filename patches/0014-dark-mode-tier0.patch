@@ -26,9 +26,10 @@
 # Tier-0 only -- the M4 band-clamp / halation ceiling is already handled by M3 (0013).
 #
 diff --git a/layout/base/nsPresContext.cpp b/layout/base/nsPresContext.cpp
+index d89fbba8d5..553b1e6838 100644
 --- a/layout/base/nsPresContext.cpp
 +++ b/layout/base/nsPresContext.cpp
-@@ -829,9 +829,12 @@
+@@ -855,9 +855,12 @@ void nsPresContext::UpdateColorInversion(bool aNotify) {
  // un-inverted; only ApplyHybridDefaultInvertIfThemeless flips it). If the page
  // did NOT author a dark theme -- background is light or transparent (the UA white
  // canvas shows through) -- flip the whole document to inverted pre-paint so it
@@ -44,7 +45,7 @@ diff --git a/layout/base/nsPresContext.cpp b/layout/base/nsPresContext.cpp
  // survives later UpdateColorInversion re-derives (durable).
  void nsPresContext::ApplyHybridDefaultInvertIfThemeless() {
    if (mColorInversion || mHybridDefaultInvert) {
-@@ -852,8 +855,11 @@
+@@ -878,8 +881,11 @@ void nsPresContext::ApplyHybridDefaultInvertIfThemeless() {
    }
    auto bg = nsCSSRendering::FindEffectiveBackgroundColor(
        frame, /* aStopAtThemed = */ true, /* aPreferBodyToCanvas = */ true);
@@ -59,9 +60,10 @@ diff --git a/layout/base/nsPresContext.cpp b/layout/base/nsPresContext.cpp
      mHybridDefaultInvert = true;
      UpdateColorInversion(/* aNotify = */ true);  // mColorInversion=true + restyle
 diff --git a/layout/style/GeckoBindings.cpp b/layout/style/GeckoBindings.cpp
+index ee784cef62..69057eac0f 100644
 --- a/layout/style/GeckoBindings.cpp
 +++ b/layout/style/GeckoBindings.cpp
-@@ -702,6 +702,11 @@
+@@ -702,6 +702,11 @@ bool Gecko_IsDarkColorScheme(const Document* aDoc,
    return LookAndFeel::ColorSchemeForStyle(*aDoc, *aStyle) == ColorScheme::Dark;
  }
  
@@ -74,9 +76,10 @@ diff --git a/layout/style/GeckoBindings.cpp b/layout/style/GeckoBindings.cpp
                                   const StyleColorSchemeFlags* aStyle) {
    auto colorScheme = LookAndFeel::ColorSchemeForStyle(*aDoc, *aStyle);
 diff --git a/layout/style/GeckoBindings.h b/layout/style/GeckoBindings.h
+index b8317e0062..11a8784817 100644
 --- a/layout/style/GeckoBindings.h
 +++ b/layout/style/GeckoBindings.h
-@@ -527,6 +527,7 @@
+@@ -527,6 +527,7 @@ bool Gecko_IsDocumentBody(const mozilla::dom::Element* element);
  
  bool Gecko_IsDarkColorScheme(const mozilla::dom::Document*,
                               const mozilla::StyleColorSchemeFlags*);
@@ -85,10 +88,11 @@ diff --git a/layout/style/GeckoBindings.h b/layout/style/GeckoBindings.h
                                   const mozilla::dom::Document*,
                                   const mozilla::StyleColorSchemeFlags*);
 diff --git a/servo/components/style/device/gecko.rs b/servo/components/style/device/gecko.rs
+index 64130aeffb..cbde842929 100644
 --- a/servo/components/style/device/gecko.rs
 +++ b/servo/components/style/device/gecko.rs
-@@ -397,6 +397,14 @@
-         self.pres_context().map_or(false, |pc| pc.mColorInversion)
+@@ -413,6 +413,14 @@ impl Device {
+         self.pres_context().map_or(0.92, |pc| pc.mColorInversionCeilL)
      }
  
 +    /// gjoa M4: whether the document's USED color-scheme (its resolved
