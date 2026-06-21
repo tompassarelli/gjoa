@@ -22,6 +22,12 @@
 
 const lazy = {};
 
+// setTimeout for the bounded fetch-retry backoff. The global is not reliably
+// present in a privileged .sys.mjs, so pull it from Timer.sys.mjs.
+ChromeUtils.defineESModuleGetters(lazy, {
+  setTimeout: "resource://gre/modules/Timer.sys.mjs",
+});
+
 ChromeUtils.defineLazyGetter(lazy, "log", () => {
   return console.createInstance({
     maxLogLevelPref:
@@ -104,6 +110,14 @@ const STALE_MS = 4 * 24 * 60 * 60 * 1000;
 const MAX_LIST_BYTES = 32 * 1024 * 1024;
 // Sidecar file holding the hex SHA-256 of the cached `<name>.txt`.
 const DIGEST_SUFFIX = ".sha256";
+
+// Transient-fetch resilience: a flaky network (DNS blip, dropped TCP, CDN 5xx,
+// rate-limit 429) shouldn't lose a list on a one-shot fetch — retry the network
+// portion a few times with a small exponential backoff before giving up. Only
+// the transport is retried; the integrity gates (https/size/shape/digest) are
+// permanent rejections and are NOT retried (see #fetchOnce).
+const FETCH_MAX_ATTEMPTS = 3;
+const FETCH_BACKOFF_BASE_MS = 500;
 
 /**
  * gjoa's drop-in replacement for the content-classifier RemoteSettings client.
@@ -336,14 +350,41 @@ export class ContentClassifierRemoteSettingsClient {
     }
   }
 
-  async #fetchAndCache(url, path) {
-    // (1) transport: refuse to fetch a list over anything but https.
+  // Mark an error as a transient transport failure worth retrying. A permanent
+  // rejection (non-https / oversized / bad-shape / non-retryable HTTP status) is
+  // left unmarked so #fetchWithRetry stops immediately instead of burning the
+  // backoff budget on something that can never succeed.
+  #transient(err) {
+    err.gjoaTransient = true;
+    return err;
+  }
+
+  // One network attempt: fetch + the transport-level integrity gates that bound
+  // a hostile/oversized/garbage response. Returns the validated bytes. Throws a
+  // #transient-marked error for retryable conditions (network error, 5xx, 429)
+  // and a plain error for permanent ones (non-https, 4xx, oversized, bad-shape).
+  async #fetchOnce(url) {
+    // (1) transport: refuse to fetch a list over anything but https. Permanent.
     if (!/^https:\/\//i.test(url)) {
       throw new Error(`refusing non-https list URL ${url}`);
     }
-    const resp = await fetch(url, { cache: "no-store" });
+    let resp;
+    try {
+      resp = await fetch(url, { cache: "no-store" });
+    } catch (e) {
+      // Network-layer failure (DNS, TCP reset, TLS handshake) — retryable.
+      throw this.#transient(
+        new Error(`fetch ${url} failed: ${e.message || e}`)
+      );
+    }
     if (!resp.ok) {
-      throw new Error(`fetch ${url} -> HTTP ${resp.status}`);
+      const err = new Error(`fetch ${url} -> HTTP ${resp.status}`);
+      // 5xx (server/CDN hiccup) and 429 (rate limit) are transient; other 4xx
+      // are permanent (a 404/403 won't fix itself on retry).
+      if (resp.status >= 500 || resp.status === 429) {
+        throw this.#transient(err);
+      }
+      throw err;
     }
     const buf = new Uint8Array(await resp.arrayBuffer());
     // (2) size cap: bound a hostile/oversized response before it hits disk.
@@ -356,6 +397,34 @@ export class ContentClassifierRemoteSettingsClient {
     if (!this.#looksLikeFilterList(buf)) {
       throw new Error(`list ${url} did not look like a text filter list`);
     }
+    return buf;
+  }
+
+  // Bounded retry-with-backoff around #fetchOnce: a transient network failure
+  // shouldn't lose a list to a single flaky request. Permanent rejections (the
+  // integrity gates) propagate on the first try without consuming retries.
+  async #fetchWithRetry(url) {
+    let lastErr;
+    for (let attempt = 1; attempt <= FETCH_MAX_ATTEMPTS; attempt++) {
+      try {
+        return await this.#fetchOnce(url);
+      } catch (e) {
+        lastErr = e;
+        if (!e.gjoaTransient || attempt === FETCH_MAX_ATTEMPTS) {
+          throw e;
+        }
+        const delay = FETCH_BACKOFF_BASE_MS * 2 ** (attempt - 1);
+        lazy.log.warn(
+          `fetch ${url} attempt ${attempt}/${FETCH_MAX_ATTEMPTS} failed (${e.message || e}); retrying in ${delay}ms`
+        );
+        await new Promise(r => lazy.setTimeout(r, delay));
+      }
+    }
+    throw lastErr;
+  }
+
+  async #fetchAndCache(url, path) {
+    const buf = await this.#fetchWithRetry(url);
     // (4) at-rest integrity: persist a digest alongside the cached bytes so the
     // read-back path can detect tampering/partial writes before trusting it.
     const digest = this.#sha256Hex(buf);
