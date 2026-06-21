@@ -179,9 +179,6 @@
       "#browser_compatibility + a + figure .icon",
       ".bc-level",
       ".legend-icons"
-    ],
-    "ignoreImageAnalysis": [
-      ".main-page-content .code-example .copy-icon"
     ]
   },
   "doc.rust-lang.org": {
@@ -402,14 +399,6 @@
       "img[alt=\"MongoDB logo\"]"
     ]
   },
-  "nasa.gov": {
-    "mode": "css",
-    "override": "active",
-    "_provenance": "darkreader@v4.9.127 MIT",
-    "ignoreImageAnalysis": [
-      ".vjs-has-started .vjs-control-bar .vjs-control.vjs-logo-image"
-    ]
-  },
   "nationalgeographic.com": {
     "mode": "css",
     "override": "active",
@@ -481,11 +470,6 @@
     "_provenance": "darkreader@v4.9.127 MIT",
     "invertSelectors": [
       ".ms-ohp-svg-Icon.ms-ohp-Icon--privacyLogo"
-    ],
-    "ignoreImageAnalysis": [
-      ".ms-ohp-svg-Icon.ms-ohp-Icon--privacyLogo",
-      ".ms-ohp-svg-Icon.ms-ohp-Icon--calendarLogo::before",
-      ".ms-ohp-svg-Icon.ms-ohp-Icon--flowLogo::before"
     ]
   },
   "overreacted.io": {
@@ -585,9 +569,6 @@
     ],
     "ignoreInlineStyle": [
       ".chess-replayer-board td"
-    ],
-    "ignoreImageAnalysis": [
-      ".hero-background"
     ]
   },
   "shopify.com": {
@@ -654,9 +635,6 @@
     ],
     "ignoreInlineStyle": [
       ".chess-replayer-board td"
-    ],
-    "ignoreImageAnalysis": [
-      ".hero-background"
     ]
   },
   "stripe.com": {
@@ -702,9 +680,6 @@
     ],
     "ignoreInlineStyle": [
       ".chess-replayer-board td"
-    ],
-    "ignoreImageAnalysis": [
-      ".hero-background"
     ]
   },
   "tailwindcss.com": {
