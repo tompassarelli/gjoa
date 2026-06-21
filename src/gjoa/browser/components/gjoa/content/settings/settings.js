@@ -161,8 +161,10 @@
     addCard("custom", "Custom", "Your own mix — set by editing the toggles below.", null, true);
     block.appendChild(picker);
 
-    const ast = (active && active.asterisk) ||
-                ((profiles.find((p) => p.asterisk) || {}).asterisk);
+    // Footnote is bound to the SELECTED profile: show it iff the active
+    // profile carries an asterisk (e.g. LibreWolf-Inspired). Switching to
+    // another profile (or Custom) re-renders with no active asterisk → hidden.
+    const ast = active && active.asterisk;
     if (ast) block.appendChild(el("p", "profile-disclaimer", "* " + ast));
 
     // granular toggles — editing one recomputes the active profile (-> Custom).
