@@ -8,3 +8,13 @@ EXTRA_JS_MODULES.gjoa += [
     "GjoaAboutPrefsParent.sys.mjs",
     "GjoaLoader.sys.mjs",
 ]
+
+# Vendored beagle $$bc value-semantics runtime, shipped under
+# resource:///modules/gjoa/beagle/. GjoaLoader.sys.mjs imports it from there
+# (the bare `beagle/core.js` beagle emits is unresolvable by Firefox's chrome ES
+# loader); tools/prep/overlay.bjs sets BEAGLE_JS_RUNTIME_PREFIX to that base. The
+# beagle/ subdir keeps original filenames so a future beagle/hamt.js (which imports
+# ./core.js) resolves as a sibling.
+EXTRA_JS_MODULES.gjoa.beagle += [
+    "beagle/core.js",
+]

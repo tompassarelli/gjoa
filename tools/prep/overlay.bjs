@@ -55,8 +55,18 @@
                 loader-out (join ENGINE-DIR "browser" "components" "gjoa" "GjoaLoader.sys.mjs")
                 stray (join ENGINE-DIR "browser" "components" "gjoa" "GjoaLoader.bjs")]
             (when (existsSync loader-src)
+              ;; beagle emits `import * as $$bc from 'beagle/core.js'` (the value-
+              ;; semantics runtime) into the .sys.mjs. Firefox's chrome ES loader can't
+              ;; resolve that bare specifier, so remap the `beagle/` prefix to the vendored
+              ;; copy we ship under resource:///modules/gjoa/beagle/ (cp -a above already
+              ;; placed beagle/core.js in engine/; moz.build registers it). The prefix
+              ;; replaces `beagle/`, so beagle/core.js -> <prefix>core.js (and a future
+              ;; beagle/hamt.js -> <prefix>hamt.js, no dangling specifier).
               (let [proc (.spawnSync Bun {:cmd ["bash" BEAGLE-BUILD loader-src loader-out]
                                           :cwd REPO-ROOT
+                                          :env (.assign Object {} (.-env process)
+                                                 {"BEAGLE_JS_RUNTIME_PREFIX"
+                                                  "resource:///modules/gjoa/beagle/"})
                                           :stdout "pipe"
                                           :stderr "pipe"})]
                 (when (not= (.-exitCode proc) 0)
