@@ -1,5 +1,5 @@
 {
-  "note": "Exhaustive dark-mode contrast regression corpus, by failure-proneness category. |Lc| < threshold = dark-on-dark / low-contrast FAIL.",
+  "note": "Exhaustive dark-mode contrast regression corpus, by failure-proneness category. |Lc| < threshold = dark-on-dark / low-contrast FAIL. Failure-mode tags (owns-dark-mode/white-header/hero-photo/code-syntax/svg-diagram/near-black-text/gradient-ui/transparency-composite) mark the v2 classifier stress cases.",
   "threshold": 45,
   "sites": [
     {
@@ -697,6 +697,214 @@
     {
       "url": "https://arxiv.org/",
       "tag": "reference-forum"
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/color-scheme",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://tailwindcss.com/docs/dark-mode",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://docs.github.com/en/get-started/start-your-journey/about-github-and-git",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://docs.stripe.com/payments/accept-a-payment",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://vercel.com/docs/deployments",
+      "tag": "transparency-composite"
+    },
+    {
+      "url": "https://docs.astro.build/en/getting-started/",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://docs.ghost.org/themes/",
+      "tag": "code-syntax"
+    },
+    {
+      "url": "https://www.joshwcomeau.com/css/color-formats/",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://overreacted.io/a-complete-guide-to-useeffect/",
+      "tag": "code-syntax"
+    },
+    {
+      "url": "https://css-tricks.com/a-complete-guide-to-css-media-queries/",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://web.dev/articles/prefers-color-scheme",
+      "tag": "transparency-composite"
+    },
+    {
+      "url": "https://docs.python.org/3/tutorial/index.html",
+      "tag": "near-black-text"
+    },
+    {
+      "url": "https://vitejs.dev/guide/",
+      "tag": "transparency-composite"
+    },
+    {
+      "url": "https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://docusaurus.io/docs",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://supabase.com/docs/guides/database/overview",
+      "tag": "svg-diagram"
+    },
+    {
+      "url": "https://bun.sh/docs",
+      "tag": "code-syntax"
+    },
+    {
+      "url": "https://thereader.mitpress.mit.edu/",
+      "tag": "white-header"
+    },
+    {
+      "url": "https://emergencemagazine.org/essay/thin-white-line/",
+      "tag": "hero-photo"
+    },
+    {
+      "url": "https://www.nationalgeographic.com/photography/graphics/pictures-of-the-year-2025",
+      "tag": "hero-photo"
+    },
+    {
+      "url": "https://www.biographic.com/the-big-picture-2025/",
+      "tag": "hero-photo"
+    },
+    {
+      "url": "https://www.smithsonianmag.com/issue/smithsonian/june-2025/",
+      "tag": "white-header"
+    },
+    {
+      "url": "https://www.theatlantic.com/magazine/",
+      "tag": "near-black-text"
+    },
+    {
+      "url": "https://www.newyorker.com/magazine",
+      "tag": "white-header"
+    },
+    {
+      "url": "https://www.theparisreview.org/blog/",
+      "tag": "hero-photo"
+    },
+    {
+      "url": "https://longreads.com/best-of-2025/",
+      "tag": "hero-photo"
+    },
+    {
+      "url": "https://www.theguardian.com/news/series/the-long-read",
+      "tag": "near-black-text"
+    },
+    {
+      "url": "https://restofworld.org/2025/charts-tech-2025/",
+      "tag": "svg-diagram"
+    },
+    {
+      "url": "https://www.atlasobscura.com/articles/obscura-day-summer-2025-nyc-panorama",
+      "tag": "hero-photo"
+    },
+    {
+      "url": "https://orionmagazine.org/article/your-favorite-orion-stories-of-2025/",
+      "tag": "white-header"
+    },
+    {
+      "url": "https://www.outsideonline.com/outdoor-adventure/",
+      "tag": "hero-photo"
+    },
+    {
+      "url": "https://www.lensculture.com/articles",
+      "tag": "transparency-composite"
+    },
+    {
+      "url": "https://www.afar.com/magazine",
+      "tag": "white-header"
+    },
+    {
+      "url": "https://psmag.com/",
+      "tag": "near-black-text"
+    },
+    {
+      "url": "https://www.propublica.org/series",
+      "tag": "white-header"
+    },
+    {
+      "url": "https://www.joshwcomeau.com/animation/css-transitions/",
+      "tag": "gradient-ui"
+    },
+    {
+      "url": "https://kentcdodds.com/blog/usememo-and-usecallback",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://fabiensanglard.net/gebbdoom/index.html",
+      "tag": "white-header"
+    },
+    {
+      "url": "https://fabiensanglard.net/quake3/index.php",
+      "tag": "svg-diagram"
+    },
+    {
+      "url": "https://jvns.ca/blog/2021/06/08/reasons-why-bugs-might-feel-impossible/",
+      "tag": "code-syntax"
+    },
+    {
+      "url": "https://jvns.ca/blog/2026/01/08/a-data-model-for-git/",
+      "tag": "white-header"
+    },
+    {
+      "url": "https://ciechanow.ski/internal-combustion-engine/",
+      "tag": "svg-diagram"
+    },
+    {
+      "url": "https://www.redblobgames.com/pathfinding/a-star/introduction.html",
+      "tag": "svg-diagram"
+    },
+    {
+      "url": "https://pomax.github.io/bezierinfo/",
+      "tag": "svg-diagram"
+    },
+    {
+      "url": "https://tinyclouds.org/residency",
+      "tag": "hero-photo"
+    },
+    {
+      "url": "https://docs.stripe.com/payments/quickstart",
+      "tag": "code-syntax"
+    },
+    {
+      "url": "https://tailwindcss.com/docs/installation/using-vite",
+      "tag": "owns-dark-mode"
+    },
+    {
+      "url": "https://www.nan.fyi/svg-paths",
+      "tag": "svg-diagram"
+    },
+    {
+      "url": "https://danluu.com/input-lag/",
+      "tag": "near-black-text"
+    },
+    {
+      "url": "https://bartoszmilewski.com/2014/10/28/category-theory-for-programmers-the-preface/",
+      "tag": "near-black-text"
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/text-generation",
+      "tag": "transparency-composite"
+    },
+    {
+      "url": "https://www.gatsbyjs.com/docs/conceptual/react-server-components/",
+      "tag": "gradient-ui"
     }
   ]
 }
