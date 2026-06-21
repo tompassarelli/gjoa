@@ -561,3 +561,36 @@ harness-tracked). Attempt 2 healthy (rustc at 99% CPU through the rust crates).
    hang, else it false-trips on slow rust crates.
 
 **Outcome:** <FINALIZE on attempt-2 completion: success/fail + M3 dm-shoot verify>
+
+---
+
+## 2026-06-21 — dark-mode v2 ship-build (full import: M1-M4 + DB + actors + #89)
+
+**Trigger:** bake the complete dark-mode v2 stack into ONE consistent binary +
+validate. M3 already verified on an incremental build (renders legible dark mode);
+this is the full import (so the M2 actors + DB + #89 chrome are baked, fixing the
+M3/old-actor mismatch that made the actor-ON contrast gate discard the window).
+
+**Import-setup gotcha (cost ~1 retry):** `bun run import` applies patches IN-PLACE
+to engine/ with NO auto-reset; it assumes engine/ is a clean tarball extract. My
+M3 verification build had left 0012/0013 manually applied + GjoaDarkText untracked
++ 93 working-tree changes, so the re-import failed re-applying 0012 ("does not
+apply" = already present). FIX: `git -C engine reset --hard HEAD` (HEAD = pristine
+vanilla tarball) + `git -C engine clean -fd` (objdir is gitignored → survives),
+THEN `bun run import` → 0 apply errors, full stack baked.
+
+**Gate-A override (documented, not silent):** preflight gate A FAILED 1/14 —
+0014-dark-mode-tier0.patch does not apply strict on gate A's OWN fresh extract
+(nsPresContext.cpp:829). Proceeded anyway because it is provably NOT a tree defect:
+the import applied 0014 with 0 errors AND `git apply --reverse --check 0014` is
+clean against engine/ (= exactly applied, no fuzz misplacement). So engine/ is
+correctly patched; gate A's failure is a TARBALL-PIN discrepancy (engine/ HEAD's
+snapshot vs gate A's fresh extract), a CI-reproducibility issue, not a this-build
+correctness issue. Rule #0's PURPOSE (no broken/wasted build) is satisfied. Flagged
+to gjoa-1 to reconcile the pin / rebase 0014 before a CI/ship build.
+
+**New gate idea (O):** preflight should pin gate-A's fresh extract to the SAME
+tarball commit as engine/ HEAD (or assert they match), so gate A can't false-fail
+on a snapshot drift while the real tree is correctly patched.
+
+**Outcome:** <FINALIZE on build completion + full validation>
