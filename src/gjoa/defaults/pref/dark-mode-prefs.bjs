@@ -18,28 +18,32 @@
 ;; default and "engine" is opt-in.
 (pref "gjoa.darkmode.enabled" true)
 
-;; Mode selector:
-;;   "auto"   — forces prefers-color-scheme: dark; sites with native dark
-;;              support automatically use it. No visual filter.
-;;   "engine" — forces prefers-color-scheme: light, then the ENGINE inverts every
-;;              absolute color to dark at style-resolution time (cascade hook in
-;;              servo, cached in ComputedValues, raster media untouched). The
-;;              performant successor to "filter".
-;;   "filter" — legacy compositor-level SVG invert for sites without native dark.
-;;              Counter-inverts images/video. Superseded by "engine".
-;;   "hybrid" — Forces prefers-color-scheme:dark (native-dark sites render their
-;;              own theme) AND the GjoaDarkmode actor engine-inverts ONLY documents
-;;              that stayed light (no native dark theme), decided per-document.
-;;              Every site dark, each the best way. Per-site overrides via the
-;;              user.* prefs below.
-;;   "system" — DEFAULT. Follows the OS theme: dark OS -> the no-flash hybrid
-;;              engine engages (invert themeless-light docs, keep native-dark);
-;;              light OS -> sites render in their own themes. The mode-toggle
-;;              cycle starts here. Must match the live default in
-;;              chrome/bjs/dark-mode/index.bjs (mode- / set-darkmode-defaults!).
-;;   "off"    — dark mode disabled (same as enabled=false; exists so the mode
-;;              pref can be cycled without touching the enabled toggle).
-(pref "gjoa.darkmode.mode" "system")
+;; Mode selector (gjoa.darkmode.mode). Four surfaced modes, strongest-opinion -> none;
+;; NONE is OS-conditional (the old OS-branching "system", whose dark branch was secretly
+;; the hybrid engine, was the biggest surprise — it is gone):
+;;   "dark"    — DEFAULT. Forces prefers-color-scheme:dark so native-dark sites use
+;;               their OWN theme; the engine pre-paint default-inverts themeless pages
+;;               (no flash) and the GjoaDarkmode actor refines per-site. The ONLY mode
+;;               where the user.* per-site lists below are live. Dark on ANY OS.
+;;   "uniform" — Forces prefers-color-scheme:light, then the ENGINE luminance-inverts
+;;               every absolute color into the Darkness band (servo cascade hook, cached
+;;               in ComputedValues, raster media untouched). One controlled dark over
+;;               ALL sites, even native-dark ones. The performant Dark-Reader-style answer.
+;;   "system"  — Conventional follow-OS (what Chrome/Firefox/Safari mean): content tracks
+;;               the real OS theme both ways, each site decides via prefers-color-scheme,
+;;               gjoa adds NO inversion. NOT dark-first.
+;;   "off"     — dark mode disabled (same render as "system"; also flips enabled=false so
+;;               the engine is parked, not just pass-through).
+;; Legacy about:config-only ids still resolve in apply!: "hybrid"/"auto" -> dark combo,
+;; "engine" -> uniform combo, "filter" -> the legacy compositor invert. The live default
+;; here MUST match chrome/bjs/dark-mode/index.bjs (mode- / set-darkmode-defaults!).
+(pref "gjoa.darkmode.mode" "dark")
+
+;; One-shot marker for the v2 mode-taxonomy migration (chrome module migrate-mode!): a
+;; stored user-branch "system" (pre-cutover = the OS-conditional hybrid engine) is
+;; rewritten to "dark" exactly once, preserving dark-OS darkening and adding light-OS
+;; darkening. Internal state, NOT a user knob — deliberately absent from about:gjoa.
+(pref "gjoa.darkmode.mode.migrated-v2" false)
 
 ;; Engine-level luminance-inversion flag. Set by the dark-mode chrome module for
 ;; "engine" mode; read by nsPresContext::UpdateColorInversion to drive the Servo

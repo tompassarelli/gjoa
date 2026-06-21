@@ -32,7 +32,7 @@
 
 (defn make-profile! [] :- String
   (let [dir (.mkdtempSync fs (.join path (.tmpdir os) "gjoa-dmregress-"))
-        mode (or (get (.-env process) "GJOA_DM_MODE") "hybrid")
+        mode (or (get (.-env process) "GJOA_DM_MODE") "dark")
         enabled (if (= mode "off") "false" "true")
         ;; GJOA_DM_NORMALIZE_PREF=1 turns the in-engine GjoaDarkmode actor's contrast
         ;; normalization ON, so the BINARY fixes contrast live and the harness just

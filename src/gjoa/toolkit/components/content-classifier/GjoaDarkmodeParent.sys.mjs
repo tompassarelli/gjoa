@@ -173,7 +173,7 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       return false;
     }
     return (
-      Services.prefs.getStringPref(MODE_PREF, "auto") === "hybrid" ||
+      Services.prefs.getStringPref(MODE_PREF, "dark") === "dark" ||
       Services.prefs.getBoolPref(DEFAULT_INVERT_PREF, false)
     );
   }

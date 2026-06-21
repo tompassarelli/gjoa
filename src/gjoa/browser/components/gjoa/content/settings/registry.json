@@ -70,7 +70,7 @@
       "intro": "Everything about how gjoa colors the web and dresses its own chrome — the dark-mode engine plus the gjoa theme — in one place. gjoa is dark-first: by default a bright white site (think YouTube) is darkened for you. Two groups below: Dark mode (how web pages are darkened) and Theme (gjoa's own window colors).",
       "subsections": [
         { "id": "darkmode", "title": "Dark mode",
-          "intro": "Engine-level dark mode. Sites that ship their own dark theme can render it; the rest are inverted at style-resolution time (cached in the engine, no per-frame compositor filter). The layers stack, broadest to narrowest: the master switch → the Mode picker → the engine appearance knobs (Darkness, Text brightness, Scrim) → the three Per-site lists → gjoa's built-in curated per-site fixes. Each narrower layer overrides the one before it. Everything is right here — nothing lives in about:config.",
+          "intro": "Engine-level dark mode. Sites that ship their own dark theme can render it; the rest are inverted at style-resolution time (cached in the engine, no per-frame compositor filter). The layers stack, broadest to narrowest: the master switch → the Mode picker → the engine appearance knobs (Darkness, Text brightness, Scrim) → the three Per-site lists → gjoa's built-in curated per-site fixes. Each narrower layer overrides the one before it. The three Per-site lists apply only in 'Dark everywhere' mode (the other modes are all-or-nothing by design). Everything is right here — nothing lives in about:config.",
           "settings": [
             { "pref": "gjoa.darkmode.enabled", "type": "bool", "title": "Dark mode (master switch)", "default": true,
               "help": "The on/off for gjoa's whole dark-mode engine. When ON, the Mode below decides how each page is darkened. When OFF, gjoa does nothing to page colors — every site renders in its own authored colors (usually light), exactly like vanilla Firefox.",
@@ -78,23 +78,19 @@
                 { "label": "ON", "detail": "Reddit, YouTube, and a plain white blog are all darkened according to the Mode you pick below." },
                 { "label": "OFF", "detail": "YouTube is bright white, Reddit is its normal light theme — gjoa stays out of the way." }
               ] },
-            { "pref": "gjoa.darkmode.mode", "type": "enum", "title": "Mode — how pages are darkened", "default": "system",
+            { "pref": "gjoa.darkmode.mode", "type": "enum", "title": "Mode — how pages are darkened", "default": "dark",
               "options": [
-                { "value": "off", "label": "Off — every site in its own colors" },
-                { "value": "auto", "label": "Only sites that already have a dark theme (gentlest)" },
-                { "value": "system", "label": "Match my OS theme (current default)" },
-                { "value": "hybrid", "label": "Always dark — keep each site's own dark theme where it has one" },
-                { "value": "engine", "label": "Always dark — force every site uniform (most consistent)" },
-                { "value": "filter", "label": "Always dark — legacy whole-page invert (advanced)" }
+                { "value": "dark", "label": "Dark everywhere (default)" },
+                { "value": "uniform", "label": "Uniform dark — one controlled darkness" },
+                { "value": "system", "label": "System — follow my OS, sites decide" },
+                { "value": "off", "label": "Off — gjoa does nothing" }
               ],
-              "help": "The core choice, ordered gentlest → most aggressive. The first three respect the web (sites stay light unless they opt in or your OS is dark); the last three force dark everywhere, differing only in HOW. If you want the uniform, Dark-Reader-style dark on every site (the most consistent result), pick 'engine'. Only matters while the master switch is ON.",
+              "help": "The core choice, ordered strongest-opinion → none. The top two make every site dark (they differ only in HOW); 'System' is the conventional follow-your-OS behavior that adds no gjoa inversion; 'Off' parks the engine entirely. Only matters while the master switch is ON. Tip: the two dark modes are adjacent so you can flip a single stubborn site between them without leaving darkness.",
               "examples": [
-                { "value": "off", "label": "off", "detail": "Identical to turning the master switch off: every site in its own (usually light) colors. Exists so the Mode can be parked without losing your other settings." },
-                { "label": "system", "detail": "Follow your operating system. Dark OS ⇒ pages go dark; light OS ⇒ sites render as-authored. Caveat: sites that ignore the OS signal (e.g. YouTube) stay light, and sites with a very dark native theme (e.g. Reddit) stay near-black — the Darkness slider does NOT move these two cases." },
-                { "label": "hybrid", "detail": "Always dark regardless of your OS. A site that ships its own dark theme uses that theme; every other site is engine-inverted. Best blend of fidelity and coverage." },
-                { "label": "auto", "detail": "Only sites that already have their own dark theme go dark; nothing else is inverted. A plain white blog stays white. The gentlest option." },
-                { "label": "engine", "detail": "Forces EVERY site to its light theme first, then the engine inverts all colors into your Darkness band. This is the consistent, Dark-Reader-style mode: Reddit, YouTube, anything — all become dark at exactly your Darkness setting. Pick this if you want uniform dark everywhere." },
-                { "label": "filter", "detail": "Legacy whole-page compositor invert. Superseded by engine; kept as an advanced fallback. Inverts the entire page (re-inverting images so photos look right), but heavier than engine. Use only if engine misbehaves on a specific page." }
+                { "label": "Dark everywhere (default)", "detail": "gjoa's signature. Every site is dark on any OS, no white flash, no thought. A site with its OWN good dark theme (GitHub, Reddit, YouTube when it honors the signal) keeps that theme; a plain bright site with no dark CSS is engine-inverted into your Darkness band before it paints. This is the ONLY mode where the three Per-site lists below are active — so if one site's own dark theme is too dark, add it to 'always force gjoa dark' rather than switching modes." },
+                { "label": "Uniform dark — one controlled darkness", "detail": "Maximum consistency, the Dark-Reader-style answer. EVERY site — even ones with their own dark theme — is forced to its light theme first, then luminance-inverted into gjoa's single Darkness band. A near-black native theme and a bright blog both land on exactly your Darkness value. Photos/video/canvas are preserved. Trade-off: well-crafted native dark themes (GitHub, syntax highlighting) get recolored too, and the Per-site lists do not apply here (uniform by design)." },
+                { "label": "System — follow my OS, sites decide", "detail": "Conventional browser behavior — exactly what Chrome, Firefox, and Safari mean by 'System'. Content follows your real OS theme both ways and each site decides via prefers-color-scheme: a dark OS lets native-dark sites show their dark theme; a light OS shows light; a site with no dark CSS stays light on either OS. gjoa adds ZERO inversion. NOT dark-first — on a light OS a themeless site like YouTube will be bright, by design. Pick this to make gjoa behave like a stock browser." },
+                { "label": "Off — gjoa does nothing", "detail": "The plain-Firefox escape hatch. Renders identically to 'System' (conventional follow-OS, no inversion), but also flips the master switch off so the whole engine is parked rather than set to pass-through. Use it to A/B against gjoa's darkening." }
               ] },
             { "pref": "gjoa.darkmode.invert.bgLightness", "type": "int", "title": "Darkness", "default": 16, "min": 0, "max": 100, "slider": true,
               "help": "How dark inverted (engine-darkened) pages get — the page-background lightness floor every darkened site lands on. 0–100; LOWER = darker. The default 16 is a deep low-grey (about #0d0d0d), deliberately not pure black. Raise it if dark feels too stark; lower it toward 8–10 for near-black.",

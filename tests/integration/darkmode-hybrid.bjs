@@ -106,20 +106,32 @@
      (let [lum (js/await (.executeAsyncScript mn (render-lum-js DARK-TOP 40 40) []))]
        (console/log (str "[dm-hybrid] tier-b /dark white-probe-lum=" lum))
        (expect (> (Number lum) 150) (str "native-dark must NOT invert: the white probe should stay WHITE; lum=" lum))))
-   ;; #48: in "system" mode the engine's pre-paint default-invert tracks the OS
-   ;; theme live. Spoof the OS via ui.systemUsesDarkTheme; the chrome matchMedia
-   ;; change drives apply!, which sets/clears gjoa.darkmode.hybrid.default-invert.
-   (deftest "darkmode system-mode: default-invert follows the OS theme" [mn ctx]
+   ;; v2 taxonomy regression guard: NO mode is OS-conditional anymore. The old
+   ;; OS-branching "system" (whose dark branch was secretly the hybrid engine) is
+   ;; gone. "dark" sets the pre-paint default-invert ON unconditionally (dark-first
+   ;; on ANY OS); "system" is conventional follow-OS with default-invert OFF on any
+   ;; OS. Spoof the OS via ui.systemUsesDarkTheme and assert default-invert tracks
+   ;; the MODE, not the OS — i.e. flipping the OS must NOT move it in either mode.
+   (deftest "darkmode v2: default-invert is per-mode, never OS-driven" [mn ctx]
      (js/await (.setContext mn "chrome"))
+     ;; "dark": default-invert ON regardless of OS
      (chrome-eval (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', true);"
-                       " Services.prefs.setStringPref('gjoa.darkmode.mode', 'system');"
-                       " return 'system';"))
-     ;; OS dark -> the no-flash hybrid engine engages
+                       " Services.prefs.setStringPref('gjoa.darkmode.mode', 'dark');"
+                       " return 'dark';"))
+     (chrome-eval "Services.prefs.setIntPref('ui.systemUsesDarkTheme', 0); return 'os-light';")
+     (js/await (await-true
+                 "return Services.prefs.getBoolPref('gjoa.darkmode.hybrid.default-invert', false) === true;"
+                 4000))
      (chrome-eval "Services.prefs.setIntPref('ui.systemUsesDarkTheme', 1); return 'os-dark';")
      (js/await (await-true
                  "return Services.prefs.getBoolPref('gjoa.darkmode.hybrid.default-invert', false) === true;"
                  4000))
-     ;; OS light -> sites left in their own themes
+     ;; "system": conventional follow-OS, default-invert OFF regardless of OS
+     (chrome-eval "Services.prefs.setStringPref('gjoa.darkmode.mode', 'system'); return 'system';")
+     (chrome-eval "Services.prefs.setIntPref('ui.systemUsesDarkTheme', 1); return 'os-dark';")
+     (js/await (await-true
+                 "return Services.prefs.getBoolPref('gjoa.darkmode.hybrid.default-invert', false) === false;"
+                 4000))
      (chrome-eval "Services.prefs.setIntPref('ui.systemUsesDarkTheme', 0); return 'os-light';")
      (js/await (await-true
                  "return Services.prefs.getBoolPref('gjoa.darkmode.hybrid.default-invert', false) === false;"
