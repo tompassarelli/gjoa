@@ -114,11 +114,15 @@
 ;; resolves at the USE SITE (non-hygienic syntax-quote; see the mi/sep note
 ;; above), so the calling fn must have `console` in scope. The wrapping fn stays
 ;; effectful — keep its `!` (E019).
+;; NOTE: unquote-splice is `~@` (Clojure-faithful) as of beagle 9d791ed — the
+;; old `,@` silently mis-expands to `body.value` (splice→deref), dropping the
+;; whole body. `,` unquote still works, so `,label`/`,fallback` stay. (Reported
+;; to beagle-4 2026-06-22; this is the correct surface, not a workaround.)
 (defmacro guard! [label & body]
-  `(try (do ,@body)
+  `(try (do ~@body)
         (catch Any _e (.error console ,label _e))))
 (defmacro quiet! [fallback & body]
-  `(try (do ,@body)
+  `(try (do ~@body)
         (catch Any _e ,fallback)))
 ;; ---- array ----
 ;; last element without the hand-rolled `(- (.-length x) 1)` off-by-one math.
