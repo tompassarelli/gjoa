@@ -665,10 +665,29 @@ Preserve these (security warnings):
 
 /* Breathing room at the panel top so the input doesn't butt against (and look
  * clipped by) the rounded command-palette edge — the FF152 urlbar restyle left
- * the input flush. Applies in both the floating and in-toolbar expanded popouts. */
-:root[gjoa-urlbar-floating] #urlbar,
-#gjoa-urlbar-toolbar #urlbar[breakout-extend] {
-  padding-block-start: 8px !important;
+ * the input flush. Applies in both the floating and in-toolbar expanded popouts.
+ *
+ * REGRESSION FIX: this breathing room used to be `padding-block-start: 8px` on
+ * `#urlbar` itself, which pushed the whole `.urlbar-input-container` (security
+ * icon + URL text) DOWN 8px on expand — the input jumped on focus because the
+ * resting urlbar has no such padding. Instead we grow the *background panel*
+ * upward by pulling its top edge up 8px, leaving the input row's vertical
+ * position (owned by `.urlbar-input-container`'s margin-block-start, untouched)
+ * pixel-identical at rest and in breakout-extend. The 8px gap now opens ABOVE
+ * the input between it and the rounded panel top, exactly as intended.
+ *
+ * Native (nova/FF152) sets the visible breakout panel's top to
+ *   inset-block-start: calc(var(--urlbar-background-inset) + var(--urlbar-input-container-top))
+ * so we subtract our breathing-room var from that to raise the panel top. */
+:root {
+  --gjoa-urlbar-breathing: 8px;
+}
+:root[gjoa-urlbar-floating] #urlbar[breakout-extend] > .urlbar-background,
+#gjoa-urlbar-toolbar #urlbar[breakout-extend] > .urlbar-background {
+  inset-block-start: calc(
+    var(--urlbar-background-inset) + var(--urlbar-input-container-top)
+    - var(--gjoa-urlbar-breathing)
+  ) !important;
 }
 
 /* Vertically center the security icon / text / star within the input row.
