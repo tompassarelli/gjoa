@@ -103,16 +103,49 @@
     {:onChange (fn []
        (when (.-v rows-ref) (.scheduleTreeResync (.-v rows-ref)))
        (when schedule-save (schedule-save))
-       (update-space-header))
+       (update-space-header)
+       ;; #89 — broadcast the space ROSTER to sibling windows so all windows on
+       ;; the same workspace stay consistent. Skip while applying a remote
+       ;; snapshot (else hydrate->onChange->broadcast echoes into a storm). The
+       ;; active-id is omitted: receivers keep their own active space (Q1).
+       (when (not (.isApplying spaces))
+         (let [snap {:spaces (.list spaces)
+                     :tabSpaces (.map (tabs!)
+                                  (fn [t]
+                                    [(.-id (tree-data! t)) (.spaceOf spaces t)]))}
+               e (.getEnumerator (.-wm Services) "navigator:browser")]
+           (loop []
+             (when (.hasMoreElements e)
+               (let [w (.getNext e)]
+                 (when (and (not (Object/is w window)) (.-Spaces w))
+                   (.applyRemoteSpaces (.-Spaces w) snap)))
+               (recur))))))
      :onActivated (fn [_prev next]
        (let [current (.-selectedTab gBrowser)]
          (when (not (and current (= (.spaceOf spaces current) next)))
            (let [in-next (.filter (tabs!)
                            #(= (.spaceOf spaces %) next))]
              (when (> (.-length in-next) 0)
-               (set! (.-selectedTab gBrowser) (aget in-next 0)))))))}))
+               (set! (.-selectedTab gBrowser) (aget in-next 0)))))))
+     :tabById (fn [gjoa-id]
+       (.find (tabs!)
+         #(let [td (tree-data! %)]
+            (and td (= (.-id td) gjoa-id)))))}))
 
 (set! (.-Spaces window) spaces)
+
+;; #89 — inherit the space ROSTER from an existing sibling window (if any) so all
+;; windows on the same workspace share ONE space-id namespace; each window
+;; otherwise mints rival uuids for its default 'Main'. Roster only (empty
+;; tabSpaces); applyRemoteSpaces keeps active-id local (lands on the shared first
+;; space). No-op for the first/only window.
+(let [e (.getEnumerator (.-wm Services) "navigator:browser")]
+  (loop []
+    (when (.hasMoreElements e)
+      (let [w (.getNext e)]
+        (if (and (not (Object/is w window)) (.-Spaces w))
+          (.applyRemoteSpaces spaces {:spaces (.list (.-Spaces w)) :tabSpaces []})
+          (recur))))))
 
 ;; Mirror the OS (niri) virtual-workspace name onto the active gjoa space. No-ops
 ;; off niri (NIRI_SOCKET unset) or when gjoa.niri.enabled is false. Must run

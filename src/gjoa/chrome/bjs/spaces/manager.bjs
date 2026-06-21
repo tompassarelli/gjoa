@@ -14,9 +14,10 @@
 (js/export (defn make-spaces! [deps] :- Any
   (let [on-change (.-onChange deps)
         on-activated (.-onActivated deps)
+        tab-by-id (.-tabById deps)
         spaces (Map.)
         tab-space (WeakMap.)
-        state :- Any {:active-id nil}
+        state :- Any {:active-id nil :applying false}
         default-space {:id (uuid) :name DEFAULT-NAME :createdAt (Date/now)}]
 
     (.set spaces (.-id default-space) default-space)
@@ -127,4 +128,36 @@
                (let [tab (tabById tab-id)]
                  (when tab
                    (.set tab-space tab space-id)))))))
-         (on-change))}))))
+         (on-change))
+
+       ;; #89 — apply a peer window's space snapshot. Keeps active-id LOCAL
+       ;; (Q1: windows view the active space independently); syncs only the
+       ;; ROSTER + per-tab membership (when deps.tabById is wired). The `applying`
+       ;; flag lets the index.bjs onChange broadcast-wrapper skip the echo —
+       ;; hydrate/on-change would otherwise re-broadcast into an infinite
+       ;; cross-window storm.
+       :isApplying #(.-applying state)
+
+       :applyRemoteSpaces
+       (fn [snapshot]
+         (set! (.-applying state) true)
+         (try
+           (.clear spaces)
+           (.forEach (.-spaces snapshot) #(.set spaces (.-id %) %))
+           (when (= (.-size spaces) 0)
+             (.set spaces (.-id default-space) default-space))
+           ;; active-id stays local: keep current if it still exists, else default.
+           (when (not (.has spaces (.-active-id state)))
+             (set! (.-active-id state) (default-id)))
+           (when tab-by-id
+             (.forEach (.-tabSpaces snapshot) (fn [entry]
+               (let [tab-id (aget entry 0)
+                     space-id (aget entry 1)]
+                 (when (.has spaces space-id)
+                   (let [tab (tab-by-id tab-id)]
+                     (when tab
+                       (.set tab-space tab space-id))))))))
+           (on-change)
+           (catch Any e
+             (console/error "[Gjoa.spaces.applyRemoteSpaces] failed" e)))
+         (set! (.-applying state) false))}))))

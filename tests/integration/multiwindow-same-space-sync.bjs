@@ -1,0 +1,92 @@
+#lang beagle/js
+;; #89 — multi-window same-space consistency.
+;;
+;; A SPACE created in one window must appear in the other window's roster. Today
+;; spaces state is PER-WINDOW (spaces/manager.bjs builds a window-local spaces Map
+;; + a per-window uuid; every mutator fires only the LOCAL on-change) and there is
+;; NO cross-window propagation path (platform/cross-window-tabs.bjs is query/focus
+;; only). So a space created in window A never reaches window B. This test asserts
+;; window B CONVERGES — it FAILS RED on the current binary and PASSES once the
+;; cross-window roster broadcast lands (PART 1–4 fix: inherit-from-sibling at
+;; startup + broadcast-wrapping onChange + applyRemoteSpaces w/ anti-echo guard).
+;;
+;; HARNESS: no test-driver change needed. window.Spaces is PER-WINDOW
+;; (tabs/index.bjs:115), so every injected script enumerates
+;; Services.wm.getEnumerator('navigator:browser') -> [a,b] and addresses both
+;; windows from the single chrome context. Window B opens via the chrome global
+;; OpenBrowserWindow(); the runner's RESET-JS only resets the most-recent window,
+;; so this test re-baselines BOTH windows and closes B itself.
+;;
+;; DEFERRED pending a product-semantics decision (raised to gjoa-2 / Tom):
+;;   (Q1) Active-space policy: do two windows on the same workspace SHARE the
+;;        active space, or view it INDEPENDENTLY? The fix keeps active-id
+;;        window-LOCAL to preserve Spaces Invariant 3 (cross-space auto-switch),
+;;        so an "active follows across windows" assertion is omitted until confirmed.
+;;   (Q2) Tab-mirror scope: Firefox gBrowser/tabs are PER-WINDOW. Mirroring a tab
+;;        opened in A into B is a far larger change than spaces-state sync and is
+;;        NOT implied by the root cause; omitted until confirmed.
+;; Under the recommended model (sync space ROSTER + per-tab MEMBERSHIP, active-id
+;; local, no tab-DOM mirror) the roster test below is correct by construction.
+(ns gjoa.tests.integration.multiwindow-same-space-sync
+  (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for]]))
+(define-mode strict)
+
+;; Open a 2nd browser window via the chrome global OpenBrowserWindow().
+(def OPEN-SECOND-JS :- String
+  (str "\n"
+       "  Services.wm.getMostRecentWindow('navigator:browser').OpenBrowserWindow();\n"
+       "  return true;\n"))
+
+;; Both windows have a live per-window gjoa API (Spaces + gjoaTest + gBrowser).
+(def BOTH-READY-JS :- String
+  (str "\n"
+       "  const ws = [...Services.wm.getEnumerator('navigator:browser')];\n"
+       "  return ws.length >= 2 && ws.every(w => !!w.Spaces && !!w.gjoaTest && !!w.gBrowser);\n"))
+
+;; Re-baseline BOTH windows to a single active 'Main' space (the runner's RESET-JS
+;; only touches the most-recent window, so we must reset both here).
+(def RESET-BOTH-JS :- String
+  (str "\n"
+       "  for (const w of [...Services.wm.getEnumerator('navigator:browser')]) {\n"
+       "    const S = w.Spaces;\n"
+       "    const main = S.list().find(s => s.name === 'Main') || S.list()[0];\n"
+       "    S.setActive(main.id);\n"
+       "    for (const s of [...S.list()]) { if (s.id !== main.id) S.delete(s.id); }\n"
+       "  }\n"
+       "  return true;\n"))
+
+;; Create a space in window A; report A's own count as a sanity signal.
+(def CREATE-IN-A-JS :- String
+  (str "\n"
+       "  const a = [...Services.wm.getEnumerator('navigator:browser')][0];\n"
+       "  const s = a.Spaces.create('SyncProbe');\n"
+       "  return JSON.stringify({ aId: s.id, aCount: a.Spaces.list().length });\n"))
+
+;; Does window B's roster now contain the space created in A? (by NAME — ids are
+;; per-window today, which is the very bug.)
+(def B-HAS-CREATED-JS :- String
+  (str "\n"
+       "  const b = [...Services.wm.getEnumerator('navigator:browser')][1];\n"
+       "  return b.Spaces.list().some(s => s.name === 'SyncProbe');\n"))
+
+(def CLOSE-SECOND-JS :- String
+  (str "\n"
+       "  const ws = [...Services.wm.getEnumerator('navigator:browser')];\n"
+       "  if (ws.length > 1) ws[ws.length - 1].close();\n"
+       "  return true;\n"))
+
+(def tests :- Any
+  [(deftest "#89 — space created in window A appears in window B's roster" [mn]
+     (chrome-eval OPEN-SECOND-JS)
+     (await-true BOTH-READY-JS 8000)
+     (chrome-eval RESET-BOTH-JS)
+     (let [created (JSON/parse (chrome-eval CREATE-IN-A-JS))]
+       (expect (> (.-aCount created) 1)
+               "sanity: window A should have >1 space after create")
+       ;; Give any (post-fix) cross-window roster propagation a tick to land.
+       (await-true B-HAS-CREATED-JS 5000)
+       (expect (chrome-eval B-HAS-CREATED-JS)
+               "window B never learned of the 'SyncProbe' space created in A (no cross-window roster sync)")
+       (chrome-eval CLOSE-SECOND-JS)))])
+
+(js/export-default tests)
