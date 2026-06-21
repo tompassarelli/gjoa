@@ -27,14 +27,19 @@
 ;;              performant successor to "filter".
 ;;   "filter" — legacy compositor-level SVG invert for sites without native dark.
 ;;              Counter-inverts images/video. Superseded by "engine".
-;;   "hybrid" — DEFAULT. Forces prefers-color-scheme:dark (native-dark sites
-;;              render their own theme) AND the GjoaDarkmode actor engine-inverts
-;;              ONLY documents that stayed light (no native dark theme), decided
-;;              per-document. Every site dark, each the best way. Per-site
-;;              overrides via the user.* prefs below.
+;;   "hybrid" — Forces prefers-color-scheme:dark (native-dark sites render their
+;;              own theme) AND the GjoaDarkmode actor engine-inverts ONLY documents
+;;              that stayed light (no native dark theme), decided per-document.
+;;              Every site dark, each the best way. Per-site overrides via the
+;;              user.* prefs below.
+;;   "system" — DEFAULT. Follows the OS theme: dark OS -> the no-flash hybrid
+;;              engine engages (invert themeless-light docs, keep native-dark);
+;;              light OS -> sites render in their own themes. The mode-toggle
+;;              cycle starts here. Must match the live default in
+;;              chrome/bjs/dark-mode/index.bjs (mode- / set-darkmode-defaults!).
 ;;   "off"    — dark mode disabled (same as enabled=false; exists so the mode
 ;;              pref can be cycled without touching the enabled toggle).
-(pref "gjoa.darkmode.mode" "hybrid")
+(pref "gjoa.darkmode.mode" "system")
 
 ;; Engine-level luminance-inversion flag. Set by the dark-mode chrome module for
 ;; "engine" mode; read by nsPresContext::UpdateColorInversion to drive the Servo
