@@ -61,3 +61,38 @@
         {:r 255 :g 255 :b 255 :a 255}
         (let [sorted (.sort pts (fn [a :- Any b :- Any] :- Any (- (lum-quick a) (lum-quick b))))]
           (aget sorted (Math/floor (/ n 2)))))))))
+
+;; The PAINTED glyph color = the luminance extreme furthest from the median
+;; backdrop. Required to validate M3 (the paint-time text re-solve): the computed
+;; CSS color is the 0009-inverted value, which M3 does NOT change, so a gate that
+;; reads computed color is M3-blind. Glyph strokes are sparse, so sample DENSER
+;; than the backdrop grid; noisy on very small text (a known limitation).
+(js/export (defn sample-foreground [png :- Any rect :- Any scale :- Any] :- Any
+  (let [w (:width png)
+        h (:height png)
+        data (:data png)
+        x0 (Math/max 0 (Math/floor (* (:x rect) scale)))
+        y0 (Math/max 0 (Math/floor (* (:y rect) scale)))
+        x1 (Math/min (- w 1) (Math/floor (* (+ (:x rect) (:w rect)) scale)))
+        y1 (Math/min (- h 1) (Math/floor (* (+ (:y rect) (:h rect)) scale)))
+        cols 16
+        rows 6
+        total (* cols rows)
+        pts (Array.)]
+    (loop [k 0]
+      (when (< k total)
+        (let [r (Math/floor (/ k cols))
+              c (- k (* r cols))
+              px (Math/round (+ x0 (* (/ (+ c 0.5) cols) (- x1 x0))))
+              py (Math/round (+ y0 (* (/ (+ r 0.5) rows) (- y1 y0))))]
+          (when (and (>= px 0) (< px w) (>= py 0) (< py h))
+            (.push pts (pixel-at data w px py))))
+        (recur (+ k 1))))
+    (let [n (.-length pts)]
+      (if (= n 0)
+        {:r 0 :g 0 :b 0 :a 255}
+        (let [sorted (.sort pts (fn [a :- Any b :- Any] :- Any (- (lum-quick a) (lum-quick b))))
+              med (lum-quick (aget sorted (Math/floor (/ n 2))))
+              lo (aget sorted (Math/floor (* n 0.05)))
+              hi (aget sorted (Math/min (- n 1) (Math/floor (* n 0.95))))]
+          (if (>= (- (lum-quick hi) med) (- med (lum-quick lo))) hi lo)))))))

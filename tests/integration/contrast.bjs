@@ -7,8 +7,9 @@
 ;;   1. navigate (chrome-side progress listener) + settle (actor round-trip + paint)
 ;;   2. enumerate visible text runs in content (Range.getClientRects, page-relative)
 ;;   3. full-page screenshot (Marionette TakeScreenshot {:full true})
-;;   4. for each text box: sample the composited backdrop behind it (median pixel),
-;;      take the post-inversion computed FG, compute WCAG contrast
+;;   4. for each text box: sample the composited backdrop (median pixel) AND the
+;;      PAINTED glyph color (luminance extreme) — both painted, so the score reflects
+;;      M3 (the paint-time text re-solve), which the computed CSS color cannot; WCAG
 ;;   5. score the page; assert passRatio >= the recorded baseline floor
 ;;
 ;; The contrast math (contrast-score) and sampling (contrast-sample) are pure and
@@ -21,8 +22,8 @@
 ;; (the runner --with-fixtures flag spawns it).
 (ns gjoa.tests.integration.contrast
   (:require [gjoa.tests.dsl :refer [deftest expect sleep NAV-JS]]
-            [gjoa.tools.test-driver.contrast-score :refer [parse-rgb evaluate-box score-page]]
-            [gjoa.tools.test-driver.contrast-sample :refer [decode-png sample-backdrop]]))
+            [gjoa.tools.test-driver.contrast-score :refer [evaluate-box score-page]]
+            [gjoa.tools.test-driver.contrast-sample :refer [decode-png sample-backdrop sample-foreground]]))
 (define-mode strict)
 
 (def BASE :- String "http://127.0.0.1:8976/")
@@ -92,7 +93,9 @@
                     (fn [b :- Any] :- Any
                       (let [rect {:x (.-x b) :y (.-y b) :w (.-w b) :h (.-h b)}
                             bg (sample-backdrop png rect scale)
-                            fg (parse-rgb (.-color b))]
+                            ;; PAINTED glyph (M3-aware), not the computed CSS color
+                            ;; (which is 0009-inverted and M3-blind).
+                            fg (sample-foreground png rect scale)]
                         (evaluate-box fg bg (.-fontSize b) (.-bold b) (.-text b)))))
           score (score-page results)
           ratio (:passRatio score)
