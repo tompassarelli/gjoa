@@ -43,6 +43,13 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     if (this.browsingContext !== this.browsingContext.top) {
       return; // subframes inherit the top document's decision (bc->Top())
     }
+    // Master gate: when dark mode is fully disabled the actor does NOTHING — no
+    // per-page colorInversionOverride write, no curated-override IPC, no refiner.
+    // (It used to run on every page regardless: wasted work when the feature is
+    // off, and the unconditional BC write detached automation's content handle.)
+    if (!Services.prefs.getBoolPref("gjoa.darkmode.enabled", true)) {
+      return;
+    }
     if (event.type === "DOMWindowCreated") {
       // Reset any override INHERITED from the previous same-tab page so this
       // fresh document starts from the engine's pre-paint default, then apply
