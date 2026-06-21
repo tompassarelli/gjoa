@@ -1,0 +1,47 @@
+#lang beagle/js
+;; Dark-mode RENDER validation — chrome-side drawSnapshot.
+;;
+;; Engine inversion detaches Marionette's CONTENT browsing-context handle (a
+;; content executeScript on an inverting page throws "Browsing context discarded"),
+;; so dark-mode rendering CANNOT be validated via content-context getComputedStyle.
+;; It MUST be read from chrome: navigate via gBrowser.loadURI, settle, then
+;; browsingContext.currentWindowGlobal.drawSnapshot into an OffscreenCanvas and
+;; sample the center pixel's luminance. (Same mechanism as tools/darkmode-regress/
+;; snap.js.) Precondition: cosmetic-fixture-server on :8975 (/light = themeless-light).
+(ns gjoa.tests.integration.darkmode-render
+  (:require [gjoa.tests.dsl :refer [deftest expect]]))
+(define-mode strict)
+(declare-extern [Number] Any)
+
+(defn render-lum-js [url :- String] :- String
+  (str "const done = arguments[arguments.length-1];"
+       "(async () => { try {"
+       "  const win = Services.wm.getMostRecentWindow('navigator:browser');"
+       "  const b = win.gBrowser.selectedBrowser;"
+       "  b.loadURI(Services.io.newURI('" url "'), {triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal()});"
+       "  await new Promise(r => win.setTimeout(r, 3500));"
+       "  const wg = b.browsingContext.currentWindowGlobal;"
+       "  const bm = await wg.drawSnapshot(new win.DOMRect(0,0,300,200), 1, 'rgb(128,128,128)');"
+       "  const c = new win.OffscreenCanvas(300,200); const x = c.getContext('2d'); x.drawImage(bm,0,0);"
+       "  const d = x.getImageData(150,100,1,1).data;"
+       "  done(String(Math.round(0.2126*d[0] + 0.7152*d[1] + 0.0722*d[2])));"
+       "} catch(e){ done('ERR:'+(e&&e.message||e)); } })();"))
+
+(defn set-dm [mn :- Any on :- Bool] :- Any
+  (.executeScript mn (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', " (if on "true" "false") ");"
+                          " Services.prefs.setCharPref('gjoa.darkmode.mode','hybrid'); return 'ok';")))
+
+(js/export (def tests :- Any
+  [(deftest "darkmode render: hybrid inverts a themeless-light page to dark (chrome-side)" [mn ctx]
+     (js/await (.setContext mn "chrome"))
+     (js/await (set-dm mn true))
+     (let [lum (js/await (.executeAsyncScript mn (render-lum-js "http://127.0.0.1:8975/light") []))]
+       (console/log (str "[darkmode-render] hybrid-ON themeless-light center-lum=" lum))
+       (expect (< (Number lum) 80) (str "themeless-light should render DARK under hybrid; got lum=" lum))))
+   (deftest "darkmode render: OFF leaves a themeless-light page light (control)" [mn ctx]
+     (js/await (.setContext mn "chrome"))
+     (js/await (set-dm mn false))
+     (let [lum (js/await (.executeAsyncScript mn (render-lum-js "http://127.0.0.1:8975/light") []))]
+       (console/log (str "[darkmode-render] OFF themeless-light center-lum=" lum))
+       (expect (> (Number lum) 150) (str "themeless-light should render LIGHT when darkmode off; got lum=" lum))))]))
+(js/export-default tests)

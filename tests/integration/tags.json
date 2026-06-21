@@ -1,7 +1,7 @@
 {
   "version": 1,
   "subsystems": {
-    "darkmode":  ["darkmode-hybrid", "darkmode-invert"],
+    "darkmode":  ["darkmode-hybrid", "darkmode-invert", "darkmode-render"],
     "contrast":  ["contrast"],
     "adblock":   ["adblock-cosmetic", "adblock-cosmetic-actor", "adblock-production", "adblock-ui", "adblock-validate"],
     "scriptlet": ["scriptlet-engine", "youtube-scriptlet"],
@@ -11,8 +11,8 @@
     "misc":      ["sqlite"]
   },
   "lanes": {
-    "slow":    ["adblock-production", "adblock-validate", "darkmode-hybrid", "contrast"],
-    "network": ["youtube-scriptlet", "scriptlet-engine", "adblock-production", "adblock-validate", "adblock-cosmetic-actor", "darkmode-invert", "darkmode-hybrid", "contrast"]
+    "slow":    ["adblock-production", "adblock-validate", "darkmode-hybrid", "darkmode-render", "contrast"],
+    "network": ["youtube-scriptlet", "scriptlet-engine", "adblock-production", "adblock-validate", "adblock-cosmetic-actor", "darkmode-invert", "darkmode-hybrid", "darkmode-render", "contrast"]
   },
   "sources": {
     "src/gjoa/chrome/bjs/dark-mode/": ["darkmode", "contrast"],
