@@ -504,17 +504,24 @@
   padding: 0 !important;
 }
 
-/* Fill the inset wrapper so the resting urlbar spans the centered width
- * (wrapper's symmetric X-margin already supplies the equal left/right gap).
- * Drop any positioned offset that would push it to one side. Scoped to the
- * NON-extended urlbar so the breakout-extend width override below still wins
- * when the urlbar is focused/expanded. */
+/* Contain the resting urlbar inside the drawer. The native urlbar is
+ * `position: absolute` (urlbar-searchbar.css `.urlbar[breakout]`), and its
+ * absolute-positioning containing block is the nearest positioned ancestor —
+ * here `#navigator-toolbox` (position: relative), NOT the inset
+ * `#gjoa-urlbar-toolbar` wrapper. So a `width: 100%` resolved against that
+ * ancestor blows past the wrapper's margin inset and spans the whole drawer/
+ * window. Instead keep native's `width: var(--urlbar-width)`, which
+ * drawer/layout.bjs `sync-urlbar-width` pins to (sidebar width − 2·inset);
+ * the abs-pos urlbar then sizes to the drawer's inner width and sits at its
+ * inset static position (inside the wrapper's margin), so it stays contained
+ * and centered. `left/right: auto` keeps it at that static position; the
+ * breakout-extend width override below still wins when focused/expanded. */
 #sidebar-main #gjoa-urlbar-toolbar #urlbar:not([breakout-extend]) {
-  width: 100% !important;
+  width: var(--urlbar-width) !important;
   min-width: 0 !important;
   left: auto !important;
   right: auto !important;
-  margin-inline: auto !important;
+  margin-inline: 0 !important;
 }
 
 /* breakout: let the urlbar expand past the sidebar when focused.
@@ -667,27 +674,39 @@ Preserve these (security warnings):
  * clipped by) the rounded command-palette edge — the FF152 urlbar restyle left
  * the input flush. Applies in both the floating and in-toolbar expanded popouts.
  *
- * REGRESSION FIX: this breathing room used to be `padding-block-start: 8px` on
- * `#urlbar` itself, which pushed the whole `.urlbar-input-container` (security
+ * REGRESSION FIX (#1): this breathing room used to be `padding-block-start: 8px`
+ * on `#urlbar` itself, which pushed the whole `.urlbar-input-container` (security
  * icon + URL text) DOWN 8px on expand — the input jumped on focus because the
- * resting urlbar has no such padding. Instead we grow the *background panel*
- * upward by pulling its top edge up 8px, leaving the input row's vertical
- * position (owned by `.urlbar-input-container`'s margin-block-start, untouched)
- * pixel-identical at rest and in breakout-extend. The 8px gap now opens ABOVE
- * the input between it and the rounded panel top, exactly as intended.
+ * resting urlbar has no such padding. Instead grow the *background panel* upward
+ * by pulling ITS top edge up 8px, leaving the input row untouched: the icon+text
+ * row lands at the identical vertical position at rest and in breakout-extend.
  *
- * Native (nova/FF152) sets the visible breakout panel's top to
- *   inset-block-start: calc(var(--urlbar-background-inset) + var(--urlbar-input-container-top))
- * so we subtract our breathing-room var from that to raise the panel top. */
+ * REGRESSION FIX (#2): the previous attempt raised the top via
+ *   inset-block-start: calc(var(--urlbar-background-inset)
+ *                           + var(--urlbar-input-container-top) - 8px)
+ * but those two vars are defined ONLY inside the `@media browser.nova.enabled`
+ * block (urlbar-searchbar.css) — and gjoa forces nova OFF (GjoaLoader). With
+ * both vars undefined the calc is invalid at computed-value time, so
+ * `inset-block-start` fell back to its initial `auto`. Combined with native's
+ * `.urlbar-background { inset: 0 }` that left top:auto / bottom:0 on an empty,
+ * height-less abs-positioned panel → it collapsed to zero height. The opaque
+ * panel (the ONLY background behind the input AND the transparent
+ * `.urlbarView` results, in non-nova) vanished, so the dropdown showed through
+ * to the sidebar.
+ *
+ * In non-nova the visible panel is `.urlbar-background` itself, stretched by
+ * `inset: 0` to the urlbar's box (which grows tall via `[breakout-extend]
+ * { height: auto }`, covering input + results). To open 8px of breathing room
+ * ABOVE the input without moving it OR collapsing the panel, raise ONLY the
+ * panel's top edge 8px above the urlbar box and leave `inset-block-end: 0`
+ * (from native `inset: 0`) intact so the panel still stretches down over the
+ * results. No nova vars; no input displacement → no-jump preserved. */
 :root {
   --gjoa-urlbar-breathing: 8px;
 }
 :root[gjoa-urlbar-floating] #urlbar[breakout-extend] > .urlbar-background,
 #gjoa-urlbar-toolbar #urlbar[breakout-extend] > .urlbar-background {
-  inset-block-start: calc(
-    var(--urlbar-background-inset) + var(--urlbar-input-container-top)
-    - var(--gjoa-urlbar-breathing)
-  ) !important;
+  inset-block-start: calc(-1 * var(--gjoa-urlbar-breathing)) !important;
 }
 
 /* Vertically center the security icon / text / star within the input row.
