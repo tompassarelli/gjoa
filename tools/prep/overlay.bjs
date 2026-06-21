@@ -8,7 +8,7 @@
 ;; later want true "tree-replace" semantics we can switch to rsync --delete
 ;; scoped to specific subtrees.
 (ns gjoa.tools.prep.overlay
-  (:require [fs :refer [existsSync readdirSync statSync rmSync]]
+  (:require [fs :refer [existsSync readdirSync statSync rmSync readFileSync writeFileSync]]
             [path :refer [join resolve]]
             [gjoa.tools.prep.paths :refer [ENGINE-DIR REPO-ROOT SRC-DIR]]
             [gjoa.tools.prep.log :refer [log]]))
@@ -23,6 +23,43 @@
 (def BEAGLE-BUILD :- String
   (.replaceAll (resolve REPO-ROOT ".." "beagle" "bin" "beagle-build") (.fromCharCode String 92) "/"))
 
+;; ── Lockstep core.js vendoring ─────────────────────────────────────────────
+;; The chrome (.bjs) is compiled against ../beagle and emits $$bc.<fn>(...)
+;; value-semantics runtime calls. Those resolve to the vendored runtime we ship
+;; at resource:///modules/gjoa/beagle/core.js. If the vendored copy drifts from
+;; the beagle it was compiled against, the emit calls a function the runtime
+;; doesn't export → `$$bc.<fn> is not a function` at chrome load. So we DON'T
+;; hand-copy it: every import re-vendors ../beagle's core.js verbatim, with a
+;; provenance header recording configs/beagle.ref. Gate M (preflight) hard-fails
+;; if ../beagle's HEAD != the pin, so this always vendors the pinned runtime.
+(def BEAGLE-CORE-SRC :- String
+  (resolve REPO-ROOT ".." "beagle" "beagle-lib" "lib" "beagle" "core.js"))
+(def VENDORED-CORE-DST :- String
+  (join SRC-DIR "browser" "components" "gjoa" "beagle" "core.js"))
+(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
+
+(defn pinned-ref [] :- String
+  (if (not (existsSync BEAGLE-REF-FILE))
+    "unknown"
+    (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
+          ref (.find lines (fn [l :- String] :- Bool
+                             (and (> (.-length (.trim l)) 0)
+                                  (not (.startsWith (.trim l) "#")))))]
+      (if ref (.slice (.trim ref) 0 12) "unknown"))))
+
+(defn vendor-core-js! [] :- Any
+  (if (not (existsSync BEAGLE-CORE-SRC))
+    (throw (Error. (str "vendor-core-js!: " BEAGLE-CORE-SRC " not found — is ../beagle checked out?")))
+    (let [body (readFileSync BEAGLE-CORE-SRC "utf8")
+          ref (pinned-ref)
+          header (str "// AUTO-VENDORED by tools/prep/overlay.bjs from "
+                      "../beagle/beagle-lib/lib/beagle/core.js (configs/beagle.ref = " ref ").\n"
+                      "// DO NOT EDIT BY HAND — re-vendored on every `bun run import` so the\n"
+                      "// $$bc value-semantics runtime always matches the beagle the chrome was\n"
+                      "// compiled against. Bump configs/beagle.ref + re-import to change it.\n")]
+      (writeFileSync VENDORED-CORE-DST (str header body))
+      (.step log (str "vendored beagle/core.js @ " ref)))))
+
 (defn count-files [dir :- String] :- Any
   (reduce
     (fn [count name]
@@ -33,7 +70,7 @@
     0
     (readdirSync dir)))
 
-(js/export (defn overlay-src [] :- Any
+(js/export (defn overlay-src! [] :- Any
   (if (not (existsSync SRC-DIR))
     (do
       (.info log "no src/gjoa/ overlays present, skipping")
@@ -45,6 +82,10 @@
           nil)
         (do
           (.step log "applying src/gjoa/ overlays")
+          ;; Re-vendor beagle/core.js into src/ FIRST, so the cp -a below carries
+          ;; the freshly-vendored runtime into engine/ in the same pass. This is
+          ;; the lockstep guarantee: runtime always matches the compiler.
+          (vendor-core-js!)
           ;; -a preserves perms/timestamps; trailing slash on source so contents
           ;; merge into engine/ rather than creating engine/gjoa/.
           (.spawnSync Bun ["cp" "-a" (str SRC-DIR "/.") (str ENGINE-DIR "/")])
