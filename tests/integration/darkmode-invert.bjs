@@ -1,95 +1,89 @@
 #lang beagle/js
-;; Dark-mode P0 validation: the engine-level luminance inversion. With
-;; gjoa.darkmode.invert.enabled set BEFORE navigation, a fresh content
-;; presContext reads the flag and the Servo cascade inverts every absolute
-;; color at computed time. We inject a white-bg / black-text box and assert its
-;; COMPUTED colors come back inverted (white -> black, black -> white) — proving
-;; the hook fires, caches, and reaches getComputedStyle. No content setTimeout
-;; (frozen in headless); waits are runner-side via await-true.
+;; Dark-mode P0 validation — engine-level luminance inversion, read CHROME-SIDE.
 ;;
-;; Precondition: tools/test-driver/cosmetic-fixture-server.mjs serving :8975
-;; (any http content doc works; we just need a real content process).
-;;   GJOA_BIN=$PWD/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa \
-;;     bun .beagle-tools/gjoa/tools/test-driver/runner.js --grep "darkmode P0"
+;; Engine inversion DETACHES Marionette's CONTENT browsing-context handle (a content
+;; executeScript on an inverting page throws "Browsing context discarded"), so the
+;; original content-context getComputedStyle reads can't run. Instead we navigate
+;; chrome-side (gBrowser.loadURI), settle, and drawSnapshot the PAINTED page into an
+;; OffscreenCanvas, sampling center-pixel luminance. Same mechanism as
+;; tests/integration/darkmode-render.bjs / tools/darkmode-regress/snap.js.
+;;
+;; NOTE: drawSnapshot reads PAINTED pixels, not computed CSS — so the original
+;; "computed bg→black / fg→white" asserts become painted-DARKNESS asserts (the page
+;; renders dark under invert), which is the actually-shippable signal anyway.
+;;
+;; Precondition: cosmetic-fixture-server.mjs on :8975 (/light = themeless white).
 (ns gjoa.tests.integration.darkmode-invert
-  (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect expect-eq NAV-JS]]))
+  (:require [gjoa.tests.dsl :refer [deftest expect]]))
 (define-mode strict)
+(declare-extern [Number] Any)
 
-(def TOP :- String "http://127.0.0.1:8975/")
+(def LIGHT :- String "http://127.0.0.1:8975/light") ;; themeless white -> inverts to black
+(def TOP :- String "http://127.0.0.1:8975/")        ;; no-bg -> Canvas/system color
 
-;; Inject a box with explicit white bg + black text, return its computed colors.
-(def PROBE :- String
-  (str "\n"
-       "  const d = document.createElement('div');\n"
-       "  d.id = 'dm-box';\n"
-       "  d.style.backgroundColor = 'rgb(255, 255, 255)';\n"
-       "  d.style.color = 'rgb(0, 0, 0)';\n"
-       "  d.textContent = 'x';\n"
-       "  document.body.appendChild(d);\n"
-       "  const cs = getComputedStyle(d);\n"
-       "  return JSON.stringify({ bg: cs.backgroundColor, fg: cs.color });\n"))
+;; Chrome-side: navigate `url`, settle, drawSnapshot the page, return center-pixel
+;; luminance (0=black .. 255=white). No content executeScript -> survives inversion.
+(defn render-lum-js [url :- String] :- String
+  (str "const done = arguments[arguments.length-1];"
+       "(async () => { try {"
+       "  const win = Services.wm.getMostRecentWindow('navigator:browser');"
+       "  const b = win.gBrowser.selectedBrowser;"
+       "  b.loadURI(Services.io.newURI('" url "'), {triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal()});"
+       "  await new Promise(r => win.setTimeout(r, 3500));"
+       "  const wg = b.browsingContext.currentWindowGlobal;"
+       "  const bm = await wg.drawSnapshot(new win.DOMRect(0,0,300,200), 1, 'rgb(128,128,128)');"
+       "  const c = new win.OffscreenCanvas(300,200); const x = c.getContext('2d'); x.drawImage(bm,0,0);"
+       "  const d = x.getImageData(150,100,1,1).data;"
+       "  done(String(Math.round(0.2126*d[0] + 0.7152*d[1] + 0.0722*d[2])));"
+       "} catch(e){ done('ERR:'+(e&&e.message||e)); } })();"))
+
+;; Re-snapshot the ALREADY-loaded page (no navigation) — for the live-toggle test.
+(def relum-js :- String
+  (str "const done = arguments[arguments.length-1];"
+       "(async () => { try {"
+       "  const win = Services.wm.getMostRecentWindow('navigator:browser');"
+       "  const b = win.gBrowser.selectedBrowser;"
+       "  await new Promise(r => win.setTimeout(r, 1500));"
+       "  const wg = b.browsingContext.currentWindowGlobal;"
+       "  const bm = await wg.drawSnapshot(new win.DOMRect(0,0,300,200), 1, 'rgb(128,128,128)');"
+       "  const c = new win.OffscreenCanvas(300,200); const x = c.getContext('2d'); x.drawImage(bm,0,0);"
+       "  const d = x.getImageData(150,100,1,1).data;"
+       "  done(String(Math.round(0.2126*d[0] + 0.7152*d[1] + 0.0722*d[2])));"
+       "} catch(e){ done('ERR:'+(e&&e.message||e)); } })();"))
+
+(defn set-prefs [mn :- Any js :- String] :- Any
+  (.executeScript mn js))
 
 (js/export (def tests :- Any
-  [(deftest "darkmode P0: engine inverts absolute colors at computed time" [mn ctx]
+  [(deftest "darkmode P0: engine inverts a themeless-light page (painted, chrome-side)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     ;; Isolate the GLOBAL-pref engine path: disable the hybrid actor so it never
-     ;; sets a per-document colorInversionOverride that would mask the pref.
-     ;; Flag must be set BEFORE navigation — P0 reads it at presContext construction.
-     (chrome-eval "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'on';")
-     (let [navOk (js/await (.executeAsyncScript mn NAV-JS [TOP]))]
-       (expect navOk (str "fixture " TOP " did not load — is cosmetic-fixture-server.mjs on :8975?"))
-       (js/await (.setContext mn "content"))
-       (let [r (chrome-eval PROBE)
-             d (JSON/parse r)]
-         (console/log (str "\n[DM-P0] injected white-bg/black-text box -> " r))
-         (expect-eq (.-bg d) "rgb(0, 0, 0)"
-                    "white background was NOT inverted to black — the cascade color-inversion hook did not fire")
-         (expect-eq (.-fg d) "rgb(255, 255, 255)"
-                    "black text was NOT inverted to white — inversion hook did not fire"))))
-   ;; Control: with the flag OFF, the same box stays un-inverted.
-   (deftest "darkmode P0: flag off leaves colors untouched" [mn ctx]
+     ;; GLOBAL-pref engine path only: hybrid actor off, invert on; set BEFORE nav.
+     (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'on';"))
+     (let [lum (js/await (.executeAsyncScript mn (render-lum-js LIGHT) []))]
+       (console/log (str "[DM-P0] invert-ON /light center-lum=" lum))
+       (expect (< (Number lum) 80) (str "themeless-light should render DARK under engine invert; lum=" lum))))
+   (deftest "darkmode P0: flag off leaves a themeless-light page light (control)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     (chrome-eval "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false); return 'off';")
-     (let [navOk (js/await (.executeAsyncScript mn NAV-JS [TOP]))]
-       (expect navOk (str "fixture " TOP " did not load"))
-       (js/await (.setContext mn "content"))
-       (let [r (chrome-eval PROBE)
-             d (JSON/parse r)]
-         (console/log (str "[DM-P0] flag off -> " r))
-         (expect-eq (.-bg d) "rgb(255, 255, 255)"
-                    "flag off but background changed — inversion leaked when disabled"))))
-   ;; P1: flipping the pref on an ALREADY-loaded tab must live-restyle it
-   ;; (nsPresContext::UpdateColorInversion via the pref-change callback).
-   (deftest "darkmode P1: live toggle restyles an already-loaded tab" [mn ctx]
+     (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false); return 'off';"))
+     (let [lum (js/await (.executeAsyncScript mn (render-lum-js LIGHT) []))]
+       (console/log (str "[DM-P0] invert-OFF /light center-lum=" lum))
+       (expect (> (Number lum) 150) (str "flag off: themeless-light should stay LIGHT; lum=" lum))))
+   (deftest "darkmode P1: live toggle restyles an already-loaded tab (painted)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     (chrome-eval "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false); return 'off';")
-     (let [navOk (js/await (.executeAsyncScript mn NAV-JS [TOP]))]
-       (expect navOk (str "fixture " TOP " did not load"))
-       (js/await (.setContext mn "content"))
-       ;; inject the box while invert is OFF — it renders un-inverted
-       (let [before (JSON/parse (chrome-eval PROBE))]
-         (console/log (str "\n[DM-P1] before toggle -> bg=" (.-bg before)))
-         (expect-eq (.-bg before) "rgb(255, 255, 255)" "box should start un-inverted"))
-       ;; flip the flag ON without reloading — engine must restyle the live doc
-       (js/await (.setContext mn "chrome"))
-       (chrome-eval "Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'on';")
-       (js/await (.setContext mn "content"))
-       ;; poll (runner-side) until the existing box becomes inverted
-       (await-true "const d=document.getElementById('dm-box'); return !!(d && getComputedStyle(d).backgroundColor === 'rgb(0, 0, 0)');" 8000)
-       (console/log "[DM-P1] live toggle restyled the existing box to inverted")))
-   ;; P2: system colors (the Canvas / default page background) invert too, so the
-   ;; full "engine" mode (force-light + invert) gives a dark page — not just dark
-   ;; explicit colors. The hook covers the Color::System arm now.
-   (deftest "darkmode P2: system colors invert under full engine mode" [mn ctx]
+     ;; load with invert OFF -> light
+     (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false); return 'off';"))
+     (let [before (js/await (.executeAsyncScript mn (render-lum-js LIGHT) []))]
+       (console/log (str "[DM-P1] before-toggle lum=" before))
+       (expect (> (Number before) 150) (str "should start LIGHT; lum=" before)))
+     ;; flip invert ON without reloading -> engine must restyle the LIVE doc
+     (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'on';"))
+     (let [after (js/await (.executeAsyncScript mn relum-js []))]
+       (console/log (str "[DM-P1] after-toggle lum=" after))
+       (expect (< (Number after) 80) (str "live toggle should restyle to DARK without reload; lum=" after))))
+   (deftest "darkmode P2: system colors invert under full engine mode (painted)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     (chrome-eval "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setIntPref('layout.css.prefers-color-scheme.content-override', 1); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'engine';")
-     (expect (js/await (.executeAsyncScript mn NAV-JS [TOP])) (str "fixture " TOP " did not load"))
-     (js/await (.setContext mn "content"))
-     (let [r (chrome-eval (str "const c=document.createElement('div'); c.style.backgroundColor='Canvas'; document.body.appendChild(c);"
-                               " const bg=getComputedStyle(c).backgroundColor; const m=bg.match(/[0-9]+/g);"
-                               " const sum=m?(+m[0]+ +m[1]+ +m[2]):999; return JSON.stringify({bg, dark: sum<200});"))
-           d (JSON/parse r)]
-       (console/log (str "\n[DM-P2] Canvas system-color box -> " r))
-       (expect (.-dark d) (str "Canvas system color (page bg) did not invert to dark: " (.-bg d)))))]))
-
+     (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setIntPref('layout.css.prefers-color-scheme.content-override', 1); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'engine';"))
+     (let [lum (js/await (.executeAsyncScript mn (render-lum-js TOP) []))]
+       (console/log (str "[DM-P2] full-engine / center-lum=" lum))
+       (expect (< (Number lum) 90) (str "system colors (page bg) should invert to DARK; lum=" lum))))]))
 (js/export-default tests)
