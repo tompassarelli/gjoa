@@ -625,3 +625,45 @@ drawSnapshot of a themeless-light page with the hybrid actor → center pixel wh
 window.gjoaTest initializes (catches a chrome-dead bake before ship). The 2 remaining suite fails are
 both known/expected (adblock M2 = #90's separate build; 1 darkmode content-nav = the Marionette
 content-context-vs-inversion limitation, product validated via drawSnapshot).
+
+---
+
+## 2026-06-21 — Lane-3 full `./mach build`: #90 content-classifier contract (concrete-type singleton)
+
+**Type:** full `nix develop .#mach -c './mach build'` (incremental, obj-* preserved), 2145s (~36 min),
+9 benign warnings (swgl `-fembed-bitcode` inherited flag, ohttp manifest key, third-party). Clean
+llvm-19; obj-* toolchain-consistency proven (zero non-conftest objects from a wrong-shell detour).
+
+**Trigger:** #90 — restore the `@mozilla.org/content-classifier-service;1` contract (concrete-type
+singleton; resolves the `StaticComponents.cpp:12205` `T`-deduction break) so cosmetic filtering can
+reach the service. Bakes gjoa-2's chrome `$bc` fix + actor-gate into the first clean shippable binary.
+
+**Preflight:** 14/15. Only Gate A red = `0014` fails `git apply --check` on pristine source — a FALSE
+POSITIVE: Gate A checks each patch INDEPENDENTLY (preflight.bjs:89-91, `--check` vs an unchanging tmp),
+but 0014 edits nsPresContext.cpp:829 which 0009 also edits, so it needs 0009 applied first. `bun run
+import` applied all 10 CUMULATIVELY with zero errors (reality). gjoa-2 independently adjudicated GO.
+
+**Two build-env traps caught (postmortem):**
+1. STALE ENGINE — `import` tracks applied patches by FILENAME (patches.bjs:113), so my content-changed
+   patches/0008 (same name) was SKIPPED and engine kept the OLD stripped 0008. Caught by direct engine
+   grep BEFORE compiling. Fix: `git -C engine reset --hard <baseline> && git clean -fd` (keeps obj-* via
+   FF .gitignore) + clear .gjoa-applied-patches + re-import. FOLLOW-UP: hash-track the apply-record.
+2. WRONG DEV SHELL — ran `./mach build` in the MINIMAL default devShell (direnv auto-load: bun/python/git
+   only), dying serially on LIBCLANG_PATH then llvm-objdump then alsa. The build toolchain is the OPT-IN
+   `nix develop .#mach` (llvm-19 + gtk/alsa/dbus + shellHook). Also re-imported INSIDE .#mach so mozconfig
+   got llvm-19 libclang (my out-of-shell import had baked llvm-21.1.7). LESSON: read flake.nix devShells
+   at the FIRST missing var; do not hand-patch PATH dep-by-dep.
+
+**Result:** SUCCESS. libxul.so fresh + `@mozilla.org/content-classifier-service;1` linked; binary =
+"Mozilla Gjoa 152.0"; chrome `$bc` fix baked (GjoaLoader to resource:///modules/gjoa/beagle/core.js).
+#90 engine PROVEN: classifier log loads 137k rules + `ClassifyForCancel hit=1` on googletagservices +
+google-analytics. Full suite (2 identical runs): **96/14**. ALL 14 harness/environmental, ZERO product
+defects: 12x marionette content-BC-discard (contrast x9 + adblock-M2-actor + youtube + zctest — known
+limitation, product renders via drawSnapshot); 2x adblock network (M0/M1) = TIMING (M0 PASSES run-alone:
+137k rules load + hit=1; 5s settle too short for the parse under full-suite load + no retry — NOT #90:
+M0 is disjoint from the contract, one shared sInstance, network path uses GetInstance()).
+
+**Follow-ups:** (a) Gate A cumulative-apply (Task H); (b) hash-track apply-record (stale-engine trap);
+(c) adblock M0/M1 need a list-parse-complete gate + retry (flaky under load); (d) flake.nix devShell.mach
+missing LIBCLANG_PATH/llvm-objdump despite the shellHook — verify. Contrast sleep-reorder fix DISPROVEN
+(re-verify still discards — general content-BC limit, needs JSActor/drawSnapshot, not the reorder).
