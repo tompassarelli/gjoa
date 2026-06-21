@@ -356,7 +356,7 @@
               (js/await
                (try
                 (do
-                  (let [p (js/await (create-profile))] (reset! profile p))
+                  (let [p (js/await (create-profile {:marionettePort marionettePort}))] (reset! profile p))
                   (when (.-verbose opts) (logErr (str "profile: " (.-path (deref profile)))))
                   (when (.-verbose opts) (logErr (str "binary:  " gjoaBin)))
                   (let [m (js/await (bootGjoa (.-path (deref profile))))] (reset! mn m))
@@ -422,6 +422,15 @@
 (def cliFiles :- Any (cli-val cliArgs "--files"))
 (def cliListLanes :- Any (.includes cliArgs "--list-lanes"))
 
+;; Marionette port — env GJOA_MARIONETTE_PORT (or --marionette-port) overrides the
+;; 2828 default so agents sharing one working tree can run the suite CONCURRENTLY
+;; without colliding on a single port (the profile dir is already per-run unique and
+;; the fixture servers are shareable, so the port was the only contention point).
+;; Unset = 2828 — identical single-agent behavior, zero change for existing callers.
+(def cliMarionettePort :- Any
+  (let [v (or (cli-val cliArgs "--marionette-port") (.-GJOA_MARIONETTE_PORT (.-env process)))]
+    (if v (parseInt v 10) nil)))
+
 ;; --list-lanes: resolve the keep-set against tags.json + the on-disk suite
 ;; list and print it WITHOUT booting gjoa. Cheap manifest sanity-check.
 (defn list-lanes! [opts :- Any] :- Any
@@ -452,7 +461,8 @@
 (when (.-main (js/import-meta))
   (let [opts {:verbose cliVerbose :grep cliGrep :headed cliHeaded
               :subsystem cliSubsystem :lane cliLane
-              :excludeLane cliExcludeLane :files cliFiles}]
+              :excludeLane cliExcludeLane :files cliFiles
+              :marionettePort cliMarionettePort}]
     (if cliListLanes
       (.catch (list-lanes! opts)
         (fn [e] (logErr (str "fatal: " (or (.-stack e) e))) (.exit process 1)))
