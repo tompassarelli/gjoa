@@ -164,6 +164,30 @@
               " Services.prefs.clearUserPref('gjoa.darkmode.enabled');"
               " Services.prefs.clearUserPref('gjoa.darkmode.invert.enabled');"
               " Services.prefs.savePrefFile(null);")
-         []))))]))
+         []))))
+
+   ;; Per-site override P2 — user.force-native (override='inactive', the mirror of
+   ;; #49/off): "never invert this host". Default-invert would darken a themeless
+   ;; /light page; force-native overrides -> it STAYS light. Painted, chrome-side.
+   (deftest "darkmode override: user.force-native keeps a themeless-light page light (painted)" [mn ctx]
+     (js/await (.setContext mn "chrome"))
+     (chrome-eval HYBRID-B-JS)
+     (chrome-eval "Services.prefs.setCharPref('gjoa.darkmode.user.force-native', '127.0.0.1'); return 'fn';")
+     (let [lum (js/await (.executeAsyncScript mn (render-lum-js LIGHT-TOP 150 100) []))]
+       (console/log (str "[dm-override] force-native /light center-lum=" lum))
+       (expect (> (Number lum) 150) (str "force-native must KEEP themeless-light un-inverted (light); lum=" lum)))
+     (chrome-eval "Services.prefs.clearUserPref('gjoa.darkmode.user.force-native'); return 'clean';"))
+
+   ;; Per-site override P2 — user.force-invert (override='active'): "always invert
+   ;; this host". A native-dark /dark page is normally KEPT; force-invert overrides
+   ;; the keep -> #111 page bg inverts to a light center. Painted, chrome-side.
+   (deftest "darkmode override: user.force-invert inverts a native-dark page (painted)" [mn ctx]
+     (js/await (.setContext mn "chrome"))
+     (chrome-eval HYBRID-B-JS)
+     (chrome-eval "Services.prefs.setCharPref('gjoa.darkmode.user.force-invert', '127.0.0.1'); return 'fi';")
+     (let [lum (js/await (.executeAsyncScript mn (render-lum-js DARK-TOP 150 100) []))]
+       (console/log (str "[dm-override] force-invert /dark center-lum=" lum))
+       (expect (> (Number lum) 150) (str "force-invert must invert the native-dark page (#111 -> light center); lum=" lum)))
+     (chrome-eval "Services.prefs.clearUserPref('gjoa.darkmode.user.force-invert'); return 'clean';"))]))
 
 (js/export-default tests)
