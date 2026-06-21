@@ -75,6 +75,38 @@
        "  if (ws.length > 1) ws[ws.length - 1].close();\n"
        "  return true;\n"))
 
+;; OP7 RENAME: rename a space in A -> B's roster reflects the new name.
+(def RENAME-IN-A-JS :- String
+  (str "\n"
+       "  const a = [...Services.wm.getEnumerator('navigator:browser')][0];\n"
+       "  let s = a.Spaces.list().find(x => x.name === 'SyncProbe');\n"
+       "  if (!s) s = a.Spaces.create('SyncProbe');\n"
+       "  a.Spaces.rename(s.id, 'SyncRenamed');\n"
+       "  return true;\n"))
+
+(def B-HAS-RENAMED-JS :- String
+  (str "\n"
+       "  const b = [...Services.wm.getEnumerator('navigator:browser')][1];\n"
+       "  const names = b.Spaces.list().map(s => s.name);\n"
+       "  return names.includes('SyncRenamed') && !names.includes('SyncProbe');\n"))
+
+;; OP8 DELETE: create two spaces in A, delete one -> B reflects the SURVIVOR and
+;; not the deleted one. Asserting the survivor present is what makes this RED on
+;; current code (window B receives neither space).
+(def CREATE-TWO-DELETE-ONE-IN-A-JS :- String
+  (str "\n"
+       "  const a = [...Services.wm.getEnumerator('navigator:browser')][0];\n"
+       "  a.Spaces.create('SyncKeep');\n"
+       "  const doomed = a.Spaces.create('SyncDoomed');\n"
+       "  a.Spaces.delete(doomed.id);\n"
+       "  return true;\n"))
+
+(def B-REFLECTS-DELETE-JS :- String
+  (str "\n"
+       "  const b = [...Services.wm.getEnumerator('navigator:browser')][1];\n"
+       "  const names = b.Spaces.list().map(s => s.name);\n"
+       "  return names.includes('SyncKeep') && !names.includes('SyncDoomed');\n"))
+
 (def tests :- Any
   [(deftest "#89 — space created in window A appears in window B's roster" [mn]
      (chrome-eval OPEN-SECOND-JS)
@@ -87,6 +119,26 @@
        (await-true B-HAS-CREATED-JS 5000)
        (expect (chrome-eval B-HAS-CREATED-JS)
                "window B never learned of the 'SyncProbe' space created in A (no cross-window roster sync)")
-       (chrome-eval CLOSE-SECOND-JS)))])
+       (chrome-eval CLOSE-SECOND-JS)))
+
+   (deftest "#89 — space renamed in window A is reflected in window B's roster" [mn]
+     (chrome-eval OPEN-SECOND-JS)
+     (await-true BOTH-READY-JS 8000)
+     (chrome-eval RESET-BOTH-JS)
+     (chrome-eval RENAME-IN-A-JS)
+     (await-true B-HAS-RENAMED-JS 5000)
+     (expect (chrome-eval B-HAS-RENAMED-JS)
+             "window B did not reflect the rename 'SyncProbe'->'SyncRenamed' from window A")
+     (chrome-eval CLOSE-SECOND-JS))
+
+   (deftest "#89 — space deleted in window A is dropped from window B's roster" [mn]
+     (chrome-eval OPEN-SECOND-JS)
+     (await-true BOTH-READY-JS 8000)
+     (chrome-eval RESET-BOTH-JS)
+     (chrome-eval CREATE-TWO-DELETE-ONE-IN-A-JS)
+     (await-true B-REFLECTS-DELETE-JS 5000)
+     (expect (chrome-eval B-REFLECTS-DELETE-JS)
+             "window B did not reflect A's roster after create-two/delete-one (missing survivor or kept the deleted)")
+     (chrome-eval CLOSE-SECOND-JS))])
 
 (js/export-default tests)
