@@ -70,7 +70,7 @@
       "intro": "Everything about how gjoa colors the web and dresses its own chrome — the dark-mode engine plus the gjoa theme — in one place. gjoa is dark-first: by default a bright white site (think YouTube) is darkened for you. Two groups below: Dark mode (how web pages are darkened) and Theme (gjoa's own window colors).",
       "subsections": [
         { "id": "darkmode", "title": "Dark mode",
-          "intro": "Engine-level dark mode. Sites that ship their own dark theme can render it; the rest are inverted at style-resolution time (cached in the engine, no per-frame compositor filter). The layers stack, broadest to narrowest: the master toggle → the Mode picker → per-site overrides (the gjoa.darkmode.user.* host-lists in about:config) → gjoa's built-in curated per-site fixes → the engine knobs below (Darkness, Text brightness, Scrim). Each layer overrides the one before it.",
+          "intro": "Engine-level dark mode. Sites that ship their own dark theme can render it; the rest are inverted at style-resolution time (cached in the engine, no per-frame compositor filter). The layers stack, broadest to narrowest: the master switch → the Mode picker → the engine appearance knobs (Darkness, Text brightness, Scrim) → the three Per-site lists → gjoa's built-in curated per-site fixes. Each narrower layer overrides the one before it. Everything is right here — nothing lives in about:config.",
           "settings": [
             { "pref": "gjoa.darkmode.enabled", "type": "bool", "title": "Dark mode (master switch)", "default": true,
               "help": "The on/off for gjoa's whole dark-mode engine. When ON, the Mode below decides how each page is darkened. When OFF, gjoa does nothing to page colors — every site renders in its own authored colors (usually light), exactly like vanilla Firefox.",
@@ -80,14 +80,14 @@
               ] },
             { "pref": "gjoa.darkmode.mode", "type": "enum", "title": "Mode — how pages are darkened", "default": "system",
               "options": [
-                { "value": "off", "label": "Off — leave every site in its own colors" },
-                { "value": "system", "label": "Match my OS theme (default)" },
-                { "value": "hybrid", "label": "Always dark — prefer each site's own dark theme" },
-                { "value": "auto", "label": "Only sites that already have a dark theme" },
-                { "value": "engine", "label": "Always dark — force every site (most consistent)" },
+                { "value": "off", "label": "Off — every site in its own colors" },
+                { "value": "auto", "label": "Only sites that already have a dark theme (gentlest)" },
+                { "value": "system", "label": "Match my OS theme (current default)" },
+                { "value": "hybrid", "label": "Always dark — keep each site's own dark theme where it has one" },
+                { "value": "engine", "label": "Always dark — force every site uniform (most consistent)" },
                 { "value": "filter", "label": "Always dark — legacy whole-page invert (advanced)" }
               ],
-              "help": "The core choice. The raw pref value is shown above each label below so about:config power users can map them. Only matters while the master switch is ON.",
+              "help": "The core choice, ordered gentlest → most aggressive. The first three respect the web (sites stay light unless they opt in or your OS is dark); the last three force dark everywhere, differing only in HOW. If you want the uniform, Dark-Reader-style dark on every site (the most consistent result), pick 'engine'. Only matters while the master switch is ON.",
               "examples": [
                 { "value": "off", "label": "off", "detail": "Identical to turning the master switch off: every site in its own (usually light) colors. Exists so the Mode can be parked without losing your other settings." },
                 { "label": "system", "detail": "Follow your operating system. Dark OS ⇒ pages go dark; light OS ⇒ sites render as-authored. Caveat: sites that ignore the OS signal (e.g. YouTube) stay light, and sites with a very dark native theme (e.g. Reddit) stay near-black — the Darkness slider does NOT move these two cases." },
@@ -124,6 +124,39 @@
               "examples": [
                 { "label": "OFF (default)", "detail": "The engine scrim handles background images — correct for nearly every page, zero extra work." },
                 { "label": "ON", "detail": "gjoa additionally inspects each image; may improve odd icon/logo edge cases, but can occasionally misjudge an image. Turn on only if a specific site's images look wrong." }
+              ] },
+            { "pref": "gjoa.darkmode.user.force-native", "type": "string", "title": "Per-site — keep the site's own theme", "default": "",
+              "help": "Comma-separated domains gjoa should NEVER invert — it leaves them in their own authored colors (their native dark theme if they have one, otherwise light). Use this for a site whose own dark theme you prefer over gjoa's inversion.",
+              "examples": [
+                { "label": "github.com, news.ycombinator.com", "detail": "GitHub keeps its own dark theme; HN renders as-authored — gjoa won't touch either, while every other site still follows your Mode." },
+                { "label": "(empty — default)", "detail": "No exceptions; every site follows the Mode above." }
+              ],
+              "note": "Overrides gjoa's automatic per-site decision. Lowest of the three per-site rules: 'disable' wins, then 'force dark', then this." },
+            { "pref": "gjoa.darkmode.user.force-invert", "type": "string", "title": "Per-site — always force gjoa dark", "default": "",
+              "help": "Comma-separated domains gjoa should ALWAYS engine-invert into your Darkness band — even if the site ships its own dark theme. Use this when a site's native dark theme is ugly or inconsistent and you'd rather have gjoa's uniform dark.",
+              "examples": [
+                { "label": "reddit.com", "detail": "Instead of Reddit's near-black native theme, gjoa inverts it to your Darkness setting (e.g. #0d0d0d), consistent with every other inverted site." },
+                { "label": "(empty — default)", "detail": "No forced sites; gjoa decides per the Mode above." }
+              ],
+              "note": "Beats 'keep the site's own theme', but is itself overridden by 'disable' below." },
+            { "pref": "gjoa.darkmode.user.off", "type": "string", "title": "Per-site — disable dark mode entirely", "default": "",
+              "help": "Comma-separated domains where gjoa does NOTHING — the page renders exactly as authored (usually light), as if dark mode were off, but only for these sites. Use this for a site where any darkening looks broken (design tools, maps, color-critical work).",
+              "examples": [
+                { "label": "figma.com, maps.google.com", "detail": "Design / map tools render in true colors, untouched, while every other site stays dark." },
+                { "label": "(empty — default)", "detail": "No sites excluded." }
+              ],
+              "note": "Highest-precedence per-site rule — beats both lists above." },
+            { "pref": "gjoa.darkmode.normalize.enabled", "type": "bool", "title": "Contrast guard (experimental)", "default": false,
+              "help": "A final readability pass: after inversion settles, gjoa measures real text against its real background and re-tones any text that would fall below a legibility floor — the 'never unreadable, no black-on-black' backstop. OFF by default pending full build verification; the engine inversion already yields readable contrast in the common case.",
+              "examples": [
+                { "label": "OFF (default)", "detail": "Engine inversion handles contrast — correct for nearly every page, zero extra work." },
+                { "label": "ON", "detail": "gjoa additionally re-tones any low-contrast text it detects. Turn on if a darkened site has hard-to-read text." }
+              ] },
+            { "pref": "gjoa.darkmode.normalize.floor", "type": "int", "title": "Contrast guard strictness", "default": 45, "min": 0, "max": 100, "slider": true,
+              "help": "How strict the Contrast guard is, in APCA Lc (perceptual contrast). HIGHER = stricter (more text gets re-toned). ~45 ≈ large / secondary text; raise toward 60 for stricter body-text contrast. Only matters when the Contrast guard above is ON.",
+              "examples": [
+                { "label": "45 (default)", "detail": "Catches genuinely illegible text without over-correcting." },
+                { "label": "60", "detail": "Stricter — enforces stronger body-text contrast, re-tones more aggressively." }
               ] }
           ] },
         { "id": "theme", "title": "Theme",
