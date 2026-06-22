@@ -7,14 +7,14 @@
 ;;            engine file exactly — i.e. the claim-doc stays equivalent to patch 0011.
 ;;   bun run projector:test
 (ns gjoa.tools.projector.test-projector
-  (:require [fs :refer [readFileSync]]
+  (:require [fs :refer [readFileSync existsSync]]
             [path :refer [join dirname]]
             [gjoa.tools.prep.sh :refer [sh]]
             [gjoa.tools.projector.reflector :refer [round-trips?]]
             [gjoa.tools.projector.claims :refer [json->doc replay]]
             [gjoa.tools.projector.codegraph :refer [build-graph! beagle-callers projected-callers]]))
 (define-mode strict)
-(declare-extern [process console] Any)
+(declare-extern [process console parseInt] Any)
 
 (def REPO :- String (.cwd process))
 (def ENGINE :- String (join REPO "engine"))
@@ -23,7 +23,24 @@
   (console/error (str "FAIL: " msg))
   (.exit process 1))
 
+;; GATE C parses the EMITTED chrome bundles (dist/chrome/JS/*.uc.js). Those are
+;; built by `chrome:dist`, NOT by this test — so a local run reads whatever is
+;; there while CI rebuilds them fresh first. That divergence let a freshly-emitted
+;; parse error pass locally and only fail in CI (v0.4.1). Refuse to run GATE C on
+;; bundles older than the chrome source they come from — same "refuse if stale"
+;; discipline as Gate K (engine-currency). A local green now == a CI green.
+(defn assert-bundles-fresh! [] :- Any
+  (let [js-dir (join REPO "dist" "chrome" "JS")]
+    (when (not (existsSync js-dir))
+      (fail! "dist/chrome/JS missing — run `bun run chrome:dist` before projector:test"))
+    (let [newest-src (.trim (sh (str "find " REPO "/src/gjoa/chrome -type f \\( -name '*.bjs' -o -name '*.css' \\) -printf '%T@\\n' 2>/dev/null | sort -rn | head -1") nil))
+          oldest-js (.trim (sh (str "find " js-dir " -name '*.uc.js' -printf '%T@\\n' 2>/dev/null | sort -n | head -1") nil))]
+      (when (and (> (.-length newest-src) 0) (> (.-length oldest-js) 0)
+                 (> (parseInt newest-src 10) (parseInt oldest-js 10)))
+        (fail! "dist/chrome/JS is STALE vs src/gjoa/chrome — run `bun run chrome:dist` first. (This stale-bundle false-green is what broke v0.4.1 CI; the gate now refuses it.)")))))
+
 (defn main! [] :- Any
+  (assert-bundles-fresh!)
   ;; GATE A — reflector round-trip over a corpus
   (let [files (.filter (.split (sh (str "find " ENGINE "/browser/components " ENGINE "/toolkit/modules -name '*.sys.mjs' 2>/dev/null | head -40") nil) "\n")
                        (fn [s :- String] :- Bool (> (.-length s) 0)))]

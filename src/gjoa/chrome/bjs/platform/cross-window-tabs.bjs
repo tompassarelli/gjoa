@@ -12,20 +12,25 @@
               (let [w (.getNext e)
                     p (.-Gjoa w)]
                 (when p
-                  (let [win (.current (.-windows p))
-                        tabs (.list (.-tabs win))]
-                    (.forEach tabs
-                      (fn [t]
-                        (.push out {:id (.-id t)
-                                    :url (.-url t)
-                                    :label (.-label t)
-                                    :customName (.-customName t)
-                                    :pinned (.-pinned t)
-                                    :selected (.-selected t)
-                                    :hidden (.-hidden t)
-                                    :parentId (.-parentId t)
-                                    :depth (.-depth t)
-                                    :windowId (.-windowId win)}))))))
+                  ;; per-window try: a window still initializing (no windows.current
+                  ;; / tabs.list yet) must NOT abort the whole all-windows walk —
+                  ;; otherwise one not-ready window blanks the entire shift+T picker.
+                  (try
+                    (let [win (.current (.-windows p))
+                          tabs (.list (.-tabs win))]
+                      (.forEach tabs
+                        (fn [t]
+                          (.push out {:id (.-id t)
+                                      :url (.-url t)
+                                      :label (.-label t)
+                                      :customName (.-customName t)
+                                      :pinned (.-pinned t)
+                                      :selected (.-selected t)
+                                      :hidden (.-hidden t)
+                                      :parentId (.-parentId t)
+                                      :depth (.-depth t)
+                                      :windowId (.-windowId win)}))))
+                    (catch Any _e nil))))
               (recur e))
             out))
         (catch Any err
