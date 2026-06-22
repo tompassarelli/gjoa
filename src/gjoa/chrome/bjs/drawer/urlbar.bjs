@@ -14,12 +14,24 @@
 
         intent-attr #(if (= % "newTab") "new-tab" "current")
 
-        deactivate-floating (fn []
-          (when (.-activated state)
-            (set! (.-activated state) false)
-            (log "deactivateFloating")
+        ;; #149 ATOMIC TEARDOWN. The naive teardown removed `gjoa-urlbar-floating`
+        ;; synchronously, which instantly reverted the urlbar from the centered
+        ;; position:fixed palette back to its resting in-sidebar INLINE box — that
+        ;; geometry-restore frame was visible ("spazzes out" as a small inline
+        ;; search box flashes in the sidebar) before the bar/ghost were gone.
+        ;; Fix ordering: (1) set `gjoa-urlbar-teardown` → CSS instantly opacity:0's
+        ;; the floating bar + backdrop with NO transition; (2) next animation frame
+        ;; (after the hidden frame paints) actually remove the floating attrs and
+        ;; tear down backdrop/ghost/popover behind the now-invisible box. So the
+        ;; inline-restore reflow never paints.
+        finish-teardown (fn []
+          ;; Bail if a re-summon raced in before this frame fired — activate-floating
+          ;; set activated=true + re-added the floating attrs, so tearing down now
+          ;; would clobber the fresh activation. Leave it fully armed.
+          (when (not (.-activated state))
             (rmattr! root "gjoa-urlbar-floating")
             (rmattr! root "gjoa-urlbar-intent")
+            (rmattr! root "gjoa-urlbar-teardown")
             (when (.-backdrop state)
               (.remove (.-backdrop state))
               (set! (.-backdrop state) nil))
@@ -39,8 +51,23 @@
                   (catch Any e
                     (log "deactivateFloating:popover-sync-error" {:msg (String e)})))))))
 
+        deactivate-floating (fn []
+          (when (.-activated state)
+            (set! (.-activated state) false)
+            (log "deactivateFloating")
+            ;; Hide FIRST (this frame), restore geometry NEXT frame behind the
+            ;; hidden box — no intermediate inline-sidebar frame is ever painted.
+            (attr! root "gjoa-urlbar-teardown" "")
+            (.requestAnimationFrame window finish-teardown)))
+
         activate-floating (fn [new-intent]
           (set! (.-intent state) new-intent)
+          ;; If a prior dismiss is still mid-teardown (teardown attr set, rAF
+          ;; pending), a quick re-summon must clear it so the bar isn't stuck
+          ;; opacity:0. The pending finish-teardown is then a near-no-op (attrs
+          ;; already re-set by activate; it only re-removes the stale teardown
+          ;; attr, which activate cleared anyway).
+          (rmattr! root "gjoa-urlbar-teardown")
           (let [attr-val (intent-attr (.-intent state))]
             (if (.-activated state)
               (do (log "activateFloating:re-arm" {:intent (.-intent state)})

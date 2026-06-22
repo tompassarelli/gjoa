@@ -90,7 +90,13 @@
                               10)
                     w (Math/max 0 (- (.-width (.getBoundingClientRect sidebar-main))
                                       (* inset 2)))]
-                (.setProperty (.-style urlbar) "--urlbar-width" (str w "px")))
+                (.setProperty (.-style urlbar) "--urlbar-width" (str w "px"))
+                ;; #150: stash the resting width so the FLIPPED breakout-extend
+                ;; CSS can grow the bar toward the page (leftward) instead of the
+                ;; off-screen window edge — it translates left by (expand-w −
+                ;; resting-w), and `--urlbar-width` is clobbered to expand-w
+                ;; inside that rule, so it needs this untouched copy.
+                (.setProperty (.-style urlbar) "--gjoa-urlbar-resting-w" (str w "px")))
               (set! (.-updating state) false)))
 
         ;; --- collect-icons ---

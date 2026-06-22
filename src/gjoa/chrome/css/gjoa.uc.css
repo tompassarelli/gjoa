@@ -739,6 +739,19 @@
   margin-inline: 0 !important;
 }
 
+/* #150 FLIP DIRECTION: when the sidebar is flipped to the RIGHT
+ * (`sidebar-positionend` on the shadow host), the page is to the LEFT of the
+ * drawer, so the default rightward growth above heads toward the OFF-SCREEN
+ * window edge and clips. The box stays anchored at its resting LEFT edge and is
+ * `--gjoa-urlbar-expand-w` wide; translate it left by (expand-w − resting-w) so
+ * its RIGHT edge instead pins at the resting right edge and the extra width
+ * grows toward the page/center. `--gjoa-urlbar-resting-w` is the untouched
+ * resting width stashed by drawer/layout.bjs (sidebar inner width); the
+ * `--urlbar-width` here is already clobbered to expand-w so it can't be used. */
+#sidebar-main[sidebar-positionend] #gjoa-urlbar-toolbar #urlbar:is([focused][breakout-extend]) {
+  transform: translateX(calc(-1 * (var(--gjoa-urlbar-expand-w) - var(--gjoa-urlbar-resting-w, var(--urlbar-width, 0px))))) !important;
+}
+
 #gjoa-urlbar-toolbar:has(#urlbar[breakout-extend]) {
   overflow: visible !important;
 }
@@ -820,12 +833,14 @@ Preserve these (security warnings):
  * "open in new tab" path). Mouse-click activation is deliberately NOT covered
  * here — the in-sidebar breakout-extend at-click-point behavior is preserved. */
 
-/* Width: 720px ideal, never closer than 20px to either edge, never above
- * 720px. min(720px, 100vw - 40px) computes once and reapplies on every
+/* Width: 860px ideal, never closer than 20px to either edge, never above
+ * 860px. min(860px, 100vw - 40px) computes once and reapplies on every
  * window resize. All three width properties use the same expression so
- * Firefox's UrlbarInput sizing JS can't override any of them. */
+ * Firefox's UrlbarInput sizing JS can't override any of them. (Bumped
+ * 720→860 for a roomier command palette; the `100vw - 40px` cap keeps the
+ * card-gap inset so it never reaches the window edge.) */
 :root[gjoa-urlbar-floating] {
-  --gjoa-floating-w: min(720px, calc(100vw - 40px));
+  --gjoa-floating-w: min(860px, calc(100vw - 40px));
   /* Cap dropdown height so a long suggestion list doesn't bleed below the
    * viewport on tall-narrow windows. 100vh - 22vh (top offset) - 24vh (input
    * height + breathing room) ≈ 54vh of result list. */
@@ -915,6 +930,28 @@ Preserve these (security warnings):
 
 :root[gjoa-urlbar-floating] #urlbar {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* #149 ATOMIC TEARDOWN: deactivate sets `gjoa-urlbar-teardown` on :root for ONE
+ * frame BEFORE removing `gjoa-urlbar-floating`. While teardown is set the
+ * floating bar (and its backdrop) is instantly opacity:0 / non-interactive with
+ * NO transition or animation, so the geometry-restore reflow back to the resting
+ * in-sidebar inline urlbar happens entirely behind a hidden box — the
+ * intermediate "small inline search box flashing in the sidebar" frame is never
+ * painted. Must out-specify the float-in animation + box-shadow rules above, so
+ * it carries the same `:root[gjoa-urlbar-floating]` prefix plus the teardown
+ * attr. */
+:root[gjoa-urlbar-floating][gjoa-urlbar-teardown] #urlbar {
+  opacity: 0 !important;
+  animation: none !important;
+  transition: none !important;
+  pointer-events: none !important;
+}
+:root[gjoa-urlbar-teardown] #gjoa-urlbar-backdrop {
+  opacity: 0 !important;
+  animation: none !important;
+  transition: none !important;
+  pointer-events: none !important;
 }
 
 /* Breathing room at the panel top so the input doesn't butt against (and look
