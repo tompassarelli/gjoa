@@ -3,6 +3,10 @@
   "threshold": 45,
   "sites": [
     {
+      "url": "https://news.mit.edu/",
+      "tag": "mit-news"
+    },
+    {
       "url": "https://www.google.com/",
       "tag": "top-global"
     },

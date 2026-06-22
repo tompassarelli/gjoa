@@ -36,6 +36,10 @@
 ;; themeless page renders dark from frame 1 (no flash), retracted pre-paint for
 ;; sites that authored their own dark theme.
 (def PREF-DEFAULT-INVERT :- String "gjoa.darkmode.hybrid.default-invert")
+;; APCA contrast normalizer (GjoaDarkmode actor pass-3): re-tones any text that
+;; renders below the readability floor against its REAL backdrop — the
+;; no-black-on-black backstop. Default ON (set in set-darkmode-defaults!).
+(def PREF-NORMALIZE :- String "gjoa.darkmode.normalize.enabled")
 
 ;; resistFingerprinting (RFP) — enabled by the "librewolf" privacy profile — spoofs
 ;; content `prefers-color-scheme: light` as an anti-fingerprinting defense, which
@@ -187,7 +191,13 @@
       ;; or a wayland/niri portal that gecko doesn't pick up) reads LIGHT even on a
       ;; dark OS → every site renders light. Dark never consults the OS, so it Just
       ;; Works. Users who want OS-follow can still pick System explicitly.
-      (.setCharPref d PREF-MODE "dark"))
+      (.setCharPref d PREF-MODE "dark")
+      ;; No-black-on-black backstop ON by default. Engine inversion alone leaves
+      ;; sub-floor text on real pages (news.mit.edu measured 7/9 text els black-on-
+      ;; black with this OFF, 0 with it ON). Set on the default branch here so it
+      ;; flips for ALREADY-BUILT binaries via `gjoa sync` — the normalize pass lives
+      ;; in the synced actor, so no engine rebuild is needed to make dark mode legible.
+      (.setBoolPref d PREF-NORMALIZE true))
     (catch Any e
       (console/error "gjoa-darkmode: set-darkmode-defaults! failed" e))))
 
@@ -219,8 +229,11 @@
 
 (defn init-! [] :- Any
   (set-darkmode-defaults!)
-  ;; (migrate-mode!) removed: the default appearance is now "system" (follow OS),
-  ;; so the old one-shot system→dark rewrite would fight the chosen default.
+  ;; (migrate-mode!) intentionally NOT called. The default moved to "dark"
+  ;; (unconditional — see set-darkmode-defaults!), so default-branch users land
+  ;; on dark with no migration. Tradeoff (accepted): a user who explicitly stored
+  ;; "system" pre-cutover keeps it (now plain OS-follow, which can mis-read a dark
+  ;; OS) rather than being silently rewritten — they can re-pick Dark.
   (apply!)
   (let [observer {:observe (fn [_s _t _d] (apply!))}
         mql (.matchMedia window "(prefers-color-scheme: dark)")

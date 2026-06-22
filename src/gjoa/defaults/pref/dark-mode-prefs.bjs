@@ -135,8 +135,12 @@
 ;; pre-inverted when the engine is inverting this doc), and the child applies it. This
 ;; is the guarantee that NO text renders below the readability floor — the
 ;; "no black-on-black ever" backstop. Validated by tools/darkmode-regress (the suite
-;; measures with the same APCA math). DEFAULT OFF until the build is verified.
-(pref "gjoa.darkmode.normalize.enabled" false)
+;; measures with the same APCA math). DEFAULT ON: without it the engine inversion
+;; alone leaves sub-floor text on real pages — measured on news.mit.edu, 7 of 9 text
+;; elements were black-on-black with this off and 0 with it on. It was the missing
+;; backstop behind the recurring "dark mode is unreadable" reports. (Cost: one
+;; drawSnapshot + per-text APCA at DOMContentLoaded on inverted pages.)
+(pref "gjoa.darkmode.normalize.enabled" true)
 ;; APCA Lc floor the normalizer enforces (45 ≈ large/secondary text; raise toward 60
 ;; for stricter body-text contrast). Below this, text gets re-toned.
 (pref "gjoa.darkmode.normalize.floor" 45)
