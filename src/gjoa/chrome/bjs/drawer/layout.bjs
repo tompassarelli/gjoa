@@ -52,6 +52,15 @@
                        " :host([expanded]) .bottom-actions {"
                        "   align-self: center !important;"
                        " }"
+                       ;; #147: the tool + bottom-action button column hugs the
+                       ;; INNER (page) edge when flipped because native
+                       ;; `.actions-list { align-items: start }` always means
+                       ;; inline-start (left). Anchor it to the OUTER screen edge:
+                       ;; start when the drawer is on the left, end when flipped
+                       ;; right (FF sets `sidebar-positionend` on the host).
+                       " :host([sidebar-positionend]) .actions-list {"
+                       "   align-items: end !important;"
+                       " }"
                        ;; Kill the startup overflow-flicker: the native sidebar's
                        ;; IntersectionObserver mis-fires before the column reaches
                        ;; full height → momentarily shows the `>>` chevron and

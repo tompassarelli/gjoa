@@ -387,9 +387,46 @@
   }
 }
 
+/* VERTICAL tabs (gjoa default): the secondary sidebar #sidebar-box hosts the
+ * "Customize Sidebar" panel (SidebarController.show("viewCustomizeSidebar"))
+ * as well as history/bookmarks. It must read as a FLOATING CARD in the slot
+ * next to the drawer — [drawer][gap][#sidebar-box][gap][page] — never stacked
+ * below / flush against the window edge (the #145 symptom). Card rounding +
+ * shadow already come from FF's `#sidebar` revamp rule; here we own only the
+ * insets, all of them the ONE uniform --gjoa-card-gap. */
 @media -moz-pref("sidebar.verticalTabs") {
   #sidebar-box {
-    padding-top: 8px !important;
+    margin-block: var(--gjoa-card-gap) !important;
+    padding-top: 0 !important;
+  }
+}
+
+/* STATIC drawer in the floating-card layout: #browser already lays the row out
+ * with `gap: --gjoa-card-gap` + `padding: --gjoa-card-gap` (region below), so
+ * [drawer][gap][#sidebar-box][gap][page] falls out for free — DON'T add an
+ * inline margin here or the drawer↔panel gap doubles (the "oversized gap" Tom
+ * saw). Only the block insets above are needed (FF zeroes the top padding). */
+
+/* COMPACT drawer (position:fixed → out of #browser flow) OR floating-cards OFF:
+ * no flex gap sits between the drawer and #sidebar-box, so the panel would butt
+ * against the drawer / window edge. Inset its DRAWER-FACING edge by one
+ * card-gap. Normal = drawer on left → inset inline-start; flipped (FF stamps
+ * sidebar-positionend) = drawer on right → inset inline-end. */
+@media -moz-pref("sidebar.verticalTabs") {
+  #browser:has(> #sidebar-main[data-gjoa-compact]) > #sidebar-box:not([sidebar-positionend]),
+  #sidebar-box:not([sidebar-positionend]) {
+    margin-inline-start: var(--gjoa-card-gap) !important;
+  }
+  #browser:has(> #sidebar-main[data-gjoa-compact]) > #sidebar-box[sidebar-positionend],
+  #sidebar-box[sidebar-positionend] {
+    margin-inline-end: var(--gjoa-card-gap) !important;
+  }
+  /* …but inside the STATIC floating-card layout, the #browser gap owns it —
+   * cancel the inline inset so the gap stays exactly one card-gap. */
+  @media -moz-pref("gjoa.layout.floatingCards") {
+    #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-box {
+      margin-inline: 0 !important;
+    }
   }
 }
 
@@ -594,6 +631,24 @@
   /* zero visual footprint */
   min-width: 0 !important;
   height: 0 !important;
+}
+
+/* --- FLIPPED nav-bar (#146): mirror the whole row -----------------------
+ * When the sidebar is moved to the RIGHT, FF stamps `sidebar-positionend`
+ * on #sidebar-main. The toolbar must mirror horizontally so the
+ * sidebar-toggle sits on the OUTER (sidebar) edge and hamburger/ext on the
+ * INNER (page) edge:
+ *   normal  [☰][sb][ext]──[back fwd refresh]
+ *   flipped [refresh fwd back]──[ext][sb][☰]
+ * `row-reverse` reverses visual order while leaving every `order:` value
+ * above intact (lower order is still "first", but "first" is now the right
+ * edge). Reversed on BOTH the nav-bar (top-level groups) and the inner
+ * customization-target (ext / spring / back-fwd-refresh) for a true mirror. */
+#sidebar-main[sidebar-positionend] #nav-bar {
+  flex-direction: row-reverse !important;
+}
+#sidebar-main[sidebar-positionend] #nav-bar > #nav-bar-customization-target {
+  flex-direction: row-reverse !important;
 }
 
 /* #endregion navigator-toolbox */
@@ -1181,8 +1236,12 @@ Preserve these (security warnings):
    * content card fill: every gap — window↔sidebar, sidebar↔content, content↔edge, and
    * top/bottom — is then exactly one --gjoa-card-gap. */
   #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-launcher-splitter,
+  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-splitter,
   #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #ai-window-splitter[collapsed],
   #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #ai-window-box[collapsed] {
+    /* #sidebar-splitter joins the list (#145): when the Customize / history /
+     * bookmarks panel (#sidebar-box) is open, this splitter sits between it and
+     * the content card and would otherwise eat gap+splitter+gap there too. */
     display: none !important;
   }
 
