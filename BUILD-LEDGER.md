@@ -667,3 +667,28 @@ M0 is disjoint from the contract, one shared sInstance, network path uses GetIns
 (c) adblock M0/M1 need a list-parse-complete gate + retry (flaky under load); (d) flake.nix devShell.mach
 missing LIBCLANG_PATH/llvm-objdump despite the shellHook — verify. Contrast sleep-reorder fix DISPROVEN
 (re-verify still discards — general content-BC limit, needs JSActor/drawSnapshot, not the reorder).
+
+## 2026-06-23 — v0.4.1 re-cut: nix hermetic build at main HEAD (#118) — SUCCESS (exit 0)
+
+**Trigger:** #118 — bake the session's user-facing work into a shippable binary, headlined by the
+dark-mode contrast backstop (`gjoa.darkmode.normalize.enabled` now defaults TRUE — the fix for the
+recurring 8x black-on-black reports), plus the vim actor/about:vim/:bind, settings/about-page index,
+and floating-card layout fixes (#106). `nix build .#gjoa --impure` (hermetic: re-extracts the tarball
++ re-applies all 10 patches fresh — independent of engine/ state).
+
+**Result:** SUCCESS. `@@@ BUILD EXIT=0` → `/nix/store/df119g8s9izir29bwm313mmgwjyimp1p-gjoa-152.0.1`
+(built 00:06). Binary runs: `Mozilla Gjoa 152.0`. HEADLINE VERIFIED IN THE ARTIFACT — `unzip -p
+browser/omni.ja` shows `pref("gjoa.darkmode.normalize.enabled", true)` baked; the APCA no-black-on-black
+backstop ships ON. Gate W (preflight) now guards that default from ever regressing.
+
+**Provenance note:** the build started ~23:24 from main HEAD; commits added afterward this session
+(patch-order, upstream-provenance, Gate U/V/W, stewardship tapestry, purity-leak fixes) are tooling/docs
+ONLY — they touch no `src/gjoa/`, `patches/`, or `engine/` input, so the artifact corresponds exactly to
+HEAD's binary-affecting content. The stale v0.4.1 tag (6c77302, 6/21) is superseded; NO public GitHub
+release exists for it.
+
+**Release:** PUNTED per Tom — no tag move / no `gh release` now. ONE final cut at end-of-session once the
+whole todo list is clear (Tom is calling it v0.4.2). Artifact stays ready in `result/`.
+
+**Follow-ups:** post-build verification of the UX batch against this binary (dark-mode contrast on the
+227-site corpus, vim, popups) folds into the end-of-session pass before the final cut.
