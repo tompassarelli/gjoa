@@ -1,0 +1,71 @@
+#lang beagle/js
+;; Static regression test for about:gjoa (settings home).
+;;
+;; Bug (task #142): the settings page carried an obsolete "More" section
+;; (`<section id="sec-more">` in settings.html + a `sec-more` nav item built by a
+;; dead `renderLinks` in settings.js), AND the scroll-spy bottom-guard used a
+;; too-tight threshold (`scrollHeight - 4`) so the final section (Layout) could
+;; never activate on a short page.
+;;
+;; Fix: removed the More section + its nav item + the dead renderLinks, and
+;; widened the bottom-guard to a generous threshold (`scrollHeight - 120`).
+;;
+;; This is a STATIC source assertion (no browser boot): the regression is
+;; visible in the source text, so we read the two files and assert the fix
+;; holds. Instant + non-flaky. Modeled on tests/branding.test.bjs.
+;;
+;; ns is 2-segment (gjoa.tests) to match the on-disk directory depth of the
+;; emitted `.beagle-tools/gjoa/tests/` mirror — see branding.test.bjs for the
+;; why (a deeper ns mis-emits relative imports). The `.test` lives in the
+;; FILENAME, not the namespace; bun:test still recognizes the `.test.js` file.
+(ns gjoa.tests.settings-no-more-section
+  (:require [fs :refer [readFileSync]]
+            [path :refer [join]]))
+(define-mode strict)
+
+;; bun:test's specifier contains a ':', which beagle rejects as a require
+;; namespace; the generated JS needs this import prepended manually (same
+;; pattern as branding.test.bjs):
+;;   import { describe, expect, test } from "bun:test";
+(declare-extern [describe expect test] Any)
+
+;; Source files under test. cwd is the repo root when bun runs the suite.
+(def SETTINGS-DIR :- String
+  "src/gjoa/browser/components/gjoa/content/settings")
+(def HTML :- String (readFileSync (join SETTINGS-DIR "settings.html") "utf8"))
+(def JS :- String   (readFileSync (join SETTINGS-DIR "settings.js") "utf8"))
+
+;; The bottom-guard threshold: `sc.scrollHeight - <N>`. Capture N so we can
+;; assert it's generous (>= ~100), not the old tight 4. The Layout section
+;; can't scroll its top above the activation line on a short page, so the guard
+;; must fire well before the literal end of the document.
+(def GUARD-RE :- Any
+  (RegExp. "scrollHeight\\s*-\\s*(\\d+)"))
+
+(describe "about:gjoa settings — no obsolete More section + forgiving scroll-spy guard"
+  (fn []
+
+    (test "settings.html has no 'sec-more' anywhere"
+      (fn []
+        (.toBe (expect (.includes HTML "sec-more")) false)))
+
+    (test "settings.html has no id=\"sec-more\" section"
+      (fn []
+        (.toBe (expect (.includes HTML "id=\"sec-more\"")) false)))
+
+    (test "settings.js renderNav does not push a sec-more nav item"
+      (fn []
+        (.toBe (expect (.includes JS "sec-more")) false)))
+
+    (test "settings.js has no dead renderLinks function"
+      (fn []
+        (.toBe (expect (.includes JS "renderLinks")) false)))
+
+    (test "scroll-spy bottom-guard uses a generous threshold (>= ~100, not 4)"
+      (fn []
+        (let [m (.match JS GUARD-RE)]
+          ;; The guard must exist…
+          (.toBeTruthy (expect m))
+          ;; …and be forgiving: the old buggy value was 4 (too tight); the fix
+          ;; uses 120. Anything >= 100 satisfies "near the end" on a short page.
+          (.toBeGreaterThanOrEqual (expect (parseInt (aget m 1) 10)) 100))))))

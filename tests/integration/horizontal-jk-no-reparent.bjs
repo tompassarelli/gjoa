@@ -1,0 +1,133 @@
+#lang beagle/js
+;; #144 regression (a re-surfacing of #124): in HORIZONTAL tab mode, pressing
+;; j / k to MOVE THE CURSOR must NEVER reparent a tab. The bug: a child `c`
+;; under `b` got relocated to ROOT on plain j/k navigation, because a stray
+;; drop bubbled to handle-container-drop with ~0px pointer movement and was
+;; treated as an intentional reparent. The fix extended the 6px (36px²)
+;; movement threshold to handle-container-drop (tabs/drag.bjs), so a click /
+;; jitter-sized "drop" is rejected as "below-drag-threshold (click, not drag)".
+;;
+;; This test drives REAL, trusted key events (Marionette performActions) — the
+;; same path a user's keystroke takes through the vim keydown handler — rather
+;; than synthetic events, because the bug lived in the interaction between
+;; selection-driven keys and the drag listeners. We assert the TREE TRUTH:
+;; c.parentId is UNCHANGED (still b) after j and after k.
+(ns gjoa.tests.integration.horizontal-jk-no-reparent
+  (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect expect-eq sleep]]))
+(define-mode strict)
+
+;; --- mode + reset (mirrors tab-tree-machine.bjs) ----------------------------
+
+(defn reset! [mn :- Any] :- Any
+  (js/await (.executeScript mn
+    (str
+      "    try { Services.prefs.setBoolPref(\"sidebar.verticalTabs\", true); } catch {}\n"
+      "    try { Services.prefs.setBoolPref(\"gjoa.keys.useLeader\", false); } catch {}\n"
+      "    const marked = [...gBrowser.tabs].filter(t => t.getAttribute && t.getAttribute(\"gjoa-test-marker\"));\n"
+      "    if (marked.length < gBrowser.tabs.length) {\n"
+      "      for (const t of marked) { try { gBrowser.removeTab(t); } catch {} }\n"
+      "    }\n"
+      "  ")))
+  (await-true "return !document.getElementById(\"gjoa-tab-panel\").hasAttribute(\"gjoa-horizontal\");" 3000))
+
+(defn to-horizontal! [mn :- Any] :- Any
+  (chrome-eval "Services.prefs.setBoolPref(\"sidebar.verticalTabs\", false); return true;")
+  (await-true "return document.getElementById(\"gjoa-tab-panel\").hasAttribute(\"gjoa-horizontal\");" 3000))
+
+;; --- tree construction: a,b siblings + c nested under b ----------------------
+
+;; Create 3 marker root tabs <stamp>-a / -b / -c.
+(defn build-roots-js [stamp :- String] :- String
+  (str "
+    const principal = Services.scriptSecurityManager.getSystemPrincipal();
+    const T = window.gjoaTest.treeOf;
+    for (const key of [\"a\", \"b\", \"c\"]) {
+      const t = gBrowser.addTab(\"about:blank\", { triggeringPrincipal: principal });
+      t.setAttribute(\"gjoa-test-marker\", \"" stamp "-\" + key);
+      T.get(t).parentId = null;
+    }
+    window.gjoaTest.rows.scheduleTreeResync();
+    window.gjoaTest.rows.updateVisibility();
+    return true;"))
+
+;; Nest c under b (c becomes a child of b).
+(defn nest-c-under-b-js [stamp :- String] :- String
+  (str "
+    const T = window.gjoaTest.treeOf;
+    const find = m => [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === m);
+    const b = find(\"" stamp "-b\"), c = find(\"" stamp "-c\");
+    if (!b || !c) throw new Error(\"nest: missing b/c\");
+    T.get(c).parentId = T.get(b).id;
+    T.get(b).collapsed = false;
+    window.gjoaTest.rows.scheduleTreeResync();
+    window.gjoaTest.rows.updateVisibility();
+    return true;"))
+
+(defn await-marker-js [marker :- String] :- String
+  (str "return [...gBrowser.tabs].some(t => t.getAttribute(\"gjoa-test-marker\") === \"" marker "\");"))
+
+;; Select b, place the vim cursor on b's row, and focus the panel so the
+;; performActions keystrokes route through the vim keydown handler.
+(defn focus-b-js [stamp :- String] :- String
+  (str "
+    const find = m => [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === m);
+    const b = find(\"" stamp "-b\");
+    gBrowser.selectedTab = b;
+    const row = window.gjoaTest.rowOf.get(b);
+    if (window.gjoaTest.vim && window.gjoaTest.vim.setCursor && row) {
+      window.gjoaTest.vim.setCursor(row);
+    }
+    const panel = document.getElementById(\"gjoa-tab-panel\");
+    if (panel) { panel.setAttribute(\"tabindex\", \"0\"); panel.focus(); }
+    return !!panel;"))
+
+;; parentId of c as a string ('null' for a root). The discriminating value:
+;; before the fix the stray drop set it to null (reparented to ROOT).
+(defn c-parent-js [stamp :- String] :- String
+  (str "
+    const T = window.gjoaTest.treeOf;
+    const c = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-c\");
+    const pid = T.get(c).parentId;
+    return pid == null ? \"null\" : String(pid);"))
+
+(defn b-id-js [stamp :- String] :- String
+  (str "
+    const T = window.gjoaTest.treeOf;
+    const b = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-b\");
+    return String(T.get(b).id);"))
+
+;; A trusted key down/up for `ch` via Marionette (untrusted synthetic events
+;; would not reach the privileged vim handler the same way).
+(defn key-action [ch :- String] :- Any
+  [{:type "key" :id "kbd"
+    :actions [{:type "keyDown" :value ch} {:type "keyUp" :value ch}]}])
+
+(js/export (def tests :- Any
+  [(deftest "horizontal: j/k cursor nav does NOT reparent a nested child (#144)" [mn]
+     (await-true "return !!(window.gjoaTest && window.gjoaTest.treeOf && window.gjoaTest.vim);" 10000)
+     (js/await (reset! mn))
+     (let [stamp (str "hjk-" (Date/now))]
+       (chrome-eval (build-roots-js stamp))
+       (await-true (await-marker-js (str stamp "-c")) 3000)
+       (chrome-eval (nest-c-under-b-js stamp))
+       ;; await the nesting landing in the tree (no fixed sleep): c.parentId == b.id
+       (let [b-id (chrome-eval (b-id-js stamp))]
+         (await-true (str "return (" (c-parent-js stamp) ") === \"" b-id "\";") 3000)
+         (js/await (to-horizontal! mn))
+         (expect (chrome-eval (focus-b-js stamp)) "no #gjoa-tab-panel to focus for vim keys")
+         ;; Fire real j then k — pure cursor navigation; must not touch the tree.
+         (js/await (.performActions mn (key-action "j")))
+         (js/await (.performActions mn (key-action "k")))
+         ;; One short settle: the drag-drop path (the bug surface) defers its
+         ;; tree mutation to a requestAnimationFrame, so a no-op pass needs a
+         ;; frame to have NOT happened. There is no positive condition to
+         ;; await-true on (the assertion is that NOTHING changed), so a brief
+         ;; fixed settle is the honest wait here.
+         (js/await (sleep 200))
+         (let [c-parent (chrome-eval (c-parent-js stamp))]
+           (expect-eq c-parent b-id
+             (str "j/k cursor nav reparented c (#144 regression): c.parentId must "
+                  "stay b (" b-id "), got " c-parent
+                  (if (= c-parent "null") " (relocated to ROOT)" "")))))))]))
+
+(js/export-default tests)

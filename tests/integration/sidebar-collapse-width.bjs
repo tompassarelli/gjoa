@@ -1,0 +1,155 @@
+#lang beagle/js
+;; Sidebar collapse-width regression lock (commit 833c5b9, drawer/layout.bjs).
+;;
+;; THE BUG: collapsing the sidebar used to shrink it toward favicon width but it
+;; STAYED WIDE — drawer/layout.bjs `expand` pins an inline `width:NNNpx` on
+;; #sidebar-main (the persisted `gjoa.sidebar.width`), and that inline style
+;; OVERRODE the native icon-strip width once collapsed, so the strip never
+;; narrowed and tab labels kept showing. THE FIX: `collapse` now
+;; `removeProperty('width')` so the strip reverts to its favicon width, and
+;; `expand` re-applies the persisted width so re-expanding restores it.
+;;
+;; This is runtime DOM/layout behavior (computed width across a collapse/expand
+;; cycle + presence of an inline width style), not a statically-checkable string,
+;; so it must boot a browser. #sidebar-main is CHROME, so a Marionette
+;; chrome-context executeScript reads its rects directly — no content discard, no
+;; network, DEFAULT lane.
+;;
+;; Collapse/expand are driven exactly as FF drives them at runtime: toggling the
+;; `sidebar-launcher-expanded` attribute on #sidebar-main, which layout.bjs's
+;; MutationObserver (attributeFilter ["sidebar-launcher-expanded"]) watches to
+;; call expand()/collapse(). We await the real post-mutation DOM state — never a
+;; fixed sleep.
+(ns gjoa.tests.integration.sidebar-collapse-width
+  (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect]]))
+(define-mode strict)
+
+(declare-extern [Number] Any)
+
+;; Put the window into the EXPANDED vertical-tab drawer layout, with a KNOWN-WIDE
+;; persisted width so the expanded state is unambiguously wide (well past the
+;; favicon strip). Setting the pref BEFORE expanding means expand() pins this
+;; exact inline width. Returns the preconditions the test guards on.
+(def ENSURE-EXPANDED-WIDE :- String "
+  Services.prefs.setBoolPref('sidebar.verticalTabs', true);
+  Services.prefs.setBoolPref('sidebar.revamp', true);
+  Services.prefs.setIntPref('gjoa.sidebar.width', 320);
+  const sm = document.getElementById('sidebar-main');
+  if (sm && !sm.hasAttribute('sidebar-launcher-expanded')) {
+    sm.setAttribute('sidebar-launcher-expanded', '');
+  }
+  return { hasSidebarMain: !!sm,
+           hasToolbar: !!document.getElementById('gjoa-urlbar-toolbar'),
+           hasGjoaTest: !!window.gjoaTest };
+")
+
+;; Force a collapse the way FF does at runtime: drop the attribute the drawer's
+;; MutationObserver keys off, which calls collapse().
+(def DRIVE-COLLAPSE :- String "
+  const sm = document.getElementById('sidebar-main');
+  if (!sm) return false;
+  sm.removeAttribute('sidebar-launcher-expanded');
+  return true;
+")
+
+;; Force a re-expand the same way: re-add the attribute → expand().
+(def DRIVE-EXPAND :- String "
+  const sm = document.getElementById('sidebar-main');
+  if (!sm) return false;
+  sm.setAttribute('sidebar-launcher-expanded', '');
+  return true;
+")
+
+;; Snapshot #sidebar-main's measured width AND its inline width style. The inline
+;; style is the actual bug surface — a non-empty `style.width` is what pinned the
+;; strip wide when collapsed.
+(def MEASURE-SIDEBAR :- String "
+  const sm = document.getElementById('sidebar-main');
+  if (!sm) return { error: 'no #sidebar-main' };
+  const r = sm.getBoundingClientRect();
+  return {
+    width: r.width,
+    inlineWidth: sm.style.width,          // '' when removeProperty cleared it
+    hasInlineWidth: sm.style.width !== '',
+    expandedAttr: sm.hasAttribute('sidebar-launcher-expanded'),
+  };
+")
+
+(js/export (def tests :- Any
+  [(deftest "sidebar — collapse narrows to favicon strip (no inline width pins it wide); expand restores (#833c5b9)" [mn]
+     (let [pre (chrome-eval ENSURE-EXPANDED-WIDE)]
+       ;; GUARD against a vacuous pass on a dead-chrome binary: if GjoaLoader
+       ;; never ran, #gjoa-urlbar-toolbar / window.gjoaTest are absent and the
+       ;; drawer's expand/collapse never wires up — the attribute toggle would
+       ;; then be a no-op and a "narrow" assertion could pass on native FF
+       ;; defaults rather than on our fix. Fail loudly + specifically.
+       (expect (.-hasSidebarMain pre) "no #sidebar-main — not a gjoa chrome window")
+       (expect (and (.-hasToolbar pre) (.-hasGjoaTest pre))
+         (str "gjoa drawer chrome did not initialize (#gjoa-urlbar-toolbar / "
+              "window.gjoaTest missing) — e.g. GjoaLoader $$bc-runtime mismatch in a "
+              "stale binary. Rebuild the bundle/binary; this test needs live gjoa "
+              "chrome to exercise expand/collapse. " (JSON/stringify pre))))
+
+     ;; Settle the EXPANDED state: expand() must have pinned the persisted inline
+     ;; width and the drawer must be wide (well past favicon).
+     (js/await (await-true
+                 (str "const sm = document.getElementById('sidebar-main');"
+                      "if (!sm) return false;"
+                      "return sm.hasAttribute('sidebar-launcher-expanded') &&"
+                      "       sm.getBoundingClientRect().width > 200;")
+                 5000))
+     (let [exp (chrome-eval MEASURE-SIDEBAR)]
+       (expect (not (.-error exp)) (str "MEASURE-SIDEBAR (expanded) error: " (JSON/stringify exp)))
+       (expect (> (Number (.-width exp)) 200)
+         (str "expanded sidebar not wide — width " (.toFixed (Number (.-width exp)) 1)
+              "px (expected > 200; expand() should pin the 320px persisted width). "
+              (JSON/stringify exp)))
+       (expect (.-hasInlineWidth exp)
+         (str "expand() did not pin an inline width on #sidebar-main — the "
+              "expand-restore half of the fix is gone (collapse would have nothing "
+              "to clear). " (JSON/stringify exp))))
+
+     ;; --- COLLAPSE: the regression surface ---
+     (js/await (.executeScript mn DRIVE-COLLAPSE))
+     ;; Await the real collapsed DOM state: BOTH the strip narrowed to favicon
+     ;; width AND no inline width style remains. The OLD bug failed both — the
+     ;; inline width:320px pinned the measured width wide. < 80px = favicon strip.
+     (js/await (await-true
+                 (str "const sm = document.getElementById('sidebar-main');"
+                      "if (!sm || sm.hasAttribute('sidebar-launcher-expanded')) return false;"
+                      "const w = sm.getBoundingClientRect().width;"
+                      "return w > 0 && w < 80 && sm.style.width === '';")
+                 5000))
+     (let [col (chrome-eval MEASURE-SIDEBAR)]
+       (expect (not (.-error col)) (str "MEASURE-SIDEBAR (collapsed) error: " (JSON/stringify col)))
+       (expect (not (.-expandedAttr col))
+         (str "sidebar still has [sidebar-launcher-expanded] after collapse — measured "
+              "the wrong state. " (JSON/stringify col)))
+       ;; THE FIX, part 1: no inline width style survives the collapse.
+       (expect (not (.-hasInlineWidth col))
+         (str "collapsed #sidebar-main STILL has an inline width style ('"
+              (.-inlineWidth col) "') — collapse() did not removeProperty('width'); "
+              "this inline width pins the strip wide (the regression). "
+              (JSON/stringify col)))
+       ;; THE FIX, part 2: the actual measured width is the narrow favicon strip.
+       (expect (< (Number (.-width col)) 80)
+         (str "collapsed sidebar did not narrow to the favicon strip — width "
+              (.toFixed (Number (.-width col)) 1) "px (expected < 80px). The persisted "
+              "inline width kept it wide (the bug). " (JSON/stringify col))))
+
+     ;; --- EXPAND: must restore the persisted width ---
+     (js/await (.executeScript mn DRIVE-EXPAND))
+     (js/await (await-true
+                 (str "const sm = document.getElementById('sidebar-main');"
+                      "if (!sm || !sm.hasAttribute('sidebar-launcher-expanded')) return false;"
+                      "return sm.style.width !== '' && sm.getBoundingClientRect().width > 200;")
+                 5000))
+     (let [re (chrome-eval MEASURE-SIDEBAR)]
+       (expect (not (.-error re)) (str "MEASURE-SIDEBAR (re-expanded) error: " (JSON/stringify re)))
+       (expect (and (.-hasInlineWidth re) (> (Number (.-width re)) 200))
+         (str "re-expand did not restore the persisted width — width "
+              (.toFixed (Number (.-width re)) 1) "px, inline '" (.-inlineWidth re)
+              "' (expected wide + inline 320px). The expand-restore half regressed. "
+              (JSON/stringify re)))))]))
+
+(js/export-default tests)

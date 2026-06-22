@@ -1,0 +1,87 @@
+#lang beagle/js
+;; Static regression test for the urlbar/palette theme shield in
+;; src/gjoa/chrome/css/gjoa.uc.css (task #141).
+;;
+;; The bug: the shield set FF152-NONEXISTENT urlbar variable names, so the
+;; resting + focused urlbar (and the in-field page-action boxes) painted FF's
+;; fallback gray `rgb(66,65,77)` instead of the selected theme color. The fix
+;; (commit 833c5b9) added the CORRECT FF152 names:
+;;   --toolbar-field-background-color-focus   (suffix `-focus`)
+;;   --urlbar-box-background-color{,-focus,-hover,-active}
+;; and REMOVED the dead typo declarations `--urlbar-box-bgcolor` /
+;; `--urlbar-box-hover-bgcolor`.
+;;
+;; This test is the cheapest thing that catches a regression: it reads the CSS
+;; source text and asserts on variable names. No browser, no build — instant,
+;; non-flaky. It would fail on the old buggy source (correct names absent,
+;; `--urlbar-box-bgcolor:` declared) and passes on the current fixed source.
+;;
+;; A DELIBERATE deviation from a naive "must-not-contain" of the dead names:
+;;   - `--urlbar-box-bgcolor` STILL appears in the file — but only inside the
+;;     fix's explanatory comment, never as a declaration. So we assert the
+;;     absence of a DECLARATION (`--name : value`), not the absence of the
+;;     string, or a comment mention would falsely trip the gate.
+;;   - `--toolbar-field-focus-background-color` (the `-focus`-WORD spelling) is
+;;     INTENTIONALLY present as a declaration: the source documents it as an
+;;     LWT-legacy alias FF still reads in some paths (kept belt-and-suspenders).
+;;     Asserting its absence would be red on the shipped code and contradict the
+;;     source's own intent, so we DON'T — the real regression is the missing
+;;     correct `-focus`-SUFFIX name + the reintroduced `--urlbar-box-bgcolor`
+;;     declaration, which is exactly what we pin.
+;;
+;; ns is 3-segment (gjoa.tests.theme-shield) to match the on-disk DIRECTORY depth
+;; (.beagle-tools/gjoa/tests/) — same convention as tests/branding.test.bjs. The
+;; `.test` lives in the filename, not the namespace; bun:test recognizes the
+;; emitted `.test.js`. No sibling imports here, so ns depth is non-load-bearing
+;; for resolution either way.
+(ns gjoa.tests.theme-shield
+  (:require [fs :refer [existsSync readFileSync]]
+            [path :refer [join]]))
+(define-mode strict)
+
+;; bun:test's specifier carries a ':', which beagle rejects as a require ns, so
+;; declare its globals as externs (same pattern as branding/mitigations tests).
+;; The emitted JS still needs the bun:test import prepended by the runner setup.
+(declare-extern [describe expect test process RegExp] Any)
+
+(def REPO :- String (.cwd process))
+(def SHIELD :- String (join REPO "src" "gjoa" "chrome" "css" "gjoa.uc.css"))
+
+;; A custom-property DECLARATION: `--name : value`. The trailing `:` (allowing
+;; arbitrary whitespace before it) is what distinguishes a live declaration from
+;; a bare mention of the name inside a `/* ... */` comment.
+(defn declares? [css :- String name :- String] :- Any
+  (.test (RegExp. (str "--" name "\\s*:")) css))
+
+(describe "urlbar/palette theme shield (#141) — FF152 variable names"
+  (fn []
+
+    (test "shield CSS source exists"
+      (fn []
+        (.toBe (expect (existsSync SHIELD)) true)))
+
+    ;; The two load-bearing CORRECT FF152 names the fix added. If either stops
+    ;; being declared, the urlbar/palette falls back to FF's gray again.
+    (test "declares the correct FF152 focus + box names"
+      (fn []
+        (let [css (readFileSync SHIELD "utf8")]
+          ;; focused urlbar field paints `.urlbar-background` with this var
+          (.toBe (expect (declares? css "toolbar-field-background-color-focus")) true)
+          ;; in-field page-action boxes (bookmark star, etc.)
+          (.toBe (expect (declares? css "urlbar-box-background-color")) true))))
+
+    ;; The exact dead typo the fix removed. It may appear in the explanatory
+    ;; comment, but it must NEVER be DECLARED again — that's the regression.
+    (test "does NOT reintroduce the dead --urlbar-box-bgcolor declaration"
+      (fn []
+        (let [css (readFileSync SHIELD "utf8")]
+          (.toBe (expect (declares? css "urlbar-box-bgcolor")) false))))
+
+    ;; Guard the declares? predicate itself so a logic break (not just a data
+    ;; change) is caught: a declaration matches, a comment-only mention does not.
+    (test "declares? distinguishes a declaration from a comment mention"
+      (fn []
+        (let [decl "  --urlbar-box-background-color: var(--x) !important;"
+              cmt  "   * the earlier `--urlbar-box-bgcolor` names were a typo"]
+          (.toBe (expect (declares? decl "urlbar-box-background-color")) true)
+          (.toBe (expect (declares? cmt "urlbar-box-bgcolor")) false))))))
