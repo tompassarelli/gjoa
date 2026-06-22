@@ -225,3 +225,26 @@ html, body {
 .pick-title { font-weight: 600; color: var(--ink); }
 .pick-sum { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .pick-custom .pick-title { opacity: 0.75; }
+
+/* Control-center index (top of about:gjoa). Shared visual language across the
+   gjoa surfaces; external Firefox pages are dimmed with an out-arrow. */
+.page-index {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 4px 0 22px;
+}
+.page-index .pi {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel); text-decoration: none; color: var(--ink);
+  transition: border-color .12s ease, transform .12s ease;
+}
+.page-index .pi:hover { border-color: var(--accent); transform: translateY(-1px); }
+.page-index .pi-name {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: var(--accent);
+}
+.page-index .pi-what { font-size: 13px; color: var(--muted); }
+.page-index .pi-here { border-color: var(--accent); background: #161b22; }
+.page-index .pi-here .pi-name::after { content: " · you are here"; color: var(--faint); font-family: inherit; }
+.page-index .pi-ext .pi-name::after { content: " ↗"; color: var(--faint); }

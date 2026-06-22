@@ -22,12 +22,32 @@
       </aside>
 
       <main id="panel" aria-live="polite">
+        <!-- Control-center index: the gjoa surfaces (shared rail across pages, each
+             its own bookmarkable URL) + Firefox's own pages we link out to. -->
+        <nav class="page-index" aria-label="gjoa pages">
+          <a class="pi pi-here" href="about:gjoa">
+            <span class="pi-name">about:gjoa</span>
+            <span class="pi-what">This page — every gjoa setting, present and reversible.</span>
+          </a>
+          <a class="pi" href="about:vim">
+            <span class="pi-name">about:vim</span>
+            <span class="pi-what">Customize your keyboard shortcuts (Vim keys).</span>
+          </a>
+          <a class="pi" href="about:sovereignty">
+            <span class="pi-name">about:sovereignty</span>
+            <span class="pi-what">Every network call this build makes — the egress audit.</span>
+          </a>
+          <a class="pi pi-ext" href="about:preferences">
+            <span class="pi-name">about:preferences</span>
+            <span class="pi-what">Firefox's own underlying settings.</span>
+          </a>
+          <a class="pi pi-ext" href="about:config">
+            <span class="pi-name">about:config</span>
+            <span class="pi-what">The raw pref store (advanced) — each setting below shows its pref name.</span>
+          </a>
+        </nav>
         <p class="intro">
-          Every gjoa setting lives here — no hunting through about:config. Firefox's own
-          settings stay in <a href="about:preferences">Firefox Settings</a>; the raw pref
-          store is <a href="about:config">about:config</a> (each setting below shows its
-          pref name so you can find it there). Every gjoa feature stays present and
-          reversible — flip it back any time.
+          Every gjoa setting lives here — present and reversible, flip it back any time.
         </p>
 
         <!-- Privacy section (profile picker + granular toggles) is rendered into #profiles. -->

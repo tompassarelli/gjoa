@@ -68,6 +68,15 @@
     (.forEach VIM-COMMANDS (fn [c] (.add s (.-id c))))
     s))
 
+;; Publish the catalog (default branch) so about:vim — a separate privileged page
+;; that can't import this chrome bundle — renders the command list + default keys
+;; from the SAME source. VIM-COMMANDS stays the one source of truth; the page edits
+;; gjoa.keys.bindings, this only exposes the catalog.
+(try
+  (.setCharPref (.getDefaultBranch (.-prefs Services) "")
+                "gjoa.keys.commands" (JSON/stringify VIM-COMMANDS))
+  (catch Any _e nil))
+
 ;; Effective command-id bound to `key`. overrides-raw is the raw pref string; ""
 ;; (no custom binds — the common case) takes the pure-default fast path.
 (defn effective-command-id [key :- String overrides-raw :- String] :- Any

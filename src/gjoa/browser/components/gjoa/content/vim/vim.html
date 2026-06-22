@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!-- about:vim — gjoa's keybinding customizer. PRIVILEGED chrome page: reads the
+     command catalog (gjoa.keys.commands, published by the vim module from its
+     VIM-COMMANDS registry) and edits the override pref (gjoa.keys.bindings).
+     textContent-only render + CSP. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src chrome:; style-src chrome: 'unsafe-inline'; script-src chrome:; img-src chrome: data:;" />
+    <title>gjoa Keys</title>
+    <link rel="icon" href="chrome://gjoa/content/gjoa.svg" />
+    <link rel="stylesheet" href="chrome://gjoa/content/vim/vim.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">gjoa · keys</div>
+      <p class="lede">Vim keybindings. Click a key to rebind it; press the new key. These edit
+        <code>gjoa.keys.bindings</code> — the same pref <code>:bind</code> writes.</p>
+      <div class="actions">
+        <button id="reset-all" type="button">Reset all to defaults</button>
+        <span id="status" class="status"></span>
+      </div>
+    </header>
+    <main id="groups"><!-- built by vim.js --></main>
+    <div id="capture" class="capture" hidden>
+      <div class="capture-box">
+        <div class="capture-cmd" id="capture-cmd"></div>
+        <div class="capture-hint">Press a key to bind it · <kbd>Esc</kbd> to cancel</div>
+      </div>
+    </div>
+    <script src="chrome://gjoa/content/vim/vim.js"></script>
+  </body>
+</html>

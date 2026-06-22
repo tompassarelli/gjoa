@@ -39,6 +39,11 @@ browser.jar:
   content/gjoa/settings/settings.css (content/settings/settings.css)
   content/gjoa/settings/settings.js (content/settings/settings.js)
   content/gjoa/settings/registry.json (content/settings/registry.json)
+# about:vim — keybinding customizer. PRIVILEGED (reads the command catalog +
+# flips gjoa.keys.bindings), registered at runtime by GjoaLoader.
+  content/gjoa/vim/vim.html (content/vim/vim.html)
+  content/gjoa/vim/vim.css (content/vim/vim.css)
+  content/gjoa/vim/vim.js (content/vim/vim.js)
 
 # The new-tab page is the only gjoa chrome that loads as a *content* document
 # (via AboutNewTab.newTabURL in GjoaLoader). It gets its own package marked
