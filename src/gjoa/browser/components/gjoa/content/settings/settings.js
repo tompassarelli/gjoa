@@ -330,22 +330,42 @@
     }
     root.appendChild(list);
 
-    // Highlight the section currently in view.
-    try {
-      const obs = new IntersectionObserver((entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            for (const a of byTarget.values()) a.classList.remove("nav-on");
-            const a = byTarget.get(e.target.id);
-            if (a) a.classList.add("nav-on");
-          }
-        }
-      }, { rootMargin: "-10% 0px -80% 0px", threshold: 0 });
+    // Highlight the section currently in view. A scroll-POSITION picker (not an
+    // IntersectionObserver band): the active entry is the lowest section whose top
+    // has passed an activation line near the top of the viewport — PLUS a bottom
+    // guard that forces the last section active once scrolled to the end. The old
+    // IO band (active only between 10–20% of the viewport) capped on a short page:
+    // the final sections (Layout / More) could never scroll high enough to enter
+    // the band, so they never activated.
+    const setActive = (id) => {
+      for (const a of byTarget.values()) a.classList.remove("nav-on");
+      const a = byTarget.get(id);
+      if (a) a.classList.add("nav-on");
+    };
+    const updateActive = () => {
+      if (!items.length) return;
+      const line = window.innerHeight * 0.25;
+      let activeId = items[0].id;
       for (const it of items) {
         const t = document.getElementById(it.id);
-        if (t) obs.observe(t);
+        if (!t) continue;
+        if (t.getBoundingClientRect().top - line <= 0) activeId = it.id; else break;
       }
-    } catch (_) {}
+      const sc = document.scrollingElement || document.documentElement;
+      if (sc.scrollTop + window.innerHeight >= sc.scrollHeight - 4) {
+        activeId = items[items.length - 1].id; // at the bottom → last section
+      }
+      setActive(activeId);
+    };
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => { ticking = false; updateActive(); });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    updateActive();
   }
 
   function renderLinks(reg) {
