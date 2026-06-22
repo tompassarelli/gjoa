@@ -166,7 +166,11 @@
                   is-vertical (pref-bool "sidebar.verticalTabs" true)]
               (when (= is-vertical want-horizontal)
                 (set-pref-bool! "sidebar.verticalTabs" (not want-horizontal))))))]
-    (.setTimeout window apply-orientation 0)
+    ;; #126: decide SYNCHRONOUSLY at chrome-init (not setTimeout 0, which ran after first
+    ;; paint and let the persisted vertical strip flash before flipping to horizontal on a
+    ;; narrow spawn). Setting the pref now means the window resolves to the right mode up
+    ;; front, so the strip never appears on a restricted-space spawn.
+    (apply-orientation)
     (.addEventListener mq "change" apply-orientation)))
 
 ;; Card gap (#125): ONE user-adjustable gjoa gap value (about:gjoa → gjoa.layout.cardGap)
