@@ -126,11 +126,28 @@ preflight missed it / new gate to add / could it have been Lane 1.
 - `~/code/zen-browser/` — peer fork, reference only
 - `~/code/firefox/` — mozilla-central source
 
+## Test stewardship — POLICY (a slow suite is the project-killer)
+
+The integration suite runs constantly; an un-stewarded one rots into a velocity
+tax that compounds. We hold it **lean, robust, comprehensive, fast** and we
+*track the stewardship itself* (audit date + result + diminishing-returns trend).
+Every test carries a `budgetMs` + category in `configs/test-budgets.json`; the
+profiler grades actual-vs-budget from history and gates on regressions.
+
+- **Policy + procedure:** [`docs/test-stewardship.md`](docs/test-stewardship.md) —
+  read it before adding/editing tests. No test enters un-budgeted; prefer a unit
+  test (ms) over a browser boot; fixed `(sleep N)` is a smell — `await-true` a
+  real condition.
+- `bun run test:profile` — actual-vs-budget report + hygiene gate.
+- `bun run test:audit` — full re-audit; writes `.test-metrics/audit-ledger.jsonl`
+  (tracks where returns diminish).
+
 ## Pointers
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — map, rebuild ladder, decision tree
 - [`docs/daily-loop.md`](docs/daily-loop.md) — command cheatsheet
 - [`docs/nix-dev-options.md`](docs/nix-dev-options.md) — when mach vs nix
+- [`docs/test-stewardship.md`](docs/test-stewardship.md) — test suite hygiene policy + profiler
 - [`BUILD-LEDGER.md`](BUILD-LEDGER.md) — every build's outcome + postmortems
 - `bun run status` / `gjoa status` — operational dashboard
 - `bun run preflight` / `gjoa preflight` — mandatory before any rebuild
