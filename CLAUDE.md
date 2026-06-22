@@ -60,7 +60,6 @@ gates regressions.
 ## Anti-goals
 
 - Don't depend on surfer / external fork tooling — use `tools/prep/`.
-- Don't pre-port palefox v0.43.0 wholesale; promote deliberately.
 - Don't patch surfer output post-import; add to `tools/prep/branding.bjs`
   substitution table + a test.
 
@@ -78,8 +77,8 @@ live in the gates + [`docs/stewardship/topology.md`](docs/stewardship/topology.m
 
 ## Reference + pointers
 
-- On disk: `~/code/palefox/archive/` (userscript palefox v0.43.0) ·
-  `~/code/zen-browser/` (peer fork) · `~/code/reference/firefox/` (mozilla-central).
+- On disk: `~/code/reference/zen-browser/` (peer fork) ·
+  `~/code/reference/firefox/` (mozilla-central).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — map, rebuild ladder, decision tree.
 - [`docs/daily-loop.md`](docs/daily-loop.md) — command cheatsheet + verify-vs-release tree.
 - [`docs/nix-dev-options.md`](docs/nix-dev-options.md) — when mach vs nix.
