@@ -1,0 +1,329 @@
+{
+  "_doc": "Per-test budgets + tiers. Policy: docs/test-stewardship.md. Maintained by `bun run test:audit`. budgetMs=lean target wall time; tier=smoke|fast|slow|network for modular/locality runs.",
+  "suiteBudgetMs": 134250,
+  "lastAudit": {
+    "date": "2026-06-22",
+    "healthySuiteP50Ms": 27200,
+    "healthySuiteP95Ms": 33700,
+    "estTotalSavingsMs": 80190,
+    "result": "first audit. history p95/flaky POISONED by 3 broken-binary mass-fail runs (every test hung to timeout); healthy wall p50=27.2s. ~80s of fixed-sleep dead time convertible to await-true (darkmode/contrast dominate). genuinely flaky: horizontal-fold-hotkeys, groups #11/#12b.",
+    "topHits": [
+      {
+        "test": "darkmode-hybrid",
+        "saveMs": 18000
+      },
+      {
+        "test": "darkmode-invert",
+        "saveMs": 11000
+      },
+      {
+        "test": "contrast",
+        "saveMs": 10000
+      },
+      {
+        "test": "darkmode-render",
+        "saveMs": 5500
+      },
+      {
+        "test": "adblock-production",
+        "saveMs": 4000
+      },
+      {
+        "test": "adblock-validate",
+        "saveMs": 4000
+      },
+      {
+        "test": "multiwindow-same-space-sync",
+        "saveMs": 3500
+      },
+      {
+        "test": "gjoa-favicons",
+        "saveMs": 2700
+      }
+    ]
+  },
+  "tests": {
+    "adblock-cosmetic": {
+      "category": "adblock",
+      "tier": "fast",
+      "budgetMs": 500
+    },
+    "adblock-cosmetic-actor": {
+      "category": "adblock",
+      "tier": "slow",
+      "budgetMs": 4000
+    },
+    "adblock-production": {
+      "category": "adblock",
+      "tier": "slow",
+      "budgetMs": 9000,
+      "note": "[trimmable] One restartGjoa (~1-2s, justified: the C++ service must init from the seeded cache at startup) + one top-page navigation",
+      "estSavingsMs": 4000
+    },
+    "adblock-ui": {
+      "category": "adblock",
+      "tier": "fast",
+      "budgetMs": 400
+    },
+    "adblock-validate": {
+      "category": "adblock",
+      "tier": "slow",
+      "budgetMs": 9000,
+      "note": "[trimmable] Near-duplicate of adblock-production but via the test_list_urls path with the full 3.6MB EasyList+EasyPrivacy. Same blin",
+      "estSavingsMs": 4000
+    },
+    "compact-context-menu": {
+      "category": "tabs",
+      "tier": "fast",
+      "budgetMs": 1200,
+      "note": "[trimmable] No boot/nav (synthetic menupopup, headless-safe) \u2014 good. The 400ms fixed sleep is the only real waste: it waits 'for the",
+      "estSavingsMs": 200
+    },
+    "contrast": {
+      "category": "contrast",
+      "tier": "slow",
+      "budgetMs": 14000,
+      "note": "[bloated] Worst offender. 9 fixtures \u00d7 (sleep 500 + sleep 800) = 11700ms of pure fixed sleep, plus 18 navigations (2 per fixture: ",
+      "estSavingsMs": 10000
+    },
+    "darkmode-hybrid": {
+      "category": "darkmode",
+      "tier": "slow",
+      "budgetMs": 12000,
+      "note": "[bloated] 7 tests; the dominant cost is hidden inside render-lum-js: every painted read bakes a hard 'await setTimeout(r,3500)' be",
+      "estSavingsMs": 18000
+    },
+    "darkmode-invert": {
+      "category": "darkmode",
+      "tier": "slow",
+      "budgetMs": 6000,
+      "note": "[bloated] No await-true at all \u2014 entirely fixed-wait driven. 4 navigations via render-lum-js (4\u00d73500=14000ms baked settle) + 1 rel",
+      "estSavingsMs": 11000
+    },
+    "darkmode-render": {
+      "category": "darkmode",
+      "tier": "slow",
+      "budgetMs": 3000,
+      "note": "[bloated] Smallest darkmode file but still pure fixed-wait: 2 navigations \u00d7 the baked 3500ms render-lum-js settle = 7000ms, no pol",
+      "estSavingsMs": 5500
+    },
+    "dynamic-orientation": {
+      "category": "tabs",
+      "tier": "fast",
+      "budgetMs": 1500,
+      "note": "[trimmable] No nav/restart. The 2\u00d7sleep 600 (post-resizeTo) are blind waits for the matchMedia listener to flip sidebar.verticalTabs",
+      "estSavingsMs": 900
+    },
+    "gjoa-favicons": {
+      "category": "newtab",
+      "tier": "fast",
+      "budgetMs": 1500,
+      "note": "[bloated] The two (sleep 1500) calls are blind fixed waits for the <link rel=icon>/setIcon belt to resolve \u2014 the exact case await-",
+      "estSavingsMs": 2700
+    },
+    "group-drag-above": {
+      "category": "group-drag-above",
+      "tier": "fast",
+      "budgetMs": 1200,
+      "note": "[trimmable] The single 250ms setTimeout after the drop waits for the tree-resync/row reposition to settle. Replace with await-true o",
+      "estSavingsMs": 200
+    },
+    "groups": {
+      "category": "groups",
+      "tier": "fast",
+      "budgetMs": 2400,
+      "note": "[trimmable] Five blind 200ms setTimeouts (1 in #11, 3 in #12b, 1 in #12) wait for tree settle after a menu-command or drag. Each sho",
+      "estSavingsMs": 850
+    },
+    "help-menu": {
+      "category": "help-menu",
+      "tier": "fast",
+      "budgetMs": 300
+    },
+    "horizontal-fold-hotkeys": {
+      "category": "vim-hotkeys",
+      "tier": "fast",
+      "budgetMs": 2200,
+      "note": "[bloated] Worst fixed-sleep offender: 3200ms of blind sleeps across 4 tests (per test: 200 post-to-horizontal, 150 post-place-curs",
+      "estSavingsMs": 2400
+    },
+    "horizontal-grid-drag": {
+      "category": "horizontal-grid-drag",
+      "tier": "fast",
+      "budgetMs": 1400,
+      "note": "[trimmable] Each test has a 250ms sleep after to-horizontal! (redundant \u2014 to-horizontal! already await-trues on gjoa-horizontal, so ",
+      "estSavingsMs": 700
+    },
+    "horizontal-toolbar": {
+      "category": "horizontal-toolbar",
+      "tier": "fast",
+      "budgetMs": 900
+    },
+    "multiwindow-same-space-sync": {
+      "category": "spaces",
+      "tier": "slow",
+      "budgetMs": 4000,
+      "note": "[trimmable] No fixed sleeps (good \u2014 all settles are await-true on B's roster). The cost is structural: each of the 3 tests calls Ope",
+      "estSavingsMs": 3500
+    },
+    "nav-bar-layout": {
+      "category": "nav-bar-layout",
+      "tier": "fast",
+      "budgetMs": 400
+    },
+    "new-tab-honors-active-space": {
+      "category": "new-tab-honors-active-space",
+      "tier": "fast",
+      "budgetMs": 1200
+    },
+    "new-tab-no-indent-chain": {
+      "category": "newtab",
+      "tier": "fast",
+      "budgetMs": 2500,
+      "note": "[trimmable] 6 tests but several await-true poll a marker set SYNCHRONOUSLY by the chrome-eval that ran one statement earlier (e.g. t",
+      "estSavingsMs": 600
+    },
+    "new-tab-visibility": {
+      "category": "newtab",
+      "tier": "slow",
+      "budgetMs": 3000,
+      "note": "[trimmable] Two 5000ms await-true ceilings wait on a +1 visible-row count after gBrowser.addTab to https://example.com \u2014 the row app",
+      "estSavingsMs": 800
+    },
+    "newtab-home": {
+      "category": "newtab-home",
+      "tier": "fast",
+      "budgetMs": 200
+    },
+    "omni-icon": {
+      "category": "tabs",
+      "tier": "fast",
+      "budgetMs": 1500
+    },
+    "scriptlet-engine": {
+      "category": "scriptlet",
+      "tier": "slow",
+      "budgetMs": 4000,
+      "note": "[trimmable] The DRIVE script retries svc.setScriptletResources up to 60x at 100ms = a 6000ms worst-case fixed-cadence poll baked int",
+      "estSavingsMs": 1000
+    },
+    "session-restore": {
+      "category": "spaces",
+      "tier": "slow",
+      "budgetMs": 3000,
+      "note": "[trimmable] Test 1 opens 5 https://example.com tabs to 'mimic session-restore' but never awaits their loads \u2014 about:blank tabs would",
+      "estSavingsMs": 700
+    },
+    "sidebar-symmetric-icons": {
+      "category": "tabs",
+      "tier": "fast",
+      "budgetMs": 1200,
+      "note": "[bloated] The convergence loop sleeps a FIXED 200ms before EVERY probe inside a 3000ms deadline = up to 15 forced 200ms naps (wors",
+      "estSavingsMs": 1500
+    },
+    "smoke": {
+      "category": "spaces",
+      "tier": "smoke",
+      "budgetMs": 2000
+    },
+    "spaces": {
+      "category": "spaces",
+      "tier": "slow",
+      "budgetMs": 3500,
+      "note": "[trimmable] An 8000ms await-true ceiling on the Work-tab becoming visible after gBrowser.addTab(https://example.com/work-tab) \u2014 the ",
+      "estSavingsMs": 900
+    },
+    "spaces-header": {
+      "category": "spaces",
+      "tier": "fast",
+      "budgetMs": 2000
+    },
+    "spaces-scope-groups": {
+      "category": "spaces",
+      "tier": "fast",
+      "budgetMs": 1500,
+      "note": "[trimmable] Two (sleep 100) calls 'give the scheduler a tick' after Spaces.setActive before manually calling updateVisibility \u2014 repl",
+      "estSavingsMs": 180
+    },
+    "spaces-session-restore": {
+      "category": "spaces",
+      "tier": "fast",
+      "budgetMs": 1200
+    },
+    "spaces-vim": {
+      "category": "spaces",
+      "tier": "fast",
+      "budgetMs": 2500,
+      "note": "[trimmable] Zero fixed sleeps \u2014 already lean on that axis. Two trims: (1) every test opens with `(await-true \"return !!window.gjoaTe",
+      "estSavingsMs": 300
+    },
+    "sqlite": {
+      "category": "misc",
+      "tier": "fast",
+      "budgetMs": 150
+    },
+    "tab-close-button": {
+      "category": "tabs",
+      "tier": "fast",
+      "budgetMs": 900,
+      "note": "[trimmable] The single `(js/await (sleep 300))` after clicking the \u00d7 is a fixed wait for tab removal \u2014 replace with `await-true` on ",
+      "estSavingsMs": 260
+    },
+    "tab-mode-toggle": {
+      "category": "tabs",
+      "tier": "slow",
+      "budgetMs": 6000,
+      "note": "[trimmable] No fixed sleeps \u2014 every mode flip is gated on the real `gjoa-horizontal` attribute via await-true (correct pattern). Blo",
+      "estSavingsMs": 1200
+    },
+    "tab-tree-machine": {
+      "category": "tabs",
+      "tier": "slow",
+      "budgetMs": 6500,
+      "note": "[bloated] 7 `(settle)` calls at 250ms each = 1750ms of unconditional wait, plus 5 deftests that each reset! + build 3-4 root tabs ",
+      "estSavingsMs": 1600
+    },
+    "urlbar-drawer": {
+      "category": "urlbar",
+      "tier": "fast",
+      "budgetMs": 1800,
+      "note": "[trimmable] Zero fixed sleeps \u2014 chrome-only rect reads, no nav, no tab. Cleanest of the set on the sleep axis. Trims: (1) all 3 test",
+      "estSavingsMs": 200
+    },
+    "vim-content-focus": {
+      "category": "tabs",
+      "tier": "fast",
+      "budgetMs": 2500,
+      "note": "[bloated] 2000ms of fixed sleeps (400+1000+600) plus a 10000ms readiness ceiling and two 8000ms data:-URL load ceilings. The `(sle",
+      "estSavingsMs": 1600
+    },
+    "vim-hotkeys": {
+      "category": "tabs",
+      "tier": "fast",
+      "budgetMs": 1200,
+      "note": "[trimmable] 800ms fixed sleeps (600+200) are settle-before-keypress waits that gate nothing real. The `(sleep 600)` before setup-js ",
+      "estSavingsMs": 700
+    },
+    "vim-privileged-bail": {
+      "category": "tabs",
+      "tier": "fast",
+      "budgetMs": 1800,
+      "note": "[bloated] 1800ms fixed sleeps (400+400+1000). The `(sleep 1000)` after the 't' keypress (proving vim YIELDS while a form field is ",
+      "estSavingsMs": 1400
+    },
+    "vim-rebind": {
+      "category": "tabs",
+      "tier": "fast",
+      "budgetMs": 1200,
+      "note": "[bloated] 1600ms fixed sleeps (400+200+1000). Same pattern as vim-hotkeys/privileged-bail: `(sleep 400)` before setup and `(sleep ",
+      "estSavingsMs": 1300
+    },
+    "youtube-scriptlet": {
+      "category": "scriptlet",
+      "tier": "slow",
+      "budgetMs": 8000,
+      "note": "[trimmable] Network test (real youtube.com nav) \u2014 inherently the slowest and SKIP-guarded, so judged on its own scale. The 3000ms fi",
+      "estSavingsMs": 2000
+    }
+  }
+}

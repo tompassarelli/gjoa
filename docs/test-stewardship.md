@@ -42,6 +42,33 @@ and **regressed** (p50 crept above budget). It also enforces a **suite-total cap
 6. **Comprehensive ≠ bloated.** Cover the behaviour, not every permutation;
    table-drive variants in one boot where possible.
 
+## Modularity — tiered, local runs (do NOT run all 81 cases for a local change)
+
+Running the whole suite on every change is the slow death. Tests are **tiered**
+(in `configs/test-budgets.json`) and **categorized** (`tests/integration/tags.json`),
+so you run only what your change can break:
+
+| tier | what | when |
+|---|---|---|
+| **unit** | pure logic — keymap resolver, editable predicate, colour math — `beagle test`, **no browser** | every edit, ms feedback |
+| **smoke** | the few core-sanity boots (`smoke`) | pre-commit, fast |
+| **fast** | sub-2s integration (most tabs/spaces/newtab/urlbar) | the subsystem you touched |
+| **slow** | render/measure-heavy (darkmode, adblock, contrast) | when you touch that subsystem, or pre-build |
+| **network** | live-site tests (youtube/adblock-production) | opt-in only (`--lane network`) |
+
+**Locality is the default, not the exception.** The runner already filters:
+
+- `--files a,b` — exactly these.
+- `--subsystem darkmode` — the subsystem (via `tags.json`).
+- `--lane slow` / `--exclude-lane slow,network` — by tier.
+- `--grep "rebind"` — by test name.
+
+And `tags.json` maps **source dirs → subsystems**, so the right move after editing
+`src/gjoa/chrome/bjs/dark-mode/` is the *darkmode* subset, never the full suite.
+The full suite + `--lane network` is for pre-build / CI, not the inner loop. (A
+`--changed` knob — `git diff` → source map → subset — is the next step; until then
+pick the `--subsystem` for what you touched.)
+
 ## The audit (tracked over time)
 
 We **audit** the whole suite on a cadence (and after any test-heavy change). The
