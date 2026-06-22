@@ -570,6 +570,10 @@
                   (.preventDefault e)
                   (do
                     (set! (.-dragSource ds) row)
+                    ;; Record the pointer origin so the drop can reject a click / 1-2px
+                    ;; jitter (no movement threshold turned a click into a reparent — #124).
+                    (set! (.-dragStartX ds) (.-screenX e))
+                    (set! (.-dragStartY ds) (.-screenY e))
                     (log "dragstart" {:source (row-desc row)})
                     (let [dt (.-dataTransfer e)]
                       (set! (.-effectAllowed dt) "move")
@@ -695,14 +699,25 @@
               ;; dragover computed dropPosition for that resolved cell, so the drop
               ;; must use it too. Falls back to the listener row when no dragover
               ;; ran (dropTarget unset).
-              (let [tgt (or (.-dropTarget ds) row)]
+              (let [tgt (or (.-dropTarget ds) row)
+                    dx (- (.-screenX e) (or (.-dragStartX ds) (.-screenX e)))
+                    dy (- (.-screenY e) (or (.-dragStartY ds) (.-screenY e)))
+                    moved-px2 (+ (* dx dx) (* dy dy))]
                 (log "drop/row:fired"
                      {:listenerOnRow (row-desc row)
                       :resolvedTarget (row-desc tgt)
+                      :movedPx2 moved-px2
                       :hasDragSource (bool (.-dragSource ds))})
                 (cond
                   (not (.-dragSource ds))
                   (log "drop/row:abort" {:reason "no-dragSource"})
+
+                  ;; #124 ROOT FIX: reject a drop whose pointer barely moved from dragstart —
+                  ;; that's a click / 1-2px jitter on a draggable row, NOT an intentional
+                  ;; reparent. The dense, overlapping horizontal grid cells made this fire on
+                  ;; ordinary clicks, silently rewriting parentId from pointer geometry.
+                  (< moved-px2 36)
+                  (log "drop/row:abort" {:reason "below-drag-threshold (click, not drag)"})
 
                   (= (.-dragSource ds) tgt)
                   (log "drop/row:abort" {:reason "source-equals-target"})
