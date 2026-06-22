@@ -1,0 +1,57 @@
+#lang beagle/js
+;; Static regression test for the drawer FLIP-SYMMETRY fixes (#145/#146/#147):
+;; when the sidebar is moved to the right (sidebar.position_start=false → the
+;; `sidebar-positionend` attribute), the drawer must mirror. Commit eeb0359 added,
+;; keyed off `sidebar-positionend`:
+;;   #146 toolbar mirror   — `flex-direction: row-reverse` on the nav-bar groups
+;;   #147 bottom anchor    — `.actions-list { align-items: end }` in the shadow CSS
+;;   #145 customize panel  — #sidebar-box floating-card insets via --gjoa-card-gap
+;; The cheapest regression guard: assert those markers are still present in source.
+;; No browser/build — instant. Fails if a refactor drops the flip branch.
+(ns gjoa.tests.flip-symmetry
+  (:require [fs :refer [existsSync readFileSync]]
+            [path :refer [join]]))
+(define-mode strict)
+(declare-extern [describe expect test process RegExp] Any)
+
+(def REPO :- String (.cwd process))
+(def CSS :- String (join REPO "src" "gjoa" "chrome" "css" "gjoa.uc.css"))
+(def LAYOUT :- String (join REPO "src" "gjoa" "chrome" "bjs" "drawer" "layout.bjs"))
+
+(defn has? [s :- String pat :- String] :- Any (.test (RegExp. pat) s))
+
+(describe "drawer flip-symmetry (#145/#146/#147)"
+  (fn []
+    (test "sources exist"
+      (fn []
+        (.toBe (expect (existsSync CSS)) true)
+        (.toBe (expect (existsSync LAYOUT)) true)))
+
+    ;; The flip is driven by the `sidebar-positionend` attribute — both surfaces
+    ;; must key off it, or the right-flipped drawer stops mirroring.
+    (test "flip mechanism (sidebar-positionend) present in CSS + shadow overrides"
+      (fn []
+        (let [css (readFileSync CSS "utf8")
+              layout (readFileSync LAYOUT "utf8")]
+          (.toBe (expect (has? css "sidebar-positionend")) true)
+          (.toBe (expect (has? layout "sidebar-positionend")) true))))
+
+    ;; #146 — the in-drawer toolbar row reverses on flip (sidebar-toggle to the
+    ;; outer edge). The mirror IS row-reverse; losing it un-mirrors the toolbar.
+    (test "#146 toolbar mirrors on flip (row-reverse)"
+      (fn []
+        (.toBe (expect (has? (readFileSync CSS "utf8") "row-reverse")) true)))
+
+    ;; #147 — bottom tool buttons hug the outer screen edge on flip via
+    ;; `align-items: end` in the injected shadow stylesheet (layout.bjs).
+    (test "#147 bottom buttons anchor to the edge (align-items: end)"
+      (fn []
+        (.toBe (expect (has? (readFileSync LAYOUT "utf8") "align-items:\\s*end")) true)))
+
+    ;; #145 — the customize-sidebar panel (#sidebar-box) gets uniform floating-card
+    ;; insets from the ONE gap var. Both must remain or the gap regresses.
+    (test "#145 customize panel uses #sidebar-box + the uniform --gjoa-card-gap"
+      (fn []
+        (let [css (readFileSync CSS "utf8")]
+          (.toBe (expect (has? css "sidebar-box")) true)
+          (.toBe (expect (has? css "--gjoa-card-gap")) true))))))

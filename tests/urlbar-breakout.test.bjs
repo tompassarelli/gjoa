@@ -1,0 +1,54 @@
+#lang beagle/js
+;; Static regression test for the floating-urlbar breakout cluster (#149/#150),
+;; commit 72b51d2:
+;;   #149 atomic teardown — deactivate sets `gjoa-urlbar-teardown` (instant hide),
+;;        then a rAF `finish-teardown` removes the floating attrs behind the hidden
+;;        box, so the inline-sidebar restore frame never paints (the "flashing
+;;        search box"). Both markers must stay or the two-phase collapses to the
+;;        old one-phase synchronous revert.
+;;   #150 flip-aware breakout — a `sidebar-positionend` branch on the
+;;        `breakout-extend` rule grows the bar toward the page, not off-screen.
+;;   width — the centered palette is --gjoa-floating-w: min(860px, …) (was 720).
+;; Static source assertion — instant, no browser/build.
+(ns gjoa.tests.urlbar-breakout
+  (:require [fs :refer [existsSync readFileSync]]
+            [path :refer [join]]))
+(define-mode strict)
+(declare-extern [describe expect test process RegExp] Any)
+
+(def REPO :- String (.cwd process))
+(def CSS :- String (join REPO "src" "gjoa" "chrome" "css" "gjoa.uc.css"))
+(def URLBAR :- String (join REPO "src" "gjoa" "chrome" "bjs" "drawer" "urlbar.bjs"))
+
+(defn has? [s :- String pat :- String] :- Any (.test (RegExp. pat) s))
+
+(describe "floating-urlbar breakout (#149/#150)"
+  (fn []
+    (test "sources exist"
+      (fn []
+        (.toBe (expect (existsSync CSS)) true)
+        (.toBe (expect (existsSync URLBAR)) true)))
+
+    ;; #149 — the two-phase teardown. Both the teardown flag (set in deactivate)
+    ;; and the deferred finish-teardown must exist; losing either reintroduces the
+    ;; synchronous inline-restore flash.
+    (test "#149 two-phase teardown present (gjoa-urlbar-teardown + finish-teardown)"
+      (fn []
+        (let [ub (readFileSync URLBAR "utf8")
+              css (readFileSync CSS "utf8")]
+          (.toBe (expect (has? ub "gjoa-urlbar-teardown")) true)
+          (.toBe (expect (has? ub "finish-teardown")) true)
+          ;; the CSS rule that instantly hides on the teardown attr
+          (.toBe (expect (has? css "gjoa-urlbar-teardown")) true))))
+
+    ;; #150 — the flipped breakout branch (grows toward page, not off-screen).
+    (test "#150 flip-aware breakout branch (sidebar-positionend + breakout-extend)"
+      (fn []
+        (let [css (readFileSync CSS "utf8")]
+          (.toBe (expect (has? css "sidebar-positionend")) true)
+          (.toBe (expect (has? css "breakout-extend")) true))))
+
+    ;; the wider centered palette (860px, not the old 720px).
+    (test "palette width bumped to 860px"
+      (fn []
+        (.toBe (expect (has? (readFileSync CSS "utf8") "--gjoa-floating-w:\\s*min\\(860px")) true)))))
