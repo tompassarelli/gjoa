@@ -37,7 +37,7 @@
 ;; Legacy about:config-only ids still resolve in apply!: "hybrid"/"auto" -> dark combo,
 ;; "engine" -> uniform combo, "filter" -> the legacy compositor invert. The live default
 ;; here MUST match chrome/bjs/dark-mode/index.bjs (mode- / set-darkmode-defaults!).
-(pref "gjoa.darkmode.mode" "system")
+(pref "gjoa.darkmode.mode" "dark")
 
 ;; One-shot marker for the v2 mode-taxonomy migration (chrome module migrate-mode!): a
 ;; stored user-branch "system" (pre-cutover = the OS-conditional hybrid engine) is

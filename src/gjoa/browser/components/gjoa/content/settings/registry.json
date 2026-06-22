@@ -78,10 +78,10 @@
                 { "label": "ON", "detail": "Reddit, YouTube, and a plain white blog are all darkened according to the Mode you pick below." },
                 { "label": "OFF", "detail": "YouTube is bright white, Reddit is its normal light theme — gjoa stays out of the way." }
               ] },
-            { "pref": "gjoa.darkmode.mode", "type": "enum", "title": "Appearance", "default": "system",
+            { "pref": "gjoa.darkmode.mode", "type": "enum", "title": "Appearance", "default": "dark",
               "options": [
-                { "value": "system", "label": "System — follow my OS (default)" },
-                { "value": "dark", "label": "Dark" },
+                { "value": "dark", "label": "Dark (default) — force every site dark" },
+                { "value": "system", "label": "System — follow my OS" },
                 { "value": "light", "label": "Light" }
               ],
               "help": "How web pages look — the universal three-way control. System RESOLVES to Dark or Light by your OS theme and applies it (it just picks which). Dark makes every site dark — native-dark sites keep their own theme, the rest are engine-inverted into your Darkness band with bright hero banners/photos toned down. Light keeps every site in its light theme. Only matters while the master switch is ON; the Per-site lists below apply whenever the result is Dark.",

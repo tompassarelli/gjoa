@@ -103,7 +103,7 @@
           (rmattr! root "gjoa-darkmode")))))
 
 (defn enabled? [] :- Boolean (pref-bool PREF-ENABLED true))
-(defn mode- [] :- String (pref-str PREF-MODE "system"))
+(defn mode- [] :- String (pref-str PREF-MODE "dark"))
 
 ;; The chrome window's prefers-color-scheme reflects the OS / browser theme
 ;; (independent of the content-override pref, which is content-only), so this is
@@ -182,7 +182,12 @@
   (try
     (let [d (.getDefaultBranch (.-prefs Services) "")]
       (.setBoolPref d PREF-ENABLED true)
-      (.setCharPref d PREF-MODE "system"))
+      ;; DEFAULT = "dark" (unconditional force-dark). "system" was the default but it
+      ;; depends on system-dark? reading the OS theme, which on some setups (RFP spoof,
+      ;; or a wayland/niri portal that gecko doesn't pick up) reads LIGHT even on a
+      ;; dark OS → every site renders light. Dark never consults the OS, so it Just
+      ;; Works. Users who want OS-follow can still pick System explicitly.
+      (.setCharPref d PREF-MODE "dark"))
     (catch Any e
       (console/error "gjoa-darkmode: set-darkmode-defaults! failed" e))))
 
