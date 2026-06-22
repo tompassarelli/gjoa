@@ -866,6 +866,18 @@
             (.trim (if (.-stdout e) (.toString (.-stdout e)) (or (.-message e) "check failed")))
             "a docs/stewardship/ ref dangled or topology.md is stale — `bun run stewardship:gen`, then commit"))))
 
+;; Gate U — patch numbering coherence (#128): every subsystem domain occupies a
+;; contiguous numeric block (no foreign patch wedged into another domain's run).
+;; Advisory (WARN, not a build stop) — alpha-apply order is sound regardless; a
+;; split domain is a batching/comprehension smell with a known minimal renumber.
+(defn gateU [] :- Any
+  (try
+    (let [out (.toString (execSync "bun .beagle-tools/gjoa/tools/prep/patch-order.js check --strict 2>&1"))]
+      (pass "U" "patch numbering coherent (domains contiguous)" (.trim out)))
+    (catch Any e
+      (warn "U" "patch numbering coherent (domains contiguous)"
+            (.trim (if (.-stdout e) (.toString (.-stdout e)) (or (.-message e) "split domain — see `patch-order renumber`")))))))
+
 ;; ── Run + render ──────────────────────────────────────────────────────────
 (defn main! [] :- Any
   (console/log (bold "gjoa preflight"))
@@ -876,7 +888,7 @@
                ["E" gateE] ["F" gateF] ["G" gateG] ["H" gateH]
                ["I" gateI] ["J" gateJ] ["K" gateK] ["L" gateL] ["M" gateM]
                ["N" gateN] ["O" gateO] ["P" gateP] ["Q" gateQ]
-               ["R" gateR] ["S" gateS] ["T" gateT]]]
+               ["R" gateR] ["S" gateS] ["T" gateT] ["U" gateU]]]
     (doseq [gate gates]
       (let [fn (aget gate 1)]
         (try (fn)

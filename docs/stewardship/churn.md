@@ -49,6 +49,16 @@ Before committing to a Firefox bump, `bun run forecast [from] [to]` intersects t
 
 Output is either `CLEAN — all patches apply unchanged` or the blast-radius list. Validated against the real `152.0 → 152.0.1` bump: fully disjoint → clean. This converts "will this bump hurt?" from a 45-min gamble into a sub-second read. (Precise per-symbol blast-radius ranking via the fram call graph is the deferred turtle; v1 ranks by tier, which needs no graph.)
 
+## Is the patch set coherently ordered? — `tools/prep/patch-order.bjs` (Gate U)
+
+The patch *numbers* carry a latent theory: they ascend by **engine depth** — chrome (`browser/`) → third_party → toolkit → engine (`layout/servo/docshell`). `patch-order.bjs analyze` derives that grouping from the diffs (no hand-list) and answers "optimally ordered/batched?" mechanically:
+
+- **file-overlap components** — patches sharing a touched file are the *only* hard ordering constraints. Alpha-apply already satisfies them, so the order is **apply-sound by construction**; batching is the open question.
+- **domain runs** — sorted by number, each subsystem should form one contiguous run. A domain appearing in two non-adjacent runs = a foreign patch wedged into another's block (a comprehension/rebase smell).
+- **minimal renumber** — the fix is a longest-increasing-subsequence over the canonical-order number sequence: the LIS is the largest already-correct run; its complement is the minimal set to move into free gap slots. On today's set it finds exactly one defect — `0011-newtab` sits inside the dark-mode/engine block (0009–0014) — and one move (`0011 → 0003`) that heals it.
+
+**Gate U** (`preflight.bjs`, WARN) runs `patch-order check` and warns on a split domain — advisory, because numbering is batching, not correctness. `renumber --apply` executes the move (rename + rekey `configs/patch-hashes.json`, content-preserving); deferred when a build is in flight or the shared worktree is hot.
+
 ## Anchoring against churn, not line numbers
 
 Two layers protect the surface from *silent* loss when upstream moves:
@@ -87,5 +97,6 @@ The thesis throughout: **minimize the surface we own, and make every remaining p
 
 - `docs/why-beagle.md` — code-as-claims, the projector, the call graph
 - `tools/prep/patch-cost.bjs` (`bun run cost`), `tools/prep/conflict-forecast.bjs` (`bun run forecast`)
-- `tools/scripts/preflight.bjs` Gate L (surface contracts), Gate M (beagle-currency), Gate S (security-critical patches persist)
+- `tools/prep/patch-order.bjs` (ordering/batching analyzer + minimal renumber)
+- `tools/scripts/preflight.bjs` Gate L (surface contracts), Gate M (beagle-currency), Gate S (security-critical patches persist), Gate U (patch numbering coherence)
 - `BUILD-LEDGER.md` — the postmortems that motivated each gate

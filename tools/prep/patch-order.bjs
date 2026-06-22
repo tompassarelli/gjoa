@@ -1,0 +1,290 @@
+#lang beagle/js
+;; Patch order + batching analyzer (#128). Answers a recurring question with a
+;; projection instead of a hand-wave: "is there a theory to the patch numbers —
+;; are they optimally ordered/batched?"
+;;
+;;   bun .beagle-tools/gjoa/tools/prep/patch-order.js analyze    # human report
+;;   bun .beagle-tools/gjoa/tools/prep/patch-order.js check      # gate: warn on a split domain (--strict => exit 2)
+;;   bun .beagle-tools/gjoa/tools/prep/patch-order.js renumber   # minimal-churn renumber plan (--apply to execute)
+;;
+;; The model, all DERIVED from the patches (no hand-list to rot):
+;;  - domain = the subsystem a patch lives in, bucketed by top-level dir
+;;    (chrome / third_party / toolkit / engine), ascending by how deep into the
+;;    engine it reaches. That ascending-depth order IS the latent "theory".
+;;  - file-overlap components = patches sharing a touched file. These are the
+;;    only HARD ordering constraints; alpha-apply already satisfies them, so the
+;;    current order is apply-sound by construction. Batching is the open question.
+;;  - a domain SPLIT (the same domain in two non-adjacent numeric runs) is the
+;;    real batching defect — an unrelated patch wedged inside another domain's
+;;    block. Healing it is a minimal renumber: an LIS over the canonical-order
+;;    number sequence keeps the largest already-correct run; the complement moves
+;;    into free gap slots. (The renumber problem just IS longest-incr-subsequence.)
+(ns gjoa.tools.prep.patch-order
+  (:require [fs :refer [readdirSync readFileSync renameSync writeFileSync]]
+            [path :refer [join]]))
+(define-mode strict)
+(declare-extern [process parseInt] Any)
+
+(def REPO :- String (.cwd process))
+(def PATCHES-DIR :- String (join REPO "patches"))
+(def HASHES :- String (join REPO "configs" "patch-hashes.json"))
+
+;; ── derive the patch model ──────────────────────────────────────────────────
+
+(defn parse-num [name :- String] :- Int
+  (let [m (.match name (RegExp. "^(\\d{4})"))]
+    (if m (parseInt (aget m 1) 10) -1)))
+
+(defn slug-of [name :- String] :- String
+  (.replace (.replace name (RegExp. "^\\d{4}-") "") (RegExp. "\\.patch$") ""))
+
+(defn pad4 [n :- Int] :- String
+  (let [s (.toString n)]
+    (cond (< n 10) (str "000" s) (< n 100) (str "00" s) (< n 1000) (str "0" s) :else s)))
+
+;; Files a patch edits, read straight from the unified diff (git format first,
+;; plain `+++ b/` fallback) — the ground truth, independent of header `touches:`.
+(defn diff-touches [text :- String] :- Any
+  (let [out (Set.)]
+    (doseq [m (.matchAll text (RegExp. "^diff --git a/(\\S+)\\s+b/\\S+$" "gm"))]
+      (.add out (aget m 1)))
+    (when (= (.-size out) 0)
+      (doseq [m (.matchAll text (RegExp. "^\\+\\+\\+ b/(\\S+)$" "gm"))]
+        (.add out (aget m 1))))
+    (Array.from out)))
+
+;; Bucket a patch into a subsystem domain by its touched dirs. First match wins
+;; (a patch reaching browser chrome is "chrome" even if it also dips into core).
+;; Order encodes engine depth: chrome (UI) shallowest, engine (layout/servo) deepest.
+(defn domain-of [files :- Any] :- String
+  (let [hit (fn [re :- String] :- Bool (.some files (fn [f :- String] :- Bool (.test (RegExp. re) f))))]
+    (cond
+      (hit "^browser/") "chrome"
+      (hit "^toolkit/") "toolkit"
+      (hit "^(layout|servo|docshell|dom|gfx)/") "engine"
+      (hit "^third_party/") "third_party"
+      :else "build")))
+
+(defn depth-rank [domain :- String] :- Int
+  (cond (= domain "chrome") 0 (= domain "third_party") 1
+        (= domain "toolkit") 2 (= domain "engine") 3 :else 4))
+
+(defn load-all [] :- Any
+  (let [names (.sort (.filter (readdirSync PATCHES-DIR) (fn [p :- String] :- Bool (.endsWith p ".patch"))))]
+    (.map names
+      (fn [n :- String] :- Any
+        (let [text (readFileSync (join PATCHES-DIR n) "utf8")
+              files (diff-touches text)]
+          {:name n :num (parse-num n) :slug (slug-of n)
+           :files files :domain (domain-of files)})))))
+
+;; ── file-overlap connected components (union-find) ──────────────────────────
+
+(defn uf-find [parent :- Any x :- Int] :- Int
+  (loop [r x] (if (= (aget parent r) r) r (recur (aget parent r)))))
+
+(defn components [patches :- Any] :- Any
+  (let [n (.-length patches)
+        parent (Array. n)
+        by-file (Map.)]
+    (loop [i 0] (when (< i n) (aset parent i i) (recur (+ i 1))))
+    (loop [i 0]
+      (when (< i n)
+        (doseq [f (.-files (aget patches i))]
+          (if (.has by-file f)
+            (aset parent (uf-find parent (.get by-file f)) (uf-find parent i))
+            (.set by-file f i)))
+        (recur (+ i 1))))
+    (let [groups (Map.)]
+      (loop [i 0]
+        (when (< i n)
+          (let [r (uf-find parent i)]
+            (when (not (.has groups r)) (.set groups r []))
+            (.push (.get groups r) (aget patches i)))
+          (recur (+ i 1))))
+      (Array.from (.values groups)))))
+
+;; files touched by >=2 members of a group (what binds the component together)
+(defn shared-in-group [group :- Any] :- Any
+  (let [counts (Map.) out []]
+    (doseq [p group]
+      (doseq [f (.-files p)] (.set counts f (+ 1 (or (.get counts f) 0)))))
+    (doseq [e (Array.from (.entries counts))]
+      (when (> (aget e 1) 1) (.push out (aget e 0))))
+    (.sort out)))
+
+;; ── domain runs + split detection ───────────────────────────────────────────
+
+(defn by-num [patches :- Any] :- Any
+  (.sort (.slice patches) (fn [a :- Any b :- Any] :- Int (- (.-num a) (.-num b)))))
+
+(defn domain-runs [patches :- Any] :- Any
+  (let [runs []]
+    (doseq [p (by-num patches)]
+      (let [last (if (> (.-length runs) 0) (aget runs (- (.-length runs) 1)) nil)]
+        (if (and last (= (.-domain last) (.-domain p)))
+          (.push (.-members last) p)
+          (.push runs {:domain (.-domain p) :members [p]}))))
+    runs))
+
+;; domains appearing in >1 run = split (a foreign patch wedged in the block)
+(defn split-domains [runs :- Any] :- Any
+  (let [counts (Map.) out []]
+    (doseq [r runs] (.set counts (.-domain r) (+ 1 (or (.get counts (.-domain r)) 0))))
+    (doseq [e (Array.from (.entries counts))]
+      (when (> (aget e 1) 1) (.push out (aget e 0))))
+    out))
+
+;; ── minimal renumber via longest-increasing-subsequence ─────────────────────
+
+(defn canonical [patches :- Any] :- Any
+  (.sort (.slice patches)
+    (fn [a :- Any b :- Any] :- Int
+      (let [dr (- (depth-rank (.-domain a)) (depth-rank (.-domain b)))]
+        (if (not= dr 0) dr (- (.-num a) (.-num b)))))))
+
+;; values of the longest strictly-increasing subsequence of distinct `nums`.
+(defn lis-keep [nums :- Any] :- Any
+  (let [n (.-length nums)
+        len (Array. n)
+        prev (Array. n)]
+    (loop [i 0]
+      (when (< i n)
+        (aset len i 1) (aset prev i -1)
+        (loop [j 0]
+          (when (< j i)
+            (when (and (< (aget nums j) (aget nums i)) (> (+ 1 (aget len j)) (aget len i)))
+              (aset len i (+ 1 (aget len j)))
+              (aset prev i j))
+            (recur (+ j 1))))
+        (recur (+ i 1))))
+    (let [best (loop [i 0 bi -1 bl -1]
+                 (if (>= i n) bi
+                   (if (> (aget len i) bl) (recur (+ i 1) i (aget len i)) (recur (+ i 1) bi bl))))
+          keep (Set.)]
+      (loop [k best] (when (>= k 0) (.add keep (aget nums k)) (recur (aget prev k))))
+      keep)))
+
+;; canonical order with the LIS pinned; everything else slots into the lowest
+;; free integer above its nearest kept predecessor.
+(defn renumber-plan [patches :- Any] :- Any
+  (let [canon (canonical patches)
+        nums (.map canon (fn [p :- Any] :- Int (.-num p)))
+        keep (lis-keep nums)
+        used (Set. (.map patches (fn [p :- Any] :- Int (.-num p))))
+        moves []]
+    (loop [i 0]
+      (when (< i (.-length canon))
+        (let [p (aget canon i)]
+          (when (not (.has keep (.-num p)))
+            (let [lo (loop [j (- i 1)]
+                       (cond (< j 0) 0
+                             (.has keep (.-num (aget canon j))) (.-num (aget canon j))
+                             :else (recur (- j 1))))
+                  slot (loop [s (+ lo 1)] (if (.has used s) (recur (+ s 1)) s))]
+              (.add used slot)
+              (.push moves {:from-name (.-name p) :to-name (str (pad4 slot) "-" (.-slug p) ".patch")
+                            :from (.-num p) :to slot :domain (.-domain p)}))))
+        (recur (+ i 1))))
+    moves))
+
+;; ── render ──────────────────────────────────────────────────────────────────
+
+(defn gaps [patches :- Any] :- Any
+  (let [nums (.map (by-num patches) (fn [p :- Any] :- Int (.-num p)))
+        out []]
+    (loop [i 1]
+      (when (< i (.-length nums))
+        (let [prev (aget nums (- i 1)) cur (aget nums i)]
+          (when (> cur (+ prev 1)) (.push out (str (pad4 (+ prev 1)) "–" (pad4 (- cur 1))))))
+        (recur (+ i 1))))
+    out))
+
+(defn analyze! [] :- Any
+  (let [patches (load-all)
+        comps (.filter (components patches) (fn [g :- Any] :- Bool (> (.-length g) 1)))
+        runs (domain-runs patches)
+        splits (split-domains runs)
+        moves (renumber-plan patches)]
+    (console/log (str "patch order + batching analysis  (" (.-length patches) " patches)\n"))
+    (console/log "  #     domain       slug")
+    (doseq [p (by-num patches)]
+      (console/log (str "  " (pad4 (.-num p)) "  " (.padEnd (.-domain p) 11) "  " (.-slug p))))
+    (console/log "\nfile-overlap components (the only HARD ordering constraints):")
+    (if (= (.-length comps) 0)
+      (console/log "  (none — every patch touches a disjoint file set; fully reorderable)")
+      (doseq [g comps]
+        (console/log (str "  · {" (.join (.map (by-num g) (fn [p :- Any] :- String (pad4 (.-num p)))) ", ") "}"
+                          "  share: " (.join (shared-in-group g) ", ")))))
+    (console/log (str "\ndomain sequence (by number):  "
+                      (.join (.map runs (fn [r :- Any] :- String
+                                          (str (.-domain r) "×" (.-length (.-members r))))) " · ")))
+    (if (= (.-length splits) 0)
+      (console/log "  ✓ every domain is contiguous — batching is optimal")
+      (doseq [d splits]
+        (let [where (.filter runs (fn [r :- Any] :- Bool (= (.-domain r) d)))]
+          (console/log (str "  ⚠ domain '" d "' is SPLIT across " (.-length where) " runs at "
+                            (.join (.map where (fn [r :- Any] :- String
+                                                 (str "[" (.join (.map (.-members r) (fn [p :- Any] :- String (pad4 (.-num p)))) ",") "]"))) " and "))))))
+    (let [g (gaps patches)]
+      (when (> (.-length g) 0) (console/log (str "\nnumbering gaps: " (.join g ", ") "  (dropped/absorbed patches)"))))
+    (console/log "\nverdict: APPLY-SOUND (alpha-apply order satisfies every overlap constraint).")
+    (if (= (.-length moves) 0)
+      (console/log "  batching is OPTIMAL — numbers ascend by engine depth, every domain contiguous.")
+      (do
+        (console/log (str "  batching is " (.-length moves) " move(s) short of optimal. Minimal renumber:"))
+        (doseq [m moves]
+          (console/log (str "    " (.-from-name m) "  →  " (pad4 (.-to m)) "   (" (.-domain m) ")")))
+        (console/log "  theory: numbers ascend by engine depth — chrome → third_party → toolkit → engine.")))))
+
+(defn check! [strict :- Bool] :- Any
+  (let [patches (load-all)
+        splits (split-domains (domain-runs patches))
+        moves (renumber-plan patches)]
+    (if (= (.-length splits) 0)
+      (do (console/log (str "patch-order ok — " (.-length patches) " patches, every domain contiguous, apply-sound"))
+          0)
+      (do
+        (console/error (str "patch-order: " (.-length splits) " split domain(s): " (.join splits ", ")
+                            " — minimal fix: " (.join (.map moves (fn [m :- Any] :- String (str (.-from-name m) "→" (pad4 (.-to m))))) ", ")))
+        (when strict (.exit process 2))
+        0))))
+
+;; --apply: rename the patch files + rekey configs/patch-hashes.json (content
+;; unchanged, so hashes are preserved). Refs in prose (BUILD-LEDGER, registry
+;; comments) are grep-warned, not auto-edited — those are human review.
+(defn apply-renumber! [] :- Any
+  (let [patches (load-all)
+        moves (renumber-plan patches)]
+    (if (= (.-length moves) 0)
+      (console/log "patch-order: nothing to renumber.")
+      (let [hashes (JSON/parse (readFileSync HASHES "utf8"))]
+        (doseq [m moves]
+          (renameSync (join PATCHES-DIR (.-from-name m)) (join PATCHES-DIR (.-to-name m)))
+          (let [h (aget (.-patches hashes) (.-from-name m))]
+            (when h
+              (aset (.-patches hashes) (.-to-name m) h)
+              (js-delete (aget (.-patches hashes) (.-from-name m)))))
+          (console/log (str "  renamed " (.-from-name m) " → " (.-to-name m))))
+        (writeFileSync HASHES (str (JSON/stringify hashes nil 2) "\n"))
+        (console/log (str "patch-hashes.json rekeyed (" (.-length moves) " entr(ies)). "
+                          "Grep BUILD-LEDGER.md / tools/prep/darkmode-registry.bjs for stale `patches/NNNN-` refs."))))))
+
+(defn main! [] :- Any
+  (let [argv (.slice (.-argv process) 2)
+        cmd (or (aget argv 0) "analyze")
+        strict (.includes argv "--strict")]
+    (cond
+      (= cmd "analyze") (analyze!)
+      (= cmd "check") (check! strict)
+      (and (= cmd "renumber") (.includes argv "--apply")) (apply-renumber!)
+      (= cmd "renumber")
+      (let [moves (renumber-plan (load-all))]
+        (if (= (.-length moves) 0)
+          (console/log "renumber: already optimal — nothing to move.")
+          (do
+            (console/log "renumber plan (dry — pass --apply to execute):")
+            (doseq [m moves] (console/log (str "  " (.-from-name m) "  →  " (.-to-name m)))))))
+      :else (do (console/error "usage: patch-order <analyze|check [--strict]|renumber [--apply]>") (.exit process 1)))))
+
+(when (.-main (js/import-meta)) (main!))
