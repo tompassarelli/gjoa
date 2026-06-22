@@ -77,13 +77,36 @@ html, body {
   .nav-on { border-left: none; border-bottom-color: var(--accent); }
 }
 
-/* setting rows */
-.row {
-  display: flex; align-items: flex-start; gap: 16px;
-  padding: 12px 0; border-top: 1px solid var(--line);
+/* setting rows — compact by default, details collapsed behind a chevron */
+.row { display: block; border-top: 1px solid var(--line); }
+.row-head {
+  display: flex; align-items: center; gap: 16px; padding: 12px 0;
 }
-.row-main { flex: 1; min-width: 0; }
-.row-title { font-weight: 500; }
+.row-titlewrap {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px;
+  border-radius: 8px; padding: 2px 6px 2px 2px; margin-left: -2px;
+}
+.row-titlewrap.is-clickable { cursor: pointer; }
+.row-titlewrap.is-clickable:hover { background: rgba(122,162,247,0.06); }
+.row-titlewrap.is-clickable:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.row-chevron {
+  flex: none; width: 12px; height: 16px; color: var(--faint);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform 0.16s ease, color 0.12s ease;
+}
+.row-chevron::before { content: "\203A"; font-size: 17px; line-height: 1; }
+.row-titlewrap:hover .row-chevron { color: var(--muted); }
+.row.expanded .row-chevron { transform: rotate(90deg); color: var(--accent); }
+.row-title { font-weight: 500; min-width: 0; }
+
+.row-details {
+  display: none; padding: 2px 0 14px 23px; max-width: 64ch;
+}
+.row.expanded .row-details { display: block; animation: rowReveal 0.16s ease; }
+@keyframes rowReveal { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+
 .row-help { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .row-cost { color: var(--faint); font-size: 12px; margin-top: 4px; }
 

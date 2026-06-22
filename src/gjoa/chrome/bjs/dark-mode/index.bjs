@@ -137,6 +137,11 @@
       ;; "filter": legacy compositor invert (about:config-only, superseded by uniform).
       (= m "filter")
         (do (set-chrome-scheme! true) (set-content-override! 0) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! true) (apply-filter!))
+      ;; "light": conventional Light appearance — force prefers-color-scheme:light so every
+      ;; site shows its light theme on ANY OS; gjoa adds NO inversion. The step-out-of-dark
+      ;; appearance (distinct from the master switch, which parks the whole engine).
+      (= m "light")
+        (do (set-chrome-scheme! false) (set-content-override! 1) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! false) (remove-filter!))
       ;; "dark" (DEFAULT; was "hybrid"): force prefers-color-scheme:dark so native-dark
       ;; sites activate their own theme; the engine pre-paint default-inverts themeless
       ;; pages (no flash) and the GjoaDarkmode actor refines per-site. The ONLY tier
@@ -157,15 +162,10 @@
 ;; engine/filter/hybrid/auto ids fold forward into the new cycle.
 (defn cycle-mode [] :- String
   (let [cur (mode-)
-        nxt (cond (= cur "dark")    "uniform"
-                  (= cur "uniform") "system"
-                  (= cur "system")  "off"
-                  (= cur "off")     "dark"
-                  ;; legacy ids fold forward into the new cycle
-                  (= cur "hybrid")  "uniform"
-                  (= cur "auto")    "uniform"
-                  (= cur "engine")  "system"
-                  (= cur "filter")  "system"
+        nxt (cond (= cur "dark")   "light"
+                  (= cur "light")  "system"
+                  (= cur "system") "dark"
+                  ;; legacy/about:config-only ids fold into the appearance cycle
                   :else "dark")]
     (set-pref-str! PREF-MODE nxt)
     nxt))

@@ -136,37 +136,63 @@
     return "cost: " + m.value + " " + (m.unit || "") + " (" + (m.confidence || "") + ")";
   }
 
+  // A row shows just TITLE + CONTROL by default; the verbose help / examples / note
+  // are collapsed behind a disclosure chevron (click or keyboard) so the page stays
+  // a scannable list, not a wall of text. Rows with nothing to explain show no chevron.
   function settingRow(s, rerender) {
     const row = el("div", "row");
-    const main = el("div", "row-main");
-    main.appendChild(el("div", "row-title", s.title));
-    if (s.help) main.appendChild(el("div", "row-help", s.help));
-    // `examples` is an array of { label, detail } "what you'll see" callouts —
-    // concrete site outcomes (Reddit / YouTube) under this setting. Over-explain.
-    if (Array.isArray(s.examples) && s.examples.length) {
-      const ex = el("ul", "row-examples");
-      for (const e of s.examples) {
-        const li = el("li", "row-example");
-        if (e.label) li.appendChild(el("span", "ex-label", e.label));
-        if (e.detail) li.appendChild(el("span", "ex-detail", e.detail));
-        ex.appendChild(li);
+    const head = el("div", "row-head");
+    const titleWrap = el("div", "row-titlewrap");
+    const hasDetails = !!(
+      s.help || (Array.isArray(s.examples) && s.examples.length) || s.note || s.measurement
+    );
+    if (hasDetails) titleWrap.appendChild(el("span", "row-chevron"));
+    titleWrap.appendChild(el("div", "row-title", s.title));
+    head.appendChild(titleWrap);
+    head.appendChild(control(s, rerender));
+    row.appendChild(head);
+
+    if (hasDetails) {
+      titleWrap.classList.add("is-clickable");
+      titleWrap.setAttribute("role", "button");
+      titleWrap.setAttribute("tabindex", "0");
+      titleWrap.setAttribute("aria-expanded", "false");
+      const details = el("div", "row-details");
+      if (s.help) details.appendChild(el("div", "row-help", s.help));
+      // `examples` is an array of { label, detail } "what you'll see" callouts —
+      // concrete site outcomes (Reddit / YouTube) under this setting.
+      if (Array.isArray(s.examples) && s.examples.length) {
+        const ex = el("ul", "row-examples");
+        for (const e of s.examples) {
+          const li = el("li", "row-example");
+          if (e.label) li.appendChild(el("span", "ex-label", e.label));
+          if (e.detail) li.appendChild(el("span", "ex-detail", e.detail));
+          ex.appendChild(li);
+        }
+        details.appendChild(ex);
       }
-      main.appendChild(ex);
+      if (s.note) details.appendChild(el("div", "row-note", s.note));
+      if (s.measurement) {
+        const cost = el("div", "row-cost", costText(s.measurement));
+        if (s.measurement.basis) cost.title = s.measurement.basis;
+        details.appendChild(cost);
+      }
+      const pref = el("a", "row-pref");
+      pref.textContent = s.pref;
+      pref.href = "about:config";
+      pref.title = "open about:config (search this pref to edit raw)";
+      details.appendChild(pref);
+      row.appendChild(details);
+
+      const toggleExpand = () => {
+        const open = row.classList.toggle("expanded");
+        titleWrap.setAttribute("aria-expanded", open ? "true" : "false");
+      };
+      titleWrap.addEventListener("click", toggleExpand);
+      titleWrap.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); toggleExpand(); }
+      });
     }
-    // `note` is a single plain caveat/tip line under the row.
-    if (s.note) main.appendChild(el("div", "row-note", s.note));
-    if (s.measurement) {
-      const cost = el("div", "row-cost", costText(s.measurement));
-      if (s.measurement.basis) cost.title = s.measurement.basis;
-      main.appendChild(cost);
-    }
-    const pref = el("a", "row-pref");
-    pref.textContent = s.pref;
-    pref.href = "about:config";
-    pref.title = "open about:config (search this pref to edit raw)";
-    main.appendChild(pref);
-    row.appendChild(main);
-    row.appendChild(control(s, rerender));
     return row;
   }
 
