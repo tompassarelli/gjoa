@@ -78,16 +78,16 @@
                 { "label": "ON", "detail": "Reddit, YouTube, and a plain white blog are all darkened according to the Mode you pick below." },
                 { "label": "OFF", "detail": "YouTube is bright white, Reddit is its normal light theme — gjoa stays out of the way." }
               ] },
-            { "pref": "gjoa.darkmode.mode", "type": "enum", "title": "Appearance", "default": "dark",
+            { "pref": "gjoa.darkmode.mode", "type": "enum", "title": "Appearance", "default": "system",
               "options": [
-                { "value": "system", "label": "System — follow my OS" },
-                { "value": "dark", "label": "Dark (default)" },
+                { "value": "system", "label": "System — follow my OS (default)" },
+                { "value": "dark", "label": "Dark" },
                 { "value": "light", "label": "Light" }
               ],
               "help": "How web pages look — the universal three-way control (like Chrome/Firefox/Safari, but dark-first). System follows your OS theme and lets each site decide. Dark makes every site dark — native-dark sites keep their own theme, the rest are engine-inverted into your Darkness band with bright hero banners/photos toned down. Light keeps every site in its light theme. Only matters while the master switch is ON; the Per-site lists below apply in Dark.",
               "examples": [
-                { "label": "System — follow my OS", "detail": "Conventional browser behavior — exactly what Chrome, Firefox, and Safari mean. Content follows your real OS theme both ways and each site decides via prefers-color-scheme; gjoa adds ZERO inversion. On a light OS a themeless site stays bright, by design. Pick this to make gjoa behave like a stock browser." },
-                { "label": "Dark (default)", "detail": "gjoa's signature. Every site reads dark on any OS, no white flash. A site with its OWN good dark theme (GitHub, Reddit, signed-in YouTube) keeps that theme; a light or themeless site is engine-inverted into your Darkness band, and bright hero banners/photos are toned down so nothing stays glaringly light. The ONLY appearance where the three Per-site lists below apply." },
+                { "label": "System — follow my OS (default)", "detail": "Conventional browser behavior — exactly what Chrome, Firefox, and Safari mean. Content follows your real OS theme both ways and each site decides via prefers-color-scheme; gjoa adds ZERO inversion. On a light OS a themeless site stays bright, by design. The default — gjoa follows your desktop." },
+                { "label": "Dark", "detail": "gjoa's signature dark-everywhere. Every site reads dark on any OS, no white flash. A site with its OWN good dark theme (GitHub, Reddit, signed-in YouTube) keeps that theme; a light or themeless site is engine-inverted into your Darkness band, and bright hero banners/photos are toned down so nothing stays glaringly light. The ONLY appearance where the three Per-site lists below apply." },
                 { "label": "Light", "detail": "Force every site to its light theme on any OS — gjoa adds no darkening. A quick way to step out of dark for a site or a session without turning the whole engine off." }
               ] },
             { "pref": "gjoa.darkmode.invert.bgLightness", "type": "int", "title": "Darkness", "default": 16, "min": 0, "max": 100, "slider": true,
