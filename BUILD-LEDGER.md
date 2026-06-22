@@ -681,11 +681,21 @@ and floating-card layout fixes (#106). `nix build .#gjoa --impure` (hermetic: re
 browser/omni.ja` shows `pref("gjoa.darkmode.normalize.enabled", true)` baked; the APCA no-black-on-black
 backstop ships ON. Gate W (preflight) now guards that default from ever regressing.
 
-**Provenance note:** the build started ~23:24 from main HEAD; commits added afterward this session
-(patch-order, upstream-provenance, Gate U/V/W, stewardship tapestry, purity-leak fixes) are tooling/docs
-ONLY — they touch no `src/gjoa/`, `patches/`, or `engine/` input, so the artifact corresponds exactly to
-HEAD's binary-affecting content. The stale v0.4.1 tag (6c77302, 6/21) is superseded; NO public GitHub
-release exists for it.
+**Provenance note (CORRECTED):** this is a `--impure` build, so it baked the SHARED-WORKTREE WORKING TREE
+at build time, NOT a clean commit. Post-build artifact audit (`unzip -l browser/omni.ja` + toolkit
+`omni.ja`) found it is NOT release-coherent: the toolkit omni.ja bakes `GjoaCosmetic*` + `GjoaDarkmode*`
+actors but is **MISSING `GjoaInput*`** (the vim editable-focus foundation, committed `ef53910` 22:03) —
+even though the later vim commits (about:vim, which-key) ARE baked. That ordering is impossible for a
+single commit; it confirms the build snapshotted a transient worktree state mid-session. So this build is
+a CHECKPOINT (proved the dark-mode normalize=ON fix compiles + bakes, and the binary runs) but must NOT
+be the release artifact. The stale v0.4.1 tag (6c77302, 6/21) is superseded; NO public GitHub release
+exists for it.
+
+**REQUIRED before the final v0.4.1 cut:** a FRESH clean `nix build` from the final committed state, then
+verify `GjoaInput{Child,Parent}.sys.mjs` ARE in the toolkit omni.ja (patches/0008 + src/gjoa + engine/
+all currently wire them, so a clean build should). Add a post-build smoke check that every actor
+registered in patches/0008 EXTRA_JS_MODULES actually appears in the built omni.ja — this miss would have
+shipped a vim-foundation-less binary otherwise.
 
 **Release:** PUNTED per Tom — no tag move / no `gh release` now. ONE final cut at end-of-session once the
 whole todo list is clear (Tom is calling it v0.4.2). Artifact stays ready in `result/`.
