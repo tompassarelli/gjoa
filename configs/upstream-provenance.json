@@ -39,7 +39,7 @@
       "servo/components/style/properties/computed_value_flags.rs": "d13a344e231fa12b9ce803769f41a553d1601517",
       "servo/components/style/style_adjuster.rs": "1756b77b9be0deb7dc562b142aa2d6553a258af1"
     },
-    "0011-newtab-redirector-gjoa.patch": {
+    "0003-newtab-redirector-gjoa.patch": {
       "browser/components/newtab/AboutNewTabRedirector.sys.mjs": "328842c18aa6895273b68de01fda4d60c217e634"
     },
     "0012-dark-mode-role-resolver.patch": {

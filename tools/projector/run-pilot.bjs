@@ -1,7 +1,7 @@
 #lang beagle/js
 ;; tools/projector/run-pilot.bjs — one-command reproducible Phase 5 pilot.
 ;; Materializes pristine upstream (the pinned Firefox tag from gjoa.json) + the
-;; patch-0011-applied ground truth, then runs the claim-doc pilot gates.
+;; patch-0003-applied ground truth, then runs the claim-doc pilot gates.
 ;;   bun run projector:pilot
 (ns gjoa.tools.projector.run-pilot
   (:require [child_process :refer [execSync]]
@@ -27,12 +27,12 @@
     (sh (str "rm -rf " TMP " && mkdir -p " dir) nil)
     (sh (str "git -C " FF-SRC " show " tag ":" REL " > " (join TMP "pristine.mjs")) nil)
     (sh (str "cp " (join TMP "pristine.mjs") " " (join TMP REL)) nil)
-    (sh (str "cd " TMP " && patch -p1 < " (join REPO "patches" "0011-newtab-redirector-gjoa.patch")) nil)
+    (sh (str "cd " TMP " && patch -p1 < " (join REPO "patches" "0003-newtab-redirector-gjoa.patch")) nil)
     (sh (str "cp " (join TMP REL) " " (join TMP "patched.mjs")) nil)
-    (console/error (str "pilot inputs ready (pristine @ " tag ", patched via patches/0011)"))
+    (console/error (str "pilot inputs ready (pristine @ " tag ", patched via patches/0003)"))
     ;; delegate to the pilot (it owns the gates + exit code).
-    (execSync (str "bun " (join REPO ".beagle-tools" "gjoa" "tools" "projector" "pilot-0011.js")
-                   " " (join TMP "pristine.mjs") " " (join TMP "patched.mjs") " " (join TMP "0011.claims.json"))
+    (execSync (str "bun " (join REPO ".beagle-tools" "gjoa" "tools" "projector" "pilot-0003.js")
+                   " " (join TMP "pristine.mjs") " " (join TMP "patched.mjs") " " (join TMP "0003.claims.json"))
               {:stdio "inherit"})))
 
 (when (.-main (js/import-meta))

@@ -231,7 +231,7 @@
       (.setBoolPref d "gjoa.toolbar.newTabButton" false)
       ;; Home/startup page is the gjoa new-tab page. "about:newtab" (and
       ;; "about:home") are routed to chrome://gjoa-newtab at the channel layer by
-      ;; the AboutNewTabRedirector patch (patches/0011-newtab-redirector-gjoa) —
+      ;; the AboutNewTabRedirector patch (patches/0003-newtab-redirector-gjoa) —
       ;; FF152 dropped the legacy AboutNewTab.newTabURL hook, so the redirect can
       ;; no longer be done from JS. The home button, new windows, and a
       ;; home-based startup all land on the same custom page as new tabs.

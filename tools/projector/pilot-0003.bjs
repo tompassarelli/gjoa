@@ -1,5 +1,5 @@
 #lang beagle/js
-;; tools/projector/pilot-0011.bjs — Phase 5 pilot: patch 0011 as a portable claim
+;; tools/projector/pilot-0003.bjs — Phase 5 pilot: patch 0003 as a portable claim
 ;; document instead of a textual diff.
 ;;
 ;; 0011 edits two same-named methods in two classes. As a claim-doc that is two
@@ -12,8 +12,8 @@
 ;;            a body line the patch anchors on edited) the textual patch `.rej`s
 ;;            (Hunk #1 FAILED), but the name-anchored claim-doc still applies to
 ;;            valid JS carrying both gjoa edits.
-;;   bun .beagle-tools/gjoa/tools/projector/pilot-0011.js <pristine> <patched> [claim-out.json]
-(ns gjoa.tools.projector.pilot-0011
+;;   bun .beagle-tools/gjoa/tools/projector/pilot-0003.js <pristine> <patched> [claim-out.json]
+(ns gjoa.tools.projector.pilot-0003
   (:require [fs :refer [readFileSync writeFileSync]]
             [gjoa.tools.projector.claims :refer [build-doc replay doc->json json->doc]]
             [gjoa.tools.projector.set-body :refer [parses?]]))
@@ -33,7 +33,7 @@
 (defn main! [] :- Any
   (let [pristine (readFileSync (aget (.-argv process) 2) "utf8")
         patched (readFileSync (aget (.-argv process) 3) "utf8")
-        claim-path (or (aget (.-argv process) 4) "/tmp/0011.claims.json")
+        claim-path (or (aget (.-argv process) 4) "/tmp/0003.claims.json")
         ;; build the claim-doc from the known-good patched output, persist to JSON,
         ;; then reload it — proving the edit round-trips through a portable artifact.
         doc0 (build-doc patched pristine ANCHORS)
@@ -62,7 +62,7 @@
                        (= (count-occurrences (.-src r3) "gjoa-newtab") 2)
                        (> (.-length (.-recoveries r3)) 0))]
     (console/error (str "claim-doc: " (.-length doc) " set-body verbs, " (.-length json) " bytes JSON -> " claim-path))
-    (console/error (str "GATE 1  equivalence (claim-replay == patch 0011, byte-for-byte): " equiv))
+    (console/error (str "GATE 1  equivalence (claim-replay == patch 0003, byte-for-byte): " equiv))
     (console/error (str "GATE 2  churn-resilience (name-anchored claim survives reflow that .rej's the patch): " churn-ok))
     (console/error (str "GATE 3  rename-recovery (claim survives a method rename that .rej's the patch): " rename-ok))
     (when rename-ok

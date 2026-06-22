@@ -180,7 +180,7 @@ build workflows):
   (`reflector.bjs`) and renders it back **byte-identically** — the projection
   loses nothing.
 - **Gate B** proves the committed `0011` claim-doc
-  (`patches/0011-newtab-redirector-gjoa.claims.json`) reproduces its textual patch
+  (`patches/0003-newtab-redirector-gjoa.claims.json`) reproduces its textual patch
   output **exactly**.
 - Anchor-recovery (`anchor.bjs`) survives reflow *and a method rename* — fuzzy-
   matching on params + body-identifier overlap when the name itself changes.

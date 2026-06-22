@@ -4,7 +4,7 @@
 ;;   GATE A — reflector round-trips a corpus of engine .sys.mjs byte-identically.
 ;;   GATE B — the committed 0011 claim-doc, replayed onto pristine (derived by
 ;;            reverse-applying the textual patch to the engine file), reproduces the
-;;            engine file exactly — i.e. the claim-doc stays equivalent to patch 0011.
+;;            engine file exactly — i.e. the claim-doc stays equivalent to patch 0003.
 ;;   bun run projector:test
 (ns gjoa.tools.projector.test-projector
   (:require [fs :refer [readFileSync existsSync]]
@@ -52,8 +52,8 @@
           (console/error (str "GATE A  reflector round-trip: " (- (.-length files) bad) "/" (.-length files) " byte-identical"))
           (when (> bad 0) (fail! (str bad " file(s) failed round-trip")))))))
   ;; GATE B — committed claim-doc reproduces the textual patch's output
-  (let [artifact (join REPO "patches" "0011-newtab-redirector-gjoa.claims.json")
-        patch (join REPO "patches" "0011-newtab-redirector-gjoa.patch")
+  (let [artifact (join REPO "patches" "0003-newtab-redirector-gjoa.claims.json")
+        patch (join REPO "patches" "0003-newtab-redirector-gjoa.patch")
         doc (json->doc (readFileSync artifact "utf8"))
         rel (.-file doc)
         engine-target (join ENGINE rel)
@@ -65,7 +65,7 @@
           patched (readFileSync engine-target "utf8")
           r (replay (.-edits doc) pristine)]
       (if (and (.-ok r) (= (.-src r) patched))
-        (console/error "GATE B  claim-doc equivalence: replay(pristine) == engine (patch 0011) [byte-for-byte]")
+        (console/error "GATE B  claim-doc equivalence: replay(pristine) == engine (patch 0003) [byte-for-byte]")
         (fail! (if (.-ok r) "claim-doc replay does not reproduce the engine file" (.-reason r))))))
   ;; GATE C — codegraph soundness: the call graph the codegraph projector derives
   ;; from emitted JS must be a SUPERSET of beagle's own (under-reported) caller

@@ -1,6 +1,6 @@
 #lang beagle/js
 ;; tools/projector/gen-claims.bjs — generate the committed claim-doc artifact for
-;; patch 0011: patches/0011-newtab-redirector-gjoa.claims.json. The artifact is the
+;; patch 0003: patches/0003-newtab-redirector-gjoa.claims.json. The artifact is the
 ;; identity-anchored form of the patch ({file, edits:[set-body verbs]}), extracted
 ;; from the known-good patched output (pinned upstream + the textual patch). Run
 ;; once and commit; the build replays it as a fallback when the textual patch .rej's.
@@ -17,7 +17,7 @@
 (def REL :- String "browser/components/newtab/AboutNewTabRedirector.sys.mjs")
 (def ANCHORS :- Any [{:class "AboutNewTabRedirectorParent" :method "newChannel"}
                      {:class "AboutNewTabRedirectorChild" :method "newChannel"}])
-(def OUT :- String (join REPO "patches" "0011-newtab-redirector-gjoa.claims.json"))
+(def OUT :- String (join REPO "patches" "0003-newtab-redirector-gjoa.claims.json"))
 (def FF-SRC :- String (join (.-HOME (.-env process)) "code" "reference" "firefox"))
 (def TMP :- String "/tmp/gjoa-gen")
 
@@ -28,7 +28,7 @@
     (sh (str "rm -rf " TMP " && mkdir -p " dir) nil)
     (sh (str "git -C " FF-SRC " show " tag ":" REL " > " (join TMP "pristine.mjs")) nil)
     (sh (str "cp " (join TMP "pristine.mjs") " " (join TMP REL)) nil)
-    (sh (str "cd " TMP " && patch -p1 < " (join REPO "patches" "0011-newtab-redirector-gjoa.patch")) nil)
+    (sh (str "cd " TMP " && patch -p1 < " (join REPO "patches" "0003-newtab-redirector-gjoa.patch")) nil)
     (let [patched (readFileSync (join TMP REL) "utf8")
           pristine (readFileSync (join TMP "pristine.mjs") "utf8")
           edits (build-doc patched pristine ANCHORS)

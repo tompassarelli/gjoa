@@ -55,7 +55,7 @@ The patch *numbers* carry a latent theory: they ascend by **engine depth** — c
 
 - **file-overlap components** — patches sharing a touched file are the *only* hard ordering constraints. Alpha-apply already satisfies them, so the order is **apply-sound by construction**; batching is the open question.
 - **domain runs** — sorted by number, each subsystem should form one contiguous run. A domain appearing in two non-adjacent runs = a foreign patch wedged into another's block (a comprehension/rebase smell).
-- **minimal renumber** — the fix is a longest-increasing-subsequence over the canonical-order number sequence: the LIS is the largest already-correct run; its complement is the minimal set to move into free gap slots. On today's set it finds exactly one defect — `0011-newtab` sits inside the dark-mode/engine block (0009–0014) — and one move (`0011 → 0003`) that heals it.
+- **minimal renumber** — the fix is a longest-increasing-subsequence over the canonical-order number sequence: the LIS is the largest already-correct run; its complement is the minimal set to move into free gap slots. (Worked example, since healed: the newtab patch once sat inside the dark-mode/engine block as `0011`; one move — `0011 → 0003`, into the chrome block — healed the split. The set is now contiguous: chrome `0001–0003` · third_party `0007` · toolkit `0008` · engine `0009–0014`.)
 
 **Gate U** (`preflight.bjs`, WARN) runs `patch-order check` and warns on a split domain — advisory, because numbering is batching, not correctness. `renumber --apply` executes the move (rename + rekey `configs/patch-hashes.json`, content-preserving); deferred when a build is in flight or the shared worktree is hot.
 
@@ -98,7 +98,7 @@ This is the structural complement to the seam-cost scorer: cost tells you *which
 
 ### Structural patch anchoring — the projector (`docs/why-beagle.md`)
 
-A textual `.patch` is anchored to line numbers and surrounding context; when Mozilla reflows or renames around a hunk it `.rej`s. gjoa's **projector** (`tools/projector/`) expresses selected edits as **claim-docs** — JSON verbs like `set-body`, anchored by *structural identity* (parameter list, ordinal, body identifiers) **not by line**. When the source moves, the claim-doc re-locates its target by identity and re-applies; anchor-recovery survives reflow *and* a method rename. CI-gated: `bun run projector:test` Gate A round-trips the `.sys.mjs` corpus byte-identically; Gate B proves `patches/0011-newtab-redirector-gjoa.claims.json` reproduces its textual patch output exactly. **The payoff: a patch you can't silently lose to an upstream refactor.**
+A textual `.patch` is anchored to line numbers and surrounding context; when Mozilla reflows or renames around a hunk it `.rej`s. gjoa's **projector** (`tools/projector/`) expresses selected edits as **claim-docs** — JSON verbs like `set-body`, anchored by *structural identity* (parameter list, ordinal, body identifiers) **not by line**. When the source moves, the claim-doc re-locates its target by identity and re-applies; anchor-recovery survives reflow *and* a method rename. CI-gated: `bun run projector:test` Gate A round-trips the `.sys.mjs` corpus byte-identically; Gate B proves `patches/0003-newtab-redirector-gjoa.claims.json` reproduces its textual patch output exactly. **The payoff: a patch you can't silently lose to an upstream refactor.**
 
 ## Pinned toolchain — churn isolation on the authoring side
 
