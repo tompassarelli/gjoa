@@ -30,6 +30,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     // <style> id, and a debounce handle for the optional one re-run.
     this._imgVerdictCache = new Map();
     this._imgStyleEl = null;
+    this._dimSheet = null;
     this._imgPassScheduled = false;
     this._imgRerunTimer = null;
     // Curated `ignoreImageAnalysis` from the explicit decision: `true` skips the
@@ -321,12 +322,95 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this.browsingContext.colorInversionOverride = resp.override;
       } catch (e) {}
     }
+    // When this doc ends up inverted, dim its large bright media (replaced <img>/
+    // <video> heroes the engine exempts for fidelity but which keep a page reading
+    // light — e.g. amazon's promo banner).
+    if (resp.override === "active") {
+      this.#dimLargeMedia(win, doc);
+    }
     // Pass-2 polish (pref-gated, default off): the refiner has settled the
     // inversion state, so the image pass can now read it the right way round.
     this.#maybeRunImagePass(win, doc);
     // Pass-3 (pref-gated): backdrop-aware APCA contrast normalization. Runs after
     // the inversion state is settled so we measure + correct the FINAL colors.
     this.#maybeNormalizeContrast(win, doc);
+  }
+
+  // Dim large bright replaced media (<img>/<video>/<canvas>) on an inverted page. The
+  // engine exempts replaced media from inversion (a negative photo is worse than a bright
+  // one), but a big bright hero — amazon's <img> promo banner — then dominates and the
+  // page reads light. Tone large media down with a brightness filter (NOT an invert) so it
+  // stays recognizable but sits in the dark page. Size-gated: icons/thumbnails are left
+  // alone. pref gjoa.darkmode.media-dim.pct (0..100, default 55, 0 = off).
+  #dimLargeMedia(win, doc) {
+    try {
+      let pct = 55;
+      try {
+        pct = Services.prefs.getIntPref("gjoa.darkmode.media-dim.pct", 55);
+      } catch (e) {}
+      if (pct <= 0 || pct >= 100 || !doc || !doc.documentElement) {
+        return;
+      }
+      const dim = pct / 100;
+      const MIN_AREA = 150 * 150; // hero/banner scale; smaller = icon/thumb, skip
+      const W = win.innerWidth || 0, H = win.innerHeight || 0;
+      const tag = () => {
+        let n = 0, all;
+        try {
+          all = doc.querySelectorAll("img,video,canvas,[style*='background'],div,section,a,header");
+        } catch (e) {
+          return 0;
+        }
+        let scanned = 0;
+        for (const el of all) {
+          if (++scanned > 4000) break;
+          try {
+            if (el.hasAttribute("data-gjoa-dim")) {
+              continue;
+            }
+            const r = el.getBoundingClientRect();
+            if (r.width * r.height < MIN_AREA || r.top > H || r.bottom < 0 || r.left > W) {
+              continue;
+            }
+            const tn = el.tagName;
+            let isMedia = tn === "IMG" || tn === "VIDEO" || tn === "CANVAS";
+            if (!isMedia) {
+              // a big element whose BACKGROUND is a raster image (amazon's promo banner
+              // is a tan bg-image <div>) — the engine exempts it, so it stays bright.
+              let bg = "";
+              try { bg = win.getComputedStyle(el).backgroundImage || ""; } catch (e) {}
+              isMedia = /url\(/i.test(bg);
+            }
+            if (isMedia) {
+              el.setAttribute("data-gjoa-dim", "1");
+              n++;
+            }
+          } catch (e) {}
+        }
+        return n;
+      };
+      const ensureSheet = () => {
+        if (this._dimSheet && this._dimSheet.isConnected) {
+          return;
+        }
+        const s = doc.createElement("style");
+        s.id = "gjoa-darkmode-media-dim";
+        s.textContent = `[data-gjoa-dim="1"]{filter:brightness(${dim})!important}`;
+        (doc.head || doc.documentElement).appendChild(s);
+        this._dimSheet = s;
+      };
+      if (tag()) {
+        ensureSheet();
+      }
+      // One delayed re-tag for lazy/streamed-in heroes (not a hot observer).
+      win.setTimeout(() => {
+        try {
+          if (tag()) {
+            ensureSheet();
+          }
+        } catch (e) {}
+      }, 1400);
+    } catch (e) {}
   }
 
   // Schedule the contrast-normalization pass after the override's re-cascade paints.

@@ -119,6 +119,15 @@
 ;; engine scrim (the correctness floor); off means the actor does NOTHING here.
 (pref "gjoa.darkmode.image-analysis.enabled" false)
 
+;; Large-media dimming (GjoaDarkmodeChild). On an INVERTED page, replaced media
+;; (<img>/<video>/<canvas>) and large background-image heroes are exempt from engine
+;; inversion (a negative photo is worse than a bright one), so a big bright hero — e.g.
+;; amazon's promo banner — keeps the page reading light. This tones large media down with
+;; a brightness() filter (NOT an invert, so no negatives), size-gated so icons/thumbnails
+;; are untouched. 0-100 percent brightness; 0 disables. Default 55. The actor reads this
+;; with a code default of 55, so it is live even before this baked default applies.
+(pref "gjoa.darkmode.media-dim.pct" 55)
+
 ;; Backdrop-aware APCA contrast normalization (GjoaDarkmode actor pass-3). After the
 ;; inversion state settles, the content actor walks visible text, the parent
 ;; drawSnapshots the REAL composited content and computes a corrective tone for any
