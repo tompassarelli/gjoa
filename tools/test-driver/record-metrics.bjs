@@ -10,7 +10,7 @@
 ;;   2. Parse the NDJSON, accumulate per-test {file,name,status,durationMs}
 ;;      from test:pass|fail|skip, and capture the `summary` (carries :binary).
 ;;   3. On EOF, append ONE run record (binary + git + totals + tests) to
-;;      .test-metrics/runs.jsonl, then re-exit with the runner's fail status
+;;      metrics/runs.jsonl, then re-exit with the runner's fail status
 ;;      so a failed run is NOT masked by the pipe (CI safety).
 ;;
 ;; Run record is one JSON object per line (JSONL-of-runs, not per-test) —
@@ -24,7 +24,7 @@
 (declare-extern [process] Any)
 
 (def REPO-ROOT :- String (.cwd process))
-(def LEDGER :- String (join REPO-ROOT ".test-metrics" "runs.jsonl"))
+(def LEDGER :- String (join REPO-ROOT "metrics" "runs.jsonl"))
 (def MAX-RUNS :- Any 500)
 
 (def LANE :- Any (or (aget (.-argv process) 2) "fast"))

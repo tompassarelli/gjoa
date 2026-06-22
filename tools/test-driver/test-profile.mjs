@@ -4,19 +4,19 @@
 //   bun run test:profile        report actual-vs-budget; --gate exits 1 on regression
 //   bun run test:audit          full audit: write an audit-ledger entry + show trend
 //
-// Reads the duration HISTORY (.test-metrics/runs.jsonl, written by record-metrics)
+// Reads the duration HISTORY (metrics/runs.jsonl, written by record-metrics)
 // and the budget manifest (configs/test-budgets.json). Excludes "dead-binary" runs
 // (>50% fail — every test hung to its timeout ceiling) so artifacts don't poison
-// the stats. Tracks the audit itself (.test-metrics/audit-ledger.jsonl) so the
+// the stats. Tracks the audit itself (metrics/audit-ledger.jsonl) so the
 // diminishing-returns trend is visible across audits.
 
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "fs";
 import { join } from "path";
 
 const REPO = process.cwd();
-const RUNS = join(REPO, ".test-metrics", "runs.jsonl");
+const RUNS = join(REPO, "metrics", "runs.jsonl");
 const BUDGETS = join(REPO, "configs", "test-budgets.json");
-const LEDGER = join(REPO, ".test-metrics", "audit-ledger.jsonl");
+const LEDGER = join(REPO, "metrics", "audit-ledger.jsonl");
 
 const baseName = (f) => (f || "").replace(/.*\//, "").replace(/\.(js|bjs)$/, "");
 
@@ -104,7 +104,7 @@ function main() {
         ` over-budget ${overBudget.length - prior.overBudget >= 0 ? "+" : ""}${overBudget.length - prior.overBudget}` +
         `  (rising est-savings = more slack; falling = diminishing returns)`);
     }
-    console.log(`  audit-ledger ← ${entry.date}  (.test-metrics/audit-ledger.jsonl)`);
+    console.log(`  audit-ledger ← ${entry.date}  (metrics/audit-ledger.jsonl)`);
   }
 
   if (gate && (overBudget.length || unbudgeted.length)) {

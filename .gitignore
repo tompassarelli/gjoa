@@ -31,8 +31,10 @@ artifacts/
 # Gjoa prep tool source cache (downloaded firefox tarballs)
 .cache/
 
-# Per-test perf metrics ledger (test:report reads this)
-.test-metrics/
+# Local measurement telemetry (test:report / test:profile read this) — run-local
+# data, not tracked; the README documents the dir + survives a fresh clone.
+metrics/*
+!metrics/README.md
 
 # IDE / OS
 .vscode/

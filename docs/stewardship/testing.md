@@ -19,7 +19,7 @@ Marionette) has, in `configs/test-budgets.json`:
 - **`note`** — optional: known optimization potential, or why it's inherently slow.
 
 The profiler (`tools/test-driver/test-profile`) reads the duration **history**
-(`.test-metrics/runs.jsonl`, written by `record-metrics`) and reports, per test:
+(`metrics/runs.jsonl`, written by `record-metrics`) and reports, per test:
 `p50` / `p95` / `last` actual vs `budgetMs`, **flaky** (status varied or p95/p50 > 2),
 and **regressed** (p50 crept above budget). It also enforces a **suite-total cap**.
 
@@ -74,7 +74,7 @@ pick the `--subsystem` for what you touched.)
 We **audit** the whole suite on a cadence (and after any test-heavy change). The
 audit re-profiles every test, re-estimates budgets, and finds the next
 optimization. Crucially, **each audit is itself recorded** in
-`.test-metrics/audit-ledger.jsonl` — one line per audit:
+`metrics/audit-ledger.jsonl` — one line per audit:
 
 ```
 { "date": "...", "suiteP50Ms": N, "overBudget": K, "flaky": F,

@@ -114,7 +114,7 @@ default posture, not a proven page-load win, until a load-time harness exists
 A slow suite is the project's top velocity risk (`docs/stewardship/testing.md`).
 Every integration test carries a **lean `budgetMs`** + `tier` in
 `configs/test-budgets.json` (**44 budgeted**, `suiteBudgetMs: 134250`).
-`record-metrics.bjs` tees the runner's NDJSON into `.test-metrics/runs.jsonl`;
+`record-metrics.bjs` tees the runner's NDJSON into `metrics/runs.jsonl`;
 `test-profile.mjs` reads that history and reports per-test `p50` vs budget,
 flags `OVER` (p50 > budget × 1.15) and **un-budgeted** tests (no test enters
 un-stewarded), excludes dead-binary runs (>50% fail) so a broken binary can't

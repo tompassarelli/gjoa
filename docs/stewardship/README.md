@@ -50,7 +50,7 @@ this table is the map.
 | Domain | The risk it answers | Stewarded by | Deep dive |
 |---|---|---|---|
 | **Security** | a Firefox vuln silently re-opens on a version bump; a mitigation we shipped silently rots | Gates **R** (code mitigations) + **S** (patch mitigations), `configs/security-mitigations.json`, generated `configs/security-patches.json`, `tools/security/{check,bump,patch-disclosure,audit-ledger}.bjs`, `bin/gjoa` staleness refusal | [`security.md`](security.md) |
-| **Testing / maintainability** | a slow, flaky, un-budgeted suite taxes every future change to death | `configs/test-budgets.json` (tiered budgets), `tools/test-driver/test-profile.mjs` (actual-vs-budget hygiene gate + diminishing-returns trend), `.test-metrics/audit-ledger.jsonl`, `tags.json` locality | [`testing.md`](testing.md) |
+| **Testing / maintainability** | a slow, flaky, un-budgeted suite taxes every future change to death | `configs/test-budgets.json` (tiered budgets), `tools/test-driver/test-profile.mjs` (actual-vs-budget hygiene gate + diminishing-returns trend), `metrics/audit-ledger.jsonl`, `tags.json` locality | [`testing.md`](testing.md) |
 | **Performance** | a perf flag silently no-ops (cc-wrapper strips `-march=native`), a build ships stale, PGO deadlocks | `private-docs/build-logs/` (append-only, postmortem-per-anomaly), perfFlags audit, Blacksmith CI runner topology | [`performance.md`](performance.md) |
 | **Churn-minimization** | upstream refactors a signature and our patch/overlay breaks at compile time, three hours in | Gates **A/K/L/M/P/Q** + the Lane 1/2/3 doctrine + the codegraph projector + `src/gjoa/` overlay over native patches | [`churn.md`](churn.md) |
 
@@ -78,10 +78,10 @@ Policy lives in [`docs/stewardship/testing.md`](testing.md): every
 integration test carries a `budgetMs` (a *lean* target, not its current time),
 a `category`, and a tier (`smoke|fast|slow|network`) in
 `configs/test-budgets.json`. `bun run test:profile` is the hygiene gate — it reads
-the duration history (`.test-metrics/runs.jsonl`), reports p50/p95 vs budget,
+the duration history (`metrics/runs.jsonl`), reports p50/p95 vs budget,
 flags `flaky`/`regressed`, and exits non-zero over budget. The meta-move that
 makes this anti-rot: each audit is itself recorded in
-`.test-metrics/audit-ledger.jsonl`, so a *falling* `estSavingsMs` across audits
+`metrics/audit-ledger.jsonl`, so a *falling* `estSavingsMs` across audits
 proves diminishing returns (stop polishing) and a *rising* `overBudget` proves rot
 is creeping back. An un-budgeted test fails the gate — no test enters un-stewarded.
 

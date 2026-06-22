@@ -1,5 +1,5 @@
 #lang beagle/js
-;; `test:report` — read .test-metrics/runs.jsonl and surface the perf picture:
+;; `test:report` — read metrics/runs.jsonl and surface the perf picture:
 ;;   - this run's totals + slowest tests
 ;;   - a duration trend over the last N same-lane + same-binary-kind runs
 ;;     (mach vs nix numbers aren't comparable — binary.kind is the gate)
@@ -14,7 +14,7 @@
 (declare-extern [process Math] Any)
 
 (def REPO-ROOT :- String (.cwd process))
-(def LEDGER :- String (join REPO-ROOT ".test-metrics" "runs.jsonl"))
+(def LEDGER :- String (join REPO-ROOT "metrics" "runs.jsonl"))
 (def WINDOW :- Any 10)
 (def TOP :- Any 10)
 
