@@ -122,10 +122,26 @@
             (activate-floating
               (if (and detail (= (.-intent detail) "newTab")) "newTab" "current"))))
 
-        on-deactivate-request #(deactivate-floating)]
+        on-deactivate-request #(deactivate-floating)
+
+        ;; A pointer-click on the in-sidebar resting urlbar promotes to the wide
+        ;; floating command palette (same presentation as Ctrl+L): it FULLY expands
+        ;; and reads as a deliberate backdropped layer, instead of the native narrow
+        ;; breakout that clipped suggestions in the sidebar. mousedown (not focusin)
+        ;; so it fires ONLY on a user click — never on programmatic urlbar focus
+        ;; (e.g. opening a new tab) — and BEFORE the native breakout renders, so
+        ;; there's no narrow-dropdown flash. Compact owns its own contained popover
+        ;; state machine, so leave it to the breakout there.
+        on-urlbar-pointerdown (fn [e]
+          (when (not (.-activated state))
+            (let [compact-vertical (bool (q document "#sidebar-main[data-gjoa-compact]"))
+                  compact-horizontal (has? root "data-gjoa-compact-horizontal")]
+              (when (not (or compact-vertical compact-horizontal))
+                (activate-floating "current")))))]
 
     (onc! urlbar "focusout" on-focus-out)
     (onc! urlbar "keydown" on-keydown)
+    (onc! urlbar "mousedown" on-urlbar-pointerdown)
     (on! document "gjoa-urlbar-activate" on-activate-request)
     (on! document "gjoa-urlbar-deactivate" on-deactivate-request)
 
@@ -135,6 +151,7 @@
      :destroy (fn []
        (offc! urlbar "focusout" on-focus-out)
        (offc! urlbar "keydown" on-keydown)
+       (offc! urlbar "mousedown" on-urlbar-pointerdown)
        (off! document "gjoa-urlbar-activate" on-activate-request)
        (off! document "gjoa-urlbar-deactivate" on-deactivate-request)
        (deactivate-floating))})))
