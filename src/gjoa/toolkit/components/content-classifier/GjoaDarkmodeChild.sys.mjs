@@ -382,7 +382,13 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
               isMedia = /url\(/i.test(bg);
             }
             if (isMedia) {
-              el.setAttribute("data-gjoa-dim", "1");
+              // A WIDE hero (aspect >= 2: amazon's 1500x600 promo banner) is a designed
+              // light UNIT (light bg + dark text). Inverting the whole element flips it to
+              // a correct dark banner (dark bg + light text) — the only thing that gets
+              // both right. A non-wide hero is a PHOTO; inverting it makes a negative, so
+              // just dim it.
+              const wide = r.width / Math.max(1, r.height) >= 2 && r.width >= 280;
+              el.setAttribute("data-gjoa-dim", wide ? "inv" : "dim");
               n++;
             }
           } catch (e) {}
@@ -395,7 +401,9 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         }
         const s = doc.createElement("style");
         s.id = "gjoa-darkmode-media-dim";
-        s.textContent = `[data-gjoa-dim="1"]{filter:brightness(${dim})!important}`;
+        s.textContent =
+          `[data-gjoa-dim="dim"]{filter:brightness(${dim})!important}` +
+          `[data-gjoa-dim="inv"]{filter:invert(1) hue-rotate(180deg)!important}`;
         (doc.head || doc.documentElement).appendChild(s);
         this._dimSheet = s;
       };
