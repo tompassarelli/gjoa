@@ -208,9 +208,20 @@
     --lwt-toolbarbutton-hover-background:       var(--gjoa-bg-elevated) !important;
     --lwt-toolbarbutton-active-background:      color-mix(in srgb, var(--gjoa-fg) 15%, transparent) !important;
 
-    /* Urlbar / search field */
+    /* Urlbar / search field. Variable names are EXACT per FF152 source —
+     * the focus-state name is `--toolbar-field-background-color-focus`
+     * (suffix `-focus`, NOT `--toolbar-field-focus-background-color`). The
+     * expanded command palette / focused urlbar paints `.urlbar-background`
+     * with the `-focus` var (urlbar-searchbar.css:287); the resting field
+     * uses the plain var (urlbar-searchbar.css:139). Both must be set or the
+     * field falls back to FF's `rgb(66,65,77)` gray. The two `-focus`-WORD
+     * names below (`--toolbar-field-focus-*`) are LWT-legacy aliases FF still
+     * reads in some paths — kept for belt-and-suspenders. */
     --toolbar-field-background-color:           var(--gjoa-bg-elevated) !important;
+    --toolbar-field-background-color-focus:     var(--gjoa-bg-elevated) !important;
     --toolbar-field-color:                      var(--gjoa-fg) !important;
+    --toolbar-field-text-color:                 var(--gjoa-fg) !important;
+    --toolbar-field-text-color-focus:           var(--gjoa-fg) !important;
     --toolbar-field-border-color:               var(--gjoa-border) !important;
     --toolbar-field-focus-background-color:     var(--gjoa-bg-elevated) !important;
     --toolbar-field-focus-color:                var(--gjoa-fg) !important;
@@ -220,8 +231,14 @@
     --lwt-toolbar-field-border-color:           var(--gjoa-border) !important;
     --lwt-toolbar-field-focus:                  var(--gjoa-bg-elevated) !important;
     --lwt-toolbar-field-focus-color:            var(--gjoa-fg) !important;
-    --urlbar-box-bgcolor:                       var(--gjoa-bg-elevated) !important;
-    --urlbar-box-hover-bgcolor:                 color-mix(in srgb, var(--gjoa-fg) 8%, transparent) !important;
+    /* In-field page-action button boxes (bookmark star, etc.). Real FF152
+     * names are `--urlbar-box-background-color{,-focus,-hover,-active}`
+     * (tokens.css:11-14) — the earlier `--urlbar-box-bgcolor` names were a
+     * typo and a no-op, so the boxes painted FF's `rgb(66,65,77)` gray. */
+    --urlbar-box-background-color:              var(--gjoa-bg-elevated) !important;
+    --urlbar-box-background-color-focus:        var(--gjoa-bg-elevated) !important;
+    --urlbar-box-background-color-hover:        color-mix(in srgb, var(--gjoa-fg) 8%, transparent) !important;
+    --urlbar-box-background-color-active:       color-mix(in srgb, var(--gjoa-fg) 14%, transparent) !important;
 
     /* Urlbar dropdown row colors. Variables are LOWERCASE per Firefox source
      * (browser/themes/shared/urlbar/tokens.css:23 + view-nova.css:74) — earlier
@@ -684,7 +701,7 @@
   display: flex;
   align-items: center;
   padding-inline: 8px;
-  background-color: var(--urlbar-box-bgcolor, var(--gjoa-bg-elevated)) !important;
+  background-color: var(--toolbar-field-background-color, var(--gjoa-bg-elevated)) !important;
   color: color-mix(in srgb, var(--gjoa-fg) 55%, transparent);
   font: message-box;
   font-size: inherit;

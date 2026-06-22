@@ -303,7 +303,7 @@
   }
 
   // Build the sticky category rail from the live registry order: Privacy first,
-  // then each section, then More. Clicking an entry scrolls to that section;
+  // then each section. Clicking an entry scrolls to that section;
   // the active entry is kept in sync with scroll position via IntersectionObserver.
   function renderNav(reg) {
     const root = $("nav");
@@ -312,7 +312,6 @@
     const items = [];
     if (reg.privacy) items.push({ id: "sec-privacy", label: reg.privacy.title || "Privacy" });
     for (const sec of reg.sections || []) items.push({ id: "sec-" + sec.id, label: sec.title });
-    items.push({ id: "sec-more", label: "More" });
 
     const list = el("nav", "nav-list");
     const byTarget = new Map();
@@ -335,8 +334,8 @@
     // has passed an activation line near the top of the viewport — PLUS a bottom
     // guard that forces the last section active once scrolled to the end. The old
     // IO band (active only between 10–20% of the viewport) capped on a short page:
-    // the final sections (Layout / More) could never scroll high enough to enter
-    // the band, so they never activated.
+    // the final section (Layout) could never scroll high enough to enter
+    // the band, so it never activated.
     const setActive = (id) => {
       for (const a of byTarget.values()) a.classList.remove("nav-on");
       const a = byTarget.get(id);
@@ -352,8 +351,11 @@
         if (t.getBoundingClientRect().top - line <= 0) activeId = it.id; else break;
       }
       const sc = document.scrollingElement || document.documentElement;
-      if (sc.scrollTop + window.innerHeight >= sc.scrollHeight - 4) {
-        activeId = items[items.length - 1].id; // at the bottom → last section
+      // Forgiving bottom guard: the last section (e.g. Layout) often can't scroll
+      // its top above the activation line — not enough page below it — so the main
+      // loop never activates it. Force the last item active once we're NEAR the end.
+      if (sc.scrollTop + window.innerHeight >= sc.scrollHeight - 120) {
+        activeId = items[items.length - 1].id; // near the bottom → last section
       }
       setActive(activeId);
     };
@@ -368,24 +370,11 @@
     updateActive();
   }
 
-  function renderLinks(reg) {
-    const root = $("links");
-    root.textContent = "";
-    for (const l of reg.links || []) {
-      const a = el("a", "link-card");
-      a.href = l.url;
-      a.appendChild(el("div", "link-title", l.title));
-      if (l.desc) a.appendChild(el("div", "link-desc", l.desc));
-      root.appendChild(a);
-    }
-  }
-
   let REG = null;
   let navBuilt = false;
   function render() {
     renderPrivacy(REG, render);
     renderSections(REG, render);
-    renderLinks(REG);
     // The nav is structural (registry order) — build it once, not on every
     // pref-flip rerender (which would re-run the IntersectionObserver wiring).
     if (!navBuilt) { renderNav(REG); navBuilt = true; }

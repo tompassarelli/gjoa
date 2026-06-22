@@ -127,8 +127,25 @@
         ;; container-action: (fn [tab] ...) when dropTarget IS the container
         handle-container-drop (fn [e container-ref container-action]
           (.preventDefault e)
-          (let [tab (.-_tab (.-dragSource ds))]
-            (when tab
+          (let [tab (.-_tab (.-dragSource ds))
+                dx (- (.-screenX e) (or (.-dragStartX ds) (.-screenX e)))
+                dy (- (.-screenY e) (or (.-dragStartY ds) (.-screenY e)))
+                moved-px2 (+ (* dx dx) (* dy dy))]
+            (cond
+              ;; #124 ROOT FIX (extended): the row-level drop got a movement
+              ;; threshold, but the panel / pinned-container drops did NOT — so a
+              ;; click / 1-2px jitter on a draggable row whose drop bubbled to the
+              ;; container (the common case in the dense column-major horizontal
+              ;; grid, where popout children are position:fixed and the pointer
+              ;; rarely sits over a .gjoa-tab-row) fell through here and reparented
+              ;; the child to ROOT — surfacing as "child relocates to the next
+              ;; column / parent" on plain j/k-driven selection. Reject it.
+              (< moved-px2 36)
+              (log "drop/container:abort"
+                   {:reason "below-drag-threshold (click, not drag)"
+                    :movedPx2 moved-px2})
+
+              tab
               (if (= (.-dropTarget ds) container-ref)
                 (container-action tab)
                 (when (and (.-dropTarget ds)
@@ -136,7 +153,9 @@
                                (some-> ds .-dropTarget .-_group))
                            (.-dropPosition ds))
                   (execute-drop (.-dragSource ds)
-                    (.-dropTarget ds) (.-dropPosition ds)))))
+                    (.-dropTarget ds) (.-dropPosition ds))))
+
+              :else nil)
             (clear-drop-indicator)))
 
         ;; --- showDropIndicator ---

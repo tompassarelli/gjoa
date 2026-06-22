@@ -162,6 +162,10 @@
         expand (fn []
           (when (not (.-urlbar-toolbar state))
             (log "expand")
+            ;; Re-apply the persisted width — collapse() clears the inline width
+            ;; so the icon strip can go favicon-thin, so re-expanding must restore
+            ;; the user's chosen width (not snap back to native default).
+            (set! (.-width (.-style sidebar-main)) (str (pref-int WIDTH-PREF 300) "px"))
             (when sidebar-main-element
               (.insertBefore sidebar-main navigator-toolbox sidebar-main-element))
             (let [tb (xul-id "toolbar" "gjoa-urlbar-toolbar")]
@@ -185,6 +189,12 @@
             (some-> state .-mutation-obs .disconnect)
             (set! (.-resize-obs state) nil)
             (set! (.-mutation-obs state) nil)
+
+            ;; Drop the persisted expanded width (set inline on expand/init) so
+            ;; the collapsed sidebar reverts to its native favicon-width strip.
+            ;; Without this the inline `width:NNNpx` overrode the icon-strip
+            ;; width — the sidebar stayed wide + still showed tab labels.
+            (.removeProperty (.-style sidebar-main) "width")
 
             (if (and urlbar-next (= (.-parentNode urlbar-next) urlbar-parent))
               (.insertBefore urlbar-parent urlbar-container urlbar-next)
