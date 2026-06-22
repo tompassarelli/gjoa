@@ -244,6 +244,10 @@
                 (hover-hack-delay))))
 
           on-sidebar-leave (fn [event]
+            ;; #127: leaving the sidebar dismisses an `e`-pinned reveal — clearing the pin
+            ;; here drops the is-guarded hold so the normal leave→hide path runs (so the
+            ;; pin holds only until the user enters and leaves, or presses `e` again).
+            (rmattr! sidebar-main "gjoa-pinned")
             (let [target (.-target event)
                   target-id (or (.-id target) (.-localName target))
                   exited-window (not (.-relatedTarget event))

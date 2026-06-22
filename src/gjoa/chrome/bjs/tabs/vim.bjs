@@ -638,8 +638,12 @@
                 (let [sb (by-id "sidebar-main")]
                   (if (pref-bool "gjoa.sidebar.compact" false)
                     (when sb
-                      (if (.hasAttribute sb "gjoa-pinned")
-                        (.removeAttribute sb "gjoa-pinned")
+                      (if (or (.hasAttribute sb "gjoa-pinned") (.hasAttribute sb "gjoa-has-hover"))
+                        ;; currently revealed (pinned OR hovered) → dismiss: clear BOTH, else
+                        ;; a leftover gjoa-has-hover keeps the CSS reveal and e can't dismiss.
+                        (do (.removeAttribute sb "gjoa-pinned")
+                            (.removeAttribute sb "gjoa-has-hover"))
+                        ;; hidden → reveal, pinned until `e` again OR the user enters+leaves.
                         (.setAttribute sb "gjoa-pinned" "true")))
                     (do (when sb (.removeAttribute sb "gjoa-pinned"))
                         (set-pref-bool! "gjoa.sidebar.compact" true)))))
