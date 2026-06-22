@@ -1,10 +1,10 @@
 #lang beagle/js
 (ns gjoa.drawer.layout
-  (:require [gjoa.macros :refer [by-id q xul-new xul-id pref-int set-pref-int! on! off! has?]]
+  (:require [gjoa.macros :refer [by-id q xul-new xul-id pref-int set-pref-int! pref-bool on! off! has?]]
             [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
-(declare-extern [window] Any)
+(declare-extern [window Services CustomizableUI] Any)
 
 (def WIDTH-PREF :- String "gjoa.sidebar.width")
 
@@ -222,6 +222,39 @@
                                   (sync-symmetric-footer))))]
         (.observe expand-observer sidebar-main
           {:attributes true :attributeFilter ["sidebar-launcher-expanded"]})
+
+        ;; --- #122: drive expand/collapse off the verticalTabs pref directly ---
+        ;; expand/collapse above key ONLY on the sidebar-launcher-expanded attribute, but
+        ;; FF clears that attribute on a vertical→horizontal flip ONLY when sidebar.visibility
+        ;; is "hide-sidebar". gjoa runs the default "always-show", so the attribute stays set
+        ;; and collapse() NEVER fired on a runtime flip — #navigator-toolbox stayed reparented
+        ;; inside #sidebar-main, and FF's nav-bar buildArea then DROPPED the removable
+        ;; #stop-reload-button + #sidebar-button (keeping non-removable back/forward/urlbar).
+        ;; Fix: trigger collapse/expand off verticalTabs, and after the flip re-ensure the
+        ;; widgets FF may have dropped (deferred a tick so it runs AFTER FF's buildArea).
+        (let [reensure (fn []
+                         ;; FF dropped the widgets' PLACEMENTS entirely on the flip
+                         ;; (getPlacementOfWidget -> null), so there's nothing to rebuild —
+                         ;; re-ADD them to the nav-bar (verified: restores both). Only when
+                         ;; the placement is actually gone, so a healthy flip is a no-op.
+                         ;; Visual position is owned by gjoa's nav-bar CSS `order`.
+                         (try
+                           (when (nil? (.getPlacementOfWidget CustomizableUI "stop-reload-button"))
+                             (.addWidgetToArea CustomizableUI "stop-reload-button" "nav-bar"))
+                           (when (nil? (.getPlacementOfWidget CustomizableUI "sidebar-button"))
+                             (.addWidgetToArea CustomizableUI "sidebar-button" "nav-bar"))
+                           (catch Any _e nil)))
+              vt-observer {:observe
+                           (fn [_s _t _d]
+                             (let [vertical (pref-bool "sidebar.verticalTabs" true)]
+                               (if vertical
+                                 (when (and (has? sidebar-main "sidebar-launcher-expanded")
+                                            (not (.-urlbar-toolbar state)))
+                                   (expand))
+                                 (do (when (.-urlbar-toolbar state) (collapse))
+                                     (.setTimeout window reensure 0)))
+                               (sync-symmetric-footer)))}]
+          (.addObserver (.-prefs Services) "sidebar.verticalTabs" vt-observer))
 
         ;; --- width pref ---
         (let [default-width (pref-int WIDTH-PREF 300)]
