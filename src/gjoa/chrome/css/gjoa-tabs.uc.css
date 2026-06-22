@@ -564,16 +564,29 @@
   z-index: 9999 !important;
   width: min(720px, 90vw) !important;
   max-height: 60vh !important;
-  background: var(--gjoa-bg-elevated) !important;
+  background: color-mix(in srgb, var(--gjoa-bg-elevated) 90%, transparent) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.3) !important;
+  backdrop-filter: blur(20px) saturate(1.3) !important;
   color: var(--gjoa-fg) !important;
-  border: 1px solid var(--gjoa-border) !important;
-  border-radius: 8px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.32) !important;
+  border: 1px solid color-mix(in srgb, var(--gjoa-border) 70%, transparent) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 32px 80px -18px rgba(0, 0, 0, 0.62),
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset !important;
   font-family: var(--gjoa-font, system-ui, sans-serif) !important;
   font-size: 13px !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
+  animation: gjoa-picker-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+@keyframes gjoa-picker-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(0.99); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #gjoa-picker { animation: none !important; }
 }
 
 #gjoa-picker[hidden] { display: none !important; }
@@ -581,9 +594,9 @@
 #gjoa-picker .gjoa-picker-input-box {
   display: flex !important;
   align-items: center !important;
-  gap: 8px !important;
-  padding: 10px 14px !important;
-  border-bottom: 1px solid var(--gjoa-border) !important;
+  gap: 10px !important;
+  padding: 13px 18px !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--gjoa-border) 60%, transparent) !important;
 }
 
 #gjoa-picker .gjoa-picker-prompt {
@@ -609,11 +622,13 @@
 }
 
 #gjoa-picker .gjoa-picker-row {
-  padding: 6px 14px !important;
+  padding: 7px 12px !important;
+  margin: 0 7px !important;
+  border-radius: 10px !important;
   cursor: pointer !important;
   display: flex !important;
   align-items: center !important;
-  gap: 8px !important;
+  gap: 9px !important;
 }
 
 #gjoa-picker .gjoa-picker-row[gjoa-picker-selected="true"] {

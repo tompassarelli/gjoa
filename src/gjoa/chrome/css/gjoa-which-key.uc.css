@@ -4,10 +4,9 @@
 // @include        main
 // ==/UserScript== */
 
-/* Shown when the user presses the leader key (default Space). Lists
- * the available bindings so leader-mode is self-documenting. Auto-hides
- * on dispatch / Esc / double-leader / timeout. Element created on demand
- * by src/tabs/vim.ts and reused. */
+/* The `?` / leader cheatsheet. Modern command-palette aesthetic: a soft,
+ * elevated, blurred panel with key chips and a calm enter animation. Element
+ * created on demand by tabs/vim.bjs and reused; classes are stable. */
 
 #gjoa-which-key {
   position: fixed !important;
@@ -15,75 +14,73 @@
   left: 50% !important;
   transform: translate(-50%, -50%) !important;
   z-index: 10002 !important;
-  background-color: var(--gjoa-bg-elevated) !important;
-  color: var(--gjoa-fg) !important;
-  border: 1px solid var(--gjoa-border) !important;
-  border-radius: 6px !important;
-  padding: 8px 10px !important;
-  font-family: ui-monospace, SFMono-Regular, monospace !important;
-  font-size: 12px !important;
-  line-height: 1.5 !important;
-  min-width: 220px !important;
-  max-height: 60vh !important;
+  width: max-content !important;
+  min-width: 320px !important;
+  max-width: 480px !important;
+  max-height: 68vh !important;
   overflow-y: auto !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
+  padding: 16px !important;
+  background: color-mix(in srgb, var(--gjoa-bg-elevated) 88%, transparent) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.3) !important;
+  backdrop-filter: blur(20px) saturate(1.3) !important;
+  color: var(--gjoa-fg) !important;
+  border: 1px solid color-mix(in srgb, var(--gjoa-border) 70%, transparent) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 28px 70px -16px rgba(0, 0, 0, 0.6),
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset !important;
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif !important;
   pointer-events: none !important;
+  animation: gjoa-wk-in 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  scrollbar-width: thin !important;
 }
 
-#gjoa-which-key[hidden] {
-  display: none !important;
+@keyframes gjoa-wk-in {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.975); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
+
+#gjoa-which-key[hidden] { display: none !important; }
 
 #gjoa-which-key .gjoa-wk-header {
   font-weight: 600 !important;
   color: var(--gjoa-fg-muted) !important;
-  font-size: 11px !important;
-  letter-spacing: 0.04em !important;
+  font-size: 10.5px !important;
+  letter-spacing: 0.12em !important;
   text-transform: uppercase !important;
-  margin-bottom: 6px !important;
-  padding-bottom: 4px !important;
-  border-bottom: 1px solid var(--gjoa-border) !important;
+  margin: 2px 2px 10px !important;
 }
+#gjoa-which-key .gjoa-wk-section { margin-top: 16px !important; }
 
 #gjoa-which-key .gjoa-wk-row {
   display: flex !important;
-  gap: 10px !important;
-  align-items: baseline !important;
+  gap: 12px !important;
+  align-items: center !important;
+  padding: 5px 8px !important;
+  border-radius: 9px !important;
+}
+/* the faintest lift on alternating rows for scannability */
+#gjoa-which-key .gjoa-wk-row:nth-child(even) {
+  background: color-mix(in srgb, var(--gjoa-fg) 3%, transparent) !important;
 }
 
-#gjoa-which-key .gjoa-wk-key {
-  display: inline-block !important;
-  min-width: 1.4em !important;
-  padding: 0 6px !important;
-  text-align: center !important;
-  background-color: color-mix(in srgb, var(--gjoa-fg) 8%, transparent) !important;
-  border-radius: 3px !important;
-  color: var(--gjoa-accent) !important;
-  font-weight: 600 !important;
-}
-
-/* Second-section header (": commands") gets breathing room above it. */
-#gjoa-which-key .gjoa-wk-section {
-  margin-top: 10px !important;
-}
-
-/* Ex-command pill: like a key, but left-aligned with a fixed column so the
- * descriptions line up across the varying `:command` widths. */
+#gjoa-which-key .gjoa-wk-key,
 #gjoa-which-key .gjoa-wk-cmd {
-  display: inline-block !important;
-  min-width: 7em !important;
-  padding: 0 6px !important;
-  background-color: color-mix(in srgb, var(--gjoa-fg) 8%, transparent) !important;
-  border-radius: 3px !important;
+  flex: none !important;
+  font: 600 12px/1 ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace !important;
+  text-align: center !important;
+  padding: 5px 9px !important;
   color: var(--gjoa-accent) !important;
-  font-weight: 600 !important;
-  white-space: nowrap !important;
+  background: color-mix(in srgb, var(--gjoa-accent) 13%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--gjoa-accent) 26%, transparent) !important;
+  border-radius: 8px !important;
 }
-
-#gjoa-which-key .gjoa-wk-desc {
-  color: var(--gjoa-fg) !important;
+#gjoa-which-key .gjoa-wk-key { min-width: 26px !important; }
+#gjoa-which-key .gjoa-wk-cmd {
+  min-width: 8em !important; text-align: left !important; white-space: nowrap !important;
 }
+#gjoa-which-key .gjoa-wk-desc { color: var(--gjoa-fg) !important; opacity: 0.92 !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  #gjoa-which-key { transition: none !important; }
+  #gjoa-which-key { animation: none !important; }
 }
