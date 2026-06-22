@@ -45,6 +45,16 @@
 ;; darkening. Internal state, NOT a user knob — deliberately absent from about:gjoa.
 (pref "gjoa.darkmode.mode.migrated-v2" false)
 
+;; OVERRIDE / FORCE toggle — the coverage guarantee. When true, the GjoaDarkmode
+;; content actor marks EVERY page's colorInversionOverride 'active' (force-invert)
+;; at document-start, except hosts on the user.off / user.force-native exclude lists.
+;; Because the engine reads that per-document override BEFORE its color-scheme
+;; detection, this forces sites that DECLARE a color-scheme (GitHub, logged-in
+;; YouTube) — which the engine would otherwise skip and leave light — fully dark.
+;; This is what makes "dark mode on = every site dark, no exceptions" actually true.
+;; Paired with mode/invert by the controller (apply!): set on in the force appearance.
+(pref "gjoa.darkmode.force" false)
+
 ;; Engine-level luminance-inversion flag. Set by the dark-mode chrome module for
 ;; "engine" mode; read by nsPresContext::UpdateColorInversion to drive the Servo
 ;; cascade hook. Default off; the chrome module owns it (in "hybrid" mode the

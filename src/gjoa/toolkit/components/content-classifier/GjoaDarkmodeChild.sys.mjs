@@ -65,6 +65,24 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         } catch (e) {}
         return;
       }
+      // OVERRIDE / FORCE mode — the COVERAGE GUARANTEE. Mark EVERY page 'active'
+      // (force-invert) synchronously at document-start, EXCEPT the user's exclude
+      // lists. The engine reads this per-document override BEFORE its color-scheme
+      // detection, so a site that declares color-scheme (GitHub, logged-in YouTube)
+      // — which the engine would otherwise skip and leave LIGHT — is forced dark.
+      // No site stays light. Setting _explicitApplied stops the post-load refiner
+      // from re-measuring and retracting (the contrast normalizer still runs).
+      if (Services.prefs.getBoolPref("gjoa.darkmode.force", false)) {
+        let host = "";
+        try { host = this.document.location.hostname || ""; } catch (e) {}
+        const excluded = !!host && (this.#hostInPref(host, "gjoa.darkmode.user.off") ||
+                                    this.#hostInPref(host, "gjoa.darkmode.user.force-native"));
+        try {
+          this.browsingContext.colorInversionOverride = excluded ? "inactive" : "active";
+        } catch (e) {}
+        this._explicitApplied = true;
+        return;
+      }
       // Reset any override INHERITED from the previous same-tab page so this
       // fresh document starts from the engine's pre-paint default, then apply
       // the curated/user decision (if any) at document-start. Store the promise
@@ -278,10 +296,17 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     if (!/^https?:/.test(url)) {
       return;
     }
+    // Tier-1 "did we get dark?" is decided by the PARENT from a drawSnapshot of the
+    // real painted pixels (the scorer's coverage), because getComputedStyle(body) is
+    // fooled by system Canvas colors under color-scheme:dark (reports dark while the
+    // page paints white). Pass the viewport for the snapshot; #pageIsDark goes along
+    // only as the parent's fallback when the snapshot is unavailable.
     const hasNativeDark = this.#pageIsDark(win, doc);
+    const W = Math.min(win.innerWidth | 0, 1600);
+    const H = Math.min(win.innerHeight | 0, 1200);
     let resp;
     try {
-      resp = await this.sendQuery("Darkmode:Decide", { hasNativeDark });
+      resp = await this.sendQuery("Darkmode:Decide", { w: W, h: H, hasNativeDark });
     } catch (e) {
       return;
     }

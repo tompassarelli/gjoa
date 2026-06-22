@@ -154,6 +154,11 @@ function _invertLum(rgb) {
   const adj = (l) => decompute(Math.max(0, (l + 0.05) * factor - 0.05));
   return [adj(lr), adj(lg), adj(lb)];
 }
+// Scorer-exact sRGB → CIE L* (mirrors tools/darkmode-regress/scorer.js) so the actor's
+// Tier-1 "did we get dark?" decision uses the SAME math as the QA grader (the keystone).
+function _srgbLin(c8) { const c = c8 / 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+function _relLum(r, g, b) { return 0.2126 * _srgbLin(r) + 0.7152 * _srgbLin(g) + 0.0722 * _srgbLin(b); }
+function _lstar(Y) { return Y <= 0.008856 ? 903.3 * Y : 116 * Math.cbrt(Y) - 16; }
 
 export class GjoaDarkmodeParent extends JSWindowActorParent {
   trustedUrl() {
@@ -244,29 +249,73 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
     return null;
   }
 
-  // The auto refiner, post-paint. hasNativeDark is the child's AUTHORED-darkness
-  // measurement (already un-inverted by the child when inversion is active).
-  #auto(hasNativeDark) {
+  // Tier-1 decision from the REAL painted pixels (the scorer's coverage signal), not a
+  // declaration. drawSnapshot the viewport, take the median L*. getComputedStyle(body) —
+  // and the engine's pre-paint patch-0014 check — are both fooled the same way: under our
+  // forced prefers-color-scheme:dark, a page declaring `color-scheme: light dark` resolves
+  // its system Canvas bg DARK while it paints explicit WHITE content (Wikipedia, NYT,
+  // example.com), so a computed-color read reports dark and the straggler slips through
+  // un-inverted. A snapshot sees the white. So:
+  //   painted LIGHT (median L* >= 50) → the page slipped through → FORCE invert ("active")
+  //   painted DARK                    → already correct (native-dark accepted, or themeless
+  //                                     already inverted) → defer ("none"), keeping the
+  //                                     engine's durable mHybridDefaultInvert decision.
+  // Threshold + math mirror scorer.js so the actor's decision == the QA grader's verdict.
+  async #auto(data) {
     if (!this.#hybridActive()) {
       return { override: "none", css: "", inject: "" };
     }
-    // With the engine's pre-paint default-invert active, a themeless page is
-    // already dark; defer to the engine ("none") instead of re-asserting. Only a
-    // site whose AUTHORED background is dark (one the engine's pre-paint check
-    // ran too early to see — late CSS/JS theming) needs retracting.
-    if (Services.prefs.getBoolPref(DEFAULT_INVERT_PREF, false)) {
-      return {
-        override: hasNativeDark ? "inactive" : "none",
-        css: "",
-        inject: "",
-      };
+    const L = await this.#paintedMedianLstar(data?.w | 0, data?.h | 0);
+    if (L === null) {
+      // Snapshot unavailable — fall back to the child's computed-style read (fooled on
+      // color-scheme sites, but better than fighting the engine blind).
+      return { override: data?.hasNativeDark ? "inactive" : "none", css: "", inject: "" };
     }
-    // default-invert off: the actor is the sole decider (legacy hybrid path).
-    return {
-      override: hasNativeDark ? "inactive" : "active",
-      css: "",
-      inject: "",
-    };
+    const DARK_LSTAR = 50; // scorer DARK_HI
+    return { override: L >= DARK_LSTAR ? "active" : "none", css: "", inject: "" };
+  }
+
+  // drawSnapshot the content viewport, downsample, return the MEDIAN CIE L* of the painted
+  // pixels (0..100), or null on failure. Median is immune to a bright photo/thumbnail
+  // minority (same rationale as the scorer's coverage). One snapshot per top-level nav.
+  async #paintedMedianLstar(W, H) {
+    if (!W || !H) {
+      return null;
+    }
+    const win =
+      this.browsingContext?.topChromeWindow ||
+      Services.wm.getMostRecentWindow("navigator:browser");
+    if (!win) {
+      return null;
+    }
+    const scale = Math.min(1, 256 / Math.max(W, H)); // cap longest side ~256px
+    let pix, w2, h2;
+    try {
+      const bitmap = await this.manager.drawSnapshot(
+        new win.DOMRect(0, 0, W, H),
+        scale,
+        "rgb(0,0,0)"
+      );
+      w2 = bitmap.width;
+      h2 = bitmap.height;
+      const canvas = new win.OffscreenCanvas(w2, h2);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0);
+      pix = ctx.getImageData(0, 0, w2, h2).data;
+    } catch (e) {
+      return null;
+    }
+    const n = w2 * h2;
+    if (!n) {
+      return null;
+    }
+    const Ls = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      Ls[i] = _lstar(_relLum(pix[o], pix[o + 1], pix[o + 2]));
+    }
+    Ls.sort();
+    return Ls[n >> 1];
   }
 
   // Backdrop-aware APCA retone. The child sends viewport + tagged text els (cn, rect,
@@ -363,7 +412,7 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       return { explicit: false, override: "none", css: "", inject: "" };
     }
     if (msg.name === "Darkmode:Decide") {
-      return this.#auto(!!msg.data?.hasNativeDark);
+      return this.#auto(msg.data);
     }
     return null;
   }
