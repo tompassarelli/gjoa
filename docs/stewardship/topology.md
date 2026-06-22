@@ -5,7 +5,7 @@
 > `bun run stewardship:gen`; drift or a dangling reference fails
 > `bun run stewardship:check`. A hand-list would rot — this can't.
 
-## Preflight gates (22)
+## Preflight gates (23)
 
 | Gate | Name | Enforce | Cited by |
 |---|---|---|---|
@@ -31,11 +31,12 @@
 | T | stewardship tapestry intact (docs ↔ machinery) | hard | README |
 | U | patch numbering coherent (domains contiguous) | warn | churn |
 | V | upstream provenance lock current | warn | churn |
+| W | dark-mode contrast backstop ships ON | hard | testing |
 
 ## Health
 
 - domains: 5 (README, churn, performance, security, testing)
 - file references: 72 (72 resolve, 0 dangling)
 - script references: 12 (12 resolve)
-- gates: 22 (12 documented, 10 undocumented)
+- gates: 23 (13 documented, 10 undocumented)
 - undocumented gates (add to a domain doc): C, D, E, F, G, H, I, J, N, O

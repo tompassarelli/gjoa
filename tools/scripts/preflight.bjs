@@ -891,6 +891,25 @@
       (warn "V" "upstream provenance lock current"
             (.trim (if (.-stdout e) (.toString (.-stdout e)) (or (.-message e) "stale lock — re-run `provenance lock`")))))))
 
+;; Gate W — dark-mode contrast backstop ships ON (#129). The APCA normalizer is
+;; the no-black-on-black backstop (drawSnapshot real pixels → APCA Lc per text →
+;; re-tone below the readable floor). It shipped DISABLED for months — 8 user
+;; reports of unreadable dark mode, empirically 7/9 text elements black-on-black
+;; with it off, 7→0 with it on. Assert the shipped default is true so the
+;; legibility floor can't silently regress. HARD: shipping it off is a real
+;; user-facing defect, not a style choice. (The suite already measures the
+;; shipped config, so a green contrast run now equals the browser users run.)
+(defn gateW [] :- Any
+  (let [f (join PREF-DIR "dark-mode-prefs.bjs")]
+    (if (not (existsSync f))
+      (warn "W" "dark-mode contrast backstop ships ON" "dark-mode-prefs.bjs absent — skipping")
+      (let [src (readFileSync f "utf8")]
+        (if (.match src (RegExp. "\\(pref\\s+\"gjoa\\.darkmode\\.normalize\\.enabled\"\\s+true\\)"))
+          (pass "W" "dark-mode contrast backstop ships ON" "gjoa.darkmode.normalize.enabled defaults true (APCA no-black-on-black backstop active)")
+          (fail "W" "dark-mode contrast backstop ships ON"
+                "gjoa.darkmode.normalize.enabled is not defaulted true in dark-mode-prefs.bjs"
+                "the APCA backstop fixes the recurring unreadable-dark-mode reports — restore the `true` default; if disabling deliberately, update Gate W with the rationale"))))))
+
 ;; ── Run + render ──────────────────────────────────────────────────────────
 (defn main! [] :- Any
   (console/log (bold "gjoa preflight"))
@@ -901,7 +920,8 @@
                ["E" gateE] ["F" gateF] ["G" gateG] ["H" gateH]
                ["I" gateI] ["J" gateJ] ["K" gateK] ["L" gateL] ["M" gateM]
                ["N" gateN] ["O" gateO] ["P" gateP] ["Q" gateQ]
-               ["R" gateR] ["S" gateS] ["T" gateT] ["U" gateU] ["V" gateV]]]
+               ["R" gateR] ["S" gateS] ["T" gateT] ["U" gateU] ["V" gateV]
+               ["W" gateW]]]
     (doseq [gate gates]
       (let [fn (aget gate 1)]
         (try (fn)

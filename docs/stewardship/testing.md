@@ -102,3 +102,23 @@ profiler prints `since last audit: …` so every run is in context.
 This is the anti-rot layer for velocity. The moment we stop measuring, the suite
 slows by a thousand cuts and every future change pays the tax. Treat a budget
 regression like a failing test — because it is one, just on the time axis.
+
+## Test what *ships*, not what's convenient (the #129 lesson)
+
+The dark-mode contrast suite was **green for months while the shipped browser was
+black-on-black** — 8 user reports. Root cause: the suite measured `normalize=OFF`
+and the corpus lacked the hard page-classes, so a passing run described a config
+nobody ran. The fix is a principle, now enforced: **a green run must equal the
+browser the user actually runs.**
+
+- the regression runner defaults to the **shipped** config (`normalize` ON,
+  matching `gjoa.darkmode.normalize.enabled`), not a test-only default;
+- **Gate W** (`preflight.bjs`, HARD) asserts the shipped pref *is* ON, so the
+  legibility backstop can't silently regress to off between builds;
+- the corpus covers failure-*classes* (white-header, hero-photo, svg-diagram,
+  near-black-text, transparency-composite, code-syntax…), not just top-N domains.
+
+Generalize it: when a test passes, ask "does this config match what we ship?" A
+test of the wrong configuration is worse than no test — it manufactures false
+confidence. (The browser-in-the-loop contrast run stays periodic, not a preflight
+gate: it needs a binary + network and would be flaky as a hard build gate.)
