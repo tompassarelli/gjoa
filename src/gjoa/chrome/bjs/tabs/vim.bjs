@@ -638,10 +638,10 @@
                 (let [sb (by-id "sidebar-main")]
                   (if (pref-bool "gjoa.sidebar.compact" false)
                     (when sb
-                      (if (has? sb "gjoa-pinned")
-                        (rmattr! sb "gjoa-pinned")
-                        (attr! sb "gjoa-pinned" "true")))
-                    (do (when sb (rmattr! sb "gjoa-pinned"))
+                      (if (.hasAttribute sb "gjoa-pinned")
+                        (.removeAttribute sb "gjoa-pinned")
+                        (.setAttribute sb "gjoa-pinned" "true")))
+                    (do (when sb (.removeAttribute sb "gjoa-pinned"))
                         (set-pref-bool! "gjoa.sidebar.compact" true)))))
               (key= e "b") (dispatch-key e "b" (toggle-h-sidebar-strip))
               (key= e "?") (dispatch-key e "question" (toggle-which-key))
