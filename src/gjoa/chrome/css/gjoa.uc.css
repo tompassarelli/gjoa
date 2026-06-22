@@ -924,8 +924,10 @@ Preserve these (security warnings):
   }
 }
 
-/* Visible when hovered (gjoa-has-hover set by JS) — lands at the inset resting spot. */
-#sidebar-main[data-gjoa-compact][gjoa-has-hover] {
+/* Visible when hovered (gjoa-has-hover set by JS) OR PINNED open (gjoa-pinned, set by
+ * the `e` key in compact mode, #127) — lands at the inset resting spot either way. */
+#sidebar-main[data-gjoa-compact][gjoa-has-hover],
+#sidebar-main[data-gjoa-compact][gjoa-pinned] {
   transform: translateX(0) !important;
   pointer-events: auto !important;
 }

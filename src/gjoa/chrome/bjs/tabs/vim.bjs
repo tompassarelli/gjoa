@@ -630,8 +630,19 @@
                          (.sendAsyncMessage "Gjoa:ScrollStart" {:dy -1}))
                        (catch Any _e nil))))
               (key= e "e") (dispatch-key e "e"
-                (let [cur (pref-bool "gjoa.sidebar.compact" false)]
-                  (set-pref-bool! "gjoa.sidebar.compact" (not cur))))
+                ;; #127: mode-aware. In COMPACT/collapse mode, `e` toggles the overlay
+                ;; reveal over the page (pin/unpin) — mirrors mousing to the edge, without
+                ;; changing the mode. In STATIC mode, `e` hides the sidebar by switching to
+                ;; compact (its prior behavior). CSS reveals on [gjoa-pinned]; is-guarded
+                ;; keeps a pinned overlay open.
+                (let [sb (by-id "sidebar-main")]
+                  (if (pref-bool "gjoa.sidebar.compact" false)
+                    (when sb
+                      (if (has? sb "gjoa-pinned")
+                        (rmattr! sb "gjoa-pinned")
+                        (attr! sb "gjoa-pinned" "true")))
+                    (do (when sb (rmattr! sb "gjoa-pinned"))
+                        (set-pref-bool! "gjoa.sidebar.compact" true)))))
               (key= e "b") (dispatch-key e "b" (toggle-h-sidebar-strip))
               (key= e "?") (dispatch-key e "question" (toggle-which-key))
               :else false)))
