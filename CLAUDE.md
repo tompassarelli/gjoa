@@ -52,6 +52,8 @@ builds (which is the actual goal):
 - J — scriptlet bundle integrity (`scriptlet-resources.json` matches pinned SHA-256)
 - K — engine-currency (refuse build if `src/gjoa/`/`patches/`/`tools/prep/` is newer than the last `bun run import` — kills the stale-`engine/` class). Gate A also WARNs on patch line-offset drift (early `.rej` warning).
 - L — surface contracts (a patch/overlay's declared `# depends-on:` upstream symbols still resolve in `engine/` — catches a Rust path move / field removal / JS prop deletion *before* the compile)
+- R — security mitigations intact (per-mitigation regression manifest `configs/security-mitigations.json`: every `mustMatch` source assertion still holds, and the extracted cosmetic-selector regex still rejects breakouts / accepts real rules — a shipped mitigation can't silently rot)
+- S — security-critical patches persist (any patch with a `# security:` header MUST still apply + its `depends-on` anchors resolve; non-apply is a HARD stop, not a warn — vacuously green while zero patches are security-tagged)
 
 ### Postmortem on any unexpected rebuild
 

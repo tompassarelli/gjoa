@@ -26,10 +26,25 @@
         (sh (str "bun " tool " manifest") {:quiet true})
         (.ok log "sovereignty: manifest regenerated for this build")))))
 
+;; Regenerate configs/security-patches.json — the disclosure artifact (#120),
+;; derived from patch `# security:` headers so it can't lie (a dropped entry shows
+;; as a tracked-file diff). Same guard/placement as the sovereignty manifest: runs
+;; only where the tool is compiled (the maintainer's tree). Empty list is correct
+;; while zero patches carry a `security:` block.
+(defn regen-patch-disclosure! [] :- Any
+  (let [tool ".beagle-tools/gjoa/tools/security/patch-disclosure.js"]
+    (if (not (existsSync tool))
+      (.info log "security: patch-disclosure tool not present — keeping committed configs/security-patches.json")
+      (do
+        (.step log "phase 0 — regenerating configs/security-patches.json (security-patch disclosure)")
+        (sh (str "bun " tool) {:quiet true})
+        (.ok log "security: patch-disclosure regenerated for this build")))))
+
 ;; Seven sequential phases. Each is idempotent, so re-running `bun run import`
 ;; after editing src/gjoa/ or gjoa.json picks up the changes correctly.
 (js/export (defn import-sources [] :- Any
   (js/await (regen-sovereignty-manifest!))
+  (js/await (regen-patch-disclosure!))
 
   (.step log "phase 1/7 — overlaying src/gjoa/")
   (js/await (overlay-src!))

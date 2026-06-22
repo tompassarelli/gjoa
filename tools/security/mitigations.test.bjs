@@ -1,0 +1,136 @@
+#lang beagle/js
+;; tests/ for #121 — exercise the two load-bearing bits of the security-mitigation
+;; regression program WITHOUT a build:
+;;   1. the extracted-regex logic: pull the UNSAFE_SELECTOR literal out of source
+;;      text (we can't import GjoaCosmeticChild.sys.mjs — it extends an actor) and
+;;      re-test it against the manifest's mustReject/mustAccept corpus.
+;;   2. the ledger↔manifest cross-check: every mitigated/fixed finding id in the
+;;      findings ledger has a matching gate id in configs/security-mitigations.json.
+;; ns is 4-segment (gjoa.tools.security.mitigations) to match the emitted directory
+;; depth (.beagle-tools/gjoa/tools/security/) so a sibling import resolves; the
+;; `.test` is a filename convention, bun:test still recognizes the `.test.js`.
+;; extract-edn-maps is INLINED (not imported from tools/security/audit-ledger.bjs)
+;; on purpose: that ledger is gitignored (private dev tool), so a committed test
+;; must not depend on it or CI's compile breaks. The logic is the same — split the
+;; top-level balanced `{…}` maps after stripping `;;` line-comments — and the test
+;; pins it so a regression in either copy is caught.
+(ns gjoa.tools.security.mitigations
+  (:require [fs :refer [existsSync readFileSync]]
+            [path :refer [join]]))
+(define-mode strict)
+(declare-extern [describe expect test process JSON RegExp Object Array] Any)
+
+(def REPO :- String (.cwd process))
+(def MANIFEST :- String (join REPO "configs" "security-mitigations.json"))
+(def FINDINGS-EDN :- String (join REPO "private-docs" "security-findings.edn"))
+(def FINDINGS-JSON :- String (join REPO "private-docs" "security-findings.json"))
+
+(defn extract-edn-maps [text :- String] :- Any
+  (let [clean (.join (.map (.split text "\n")
+                           (fn [l :- String] :- String (.replace l (RegExp. ";;.*$") "")))
+                     "\n")
+        maps []
+        len (.-length clean)]
+    (loop [i 0 depth 0 start -1]
+      (if (>= i len)
+        maps
+        (let [c (.charAt clean i)]
+          (cond
+            (= c "{") (recur (+ i 1) (+ depth 1) (if (= depth 0) i start))
+            (= c "}") (let [nd (- depth 1)]
+                        (when (= nd 0) (.push maps (.slice clean start (+ i 1))))
+                        (recur (+ i 1) nd start))
+            :else (recur (+ i 1) depth start)))))))
+
+;; Build a RegExp from a `/body/flags` literal text (what extractRegex pulls).
+(defn regex-from-literal [lit :- String] :- Any
+  (let [m (.match lit (RegExp. "^/(.*)/([a-z]*)$"))]
+    (if m (RegExp. (aget m 1) (aget m 2)) (RegExp. lit))))
+
+(describe "security mitigations manifest (#121)"
+  (fn []
+
+    (test "manifest parses and has the cosmetic entry"
+      (fn []
+        (.toBe (expect (existsSync MANIFEST)) true)
+        (let [m (.-mitigations (.parse JSON (readFileSync MANIFEST "utf8")))]
+          (.toBeDefined (expect (get m "cosmetic-css-injection-unvalidated-selectors"))))))
+
+    (test "every mustMatch regex hits its source file"
+      (fn []
+        (let [mits (.-mitigations (.parse JSON (readFileSync MANIFEST "utf8")))]
+          (doseq [id (Object/keys mits)]
+            (let [e (get mits id)
+                  src (readFileSync (join REPO (.-file e)) "utf8")]
+              (doseq [rx (or (.-mustMatch e) [])]
+                ;; each declared invariant must still be present in the source.
+                (.toBe (expect (.test (RegExp. rx "m") src)) true)))))))
+
+    (test "extracted UNSAFE_SELECTOR rejects every mustReject and accepts every mustAccept"
+      (fn []
+        (let [mits (.-mitigations (.parse JSON (readFileSync MANIFEST "utf8")))
+              e (get mits "cosmetic-css-injection-unvalidated-selectors")
+              src (readFileSync (join REPO (.-file e)) "utf8")
+              ex (.-extractRegex e)
+              fm (.match src (RegExp. (.-from ex)))]
+          (.toBeTruthy (expect fm))
+          (let [re (regex-from-literal (aget fm 1))]
+            ;; mustReject: the regex MUST match (→ safeSelector drops the selector).
+            (doseq [s (.-mustReject e)]
+              (.toBe (expect (.test re s)) true))
+            ;; mustAccept: the regex must NOT match (→ a real rule survives).
+            (doseq [s (.-mustAccept e)]
+              (.toBe (expect (.test re s)) false))))))
+
+    ;; A hand-rolled corpus proves the extraction+test path is sound independent of
+    ;; the shipped source (so the test fails if the LOGIC breaks, not just the data).
+    (test "extraction logic: synthetic source → working regex"
+      (fn []
+        (let [synthetic "const UNSAFE_SELECTOR = /[{}@<]|\\*\\//;\nfunction f(){}"
+              fm (.match synthetic (RegExp. "const\\s+UNSAFE_SELECTOR\\s*=\\s*(/.*?/);"))
+              re (regex-from-literal (aget fm 1))]
+          (.toBe (expect (.test re "a{}")) true)
+          (.toBe (expect (.test re "x*/y")) true)
+          (.toBe (expect (.test re ".ad-banner")) false))))))
+
+(describe "findings ledger ↔ mitigations manifest cross-check (#121)"
+  (fn []
+
+    (test "EDN map extraction splits top-level maps + pulls :id/:status"
+      (fn []
+        (let [sample "[ {:id \"a\" :status \"mitigated\" :severity \"high\"} {:id \"b\" :status \"open\"} ]"
+              maps (extract-edn-maps sample)]
+          (.toBe (expect (.-length maps)) 2)
+          (.toBe (expect (.includes (aget maps 0) ":id \"a\"")) true)
+          (.toBe (expect (.includes (aget maps 1) ":status \"open\"")) true))))
+
+    (test "trailing ;; comment after a value does not leak into extraction"
+      (fn []
+        (let [sample "[ {:id \"x\" :status \"mitigated\"  ;; landed in commit abc\n  :severity \"high\"} ]"
+              maps (extract-edn-maps sample)
+              m (aget maps 0)
+              sm (.match m (RegExp. ":status\\s+\"([^\"]+)\""))]
+          (.toBe (expect (.-length maps)) 1)
+          (.toBe (expect (aget sm 1)) "mitigated"))))
+
+    ;; Real cross-check (skipped when the gitignored findings ledger isn't present —
+    ;; CI / fresh worktrees lack private-docs/): every mitigated/fixed finding id
+    ;; must have a matching gate id in the manifest.
+    (let [has-findings (or (existsSync FINDINGS-EDN) (existsSync FINDINGS-JSON))
+          guarded-test (.skipIf test (not has-findings))]
+      (guarded-test "every mitigated/fixed finding has a gate in the manifest"
+        (fn []
+          (let [text (if (existsSync FINDINGS-EDN) (readFileSync FINDINGS-EDN "utf8") "[]")
+                maps (extract-edn-maps text)
+                gates (Object/keys (or (.-mitigations (.parse JSON (readFileSync MANIFEST "utf8"))) {}))
+                ungated []]
+            (doseq [m maps]
+              (let [sm (.match m (RegExp. ":status\\s+\"([^\"]+)\""))
+                    im (.match m (RegExp. ":id\\s+\"([^\"]+)\""))
+                    status (if sm (.toLowerCase (aget sm 1)) "")
+                    id (if im (aget im 1) nil)]
+                (when (and id (or (= status "mitigated") (= status "fixed"))
+                           (= (.indexOf gates id) -1))
+                  (.push ungated id))))
+            ;; an ungated mitigation is exactly the rot the program prevents — fail loud.
+            (.toEqual (expect ungated) [])))))))

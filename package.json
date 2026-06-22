@@ -18,6 +18,7 @@
     "chrome:install": "bun run tools:compile && bun .beagle-tools/gjoa/tools/chrome-bundle/install.js",
     "security:check": "bun run tools:compile && bun .beagle-tools/gjoa/tools/security/check.js",
     "security:bump": "bun run tools:compile && bun .beagle-tools/gjoa/tools/security/bump.js",
+    "security:patch-disclosure": "bun run tools:compile && bun .beagle-tools/gjoa/tools/security/patch-disclosure.js",
     "status": "bun run tools:compile && bun .beagle-tools/gjoa/tools/scripts/status.js",
     "preflight": "bun run tools:compile && bun .beagle-tools/gjoa/tools/scripts/preflight.js",
     "cost": "bun run tools:compile && bun .beagle-tools/gjoa/tools/prep/patch-cost.js",

@@ -725,6 +725,135 @@
           (str (.-length files) " emitted file(s) scanned; all $$bc refs (namespace + named-import) ⊆ "
                (.-size surface) " core.js exports"))))))
 
+;; ── Gate R: security mitigations intact (#121) ──────────────────────────────
+;; configs/security-mitigations.json is a per-mitigation regression manifest: for
+;; each shipped security mitigation it records the source `file` + `mustMatch`
+;; regexes that must still hit it (the belt/cap/pref is still PRESENT), and — for a
+;; regex-validator mitigation like the cosmetic selector filter — an `extractRegex`
+;; plus `mustReject`/`mustAccept` selector cases. A mitigation can silently ROT (the
+;; belt deleted, the `*/` guard dropped, the default-off pref flipped) without any
+;; build error; Gate R makes that deletion RED here, BEFORE a 2–3h compile. We cannot
+;; IMPORT GjoaCosmeticChild.sys.mjs (it `extends JSWindowActorChild`, undefined off a
+;; chrome window), so we EXTRACT the UNSAFE_SELECTOR regex literal from the source
+;; text and re-test it directly. Design twin of Gate P (patch-hash drift): a tracked
+;; manifest is the trust anchor, the gate enforces it.
+(def MITIGATIONS-FILE :- String (join REPO-ROOT "configs" "security-mitigations.json"))
+(defn gateR [] :- Any
+  (if (not (existsSync MITIGATIONS-FILE))
+    (fail "R" "security mitigations intact (#121)"
+      "no configs/security-mitigations.json — shipped mitigations are unguarded against silent rot"
+      "create configs/security-mitigations.json with {\"mitigations\":{<id>:{file,mustMatch,[extractRegex,mustReject,mustAccept]}}}")
+    (let [manifest (JSON/parse (readFileSync MITIGATIONS-FILE "utf8"))
+          mits (or (.-mitigations manifest) {})
+          ids (Object/keys mits)
+          problems []]
+      (doseq [id ids]
+        (let [e (aget mits id)
+              rel (.-file e)
+              path (join REPO-ROOT rel)]
+          (if (not (existsSync path))
+            (.push problems (str id ": source file " rel " is GONE (mitigation deleted?)"))
+            (let [src (readFileSync path "utf8")]
+              ;; (1) every mustMatch regex must still hit the source.
+              (doseq [rx (or (.-mustMatch e) [])]
+                (when (not (.test (RegExp. rx "m") src))
+                  (.push problems (str id ": mustMatch /" rx "/ no longer present in " rel " — the mitigation was edited/removed"))))
+              ;; (2) extract the validator regex literal from source text + re-test
+              ;; it against the reject/accept corpus (cannot import the actor).
+              (let [ex (.-extractRegex e)]
+                (when ex
+                  (let [m (.match src (RegExp. (.-from ex)))]
+                    (if (not (and m (aget m 1)))
+                      (.push problems (str id ": extractRegex /" (.-from ex) "/ found no regex literal in " rel))
+                      (let [lit (aget m 1)
+                            ;; strip the surrounding slashes (and any flags) → the regex body.
+                            body-m (.match lit (RegExp. "^/(.*)/([a-z]*)$"))
+                            body (if body-m (aget body-m 1) lit)
+                            flags (if body-m (aget body-m 2) "")
+                            re :- Any (try (RegExp. body flags) (catch Error _e nil))]
+                        (if (not re)
+                          (.push problems (str id ": extracted literal `" lit "` is not a constructable RegExp"))
+                          (do
+                            ;; mustReject: each MUST be rejected (regex matches → safeSelector drops it).
+                            (doseq [s (or (.-mustReject e) [])]
+                              (when (not (.test re s))
+                                (.push problems (str id ": mustReject " (JSON/stringify s) " is NOT rejected by the current " (.-name ex) " — breakout no longer blocked"))))
+                            ;; mustAccept: each MUST be accepted (regex must NOT match).
+                            (doseq [s (or (.-mustAccept e) [])]
+                              (when (.test re s)
+                                (.push problems (str id ": mustAccept " (JSON/stringify s) " is now WRONGLY rejected by " (.-name ex) " — over-broad, real rules dropped")))))))))))))))
+      (if (> (.-length problems) 0)
+        (fail "R" "security mitigations intact (#121)"
+          (str (.-length problems) " mitigation check(s) failed across " (.-length ids) " entry(ies)")
+          (str "a shipped security mitigation rotted — restore it, or (if intentionally changed) update configs/security-mitigations.json:\n    "
+               (.join problems "\n    ")))
+        (pass "R" "security mitigations intact (#121)"
+          (str (.-length ids) " mitigation(s) intact (mustMatch + extracted-regex reject/accept all hold)"))))))
+
+;; ── Gate S: security-critical patches persist (#120) ────────────────────────
+;; A patch whose header carries a `# security:` block mitigates a recorded finding;
+;; it must NOT silently stop applying (the vuln re-opens) and every upstream anchor
+;; it `depends-on` must still resolve. Unlike Gate A/L (warn/drift), here a non-apply
+;; is a HARD fail and an unresolved anchor is fail-CLOSED — security regressions never
+;; ship as a yellow warning. Reuses Gate A's cumulative-apply probe + Gate L's
+;; check-contract. VACUOUSLY GREEN today: zero patches carry a `security:` block.
+(defn patch-security-block? [text :- String] :- Bool
+  ;; `# security:` (with optional indent) anywhere in the header region.
+  (.test (RegExp. "^#\\s*security:\\s*$" "m") text))
+(defn gateS [] :- Any
+  (let [patches (.sort (.filter (readdirSync PATCHES-DIR) (fn [p :- String] :- Bool (.endsWith p ".patch"))))
+        sec-patches (.filter patches (fn [p :- String] :- Bool
+                                       (patch-security-block? (readFileSync (join PATCHES-DIR p) "utf8"))))]
+    (if (= (.-length sec-patches) 0)
+      (pass "S" "security-critical patches persist (#120)"
+        "no `security:`-tagged patches (vacuously green; gate arms automatically when one is added)")
+      ;; Build a fresh extract once, apply patches cumulatively in order; record the
+      ;; apply result of each security-tagged patch, and resolve its declared anchors.
+      (let [cache (str (.-HOME (.-env process)) "/.cache/gjoa/sources")
+            gjoa (JSON/parse (readFileSync GJOA-JSON "utf8"))
+            tarball (str cache "/firefox-" (.-version (.-firefox gjoa)) ".source.tar.xz")]
+        (if (not (existsSync tarball))
+          (fail "S" "security-critical patches persist (#120)"
+            (str (.-length sec-patches) " security-tagged patch(es) but the source tarball is not cached at " tarball " — cannot prove they apply (fail-closed)")
+            "run `bun run download` to populate the cache, then re-run preflight")
+          (let [tmp "/tmp/gjoa-preflight-sec-engine"]
+            (sh (str "rm -rf " tmp " && mkdir -p " tmp) {})
+            (let [extract (sh (str "tar -xJf " tarball " -C " tmp " --strip-components=1") {:timeout 180000})]
+              (if (not (.-ok extract))
+                (fail "S" "security-critical patches persist (#120)" "tarball extract failed (fail-closed)" (.slice (.-out extract) 0 400))
+                (do
+                  (sh (str "cd " tmp " && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m baseline") {:timeout 60000})
+                  (let [failed []
+                        unresolved []
+                        stopped (atom false)]
+                    (doseq [p patches]
+                      (when (not @stopped)
+                        (let [ppath (join PATCHES-DIR p)
+                              is-sec (.includes sec-patches p)
+                              r (sh (str "cd " tmp " && git apply " ppath) {})]
+                          (when (not (.-ok r))
+                            (reset! stopped true)
+                            ;; only a SECURITY patch failing to apply is itself a security
+                            ;; regression; a non-security patch breaking the chain ALSO blocks
+                            ;; downstream security patches from being proven, so it is recorded
+                            ;; as a fail-closed blocker.
+                            (.push failed (str p (if is-sec " (SECURITY)" " (blocks downstream security patches)") ": "
+                                               (.trim (or (aget (.split (.-out r) "\n") 0) ""))))))))
+                    ;; resolve declared anchors of each security-tagged patch (fail-closed).
+                    (doseq [p sec-patches]
+                      (doseq [cr (check-contract (readFileSync (join PATCHES-DIR p) "utf8"))]
+                        (when (= (.-verdict cr) "not-found")
+                          (.push unresolved (str p ": " (.-kind cr) " `" (.-symbol cr) "` — " (.-detail cr))))))
+                    (if (or (> (.-length failed) 0) (> (.-length unresolved) 0))
+                      (fail "S" "security-critical patches persist (#120)"
+                        (str (.-length sec-patches) " security-tagged patch(es): "
+                             (.-length failed) " apply-failure(s), " (.-length unresolved) " unresolved anchor(s) — HARD STOP (a security mitigation regressed)")
+                        (str "a security-critical patch no longer applies or its upstream anchor moved — regenerate it BEFORE building; do not ship the regression:\n"
+                             "    apply:    " (.join failed "\n              ") "\n"
+                             "    anchors:  " (.join unresolved "\n              ")))
+                      (pass "S" "security-critical patches persist (#120)"
+                        (str (.-length sec-patches) " security-tagged patch(es) apply cleanly + all declared anchors resolve")))))))))))))
+
 ;; ── Run + render ──────────────────────────────────────────────────────────
 (defn main! [] :- Any
   (console/log (bold "gjoa preflight"))
@@ -734,7 +863,8 @@
   (let [gates [["A" gateA] ["B" gateB] ["C" gateC] ["D" gateD]
                ["E" gateE] ["F" gateF] ["G" gateG] ["H" gateH]
                ["I" gateI] ["J" gateJ] ["K" gateK] ["L" gateL] ["M" gateM]
-               ["N" gateN] ["O" gateO] ["P" gateP] ["Q" gateQ]]]
+               ["N" gateN] ["O" gateO] ["P" gateP] ["Q" gateQ]
+               ["R" gateR] ["S" gateS]]]
     (doseq [gate gates]
       (let [fn (aget gate 1)]
         (try (fn)

@@ -127,6 +127,53 @@
                     {:verdict "resolved" :detail (str prop " present + read under " must-read)}))
                 {:verdict "resolved" :detail (str prop " present on " mod)})))))))))
 
+;; ── cpp-symbol / cpp-method / cpp-field ─────────────────────────────────────
+;; A C++ anchor a patch references but does not define — e.g. patches 0012-0014
+;; (dark-mode) declare `cpp-symbol nsPresContext::ColorInversion`,
+;; `cpp-field nsTextPaintStyle::mFrameBackgroundColor`, etc. These resolved as
+;; "ambiguous" before because parse-depends-on never matched the cpp-* kinds — a
+;; latent Gate L blind spot: a Mozilla refactor renaming/removing the member would
+;; pass apply and die mid-compile. Resolution is rg/fs-class (no build): given
+;; `Class::Member`, accept if EITHER a qualified `Class::Member` reference exists
+;; (out-of-line def / member-pointer / call — definite) OR `Member` appears in a
+;; file that also declares `class Class`/`struct Class` (in-class decl). engine/
+;; absent → ambiguous (never a false green), like resolve-rust-field with no objdir.
+(def CPP-ROOTS :- Any ["layout" "widget" "dom" "gfx" "view"])
+;; Only existing roots — a missing dir makes rg exit 2 (error), which the quiet sh
+;; helper swallows to "" and would false-negative every anchor (the `view` dir is
+;; absent in this Firefox tree). Resolve to absolute paths that actually exist.
+(defn cpp-search-roots [] :- String
+  (.join (.filter (.map CPP-ROOTS (fn [r :- String] :- String (join ENGINE r)))
+                  (fn [p :- String] :- Bool (existsSync p)))
+         " "))
+(js/export (defn resolve-cpp-symbol [sym :- String kind :- String] :- Any
+  (if (not (existsSync ENGINE))
+    {:verdict "ambiguous" :detail (str kind " " sym " — engine/ not extracted (no `bun run import`); can't verify C++ anchors")}
+    (let [parts (.split sym "::")
+          klass (if (>= (.-length parts) 2) (aget parts 0) "")
+          member (aget parts (- (.-length parts) 1))
+          roots (cpp-search-roots)
+          ;; (1) qualified `Class::Member` anywhere — strongest signal.
+          qualified (.trim (sh (str "rg -l --no-messages -F '" klass "::" member "' " roots " 2>/dev/null | head -1") {:quiet true}))]
+      (if (and (not= klass "") (not= qualified ""))
+        {:verdict "resolved" :detail (str klass "::" member " referenced in " (rel qualified))}
+        ;; (2) in-class DEFINITION: a file with a real `class Class {`/`: …`/`final`
+        ;; body (NOT a `class Class;` forward declaration — that file won't hold the
+        ;; member and would false-negative, e.g. nsTextFrame.h forward-declares
+        ;; nsTextPaintStyle while the field lives in nsTextPaintStyle.h) that also
+        ;; contains the member token (word-bounded). Allow Mozilla's optional
+        ;; annotation macros between the keyword and the name (`class MOZ_STACK_CLASS
+        ;; nsTextPaintStyle {`, `MOZ_RAII`, `final`, attributes, …).
+        (let [cls-files (.trim (sh (str "rg -l --no-messages -e '(class|struct)\\s+([A-Z_][A-Z0-9_]*\\s+)*" klass "\\b\\s*(\\{|:|final)' " roots " 2>/dev/null") {:quiet true}))]
+          (if (= cls-files "")
+            (if (= klass "")
+              {:verdict "not-found" :detail (str "unqualified cpp symbol `" member "` — declare as Class::Member")}
+              {:verdict "not-found" :detail (str "no `class " klass "`/`struct " klass "` found under " (.join CPP-ROOTS "/") " (class moved/renamed?)")})
+            (let [hit (.trim (sh (str "rg -l --no-messages '\\b" member "\\b' " (.replaceAll cls-files "\n" " ") " 2>/dev/null | head -1") {:quiet true}))]
+              (if (not= hit "")
+                {:verdict "resolved" :detail (str member " declared in " klass " (" (rel hit) ")")}
+                {:verdict "not-found" :detail (str member " not found in any file declaring " klass " — member removed/renamed")})))))))))
+
 ;; ── contract parsing + dispatch ─────────────────────────────────────────────
 ;; A `depends-on` entry is any comment line `(# | ;;) - <kind> <symbol> [@ path]
 ;; [| accessor=X] [must-be-read-by: Y]`. The kind keyword IS the marker, so no
@@ -143,7 +190,7 @@
 
 (js/export (defn parse-depends-on [text :- String] :- Any
   (let [out []
-        re (RegExp. "(?:#|;;)\\s*-\\s*(rust-path|rust-field|rust-method|cpp-member|webidl-attr|js-prop)\\s+(.+?)\\s*$" "gm")]
+        re (RegExp. "(?:#|;;)\\s*-\\s*(rust-path|rust-field|rust-method|cpp-symbol|cpp-method|cpp-field|cpp-member|webidl-attr|js-prop)\\s+(.+?)\\s*$" "gm")]
     (doseq [m (.matchAll text re)]
       (.push out (parse-dep-entry (.trim (aget m 1)) (.trim (aget m 2)))))
     out)))
@@ -163,6 +210,8 @@
                 (= kind "js-prop")
                 (let [parts (.split sym ".")]
                   (resolve-js-prop (or (.-at e) "") (aget parts 0) (or (aget parts 1) "") (or (.-mustRead e) "")))
+                (or (= kind "cpp-symbol") (= kind "cpp-method") (= kind "cpp-field") (= kind "cpp-member"))
+                (resolve-cpp-symbol sym kind)
                 :else {:verdict "ambiguous" :detail (str kind " not yet resolved (coverage backlog)")})]
         (.push out {:kind kind :symbol sym :verdict (.-verdict r) :detail (.-detail r)})))
     out)))

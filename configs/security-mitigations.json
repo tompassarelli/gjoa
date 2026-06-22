@@ -1,0 +1,29 @@
+{
+  "$comment": "Per-mitigation regression manifest (#121). Each entry binds a SHIPPED security mitigation to the source that implements it + (where applicable) behavioral selector cases. preflight Gate R asserts every `mustMatch` regex still hits `file`, and for the cosmetic entry EXTRACTS the UNSAFE_SELECTOR regex literal from source and re-tests it against mustReject/mustAccept. A mitigation that silently rots (belt deleted, cap removed, pref flipped) goes RED here BEFORE a build. The `id` keys cross-reference private-docs/security-findings.edn :status mitigated/fixed — tools/security/audit-ledger.bjs `findings` warns if a mitigated finding has no gate here.",
+  "mitigations": {
+    "cosmetic-css-injection-unvalidated-selectors": {
+      "file": "src/gjoa/toolkit/components/content-classifier/GjoaCosmeticChild.sys.mjs",
+      "severity": "high",
+      "mustMatch": [
+        "const UNSAFE_SELECTOR = /.+/;",
+        "UNSAFE_SELECTOR = /[^\\n]*\\\\\\*\\\\/",
+        "Array\\.prototype\\.filter\\.call\\(selectors, safeSelector\\)"
+      ],
+      "extractRegex": {
+        "name": "UNSAFE_SELECTOR",
+        "from": "const\\s+UNSAFE_SELECTOR\\s*=\\s*(/.*?/);",
+        "rejectsWhenMatches": true
+      },
+      "mustReject": ["a{}", "x*/y", "h1{color:red}@import"],
+      "mustAccept": [".ad-banner", "#promo", "div[data-ad] > span"]
+    },
+    "list-scriptlets-default-off": {
+      "file": "src/gjoa/toolkit/components/content-classifier/GjoaCosmeticParent.sys.mjs",
+      "severity": "high",
+      "mustMatch": [
+        "const LIST_SCRIPTLETS_PREF = \"gjoa\\.contentblock\\.scriptlets\\.listDriven\\.enabled\";",
+        "Services\\.prefs\\.getBoolPref\\(LIST_SCRIPTLETS_PREF, false\\)"
+      ]
+    }
+  }
+}

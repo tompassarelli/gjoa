@@ -49,17 +49,57 @@
 ;; ABSORBED upstream carries `applied-upstream: <ref>` and should be DROPPED
 ;; rather than carried forward toward the divergence cliff; `forwarded: <url>`
 ;; records a submission (informational). check-all flags absorbed patches.
+;; A `# security:` block tags a patch as a security mitigation (#120). Shape mirrors
+;; the `# gjoa-patch:` header — a marker line then indented `#   key: value` fields,
+;; with `refs:` as a `#     - <ref>` list:
+;;   # security:
+;;   #   id: <finding-id matching configs/security-mitigations.json + security-findings.edn>
+;;   #   refs:
+;;   #     - CVE-2025-XXXX
+;;   #     - MFSA-2025-NN
+;;   #   mitigates: <one-line what it blocks>
+;;   #   persist: true
+;; Returns nil if absent. Gate S arms on presence; check-all requires `id:`.
+(js/export (defn parseSecurity [text :- String] :- Any
+  (if (not (.test (RegExp. "^#\\s*security:\\s*$" "m") text))
+    nil
+    (let [im (.exec (RegExp. "^#\\s*id:\\s*(\\S+)\\s*$" "m") text)
+          mm (.exec (RegExp. "^#\\s*mitigates:\\s*(.+?)\\s*$" "m") text)
+          pm (.exec (RegExp. "^#\\s*persist:\\s*(\\S+)\\s*$" "m") text)
+          refs []]
+      ;; Collect each `#     - <ref>` line that follows the `#   refs:` marker, up to
+      ;; the next non-list `#   key:` field or the diff body. Bounded scan over lines;
+      ;; `in-refs` is threaded through the loop (no mutable cell).
+      (let [lines (.split text "\n")
+            n (.-length lines)]
+        (loop [i 0 in-refs false]
+          (when (< i n)
+            (let [l (aget lines i)]
+              (cond
+                (.test (RegExp. "^#\\s*refs:\\s*$") l) (recur (+ i 1) true)
+                (and in-refs (.test (RegExp. "^#\\s*-\\s+\\S") l))
+                (do (.push refs (.trim (.replace l (RegExp. "^#\\s*-\\s+") ""))) (recur (+ i 1) in-refs))
+                ;; another `#   key:` (not a list item) or a non-comment line ends the list.
+                (or (.test (RegExp. "^#\\s*[A-Za-z][\\w-]*:") l) (not (.startsWith l "#")))
+                (recur (+ i 1) false)
+                :else (recur (+ i 1) in-refs))))))
+      {:id (if im (aget im 1) nil)
+       :refs refs
+       :mitigates (if mm (aget mm 1) nil)
+       :persist (if pm (= (.toLowerCase (aget pm 1)) "true") false)}))))
+
 (defn parseHeader [text :- String] :- Any
   (if (not (.startsWith text HEADER-TAG))
     ;; Header may be preceded by nothing, but must be at the very top of the file.
-    {:hasHeader false :declaredBaseline nil :appliedUpstream nil :forwarded nil}
+    {:hasHeader false :declaredBaseline nil :appliedUpstream nil :forwarded nil :security nil}
     (let [bm (.exec (RegExp. "^#\\s*baseline-firefox:\\s*(\\S+)\\s*$" "m") text)
           am (.exec (RegExp. "^#\\s*applied-upstream:\\s*(\\S+)\\s*$" "m") text)
           fm (.exec (RegExp. "^#\\s*forwarded:\\s*(\\S+)\\s*$" "m") text)]
       {:hasHeader true
        :declaredBaseline (if bm (aget bm 1) nil)
        :appliedUpstream (if am (aget am 1) nil)
-       :forwarded (if fm (aget fm 1) nil)})))
+       :forwarded (if fm (aget fm 1) nil)
+       :security (parseSecurity text)})))
 
 (defn formatHeader [baseline :- String touches :- Any] :- String
   (let [lines (.concat [HEADER-TAG
@@ -79,6 +119,7 @@
      :declaredBaseline (.-declaredBaseline parsed)
      :appliedUpstream (.-appliedUpstream parsed)
      :forwarded (.-forwarded parsed)
+     :security (.-security parsed)
      :touches touches}))
 
 (defn listPatches [] :- Any
@@ -116,6 +157,15 @@
             (.-appliedUpstream p)
             (do
               (console/error (str "[patch-header] " n ": applied-upstream (" (.-appliedUpstream p) ") — Mozilla absorbed this change; DROP this patch (rm patches/" n ") to avoid carrying redundant divergence-debt"))
+              (recur (+ i 1) (+ problems 1)))
+
+            ;; A `# security:` block MUST carry an `id:` — it keys the finding in
+            ;; configs/security-mitigations.json + private-docs/security-findings.edn
+            ;; and is what preflight Gate S / the disclosure generator group on. An
+            ;; id-less security block is unattributable; HARD problem.
+            (and (.-security p) (not (.-id (.-security p))))
+            (do
+              (console/error (str "[patch-header] " n ": `# security:` block has no `id:` — add `#   id: <finding-id>` matching configs/security-mitigations.json"))
               (recur (+ i 1) (+ problems 1)))
 
             (not= (.-declaredBaseline p) current)

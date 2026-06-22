@@ -1,0 +1,6 @@
+{
+  "$schema": "gjoa security-patch disclosure (generated — do not edit by hand)",
+  "note": "No security-tagged patches. This empty list is the correct current state; a `# security:` block on any patches/*.patch will appear here automatically (regenerate via `bun run security:patch-disclosure`). A dropped entry shows as a tracked-file diff.",
+  "generator": "tools/security/patch-disclosure.bjs",
+  "patches": []
+}
