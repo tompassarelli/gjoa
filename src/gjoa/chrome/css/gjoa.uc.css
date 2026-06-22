@@ -638,17 +638,21 @@
   margin-inline: 0 !important;
 }
 
-/* breakout: keep the focused urlbar CONTAINED in the drawer card. It used to
- * widen to a fixed 600px ("expand past the sidebar"), which spilled across the
- * card gap onto the content card — incoherent with the two-card floating layout
- * and reads as the dropdown "covering content for no reason". Pin it to the same
- * --urlbar-width the resting bar uses (sidebar width − 2·inset, set by
- * drawer/layout.bjs sync-urlbar-width) so focus only grows it DOWNWARD (results),
- * never rightward over content. The wide command-palette is the separate
- * Ctrl+L `gjoa-urlbar-floating` presentation, which has its own backdrop.
+/* breakout (CLICK / focus): expand the urlbar AT POINT. Anchored at its resting
+ * left edge (left/right:auto), it grows rightward to --gjoa-urlbar-expand-w so
+ * suggestions are readable — the "expand in place, looked nice" behavior. The
+ * brief pin-to-sidebar-width experiment clipped the dropdown; the 600px spilled
+ * too far. ~440px is the sweet spot. --urlbar-width is re-anchored to the SAME
+ * value so the native .urlbarView results inherit it and can't clip. The wide
+ * CENTERED command palette is the separate Ctrl+L `gjoa-urlbar-floating` path
+ * (more specific selectors, see #region floating urlbar) — it wins when active.
  * Scoped to #gjoa-urlbar-toolbar so it only applies in expanded layout. */
+:root {
+  --gjoa-urlbar-expand-w: 440px;
+}
 #gjoa-urlbar-toolbar #urlbar:is([focused][breakout-extend]) {
-  width: var(--urlbar-width) !important;
+  width: var(--gjoa-urlbar-expand-w) !important;
+  --urlbar-width: var(--gjoa-urlbar-expand-w) !important;
   min-width: 0 !important;
   left: auto !important;
   right: auto !important;
@@ -661,6 +665,27 @@
 
 #gjoa-urlbar-toolbar:has(#urlbar[breakout-extend]) #urlbar-container {
   overflow: visible !important;
+}
+
+/* Ghost: a static look-alike that drawer/urlbar.bjs drops into the resting slot
+ * while the Ctrl+L floating palette is active, so the real urlbar lifting to the
+ * window centre doesn't collapse the slot or look like the bar "flew out" — the
+ * resting bar visually stays where it is. width/height/border-radius are set
+ * inline from the live urlbar's box; this just paints it like the resting bar. */
+#gjoa-urlbar-ghost {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding-inline: 8px;
+  background-color: var(--urlbar-box-bgcolor, var(--gjoa-bg-elevated)) !important;
+  color: color-mix(in srgb, var(--gjoa-fg) 55%, transparent);
+  font: message-box;
+  font-size: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* hide page-action-buttons (bookmark star, etc.) unless urlbar is expanded */

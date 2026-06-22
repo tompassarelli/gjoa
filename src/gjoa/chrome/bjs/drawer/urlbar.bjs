@@ -10,7 +10,7 @@
   (let [urlbar (.-urlbar deps)
         root (.-documentElement document)
         log (create-logger! "urlbar")
-        state :- Any {:activated false :intent "current" :backdrop nil}
+        state :- Any {:activated false :intent "current" :backdrop nil :ghost nil}
 
         intent-attr #(if (= % "newTab") "new-tab" "current")
 
@@ -23,6 +23,9 @@
             (when (.-backdrop state)
               (.remove (.-backdrop state))
               (set! (.-backdrop state) nil))
+            (when (.-ghost state)
+              (.remove (.-ghost state))
+              (set! (.-ghost state) nil))
 
             (let [compact-vertical (bool (q document "#sidebar-main[data-gjoa-compact]"))
                   compact-horizontal (has? root "data-gjoa-compact-horizontal")
@@ -44,6 +47,24 @@
                   (attr! root "gjoa-urlbar-intent" attr-val))
               (do (set! (.-activated state) true)
                   (log "activateFloating" {:intent (.-intent state)})
+                  ;; Leave a static look-alike (#gjoa-urlbar-ghost) in the resting
+                  ;; slot so the real urlbar lifting to the centered palette doesn't
+                  ;; collapse the slot / look like the bar "flew out" — the resting
+                  ;; bar visually STAYS put. Capture the resting box FIRST, before
+                  ;; the floating attr takes it position:fixed.
+                  (when (not (.-ghost state))
+                    (let [parent (.-parentNode urlbar)]
+                      (when parent
+                        (let [rect (.getBoundingClientRect urlbar)
+                              cs (.getComputedStyle window urlbar)
+                              g (html-new "div")]
+                          (set! (.-id g) "gjoa-urlbar-ghost")
+                          (set! (.-textContent g) (or (some-> window .-gURLBar .-value) ""))
+                          (set! (.-width (.-style g)) (str (.-width rect) "px"))
+                          (set! (.-height (.-style g)) (str (.-height rect) "px"))
+                          (set! (.-borderRadius (.-style g)) (.-borderRadius cs))
+                          (.appendChild parent g)
+                          (set! (.-ghost state) g)))))
                   (attr! root "gjoa-urlbar-floating" "")
                   (attr! root "gjoa-urlbar-intent" attr-val)
 
@@ -122,26 +143,10 @@
             (activate-floating
               (if (and detail (= (.-intent detail) "newTab")) "newTab" "current"))))
 
-        on-deactivate-request #(deactivate-floating)
-
-        ;; A pointer-click on the in-sidebar resting urlbar promotes to the wide
-        ;; floating command palette (same presentation as Ctrl+L): it FULLY expands
-        ;; and reads as a deliberate backdropped layer, instead of the native narrow
-        ;; breakout that clipped suggestions in the sidebar. mousedown (not focusin)
-        ;; so it fires ONLY on a user click — never on programmatic urlbar focus
-        ;; (e.g. opening a new tab) — and BEFORE the native breakout renders, so
-        ;; there's no narrow-dropdown flash. Compact owns its own contained popover
-        ;; state machine, so leave it to the breakout there.
-        on-urlbar-pointerdown (fn [e]
-          (when (not (.-activated state))
-            (let [compact-vertical (bool (q document "#sidebar-main[data-gjoa-compact]"))
-                  compact-horizontal (has? root "data-gjoa-compact-horizontal")]
-              (when (not (or compact-vertical compact-horizontal))
-                (activate-floating "current")))))]
+        on-deactivate-request #(deactivate-floating)]
 
     (onc! urlbar "focusout" on-focus-out)
     (onc! urlbar "keydown" on-keydown)
-    (onc! urlbar "mousedown" on-urlbar-pointerdown)
     (on! document "gjoa-urlbar-activate" on-activate-request)
     (on! document "gjoa-urlbar-deactivate" on-deactivate-request)
 
@@ -151,7 +156,6 @@
      :destroy (fn []
        (offc! urlbar "focusout" on-focus-out)
        (offc! urlbar "keydown" on-keydown)
-       (offc! urlbar "mousedown" on-urlbar-pointerdown)
        (off! document "gjoa-urlbar-activate" on-activate-request)
        (off! document "gjoa-urlbar-deactivate" on-deactivate-request)
        (deactivate-floating))})))
