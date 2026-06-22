@@ -1,6 +1,7 @@
 #lang beagle/js
 (ns gjoa.platform.tabs-reconciler
-  (:require [gjoa.macros :refer [on! off!]]))
+  (:require [gjoa.macros :refer [on! off!]]
+            [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
 (declare-extern [gBrowser] Any)
