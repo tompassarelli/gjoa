@@ -380,26 +380,49 @@
 ;; the build if one vanished. Design: private-docs/research-fork-currency-gate-l.md.
 (def OVERLAY-FILES :- Any
   [(join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "GjoaLoader.bjs")])
+;; Count raw `# depends-on` bullets — every `- <kind> ...` line whose kind carries a
+;; dep marker. DECLARED count; check-contract returns the EVALUATED count. Any gap =
+;; the parser silently dropped a declared dep (the cpp-symbol/cpp-member skew) — fail-closed.
+(def DEP-BULLET-RE :- Any (RegExp. "(?:#|;;)\\s*-\\s*((?:rust|cpp|webidl|js)-[a-z-]+)\\s+\\S" "gm"))
+(defn count-declared-deps [text :- String] :- Number
+  (let [m (.match text DEP-BULLET-RE)]
+    (if m (.-length m) 0)))
 (defn gateL [] :- Any
   (let [patch-files (.map (.filter (readdirSync PATCHES-DIR) (fn [p :- String] :- Bool (.endsWith p ".patch")))
                           (fn [p :- String] :- String (join PATCHES-DIR p)))
         files (.concat patch-files (.filter OVERLAY-FILES (fn [f :- String] :- Bool (existsSync f))))
         not-found []
         ambiguous []
+        unsupported []
+        dropped []
         resolved []]
     (doseq [f files]
-      (doseq [r (check-contract (readFileSync f "utf8"))]
-        (cond
-          (= (.-verdict r) "not-found")
-          (.push not-found (str (basename f) ": " (.-kind r) " `" (.-symbol r) "` — " (.-detail r)))
-          (= (.-verdict r) "ambiguous")
-          (.push ambiguous (str (basename f) ": " (.-symbol r)))
-          :else (.push resolved (.-symbol r)))))
+      (let [text (readFileSync f "utf8")
+            results (check-contract text)
+            declared (count-declared-deps text)]
+        ;; reconciliation: every declared `# depends-on` bullet MUST produce an evaluated
+        ;; result; a shortfall = the parser silently dropped a dep (unknown/typo'd kind).
+        (let [delta (- declared (.-length results))]
+          (if (> delta 0)
+            (.push dropped (str (basename f) ": " delta " declared depends-on bullet(s) parsed to nothing (unknown/typo'd kind — vocabulary drift)"))))
+        (doseq [r results]
+          (cond
+            (= (.-verdict r) "not-found")
+            (.push not-found (str (basename f) ": " (.-kind r) " `" (.-symbol r) "` — " (.-detail r)))
+            (= (.-verdict r) "unsupported")
+            (.push unsupported (str (basename f) ": " (.-kind r) " `" (.-symbol r) "` — " (.-detail r)))
+            (= (.-verdict r) "ambiguous")
+            (.push ambiguous (str (basename f) ": " (.-symbol r)))
+            :else (.push resolved (.-symbol r))))))
     (cond
-      (> (.-length not-found) 0)
+      ;; FAIL-CLOSED: a dep that moved (not-found), one the resolver can't evaluate
+      ;; (unsupported kind), or one the parser dropped (declared>evaluated) blocks the build.
+      ;; Green Gate L now means "every DECLARED anchor RESOLVED", not "the few we parsed did".
+      (> (+ (+ (.-length not-found) (.-length unsupported)) (.-length dropped)) 0)
       (fail "L" "surface contracts (declared upstream deps resolve)"
-        (str (.-length not-found) " declared dependency(ies) no longer resolve")
-        (str "the upstream anchor moved/was removed — regenerate the patch/overlay against current upstream:\n    " (.join not-found "\n    ")))
+        (str (+ (+ (.-length not-found) (.-length unsupported)) (.-length dropped)) " declared dependency(ies) unresolved or unevaluated (" (.-length resolved) " resolved)")
+        (str "regenerate the patch/overlay against current upstream, or fix the dep declaration:\n    "
+             (.join (.concat (.concat not-found unsupported) dropped) "\n    ")))
       (> (.-length ambiguous) 0)
       (warn "L" "surface contracts (declared upstream deps resolve)"
         (str (.-length resolved) " resolved, " (.-length ambiguous) " ambiguous (cfg/glob/no-objdir — can't prove): " (.join ambiguous ", ")))

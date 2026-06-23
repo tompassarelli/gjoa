@@ -212,6 +212,6 @@
                   (resolve-js-prop (or (.-at e) "") (aget parts 0) (or (aget parts 1) "") (or (.-mustRead e) "")))
                 (or (= kind "cpp-symbol") (= kind "cpp-method") (= kind "cpp-field") (= kind "cpp-member"))
                 (resolve-cpp-symbol sym kind)
-                :else {:verdict "ambiguous" :detail (str kind " not yet resolved (coverage backlog)")})]
+                :else {:verdict "unsupported" :detail (str kind " — no resolver for this dep kind (fail-closed; add a resolver or fix the kind)")})]
         (.push out {:kind kind :symbol sym :verdict (.-verdict r) :detail (.-detail r)})))
     out)))
