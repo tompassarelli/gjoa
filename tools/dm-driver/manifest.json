@@ -1,0 +1,48 @@
+{
+  "note": "Tiered dark-mode visual-test manifest for tools/dm-driver/dm-check.sh. The `check` tier renders each target in ENGINE mode at the default darkness (bgLightness 16) and asserts the result lands in the dark band. The `deep` tier sweeps modes x bgLightness x window sizes (axes below) over the same targets. Schema documented in README.md.",
+  "schemaVersion": 1,
+
+  "defaults": {
+    "windowSize": "1280,800",
+    "timeoutSec": 90,
+    "_comment_assert": "meanLumMax: full-screenshot mean grey luminance (0..1) must be <= this. bgHex/bgTolerance: the sampled background pixel (at bgSampleXY) must be within bgTolerance (0..1 per-channel) of bgHex. Omit bg* to skip the pixel assert (real sites have non-uniform backgrounds).",
+    "meanLumMax": 0.35,
+    "bgSampleXY": "20,20"
+  },
+
+  "targets": [
+    {
+      "id": "white-page",
+      "kind": "local",
+      "html": "<!doctype html><html><head><meta charset=utf-8><style>html,body{margin:0;height:100%;background:#ffffff;color:#000}</style></head><body><h1>White test page</h1><p>Plain white background — the engine inversion floor lands this near #0d0d0d.</p></body></html>",
+      "meanLumMax": 0.20,
+      "bgHex": "#0d0d0d",
+      "bgTolerance": 0.12,
+      "bgSampleXY": "20,20"
+    },
+    {
+      "id": "youtube",
+      "kind": "url",
+      "url": "https://www.youtube.com",
+      "meanLumMax": 0.35
+    },
+    {
+      "id": "reddit",
+      "kind": "url",
+      "url": "https://www.reddit.com",
+      "meanLumMax": 0.35
+    },
+    {
+      "id": "ap-news",
+      "kind": "url",
+      "url": "https://apnews.com",
+      "meanLumMax": 0.40
+    }
+  ],
+
+  "deep": {
+    "modes": ["system", "hybrid", "auto", "engine"],
+    "bgLightness": [8, 16, 24],
+    "windowSizes": ["1280,800", "768,1024"]
+  }
+}

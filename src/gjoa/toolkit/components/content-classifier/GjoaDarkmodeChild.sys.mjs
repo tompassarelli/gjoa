@@ -458,6 +458,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     if (!doc || !doc.body) {
       return;
     }
+    const _t0 = win.performance.now();   // #137: normalizer phase timing
     const parse = s => {
       const m = s && s.match(/[\d.]+/g);
       return m && m.length >= 3 ? [+m[0], +m[1], +m[2]] : null;
@@ -513,6 +514,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       });
       cn++;
     }
+    const _tWalk = win.performance.now();   // #137: end of DOM walk
     if (!els.length) {
       return;
     }
@@ -522,6 +524,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     } catch (e) {
       return;
     }
+    const _tQuery = win.performance.now();   // #137: end of sendQuery round-trip
     const correctives = (resp && resp.correctives) || [];
     // Replicate the engine's luminance inversion (patch 0009 — an involution) so we
     // can pre-invert per element.
@@ -562,9 +565,18 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     // Completion signal — lets a harness wait event-driven (not a fixed timer) for
     // the async normalize round-trip to finish before measuring contrast.
     try {
+      const _tEnd = win.performance.now();   // #137: total + per-phase timing
       doc.documentElement.setAttribute(
         "data-gjoa-normalized",
         String(correctives.length)
+      );
+      doc.documentElement.setAttribute(
+        "data-gjoa-normalize-ms",
+        String(Math.round(_tEnd - _t0))
+      );
+      doc.documentElement.setAttribute(
+        "data-gjoa-normalize-detail",
+        `els=${els.length} walk=${Math.round(_tWalk - _t0)} query=${Math.round(_tQuery - _tWalk)} apply=${Math.round(_tEnd - _tQuery)}`
       );
     } catch (e) {}
   }
