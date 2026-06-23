@@ -434,10 +434,17 @@ composited backdrop).
   dark-on-dark as passing. That polarity-aware near-black-honest shape *is* APCA's. Needing
   (ii) is the theorem; APCA is the instrument.
 
-- **Chroma-compression is a basis correction, not a softening.** By Helmholtz–Kohlrausch
-  the luminance channel reads saturated chroma as *added* brightness, so to land a mark at
-  a target band-luminance you *must* shed chroma — otherwise residual chroma re-inflates
-  perceived luminance and the mark drifts out of band.
+- **Hold chroma, never *add* it (Helmholtz–Kohlrausch) — a basis correction, not a
+  softening.** By H-K the luminance channel reads saturated chroma as *added* brightness, so
+  re-saturating a mark to push it lighter would re-inflate perceived luminance and drift it
+  out of band. The forced consequence is the *one-sided* rule **never add chroma**: move only
+  lightness and hold the original chroma, reducing it *only* where the (L, h) move lands
+  outside sRGB gamut (a gamut clip, not a perceptual H-K compression). **This is what
+  ships** — `colormath.js correct()` and patch 0013's `GjoaDarkText` carry `C0` unchanged and
+  gamut-clip at fixed (L, h); see the verdict's "holding the two identity (chroma) coordinates
+  fixed." A perceptual H-K *compression curve* that actively sheds chroma toward a measured
+  band-luminance is a confessed-free, **unshipped** refinement (below, M4+) — forced in
+  *direction* but not in magnitude, since the H-K effect is strongly hue-dependent.
 
 - **Freeze-surfaces-then-solve-text is forced by convergence.** A joint fg+bg fixed point
   *oscillates* (darken the ground → mark too close; lighten the mark → too bright; round
@@ -456,22 +463,32 @@ composited backdrop).
 `RETONE` = a per-document, role-resolved, **sequenced** luminance frame-shift, evaluated
 where role and the real backdrop both exist (layout / `nsTextFrame` paint, **not**
 WebRender's flat `ColorF`), realized in a hue-separable perceptually-uniform space
-(OKLab/OKLCH/HCT as instrument):
+(OKLab/OKLCH/HCT as instrument). The full operator below is the *target*; the milestone
+ladder (Part II) marks what ships today. **Shipped (M0–M3):** the per-mark solve (step 3) —
+`colormath.js correct()` ported to patch 0013's `GjoaDarkText`, run at `nsTextPaintStyle::
+GetTextColor` against the effective backdrop, holding hue, holding chroma and gamut-clipping
+only. **Not yet shipped:** the explicit surface ramp-freeze with a ~#121212 floor (step 2)
+and the halation-ceiling-as-band-clamp (step 4 of the milestone ladder, M4) — today's
+surfaces reach "dark" via patch 0009's *floorless* `Y→1−Y` luminance flip, not a floored
+ramp.
 
 0. **Identity gate.** If the document is declared-dark **and measures legible-in-band**
    under P2, return the zero transform (Tier 0). Else:
 1. **Partition** by the role the layout resolver still knows — surface / mark
    (text, icon, border) / photo. Photographs, canvas, video, WebGL are **outside the
    domain**: never recolored.
-2. **Freeze surfaces.** Map each surface's lightness *monotonically* (sign/order-
-   preserving) onto a dark ramp floored at ~#121212 (never #000), holding hue, compressing
-   chroma to gamut; **freeze** them.
-3. **Solve marks** against the now-constant ground: per mark, a 1-D monotone APCA
-   root-find on the *luminance* coordinate to land |Lc(mark, frozen-ground)| inside the
-   band [floor ~Lc 60 body / ~45 large … ceiling ~Lc 90], choosing the polarity that
-   maximizes APCA against this backdrop, holding hue, compressing chroma (H-K). *This is
-   gjoa's proven `snap.js correct(fg, bg, T)`* — polarity-pick + binary-search the minimal
-   hue-preserving shift that clears the floor (+3 hysteresis), capped below the ceiling.
+2. **Freeze surfaces.** *(Target — M3/M4, not yet shipped; today's surfaces are flipped by
+   patch 0009's floorless `Y→1−Y`.)* Map each surface's lightness *monotonically* (sign/order-
+   preserving) onto a dark ramp floored at ~#121212 (never #000), holding hue, gamut-clipping
+   chroma; **freeze** them.
+3. **Solve marks** against the now-constant ground *(shipped — M3)*: per mark, a 1-D monotone
+   APCA root-find on the *luminance* coordinate to land |Lc(mark, frozen-ground)| inside the
+   band [floor ~Lc 45 (`correct()`'s default) … ceiling ~Lc 90], choosing the polarity that
+   maximizes APCA against this backdrop, holding hue, **holding chroma** (and gamut-clipping
+   only — never re-saturating: the H-K "never add" rule). *This is gjoa's proven `colormath.js
+   correct(fg, bg, T, ceiling)`* (ported to `GjoaDarkText`) — polarity-pick + binary-search
+   the minimal hue-preserving lightness shift that clears the floor (+3 hysteresis), with a
+   ceiling backstop.
 4. **Scrim** over role=photo bearing text: a minimal dark scrim (itself a P2 emitting
    surface) re-establishes a ground — patch 0010 as a theorem.
 5. **Idempotent throughout:** any pair already in-band and under-budget maps to itself.
@@ -494,27 +511,31 @@ Every architectural piece is a *consequence*, not a module chosen for convenienc
 | Soft-dark floor ~#121212, never #000 | P2 (pure black maximizes halation + collapses surface order) |
 | Never-touch-photo + scrim | P1+P3 (no pair to conserve) **and** P2 (gratuitous photons) |
 | Declared-dark = identity; the tiers | P2 zero-distance case; tiers = the operator's domain partition |
-| Chroma compression | Helmholtz–Kohlrausch (saturated chroma reads as luminance) |
+| Hold chroma, never add it (gamut-clip only) | Helmholtz–Kohlrausch (saturated chroma reads as luminance) — forces the one-sided "never add"; shipped as hold-fixed + gamut-clip |
 
 ### Constants: forced vs confessed-free
 
 **Forced (derived, not chosen):** Δh = 0 (hold hue); monotone reflected lightness order;
 surfaces-before-text sequencing; a perceptually-uniform hue-separable space; a
-polarity-aware near-black-honest contrast metric; the *direction and necessity* of
-chroma-compression; the *existence* of a two-sided band, a near-black floor, and a
-size-dependent legibility floor.
+polarity-aware near-black-honest contrast metric; the *one-sided "never add chroma"* rule
+(H-K) — which the shipped solver realizes as *hold chroma fixed + gamut-clip only*; the
+*existence* of a two-sided band, a near-black floor, and a size-dependent legibility floor.
 
 **Confessed free (honest debts, like Why-Fram's cardinality concession):**
 
 - Legibility floor numbers (~Lc 60 body / 45 large): *that* a size-dependent floor exists
-  is forced (CSF); the values are APCA reading-research calibration. `snap.js` default 45.
+  is forced (CSF); the values are APCA reading-research calibration. The shipped solver
+  (`colormath.js correct()` / `GjoaDarkText`) uses a single floor of 45 — patch 0013 calls it
+  `(…, 45.0f, 90.0f)`; the size-dependent split is not yet wired.
 - Halation ceiling (~Lc 90) and floor hex (~#121212–#1E1E1E): forced *in kind*, free in
   exact value (display gamma, ambient, individual glare sensitivity unmodeled).
 - The native-dark luminance threshold `0.22` (patch 0009): genuinely free **and
   mis-specified** — it approximates P2's identity clause with a frame-1 pixel guess instead
   of reading the `color-scheme` *declaration* and measuring the band. MIT passes 0.22 yet
   fails the band. Replace it (M4).
-- The chroma-compression *curve* (perceptual vs clip; HCT vs OKLCH gamut-map); the `+3`
+- The chroma-handling *curve* — the shipped choice is **gamut-clip at fixed (L, h)** (the
+  cheap end); a perceptual H-K *compression* curve (HCT vs OKLCH gamut-map) is the unshipped
+  alternative, free because H-K magnitude is hue-dependent; the `+3`
   hysteresis margin; the photo scrim alpha (~0.55); *which library* realizes the space /
   the metric; the retone cache eviction policy (granularity is forced — paint-time
   frame-level, **not** Stylo's rule-keyed cache — eviction is free).
@@ -625,9 +646,13 @@ spending a single Lane-3 build on the C++ paint hook.**
 
 **Status (2026-06-21):** M0 ✅ (`colormath.js` + 11-test gate, wired into `bun run test`).
 M1 ✅ committed `patches/0012` (role choke-point, identity-gated). M2 ✅ committed `fb23599`
-(fixes DB 2→69, 6-agent quality-gated). M3 ✅ committed `patches/0013` (`GjoaDarkText.{h,cpp}`
-= the colormath port, hooked at `nsTextPaintStyle::GetTextColor`) — **first engine build in
-progress**. M4 (Tier-0 color-scheme bit) in progress. M5 pending (after M3/M4 verify). Note:
+(fixes DB 2→69, 6-agent quality-gated). M3 ✅ committed `patches/0013` — but only the
+**text re-solve half** (`GjoaDarkText.{h,cpp}` = the colormath port, hooked at
+`nsTextPaintStyle::GetTextColor`); the M3 row's **surface ramp-freeze onto ~#121212** is
+**NOT** in 0013 — surfaces still go dark via patch 0009's *floorless* `Y→1−Y`, and the
+floored freeze + halation ceiling are deferred to M4/M5. **First engine build in
+progress**. M4 (Tier-0 color-scheme bit + floored ramp + ceiling clamp) in progress. M5
+pending (after M3/M4 verify). Note:
 the engine build runs `GjoaDarkText` directly at `nsTextPaintStyle::GetTextColor` — the draft
 found `mFrameBackgroundColor` already carries the opaque ancestor-composited backdrop, so the
 "hardest risk" (backdrop acquisition) was already solved by an existing primitive.
@@ -747,11 +772,13 @@ APCA/OKLab as "instruments"; the band numbers as "confessed free").
   genuinely poor near black. *Caveat:* APCA is **not** a standard — it was a WCAG 3
   candidate, removed from the draft in 2023, non-normative as of 2026. Use it as the
   instrument; never imply it is The Standard.
-- **Helmholtz–Kohlrausch (compress chroma)** — *supported-but-debated.* The effect (chroma
+- **Helmholtz–Kohlrausch (never *add* chroma)** — *supported-but-debated.* The effect (chroma
   reads as added brightness) is established. *Caveat:* the magnitude is strongly
-  hue-dependent (large for blue/red, ~nil for yellow), so the *direction* of
-  chroma-compression is forced but a single fixed magnitude is not — exactly why the
-  compression curve is a confessed free parameter, not a derived constant.
+  hue-dependent (large for blue/red, ~nil for yellow), so the *direction* — never re-saturate
+  while pushing a mark lighter — is forced, but a single fixed compression magnitude is not.
+  That is why the shipped solver takes the conservative reading (hold chroma, gamut-clip only)
+  and a perceptual H-K compression *curve* remains a confessed free parameter, not a derived
+  constant.
 - **Soft-dark floor / avoid pure-white-on-pure-black** — *supported-but-debated.* Polarity
   and glance-legibility effects are measured (Dobres et al., *Applied Ergonomics*); the
   ~#121212 floor is Material Design guidance. *Caveat:* "halation" is a motivating
