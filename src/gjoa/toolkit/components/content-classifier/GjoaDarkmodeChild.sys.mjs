@@ -578,6 +578,17 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         "data-gjoa-normalize-detail",
         `els=${els.length} walk=${Math.round(_tWalk - _t0)} query=${Math.round(_tQuery - _tWalk)} apply=${Math.round(_tEnd - _tQuery)}`
       );
+      // #137: a harness-readable channel that survives the content-handle detach the
+      // colorInversionOverride write causes (which makes the DOM-attr read flaky under
+      // Marionette — the same wall that blocks the content-context contrast harness).
+      // Pref-gated, zero overhead off. Format is tab-delimited for trivial parsing.
+      if (Services.prefs.getBoolPref("gjoa.darkmode.normalize.logms", false)) {
+        dump(
+          `GJOA_NORMALIZE_MS\t${doc.documentURI}\tms=${Math.round(_tEnd - _t0)}` +
+            `\tels=${els.length}\twalk=${Math.round(_tWalk - _t0)}` +
+            `\tquery=${Math.round(_tQuery - _tWalk)}\tapply=${Math.round(_tEnd - _tQuery)}\n`
+        );
+      }
     } catch (e) {}
   }
 

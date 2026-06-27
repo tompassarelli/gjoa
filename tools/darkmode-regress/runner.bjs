@@ -18,7 +18,7 @@
             [path :as path]
             [gjoa.tools.test-driver.marionette :refer [connect-marionette]]))
 (define-mode strict)
-(declare-extern [process console JSON Promise Error setTimeout Object URL] Any)
+(declare-extern [process console JSON Promise Error setTimeout Object URL Date parseInt Math] Any)
 
 ;; content-context: wait two requestAnimationFrames (the next painted frame).
 (def RAF-JS :- String
@@ -27,9 +27,6 @@
 ;; content-context: wait (event-driven, rAF-poll) until the in-engine actor signals
 ;; it finished its async normalize pass (data-gjoa-normalized on <html>), so we
 ;; measure the FINAL normalized contrast — not a fixed timer, with a 6s backstop.
-(def WAIT-NORMALIZED-JS :- String
-  "const d=arguments[arguments.length-1];const t0=Date.now();(function p(){if(document.documentElement.hasAttribute('data-gjoa-normalized')){d(true);return;}if(Date.now()-t0>6000){d(false);return;}requestAnimationFrame(p);})();")
-
 (defn make-profile! [] :- String
   (let [dir (.mkdtempSync fs (.join path (.tmpdir os) "gjoa-dmregress-"))
         mode (or (get (.-env process) "GJOA_DM_MODE") "dark")
@@ -40,18 +37,55 @@
         normpref (if (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "0") "false" "true")
         ;; GJOA_DM_NOVA=1 turns FF152's nova content-card inset ON, to reproduce the
         ;; "content not full width + wallpaper margin" report and prove the cause.
-        nova (or (get (.-env process) "GJOA_DM_NOVA") "false")]
+        nova (or (get (.-env process) "GJOA_DM_NOVA") "false")
+        ;; #137: when VERIFYING the in-engine normalizer (NORMALIZE_PREF=1), force
+        ;; every page active + engine invert + force a light source color-scheme, so
+        ;; the contrast-normalize backstop definitely runs and stamps
+        ;; data-gjoa-normalize-ms on each fixture (else already-dark pages skip it).
+        verify (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "1")]
     (.writeFileSync fs (.join path dir "prefs.js")
       (str "user_pref(\"marionette.port\", 2828);\n"
            "user_pref(\"marionette.enabled\", true);\n"
            "user_pref(\"gjoa.darkmode.enabled\", " enabled ");\n"
            "user_pref(\"gjoa.darkmode.mode\", \"" mode "\");\n"
            "user_pref(\"gjoa.darkmode.normalize.enabled\", " normpref ");\n"
-           "user_pref(\"browser.nova.enabled\", " (if (= nova "1") "true" "false") ");\n"))
+           "user_pref(\"browser.nova.enabled\", " (if (= nova "1") "true" "false") ");\n"
+           (if verify
+             (str "user_pref(\"gjoa.darkmode.force\", true);\n"
+                  "user_pref(\"gjoa.darkmode.invert.enabled\", true);\n"
+                  "user_pref(\"layout.css.prefers-color-scheme.content-override\", 1);\n"
+                  ;; #137: emit the per-pass normalizer timing to stdout (dump) — the
+                  ;; channel that survives the content-handle detach; runner greps it.
+                  "user_pref(\"gjoa.darkmode.normalize.logms\", true);\n"
+                  "user_pref(\"browser.dom.window.dump.enabled\", true);\n")
+             "")))
     dir))
 
 (defn host-of [url :- String] :- String
   (try (.-hostname (URL. url)) (catch Error e "site")))
+
+;; A real awaited delay — used only to let the child flush its final dump line
+;; before the runner reads the captured stdout. #137.
+(defn sleep! [ms :- Any] :- Any
+  (Promise. (fn [res :- Any _rej :- Any] :- Any (setTimeout res ms))))
+
+;; #137: parse the child's captured stdout for the pref-gated GJOA_NORMALIZE_MS lines
+;; (tab-delimited: tag url ms=N els=N walk=N query=N apply=N) → timing tuples. PURE (no
+;; side effects) so the caller can poll-retry it while the killed child's stdout buffer
+;; finishes flushing to disk. This is the robust normalizer-perf channel — it survives
+;; the colorInversionOverride write that detaches the Marionette content handle (the
+;; same wall that blocks a content-context DOM-attr read).
+(defn parse-normalizer-timings [dumplog :- String] :- Any
+  (let [text (try (.readFileSync fs dumplog "utf8") (catch Error e ""))
+        timings []]
+    (doseq [ln (.split text "\n")]
+      (when (.startsWith ln "GJOA_NORMALIZE_MS")
+        (let [p (.split ln "\t")]
+          (when (>= (.-length p) 3)
+            (.push timings {:url (aget p 1)
+                            :ms (parseInt (.replace (aget p 2) "ms=" "") 10)
+                            :detail (.join (.slice p 3) " ")})))))
+    timings))
 
 (defn safe-shot [client :- Any] :- Any
   (try (js/await (.takeScreenshot client)) (catch Error e nil)))
@@ -98,17 +132,11 @@
       (let [_c0 (js/await (.setContext client "content"))
             navwarn (js/await (safe-nav! client url))
             _raf (js/await (.executeAsyncScript client RAF-JS []))
-            ;; when verifying the in-engine actor, wait (event-driven) for its async
-            ;; normalize pass to finish before measuring — closes the race where the
-            ;; harness measured a complex page before the actor had applied.
-            _wait (when (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "1")
-                    ;; non-fatal: a site that client-side-redirects mid-wait unloads the
-                    ;; document ("Document was unloaded") — swallow it, don't abort the run.
-                    (try (js/await (.executeAsyncScript client WAIT-NORMALIZED-JS []))
-                         (catch Error e nil)))
-            marker (when (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "1")
-                     (try (js/await (.executeScript client "return document.documentElement.getAttribute('data-gjoa-normalized');" []))
-                          (catch Error e "err")))
+            ;; #137: the in-engine normalizer's per-pass timing is NOT read from the DOM
+            ;; here — the colorInversionOverride write detaches the Marionette content
+            ;; handle (the same wall that blocks the content-context contrast harness). It
+            ;; is emitted to stdout via dump() and collected from the child's captured log
+            ;; after the run (collect-normalizer-timings!).
             meta (js/await (.executeScript client rects-js []))
             _c2 (js/await (.setContext client "chrome"))
             res (js/await (.executeAsyncScript client snap-js [meta threshold normalize? preinvert?]))
@@ -119,7 +147,7 @@
             shot (js/await (safe-shot client))]
         (when shot (.writeFileSync fs (.join path outdir (str host ".png")) shot {:encoding "base64"}))
         {:url url :host host :checked (or (.-checked res) 0) :fails pre-fails
-         :postFails post-fails :applied (.-length correctives) :marker marker
+         :postFails post-fails :applied (.-length correctives)
          ;; two-sided band: marks above the halation ceiling (over-contrast), the
          ;; upper-edge metric the floor-only gate is blind to (docs/darkmode-v2.md).
          :halation (or (.-halationCount res) 0)
@@ -152,10 +180,15 @@
           outdir "dist/darkmode-regress"
           _mk (.mkdirSync fs outdir {:recursive true})
           profile (make-profile!)
+          ;; #137: capture the child's stdout so the pref-gated GJOA_NORMALIZE_MS dump
+          ;; lines survive (the robust normalizer-timing channel — vs the detach-flaky
+          ;; content read). Parsed after the run by collect-normalizer-timings!.
+          dumplog (.join path outdir "normalize-dump.log")
+          logfd (.openSync fs dumplog "w")
           child (spawn bin
                        ["--profile" profile "--marionette" "--no-remote"
                         "--remote-allow-system-access" "--headless"]
-                       {:stdio "ignore"
+                       {:stdio ["ignore" logfd "ignore"]
                         :env (.assign Object {} (.-env process)
                                {"GJOA_ALLOW_INSECURE" "1" "MOZ_HEADLESS" "1"})})
           client (js/await (connect-marionette {:connectTimeoutMs 60000}))
@@ -176,11 +209,8 @@
                              (if (.-err r) (.-err r)
                                (if normalize?
                                  (str "(" (.-checked r) " els, " (.-fails r) "->" (.-postFails r)
-                                      " after " (.-applied r) " fixes)"
-                                      (if (.-marker r) (str " [marker=" (.-marker r) "]") " [marker=ABSENT]"))
+                                      " after " (.-applied r) " fixes)")
                                  (str "(" (.-checked r) " text els, " (.-fails r) " low-contrast)")))))))
-      (.writeFileSync fs (.join path outdir "report.json")
-        (JSON/stringify {:threshold threshold :normalize normalize? :results results} nil 2))
       (let [fail-of (fn [r :- Any] :- Any (if normalize? (.-postFails r) (.-fails r)))
             failed (.filter results (fn [r :- Any] :- Bool (> (fail-of r) 0)))
             errored (.filter results (fn [r :- Any] :- Bool (.-err r)))]
@@ -188,11 +218,32 @@
                            " sites with low-contrast text"
                            (if normalize? " (AFTER normalization)" "")
                            "  (" (.-length errored) " errored) ==="))
-        (.log console (str "report: " outdir "/report.json  + per-site PNGs in " outdir "/"))
-        (js/await (.quit client ["eForceQuit"]))
+        ;; #137: stop the child GRACEFULLY first so it flushes its captured stdout to the
+        ;; dump log on shutdown, then collect the normalizer per-pass timings — poll-retry
+        ;; the parse since the OS writeback of the flushed buffer can lag a second or two.
+        (js/await (.quit client ["eAttemptQuit"]))
         (.disconnect client)
         (when child (.kill child))
-        (.exit process (if (> (.-length failed) 0) 1 0))))))
+        (let [verify? (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "1")
+              _settle (when verify? (js/await (sleep! 800)))
+              t1 (if verify? (parse-normalizer-timings dumplog) [])
+              _settle2 (when (and verify? (= (.-length t1) 0)) (js/await (sleep! 2500)))
+              norm-timings (if (and verify? (= (.-length t1) 0)) (parse-normalizer-timings dumplog) t1)]
+          (doseq [t norm-timings]
+            (try (.appendFileSync fs "metrics/darkmode-normalize.jsonl"
+                   (str (JSON/stringify (.assign Object {:ts (.now Date)} t)) "\n"))
+                 (catch Error e nil)))
+          (when (> (.-length norm-timings) 0)
+            (let [mss (.map norm-timings (fn [t :- Any] :- Any (.-ms t)))
+                  tot (.reduce mss (fn [a :- Any b :- Any] :- Any (+ a b)) 0)]
+              (.log console (str "normalizer: " (.-length norm-timings) " passes measured, "
+                                 "mean " (.round Math (/ tot (.-length norm-timings))) "ms"
+                                 " → metrics/darkmode-normalize.jsonl"))))
+          (.writeFileSync fs (.join path outdir "report.json")
+            (JSON/stringify {:threshold threshold :normalize normalize? :results results
+                             :normalizeTimings norm-timings} nil 2))
+          (.log console (str "report: " outdir "/report.json  + per-site PNGs in " outdir "/"))
+          (.exit process (if (> (.-length failed) 0) 1 0)))))))
 
 (.catch (run!) (fn [e :- Any] :- Any
                  (.error console (str "regress failed: " (or (.-stack e) e)))

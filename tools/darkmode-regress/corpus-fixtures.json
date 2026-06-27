@@ -1,0 +1,15 @@
+{
+  "note": "Deterministic OFFLINE dark-mode corpus — the local contrast fixtures served by tools/test-driver/contrast-fixture-server.mjs on 127.0.0.1:8976. Use for reproducible normalizer perf measurement (#137) and contrast regression without the network-flaky public-site corpus. Run: bun tools/test-driver/contrast-fixture-server.mjs &  then  GJOA_DM_NORMALIZE_PREF=1 GJOA_DM_CORPUS=tools/darkmode-regress/corpus-fixtures.json bun .beagle-tools/gjoa/tools/darkmode-regress/runner.js <gjoa-bin>",
+  "threshold": 45,
+  "sites": [
+    { "url": "http://127.0.0.1:8976/dark-text-hero", "tag": "near-black-text" },
+    { "url": "http://127.0.0.1:8976/docs-codeblocks", "tag": "code-syntax" },
+    { "url": "http://127.0.0.1:8976/editorial-card", "tag": "transparency-composite" },
+    { "url": "http://127.0.0.1:8976/github", "tag": "gradient-ui" },
+    { "url": "http://127.0.0.1:8976/hacker-news", "tag": "owns-dark-mode" },
+    { "url": "http://127.0.0.1:8976/mit-news", "tag": "white-header" },
+    { "url": "http://127.0.0.1:8976/svg-logo", "tag": "svg-diagram" },
+    { "url": "http://127.0.0.1:8976/wikipedia", "tag": "white-header" },
+    { "url": "http://127.0.0.1:8976/youtube", "tag": "hero-photo" }
+  ]
+}
