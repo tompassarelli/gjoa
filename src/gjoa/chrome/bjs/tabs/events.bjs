@@ -10,6 +10,31 @@
 
 (declare-extern [Services gBrowser] Any)
 
+;; FF152 dropped the AboutNewTab.newTabURL hook, so chrome://gjoa-newtab no longer
+;; registers as a "blank page" for Firefox's focus-the-urlbar-on-new-tab treatment:
+;; on first load (and fresh new tabs) focus lands on the <browser>, where vim then
+;; eats the user's first keystroke — they typed expecting the urlbar, like stock
+;; Firefox. Restore that default: a blank gjoa newtab with an empty urlbar gets the
+;; urlbar focused. setTimeout(0) beats the default <browser> focus; guards keep it
+;; from stealing focus on real pages or a non-empty urlbar.
+(defn maybe-focus-urlbar! [] :- Any
+  (let [win (.-ownerGlobal gBrowser)]
+    (when win
+      (.setTimeout win
+        (fn []
+          (try
+            (let [spec (or (some-> gBrowser .-selectedBrowser .-currentURI .-spec) "")
+                  u (.-gURLBar win)]
+              (when (and u
+                         (or (.startsWith spec "chrome://gjoa-newtab")
+                             (= spec "about:newtab") (= spec "about:home")
+                             (= spec "about:blank"))
+                         (= (or (.-value u) "") ""))
+                (.focus u)
+                (.select u)))
+            (catch Any _e nil)))
+        0))))
+
 ;; Find previous tab in array matching predicate, searching backwards (multi-site)
 (defn find-prev-matching [tabs-arr :- Any idx :- Int pred :- Any] :- Any
   (loop [i idx]
@@ -524,7 +549,9 @@
               (when (and row (not= (.-cursor state) row))
                 (.setCursor vim row))
               (when (is-horizontal)
-                (.updateHorizontalGrid rows)))))
+                (.updateHorizontalGrid rows)))
+            ;; switching to a blank gjoa newtab focuses the urlbar (FF default)
+            (maybe-focus-urlbar!)))
 
         on-tab-attr-modified
         #(.syncTabRow rows (.-target %))
@@ -580,7 +607,9 @@
                             (.-inSessionRestore state)}))
                     (set! (.-length saved-tab-queue) 0)
                     (set! (.-inSessionRestore state) false)
-                    (.scheduleTreeResync rows))
+                    (.scheduleTreeResync rows)
+                    ;; first load lands focus on the <browser>; put it in the urlbar
+                    (maybe-focus-urlbar!))
 
                   on-manual-restore
                   (fn []

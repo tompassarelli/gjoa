@@ -696,6 +696,41 @@
 
 (defn safe-init [] :- Any
   (-> (init!)
+      (.then (fn [_]
+               ;; First load: FF152's blank-page urlbar-focus treatment no longer
+               ;; recognizes the gjoa newtab (about:newtab is redirected to a
+               ;; chrome:// doc), so Firefox focuses the content <browser> and vim
+               ;; eats the user's first keystroke (they typed expecting the urlbar,
+               ;; like stock Firefox). Put the cursor in the urlbar, and re-assert
+               ;; ONCE if Firefox steals focus to the <browser> while the newtab
+               ;; content loads. One-shot + hard stop so it never fights a real click.
+               (let [u (.-gURLBar window)]
+                 (when u
+                   (let [blank? (fn [] :- Bool
+                                  (let [spec (or (some-> gBrowser .-selectedBrowser .-currentURI .-spec) "")]
+                                    (or (.startsWith spec "chrome://gjoa-newtab")
+                                        (= spec "about:newtab") (= spec "about:home")
+                                        (= spec "about:blank"))))
+                         focus-it! (fn []
+                                     (when (and (blank?) (= (or (.-value u) "") ""))
+                                       (try (.focus u) (.select u) (catch Any _e nil))))
+                         holder :- Any {:fn nil}
+                         stop! (fn []
+                                 (when (.-fn holder)
+                                   (.removeEventListener window "focusin" (.-fn holder) true)
+                                   (set! (.-fn holder) nil)))]
+                     (set! (.-fn holder)
+                       (fn [e]
+                         (when (= (some-> e .-target .-tagName) "browser")
+                           (focus-it!)
+                           (stop!))))
+                     (.addEventListener window "focusin" (.-fn holder) true)
+                     (.setTimeout window stop! 2500)
+                     (.setTimeout window focus-it! 120)
+                     (.setTimeout window
+                       (fn [] (console/log (str "gjoa-urlbar-focus FINAL active="
+                                                (some-> window .-document .-activeElement .-tagName))))
+                       2200))))))
       (.catch #(console/error "gjoa-tabs: init() threw — sidebar may be empty" %))))
 
 ;; --- clone-node-fields: copy the 6 persistence fields into a fresh object ---
