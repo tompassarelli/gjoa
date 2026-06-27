@@ -387,6 +387,96 @@ export class GjoaInputChild extends JSWindowActorChild {
     return { state: "active" };
   }
 
+  // --- visual / caret mode (#130 P6) --------------------------------------------
+  // 'v' seeds a caret at the first visible text and enters visual mode; hjkl/w/b
+  // EXTEND the selection (a visible highlight — a pure invisible caret is useless
+  // headless and without caret-browsing), 'y' yanks it, ESC clears. The Selection
+  // IS the state — no field to track beyond what the DOM holds.
+  #visualSeed() {
+    const win = this.contentWindow,
+      doc = this.document;
+    if (!win || !doc || !doc.body) {
+      return null;
+    }
+    const sel = win.getSelection();
+    if (!sel) {
+      return null;
+    }
+    if (sel.rangeCount && !sel.isCollapsed) {
+      return sel; // keep an existing selection as the anchor
+    }
+    // first non-empty, laid-out text node
+    try {
+      const walker = doc.createTreeWalker(doc.body, win.NodeFilter.SHOW_TEXT, {
+        acceptNode(n) {
+          return n.nodeValue &&
+            n.nodeValue.trim() &&
+            n.parentElement &&
+            n.parentElement.getClientRects().length
+            ? win.NodeFilter.FILTER_ACCEPT
+            : win.NodeFilter.FILTER_SKIP;
+        },
+      });
+      const first = walker.nextNode();
+      sel.removeAllRanges();
+      sel.collapse(first || doc.body, 0);
+    } catch (_) {
+      try {
+        sel.collapse(doc.body, 0);
+      } catch (_) {}
+    }
+    return sel;
+  }
+
+  #visualStart() {
+    const sel = this.#visualSeed();
+    return { ok: !!sel };
+  }
+
+  // dir: left|right|forward|backward, unit: character|word|line|lineboundary.
+  #visualMove(dir, unit) {
+    const win = this.contentWindow;
+    if (!win) {
+      return { ok: false };
+    }
+    const sel = win.getSelection();
+    if (!sel) {
+      return { ok: false };
+    }
+    try {
+      sel.modify("extend", dir, unit);
+      // keep the moving edge on screen
+      if (sel.focusNode && sel.focusNode.parentElement) {
+        sel.focusNode.parentElement.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    } catch (_) {
+      return { ok: false };
+    }
+    return { ok: true, len: sel.toString().length };
+  }
+
+  #visualYank() {
+    const win = this.contentWindow,
+      doc = this.document;
+    const sel = win && win.getSelection();
+    const text = sel ? sel.toString() : "";
+    let copied = false;
+    try {
+      copied = doc.execCommand("copy"); // copies the live selection
+    } catch (_) {}
+    return { ok: true, len: text.length, copied };
+  }
+
+  #visualCancel() {
+    try {
+      const sel = this.contentWindow && this.contentWindow.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+      }
+    } catch (_) {}
+    return { ok: true };
+  }
+
   receiveMessage(msg) {
     if (msg.name === "GjoaInput:ScrollStart") {
       const dy = typeof msg.data?.dy === "number" ? msg.data.dy : 0;
@@ -410,6 +500,14 @@ export class GjoaInputChild extends JSWindowActorChild {
     } else if (msg.name === "LinkHints:Cancel") {
       this.#clearHints();
       return { state: "cancelled" };
+    } else if (msg.name === "Visual:Start") {
+      return this.#visualStart();
+    } else if (msg.name === "Visual:Move") {
+      return this.#visualMove(msg.data && msg.data.dir, msg.data && msg.data.unit);
+    } else if (msg.name === "Visual:Yank") {
+      return this.#visualYank();
+    } else if (msg.name === "Visual:Cancel") {
+      return this.#visualCancel();
     }
     return undefined;
   }

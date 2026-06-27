@@ -117,9 +117,26 @@ def main():
         "return !!document.querySelector('findbar:not([hidden]), .findbar:not([hidden])');")
     print(f"P5 '/' binding: findbar_open={findbar}", file=sys.stderr)
 
+    # --- P6: visual mode -> selection extends -----------------------------------
+    m.ctx("chrome"); m.key("Escape"); time.sleep(0.3)
+    m.exe("try{gBrowser.selectedBrowser.focus();}catch(e){}; return 1;")
+    m.key("v"); time.sleep(0.4)            # enter visual mode (seed caret)
+    for _ in range(8):
+        m.key("l")                        # extend right by characters
+    m.key("w"); m.key("w"); time.sleep(0.4)  # extend by words
+    m.ctx("content")
+    seltext = m.exe("var s=window.getSelection(); return s ? s.toString().length : 0;")
+    png2 = base64.b64decode(m.shot())
+    with open(a.out.replace(".png", "-visual.png"), "wb") as f:
+        f.write(png2)
+    print(f"P6 visual mode: {seltext} chars selected", file=sys.stderr)
+    m.ctx("chrome"); m.key("y"); time.sleep(0.2)  # yank + exit
+
     p4 = bool(hints and hints > 0)
-    ok = p4 and bool(findbar)
-    print("RESULT:", "PASS" if ok else f"P4={'ok' if p4 else 'FAIL'} P5={'ok' if findbar else 'FAIL'}",
+    p6 = bool(seltext and seltext > 0)
+    ok = p4 and bool(findbar) and p6
+    print("RESULT:", "PASS" if ok else
+          f"P4={'ok' if p4 else 'FAIL'} P5={'ok' if findbar else 'FAIL'} P6={'ok' if p6 else 'FAIL'}",
           file=sys.stderr)
     m.quit()
     sys.exit(0 if ok else 2)

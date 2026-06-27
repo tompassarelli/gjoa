@@ -51,6 +51,7 @@
    {:id "find"          :key "/" :desc "find in page"                      :cat "Navigation"}
    {:id "findNext"      :key "n" :desc "find next"                         :cat "Navigation"}
    {:id "findPrev"      :key "N" :desc "find previous"                     :cat "Navigation"}
+   {:id "visualMode"    :key "v" :desc "visual select (hjkl/w/b extend, y yank)" :cat "Navigation"}
    {:id "scrollDown"    :key "j" :desc "scroll down"                       :cat "Scrolling"}
    {:id "scrollUp"      :key "k" :desc "scroll up"                         :cat "Scrolling"}
    {:id "toggleCompact" :key "e" :desc "toggle compact mode"              :cat "Layout"}
@@ -155,7 +156,8 @@
            :which-key-el nil
            :leader-prev-focus nil
            :leader-focus-stash nil
-           :link-hints-active false}
+           :link-hints-active false
+           :visual-active false}
 
         commit-tree (fn [targets]
           (.forEach targets #(.syncAnyRow rows %))
@@ -711,6 +713,53 @@
                              (fn [_e] (set! (.-link-hints-active vs) false)))
                       (catch Any _e (set! (.-link-hints-active vs) false)))))))))
 
+        ;; --- visual / caret mode (#130 P6) ----------------------------------------
+        ;; 'v' seeds a caret + enters visual mode; hjkl/w/b extend the page selection
+        ;; (the actor calls Selection.modify), y yanks (execCommand copy), ESC clears.
+        start-visual (fn [] :- Any
+          (let [a (link-hints-actor)]
+            (when a
+              (set! (.-visual-active vs) true)
+              (try
+                (.then (.sendQuery a "Visual:Start" {})
+                       (fn [r] (when (or (not r) (not (.-ok r)))
+                                 (set! (.-visual-active vs) false)))
+                       (fn [_e] (set! (.-visual-active vs) false)))
+                (catch Any _e (set! (.-visual-active vs) false))))))
+
+        end-visual (fn [yank?] :- Any
+          (set! (.-visual-active vs) false)
+          (let [a (link-hints-actor)]
+            (when a
+              (if yank?
+                (try (.then (.sendQuery a "Visual:Yank")
+                            (fn [r] (when r (modeline-msg (str "yanked " (.-len r) " chars") 2000))))
+                     (catch Any _e nil))
+                (try (.sendQuery a "Visual:Cancel") (catch Any _e nil))))))
+
+        visual-move-of (fn [k] :- Any
+          (cond
+            (= k "h") {:dir "left"     :unit "character"}
+            (= k "l") {:dir "right"    :unit "character"}
+            (= k "j") {:dir "forward"  :unit "line"}
+            (= k "k") {:dir "backward" :unit "line"}
+            (= k "w") {:dir "forward"  :unit "word"}
+            (= k "b") {:dir "backward" :unit "word"}
+            (= k "0") {:dir "backward" :unit "lineboundary"}
+            (= k "$") {:dir "forward"  :unit "lineboundary"}
+            :else nil))
+
+        handle-visual-key (fn [e] :- Any
+          (let [k (.-key e)]
+            (cond
+              (key= e "Escape") (end-visual false)
+              (= k "y")         (end-visual true)
+              :else
+              (let [mv (visual-move-of k)]
+                (when mv
+                  (let [a (link-hints-actor)]
+                    (when a (try (.sendQuery a "Visual:Move" mv) (catch Any _e nil)))))))))
+
         ;; id → action. The one place each command's behavior lives; dispatch and
         ;; (later) about:vim / :bind reference commands by id. `e` is the keydown.
         command-handlers (fn [e id] :- Any
@@ -764,6 +813,7 @@
               (try (.then (.getFindBar gBrowser)
                           (fn [fb] (when fb (.onFindAgainCommand fb true))))
                    (catch Any _e nil))
+            (= id "visualMode")      (start-visual)
             :else nil))
 
         try-dispatch-binding (fn [e] :- Bool
@@ -1760,6 +1810,9 @@
                   (if (.-link-hints-active vs)
                     (do (.preventDefault e) (.stopImmediatePropagation e)
                         (handle-link-hints-key e))
+                  (if (.-visual-active vs)
+                    (do (.preventDefault e) (.stopImmediatePropagation e)
+                        (handle-visual-key e))
                   (if (and (key= e "Escape")
                            (.-which-key-el vs)
                            (not (.-hidden (.-which-key-el vs))))
@@ -1779,7 +1832,7 @@
                               (when (not handled)
                                 (.preventDefault e)
                                 (.stopImmediatePropagation e)))))
-                        (try-dispatch-binding e)))))))))
+                        (try-dispatch-binding e))))))))))
           (onc! document "keyup"
             (fn [e]
               (when (or (key= e "j") (key= e "k"))
