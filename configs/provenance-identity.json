@@ -1,0 +1,11 @@
+{
+  "$schema": "gjoa provenance identity (generated — do not edit by hand)",
+  "note": "L4 baked-provenance identity. `digest` is one sha256 over EVERY locked blob OID + hunk hash in configs/upstream-provenance.json — the supply-chain coordinate proving the binary was built against unmodified Mozilla blobs. BUILD-GATED: stamping this into the binary's version/provenance metadata happens at compile time (not done here — no build). Regenerate with `provenance lock`; a mismatch vs the lock fails `check`.",
+  "generator": "tools/prep/upstream-provenance.bjs (lock)",
+  "baseline": "152.0.1",
+  "tag": "FIREFOX_152_0_1_RELEASE",
+  "digest": "de4cb46984a8004451a083b255a3ce4ba9a27901f244d40466bc127bb7cf6dea",
+  "patches": 10,
+  "files": 39,
+  "hunks": 68
+}

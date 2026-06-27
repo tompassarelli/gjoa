@@ -1,0 +1,10 @@
+{
+  "$schema": "gjoa provenance × security cross-check (generated — do not edit by hand)",
+  "note": "L5 cross-check: for each `# security:`-tagged patch, whether its LOCKED upstream blob/hunk anchor changed vs the checked ref. A finding means Mozilla touched the code a mitigation rides on — they may have fixed it (drop the patch) or refactored (re-verify). Empty list = the honest baseline (zero security-tagged patches). Overlay mitigations in configs/security-mitigations.json are chrome JS, not upstream-anchored — out of scope here. The gitignored human ledger is private-docs/security-findings.edn; THIS is the tracked machine artifact. Regenerate via `upstream-provenance check --security`.",
+  "generator": "tools/prep/upstream-provenance.bjs (check --security)",
+  "baseline": "152.0.1",
+  "tag": "FIREFOX_152_0_1_RELEASE",
+  "ref": "FIREFOX_152_0_1_RELEASE",
+  "securityPatches": [],
+  "findings": []
+}

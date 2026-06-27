@@ -1,66 +1,765 @@
 {
-  "note": "Upstream provenance lock (churn anti-rot). Per patch, the git blob OID of every file it touches, at the baseline Firefox tag. `check` diffs these vs any ref: identical OID => that patch's context PROVABLY can't have rotted (skip it); differing => potential conflict; \"absent\" => a file gjoa creates (collision-checked). Regenerate after any patch/baseline change: provenance lock.",
+  "note": "Upstream provenance lock (churn anti-rot). Per patch, per touched file: the git blob OID (whole-file) PLUS per-hunk anchors {oid, hunks:[{header,range,hash}]} — each hunk's baseline old-side line span hashed at the Firefox tag. `check` diffs vs any ref: identical OID => provably unrotted (skip); OID changed but every hunk hash intact => still apply-safe (edit was OUTSIDE the hunks); a changed hunk => potential conflict; \"absent\" => a file gjoa creates (collision-checked). Legacy bare-string entries still read (degrade to whole-file precision). `digest` = one sha256 over the whole locked surface (baked-identity coordinate; self-verifying — `check` flags a hand-edit). Regenerate after any patch/baseline change: provenance lock.",
   "baseline": "152.0.1",
   "tag": "FIREFOX_152_0_1_RELEASE",
+  "digest": "de4cb46984a8004451a083b255a3ce4ba9a27901f244d40466bc127bb7cf6dea",
   "patches": {
     "0001-browser-components-mozbuild-include-gjoa.patch": {
-      "browser/components/moz.build": "799e5246e6d11a3725129975154f524b8fe00a16"
+      "browser/components/moz.build": {
+        "oid": "799e5246e6d11a3725129975154f524b8fe00a16",
+        "hunks": [
+          {
+            "header": "@@ -43,6 +43,7 @@",
+            "range": [
+              43,
+              6
+            ],
+            "hash": "3f58df7c4b283fe0b8878cdec59ee9c2c56a9d7737de08a5e93b8066f07aa6c0"
+          }
+        ]
+      }
     },
     "0002-browser-glue-import-gjoa-loader.patch": {
-      "browser/components/BrowserGlue.sys.mjs": "d07aaa3fbb8ccb02ae00d845649dc9c1d623cba5"
-    },
-    "0007-enable-sqlite-fts5.patch": {
-      "third_party/sqlite3/src/moz.build": "da931832e0c142c7a03c5e60e589b13f3f2073fe"
-    },
-    "0008-content-classifier-cosmetic-filtering.patch": {
-      "Cargo.lock": "ae3d1519dfa7f76b37adfa2375d16a3fd4fc24e9",
-      "toolkit/components/content-classifier/ContentClassifierService.cpp": "8ea41794189df7508a2456d4c1ba96527e891e85",
-      "toolkit/components/content-classifier/ContentClassifierService.h": "a1e5b9871a41b594da05f11f267df5c06829f01a",
-      "toolkit/components/content-classifier/components.conf": "522b94ffa01139d2998086967322fec497676fd2",
-      "toolkit/components/content-classifier/content_classifier_engine/Cargo.toml": "2a56e9f630199789c63ff153123793416ffe31c7",
-      "toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.cpp": "ae6ba60e720375d279779f628b110ae7d9d6d677",
-      "toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.h": "b9c414cce48d91197c1f27e066dd866bad148367",
-      "toolkit/components/content-classifier/content_classifier_engine/src/lib.rs": "295b3bfd8ba77f388ec80d22f93d2a87a8b43908",
-      "toolkit/components/content-classifier/moz.build": "e65d3eebce26a8d866f65bc62d2f046037cfd663",
-      "toolkit/components/content-classifier/nsIContentClassifierService.idl": "8f408b3f0daf303e9e90b2f41c67e3d6f992a4d5"
-    },
-    "0009-dark-mode-engine-color-inversion.patch": {
-      "docshell/base/BrowsingContext.cpp": "e8b50c654849f00d968a43cffd99ef88116bd0c9",
-      "docshell/base/BrowsingContext.h": "02abb6ab9562a7b41f4a95a6289c80da8d1176e8",
-      "dom/chrome-webidl/BrowsingContext.webidl": "d0508a8c29e5bd008213f781beb8eb1fcb458fb8",
-      "layout/base/PresShell.cpp": "9d651a17a91d2975017f5e21f1f533c13cc17659",
-      "layout/base/nsPresContext.cpp": "b2394c61069797a5ca8831c6ce5a37cdf425ec93",
-      "layout/base/nsPresContext.h": "13aa7141c8e5297d0dd6aa9bd78fd32f050e8123",
-      "servo/components/style/device/gecko.rs": "7ed8c2c7a10da302ed2bbeeb3b8c75d5f5f37c08",
-      "servo/components/style/values/specified/color.rs": "9c55023eb0ad182dcd4490d66bafc4b4a98cf083"
-    },
-    "0010-dark-mode-island-scrim.patch": {
-      "layout/painting/nsDisplayList.cpp": "0243566311058462dc6dfc7dbe3774de94e3b194",
-      "servo/components/style/properties/computed_value_flags.rs": "d13a344e231fa12b9ce803769f41a553d1601517",
-      "servo/components/style/style_adjuster.rs": "1756b77b9be0deb7dc562b142aa2d6553a258af1"
+      "browser/components/BrowserGlue.sys.mjs": {
+        "oid": "d07aaa3fbb8ccb02ae00d845649dc9c1d623cba5",
+        "hunks": [
+          {
+            "header": "@@ -356,6 +356,11 @@",
+            "range": [
+              356,
+              6
+            ],
+            "hash": "3a32a1c32e87920c733ae9894f9531de09d0094434b1d913ba4d738a950150f3"
+          }
+        ]
+      }
     },
     "0003-newtab-redirector-gjoa.patch": {
-      "browser/components/newtab/AboutNewTabRedirector.sys.mjs": "328842c18aa6895273b68de01fda4d60c217e634"
+      "browser/components/newtab/AboutNewTabRedirector.sys.mjs": {
+        "oid": "328842c18aa6895273b68de01fda4d60c217e634",
+        "hunks": [
+          {
+            "header": "@@ -537,15 +537,23 @@",
+            "range": [
+              537,
+              15
+            ],
+            "hash": "62a2213167f539ef438af892bfdf9ba683ad8f7c82509ee0be5094ab42620232"
+          },
+          {
+            "header": "@@ -592,33 +600,23 @@",
+            "range": [
+              592,
+              33
+            ],
+            "hash": "830f3a2538e4cbff8a2f4f0ba11c39e71e91c63d415ca0f245d388352cae78a9"
+          }
+        ]
+      }
+    },
+    "0007-enable-sqlite-fts5.patch": {
+      "third_party/sqlite3/src/moz.build": {
+        "oid": "da931832e0c142c7a03c5e60e589b13f3f2073fe",
+        "hunks": [
+          {
+            "header": "@@ -135,6 +135,9 @@",
+            "range": [
+              135,
+              6
+            ],
+            "hash": "6ca3697e2b145cbf9b0ae11cd2b17ac235d74b5c750733f0423b9b1f9af61b7e"
+          }
+        ]
+      }
+    },
+    "0008-content-classifier-cosmetic-filtering.patch": {
+      "Cargo.lock": {
+        "oid": "ae3d1519dfa7f76b37adfa2375d16a3fd4fc24e9",
+        "hunks": [
+          {
+            "header": "@@ -1116,6 +1116,7 @@",
+            "range": [
+              1116,
+              6
+            ],
+            "hash": "44cd7948b29650c11f0a269b570c5fe185a772b6af58dfefeac14a7730e84bd4"
+          }
+        ]
+      },
+      "toolkit/components/content-classifier/ContentClassifierService.cpp": {
+        "oid": "8ea41794189df7508a2456d4c1ba96527e891e85",
+        "hunks": [
+          {
+            "header": "@@ -25,6 +25,7 @@",
+            "range": [
+              25,
+              6
+            ],
+            "hash": "cc067a3624b2ec52f60e8ecf2a3d4f1f1f92385585c8bfb2350a98a4420f4ac7"
+          },
+          {
+            "header": "@@ -347,6 +348,18 @@",
+            "range": [
+              347,
+              6
+            ],
+            "hash": "5ad3f3d6c24dee5b9c8e9386bb1974f2e4b4ce566f814f4d4b07995ef684a85d"
+          },
+          {
+            "header": "@@ -520,6 +533,24 @@",
+            "range": [
+              520,
+              6
+            ],
+            "hash": "594e0be3a937911359a59a7e2f9e238bded9d0ff343798daac2d8189c8d4b28f"
+          },
+          {
+            "header": "@@ -554,6 +585,109 @@",
+            "range": [
+              554,
+              6
+            ],
+            "hash": "573bdd19772dafa62766b668dfea73012dd6791c372ff0116795758aca807d71"
+          },
+          {
+            "header": "@@ -626,6 +748,12 @@",
+            "range": [
+              626,
+              6
+            ],
+            "hash": "91705629abf3e16a20a3e0bc086ae762efc091811c51cd0579c1e105c868c7b5"
+          }
+        ]
+      },
+      "toolkit/components/content-classifier/ContentClassifierService.h": {
+        "oid": "a1e5b9871a41b594da05f11f267df5c06829f01a",
+        "hunks": [
+          {
+            "header": "@@ -40,6 +40,12 @@",
+            "range": [
+              40,
+              6
+            ],
+            "hash": "3c661719121d83de922110f7ee904a2e6b5e590ecce678674a1cc688cbdd5c74"
+          },
+          {
+            "header": "@@ -73,6 +79,11 @@",
+            "range": [
+              73,
+              6
+            ],
+            "hash": "6e057367c0075ae9ae07b85efcac97eb7d5b823d1e8b13e6fa19798abab154e2"
+          },
+          {
+            "header": "@@ -82,6 +93,11 @@",
+            "range": [
+              82,
+              6
+            ],
+            "hash": "a0ef653db79cadcf6bf41bb4ff1e075469baf62295f553cae5ccbe6a9d9b40ad"
+          }
+        ]
+      },
+      "toolkit/components/content-classifier/components.conf": {
+        "oid": "522b94ffa01139d2998086967322fec497676fd2",
+        "hunks": [
+          {
+            "header": "@@ -13,4 +13,13 @@",
+            "range": [
+              13,
+              4
+            ],
+            "hash": "7c1cdfe806667b6845fabc6cd0db53e5206e4a9355ca9dca9232e174ccac48b5"
+          }
+        ]
+      },
+      "toolkit/components/content-classifier/content_classifier_engine/Cargo.toml": {
+        "oid": "2a56e9f630199789c63ff153123793416ffe31c7",
+        "hunks": [
+          {
+            "header": "@@ -8,6 +8,7 @@",
+            "range": [
+              8,
+              6
+            ],
+            "hash": "7786f389727d800d4caf394aa1844e075618bc2b10e973fba83f3ed6da940b05"
+          }
+        ]
+      },
+      "toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.cpp": {
+        "oid": "ae6ba60e720375d279779f628b110ae7d9d6d677",
+        "hunks": [
+          {
+            "header": "@@ -37,6 +37,28 @@",
+            "range": [
+              37,
+              6
+            ],
+            "hash": "ef1172611d91774314272874141291a99d513ddd6ebdfa04d9c2310833c1047d"
+          }
+        ]
+      },
+      "toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.h": {
+        "oid": "b9c414cce48d91197c1f27e066dd866bad148367",
+        "hunks": [
+          {
+            "header": "@@ -86,9 +86,30 @@",
+            "range": [
+              86,
+              9
+            ],
+            "hash": "c5c8b6ec00ceb84d2ab94a203e5858683151a134cfd614d52f1beac637cf498d"
+          }
+        ]
+      },
+      "toolkit/components/content-classifier/content_classifier_engine/src/lib.rs": {
+        "oid": "295b3bfd8ba77f388ec80d22f93d2a87a8b43908",
+        "hunks": [
+          {
+            "header": "@@ -2,6 +2,7 @@",
+            "range": [
+              2,
+              6
+            ],
+            "hash": "406a7e54fc788219ca95eed9e5d57115e40177fbb230ee5347c4cd7a399b6013"
+          },
+          {
+            "header": "@@ -67,6 +68,28 @@",
+            "range": [
+              67,
+              6
+            ],
+            "hash": "1e289e9916e9b10622427fe420c0e0b0d44c218cc934e9dad9e79d8341b6b14f"
+          },
+          {
+            "header": "@@ -124,6 +147,76 @@",
+            "range": [
+              124,
+              6
+            ],
+            "hash": "0d70128e615d0ceee9aa436fa03145265efddcc4d23871e955144d0563742c66"
+          }
+        ]
+      },
+      "toolkit/components/content-classifier/moz.build": {
+        "oid": "e65d3eebce26a8d866f65bc62d2f046037cfd663",
+        "hunks": [
+          {
+            "header": "@@ -28,6 +28,21 @@",
+            "range": [
+              28,
+              6
+            ],
+            "hash": "f795bb85a04468b99a19ab9b589c4fe3f6d3cea5efecbfe70ab620e66060adae"
+          }
+        ]
+      },
+      "toolkit/components/content-classifier/nsIContentClassifierService.idl": {
+        "oid": "8f408b3f0daf303e9e90b2f41c67e3d6f992a4d5",
+        "hunks": [
+          {
+            "header": "@@ -8,7 +8,7 @@",
+            "range": [
+              8,
+              7
+            ],
+            "hash": "f3002a79cf40c0138c2a41d3e8dccd541affaba2fea8dbefb5ea6d66480b727e"
+          },
+          {
+            "header": "@@ -17,6 +17,14 @@",
+            "range": [
+              17,
+              6
+            ],
+            "hash": "decf18af3322116f5e75f8b3f7132e3654ba248beaf92dfbcf36693d329df8fa"
+          },
+          {
+            "header": "@@ -28,6 +36,29 @@",
+            "range": [
+              28,
+              6
+            ],
+            "hash": "2a940302d5167b291c9372fb3398666fd159324ba37fed2db3ce4797a354d7ce"
+          }
+        ]
+      }
+    },
+    "0009-dark-mode-engine-color-inversion.patch": {
+      "docshell/base/BrowsingContext.cpp": {
+        "oid": "e8b50c654849f00d968a43cffd99ef88116bd0c9",
+        "hunks": [
+          {
+            "header": "@@ -124,6 +124,11 @@",
+            "range": [
+              124,
+              6
+            ],
+            "hash": "57adea39e876435963661644ed24a0f341a48162afe70ab188c7dbeaec7c2e72"
+          },
+          {
+            "header": "@@ -3491,6 +3496,15 @@",
+            "range": [
+              3491,
+              6
+            ],
+            "hash": "ac8016fac618c8994e381fb99f06449aa53957c27c0c2eddecf7687cb00b2c51"
+          }
+        ]
+      },
+      "docshell/base/BrowsingContext.h": {
+        "oid": "02abb6ab9562a7b41f4a95a6289c80da8d1176e8",
+        "hunks": [
+          {
+            "header": "@@ -254,6 +254,8 @@",
+            "range": [
+              254,
+              6
+            ],
+            "hash": "b565083b30c61dc835210071b3ab082866cce1aed230b2a3e2ec054a98d70da7"
+          },
+          {
+            "header": "@@ -1110,6 +1112,10 @@",
+            "range": [
+              1110,
+              6
+            ],
+            "hash": "1b49bd21cb8768c2f67a7b360bcd34e03bfbfc15c90132b6089695dd869bc772"
+          },
+          {
+            "header": "@@ -1325,6 +1331,11 @@",
+            "range": [
+              1325,
+              6
+            ],
+            "hash": "55b3d4322a55db41cd71358ef92e4d24a48b05422ce3ecd6edc8601e931ac495"
+          },
+          {
+            "header": "@@ -1350,6 +1361,9 @@",
+            "range": [
+              1350,
+              6
+            ],
+            "hash": "6110d56fce49fd6e1b295159bfd9b36a345c51e9725f0cc03ff4d1570015b7b3"
+          }
+        ]
+      },
+      "dom/chrome-webidl/BrowsingContext.webidl": {
+        "oid": "d0508a8c29e5bd008213f781beb8eb1fcb458fb8",
+        "hunks": [
+          {
+            "header": "@@ -63,6 +63,13 @@",
+            "range": [
+              63,
+              6
+            ],
+            "hash": "d2465815cb032bc15a028d1daf65775acaada843ca051f3bdece6bc01a8b9b25"
+          },
+          {
+            "header": "@@ -255,6 +262,10 @@",
+            "range": [
+              255,
+              6
+            ],
+            "hash": "1f2f4ad6e6d906b3e18d9991943a7c2ea3b359bea53d727834079e6f965774b7"
+          }
+        ]
+      },
+      "layout/base/PresShell.cpp": {
+        "oid": "9d651a17a91d2975017f5e21f1f533c13cc17659",
+        "hunks": [
+          {
+            "header": "@@ -1703,6 +1703,12 @@",
+            "range": [
+              1703,
+              6
+            ],
+            "hash": "56619a58b4dda80385a31eb70862e0f95b27b4828abaacc19da4101804e0504c"
+          }
+        ]
+      },
+      "layout/base/nsPresContext.cpp": {
+        "oid": "b2394c61069797a5ca8831c6ce5a37cdf425ec93",
+        "hunks": [
+          {
+            "header": "@@ -33,6 +33,7 @@",
+            "range": [
+              33,
+              6
+            ],
+            "hash": "eee2e489caeb041a9e3ee11a1cda08a63b74bb6d55af6aa551fd30f9aa160c74"
+          },
+          {
+            "header": "@@ -70,6 +71,7 @@",
+            "range": [
+              70,
+              6
+            ],
+            "hash": "0272e0574a1a32640d2698742e864f85a40e77561d0bb223292ecb83d567f794"
+          },
+          {
+            "header": "@@ -327,6 +329,7 @@",
+            "range": [
+              327,
+              6
+            ],
+            "hash": "7ffdedf3b75c6b1fff2f839a81dc7d9f71fa50db17454d6874caca9d224e3ddd"
+          },
+          {
+            "header": "@@ -340,6 +343,9 @@",
+            "range": [
+              340,
+              6
+            ],
+            "hash": "c1bf65889dcec325fc4c912c8a68d706c3bd5436dce1c2bf7b19a0780ffd2508"
+          },
+          {
+            "header": "@@ -532,6 +536,14 @@",
+            "range": [
+              532,
+              6
+            ],
+            "hash": "dc9f91b0633f904cc53c781a37d5bdd5419eea8922a5c2d7f7d6a118fd2fe57e"
+          },
+          {
+            "header": "@@ -775,6 +784,103 @@",
+            "range": [
+              775,
+              6
+            ],
+            "hash": "829238c7acf0c171a3729b80a5d9a772fb000588041723099f086ed80c99b943"
+          },
+          {
+            "header": "@@ -927,6 +1012,7 @@",
+            "range": [
+              927,
+              6
+            ],
+            "hash": "ff7aaeda62ce5ad0410cde2d58420c47a8866e2ec07e3234b294a189b059ff14"
+          },
+          {
+            "header": "@@ -1638,9 +1724,24 @@",
+            "range": [
+              1638,
+              9
+            ],
+            "hash": "7a4ef51c27fbf584ac96c127c6d98bc89202f8764b542bf6d3cb129c76848441"
+          }
+        ]
+      },
+      "layout/base/nsPresContext.h": {
+        "oid": "13aa7141c8e5297d0dd6aa9bd78fd32f050e8123",
+        "hunks": [
+          {
+            "header": "@@ -362,6 +362,10 @@",
+            "range": [
+              362,
+              6
+            ],
+            "hash": "7ba5c0fe88cded10c9a7df598539571b873cd591cfcae90c5b529fa10988fe9c"
+          },
+          {
+            "header": "@@ -565,8 +569,14 @@",
+            "range": [
+              565,
+              8
+            ],
+            "hash": "52cdc1c52dd43f047cfe4d709e5af6daa53894582d7bd472537ee0a8b0fb814a"
+          },
+          {
+            "header": "@@ -1440,6 +1450,18 @@",
+            "range": [
+              1440,
+              6
+            ],
+            "hash": "dbdfeb13a30d0c87114afd2790582a3489b05821395ed3df2bb922fbc8a1ffd9"
+          }
+        ]
+      },
+      "servo/components/style/device/gecko.rs": {
+        "oid": "7ed8c2c7a10da302ed2bbeeb3b8c75d5f5f37c08",
+        "hunks": [
+          {
+            "header": "@@ -389,6 +389,30 @@",
+            "range": [
+              389,
+              6
+            ],
+            "hash": "1d8ced31324ffa55451e29457572cb16a4bf769ba6bfb679e672f3fe9277bf0f"
+          }
+        ]
+      },
+      "servo/components/style/values/specified/color.rs": {
+        "oid": "9c55023eb0ad182dcd4490d66bafc4b4a98cf083",
+        "hunks": [
+          {
+            "header": "@@ -860,6 +860,49 @@",
+            "range": [
+              860,
+              6
+            ],
+            "hash": "e1da382515f6b5b7a0065fd5e9b7529df749356983c464ad75d92f76f9b46518"
+          },
+          {
+            "header": "@@ -885,7 +939,7 @@",
+            "range": [
+              885,
+              7
+            ],
+            "hash": "6de00e97bfdce1037492fb27732484779e2cb7b26c46fdfd2352ecc059e0383c"
+          },
+          {
+            "header": "@@ -931,7 +985,41 @@",
+            "range": [
+              931,
+              7
+            ],
+            "hash": "475c83e5498dbc6e6873e9d226c41807f160bf42cf9c6820f06a5cb7a25dbf61"
+          }
+        ]
+      }
+    },
+    "0010-dark-mode-island-scrim.patch": {
+      "layout/painting/nsDisplayList.cpp": {
+        "oid": "0243566311058462dc6dfc7dbe3774de94e3b194",
+        "hunks": [
+          {
+            "header": "@@ -3137,6 +3137,63 @@",
+            "range": [
+              3137,
+              6
+            ],
+            "hash": "8866772542aab85dca5361fb0fc55062d8590a3c281ccc09314df73a9b536c5c"
+          },
+          {
+            "header": "@@ -3419,6 +3476,10 @@",
+            "range": [
+              3419,
+              6
+            ],
+            "hash": "5f0ccd99470c2289826cd16e13f7df9a4d1156b9ff6207888d9d56ee77c45e53"
+          }
+        ]
+      },
+      "servo/components/style/properties/computed_value_flags.rs": {
+        "oid": "d13a344e231fa12b9ce803769f41a553d1601517",
+        "hunks": [
+          {
+            "header": "@@ -123,6 +123,12 @@",
+            "range": [
+              123,
+              6
+            ],
+            "hash": "5d64d6b183624635091ebb4f9febcc73ac10e46473b2a34149737dc84cedf21f"
+          },
+          {
+            "header": "@@ -144,6 +150,7 @@",
+            "range": [
+              144,
+              6
+            ],
+            "hash": "f62a9c2aa2f2ac7b77338f82cd613bcac08eb9ee8a558c6bc4ac53ccfcf0bae0"
+          }
+        ]
+      },
+      "servo/components/style/style_adjuster.rs": {
+        "oid": "1756b77b9be0deb7dc562b142aa2d6553a258af1",
+        "hunks": [
+          {
+            "header": "@@ -311,6 +311,56 @@",
+            "range": [
+              311,
+              6
+            ],
+            "hash": "ba7a1402104f338d5172da58d98e761cb1c3dd1815e847574a65d790064905dd"
+          }
+        ]
+      }
     },
     "0012-dark-mode-role-resolver.patch": {
-      "layout/base/nsLayoutUtils.cpp": "46967151f9d91dd99b9ae4d026098abe05619537",
-      "layout/base/nsLayoutUtils.h": "b453efb3c78e4ef426a72dd2c7e0f608a0f0ebde",
-      "layout/generic/nsTextFrame.cpp": "6c3615f90cdb1e5a42e15a0618cc4649cd0d0a15",
-      "layout/generic/nsTextPaintStyle.cpp": "5d1bf44687e925aff67f44c8e0629f7f06e84e98",
-      "layout/painting/nsDisplayList.cpp": "0243566311058462dc6dfc7dbe3774de94e3b194",
-      "layout/svg/SVGGeometryFrame.cpp": "a06d081f3dcd2fde342893ebed9609d4d3f656a5"
+      "layout/base/nsLayoutUtils.cpp": {
+        "oid": "46967151f9d91dd99b9ae4d026098abe05619537",
+        "hunks": [
+          {
+            "header": "@@ -5294,6 +5294,22 @@",
+            "range": [
+              5294,
+              6
+            ],
+            "hash": "d7224d3e074160bf9f8c3641d6e44facba4667bb5c4dab2ed29e2cd18f778863"
+          }
+        ]
+      },
+      "layout/base/nsLayoutUtils.h": {
+        "oid": "b453efb3c78e4ef426a72dd2c7e0f608a0f0ebde",
+        "hunks": [
+          {
+            "header": "@@ -1762,14 +1762,35 @@",
+            "range": [
+              1762,
+              14
+            ],
+            "hash": "a70a0d20ba560b28d793b4c93e2d83ab884c8a967aab36703d2d774cfb78e32a"
+          }
+        ]
+      },
+      "layout/generic/nsTextFrame.cpp": {
+        "oid": "6c3615f90cdb1e5a42e15a0618cc4649cd0d0a15",
+        "hunks": [
+          {
+            "header": "@@ -5484,7 +5484,9 @@",
+            "range": [
+              5484,
+              7
+            ],
+            "hash": "60cba59745c5c1de124dcca4e96fa3de1ba857c5a802ae17e01fc062f6c44d92"
+          }
+        ]
+      },
+      "layout/generic/nsTextPaintStyle.cpp": {
+        "oid": "5d1bf44687e925aff67f44c8e0629f7f06e84e98",
+        "hunks": [
+          {
+            "header": "@@ -96,7 +96,8 @@",
+            "range": [
+              96,
+              7
+            ],
+            "hash": "badde3e1f7ab5d710cfab9cf5c8ac68cb0721d3313ea3f976de0047b8123db64"
+          }
+        ]
+      },
+      "layout/painting/nsDisplayList.cpp": {
+        "oid": "0243566311058462dc6dfc7dbe3774de94e3b194",
+        "hunks": [
+          {
+            "header": "@@ -3326,9 +3326,16 @@",
+            "range": [
+              3326,
+              9
+            ],
+            "hash": "5898475f2662bb26ab062b1915daa589a7e7f5cff9d8a40f7a179dea7cb1655a"
+          }
+        ]
+      },
+      "layout/svg/SVGGeometryFrame.cpp": {
+        "oid": "a06d081f3dcd2fde342893ebed9609d4d3f656a5",
+        "hunks": [
+          {
+            "header": "@@ -780,8 +780,11 @@",
+            "range": [
+              780,
+              8
+            ],
+            "hash": "08dd670a7b32d15a9d9833691a0553ab260bb0cf60e3f0810b816c6952105e73"
+          }
+        ]
+      }
     },
     "0013-dark-mode-text-solve.patch": {
-      "layout/generic/GjoaDarkText.cpp": "absent",
-      "layout/generic/GjoaDarkText.h": "absent",
-      "layout/generic/moz.build": "a0b95f0470cc661ad5316768cb637dadc9c8e449",
-      "layout/generic/nsTextPaintStyle.cpp": "5d1bf44687e925aff67f44c8e0629f7f06e84e98"
+      "layout/generic/GjoaDarkText.cpp": {
+        "oid": "absent",
+        "hunks": []
+      },
+      "layout/generic/GjoaDarkText.h": {
+        "oid": "absent",
+        "hunks": []
+      },
+      "layout/generic/moz.build": {
+        "oid": "a0b95f0470cc661ad5316768cb637dadc9c8e449",
+        "hunks": [
+          {
+            "header": "@@ -173,6 +173,7 @@",
+            "range": [
+              173,
+              6
+            ],
+            "hash": "e72ccc7d0c41a393dfbe34fc919ae7ec67e4fde82a727542c6b167f8ece421ca"
+          }
+        ]
+      },
+      "layout/generic/nsTextPaintStyle.cpp": {
+        "oid": "5d1bf44687e925aff67f44c8e0629f7f06e84e98",
+        "hunks": [
+          {
+            "header": "@@ -10,6 +10,7 @@",
+            "range": [
+              10,
+              6
+            ],
+            "hash": "ee3be67f15b33052a366db70e7ca34cef593ced0d992898a0efc677353208733"
+          },
+          {
+            "header": "@@ -104,8 +105,17 @@",
+            "range": [
+              104,
+              8
+            ],
+            "hash": "e06dd013549252dadef351248d271af3f88c0bc69ac455e8a86a1cc0f0271b6a"
+          }
+        ]
+      }
     },
     "0014-dark-mode-tier0.patch": {
-      "layout/base/nsPresContext.cpp": "b2394c61069797a5ca8831c6ce5a37cdf425ec93",
-      "layout/style/GeckoBindings.cpp": "ee784cef626a12da58ac1f6c6c8538c454f82f4f",
-      "layout/style/GeckoBindings.h": "b8317e006298c1345a6f13d26ca20980875e5bd1",
-      "servo/components/style/device/gecko.rs": "7ed8c2c7a10da302ed2bbeeb3b8c75d5f5f37c08"
+      "layout/base/nsPresContext.cpp": {
+        "oid": "b2394c61069797a5ca8831c6ce5a37cdf425ec93",
+        "hunks": [
+          {
+            "header": "@@ -855,9 +855,12 @@",
+            "range": [
+              855,
+              9
+            ],
+            "hash": "6ef0a04434db8938869c170161e5ff83056d4e35e5dc54aaf6ca814e9b6f03d2"
+          },
+          {
+            "header": "@@ -878,8 +881,11 @@",
+            "range": [
+              878,
+              8
+            ],
+            "hash": "f5649609ae1eaf8073a613a1c8cf5b0d50349a4c2e0cf5ed3af31b7d67433bf5"
+          }
+        ]
+      },
+      "layout/style/GeckoBindings.cpp": {
+        "oid": "ee784cef626a12da58ac1f6c6c8538c454f82f4f",
+        "hunks": [
+          {
+            "header": "@@ -702,6 +702,11 @@",
+            "range": [
+              702,
+              6
+            ],
+            "hash": "c3be147e525914cb27d7db533f9c142a0297fe3e82ed80dd59b43932c85a81dc"
+          }
+        ]
+      },
+      "layout/style/GeckoBindings.h": {
+        "oid": "b8317e006298c1345a6f13d26ca20980875e5bd1",
+        "hunks": [
+          {
+            "header": "@@ -527,6 +527,7 @@",
+            "range": [
+              527,
+              6
+            ],
+            "hash": "16fcabcb050c2f276edaee09576242a7088acdd9959bea41ea59871f668b612c"
+          }
+        ]
+      },
+      "servo/components/style/device/gecko.rs": {
+        "oid": "7ed8c2c7a10da302ed2bbeeb3b8c75d5f5f37c08",
+        "hunks": [
+          {
+            "header": "@@ -413,6 +413,14 @@",
+            "range": [
+              413,
+              6
+            ],
+            "hash": "7ee9fde6e1cf0b398fd7f34c9a751a9a537abbf04f2f06f1b3b67308025bcb37"
+          }
+        ]
+      }
     }
   }
 }
