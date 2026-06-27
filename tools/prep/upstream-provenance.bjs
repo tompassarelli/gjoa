@@ -6,6 +6,7 @@
 ;;
 ;;   bun .beagle-tools/gjoa/tools/prep/upstream-provenance.js lock              # write configs/upstream-provenance.json (+ provenance-identity.json) @ gjoa.json baseline
 ;;   bun .beagle-tools/gjoa/tools/prep/upstream-provenance.js check [ref]       # diff lock vs <ref> (default: baseline tag = integrity); --strict => exit 2
+;;   bun .beagle-tools/gjoa/tools/prep/upstream-provenance.js merge3 <ref>       # L-lever #4: anchor-local 3-way merge of every moved file onto <ref> (auto-mergeable vs needs-human)
 ;;   bun .beagle-tools/gjoa/tools/prep/upstream-provenance.js digest            # print the L4 baked-identity digest (build reads it to stamp the binary)
 ;;   bun .beagle-tools/gjoa/tools/prep/upstream-provenance.js check --security  # L5: cross-check `# security:` patches vs the lock -> configs/provenance-security-findings.json
 ;;
@@ -26,12 +27,13 @@
 ;; the ref — an edit OUTSIDE the hunks can't rot the apply. Coarse OID match is
 ;; the fast path; hunk match is the precise fallback when the file moved.
 (ns gjoa.tools.prep.upstream-provenance
-  (:require [fs :refer [readdirSync readFileSync writeFileSync existsSync]]
+  (:require [fs :refer [readdirSync readFileSync writeFileSync existsSync mkdtempSync rmSync]]
             [path :refer [join]]
+            [os :refer [tmpdir]]
             [gjoa.tools.prep.sh :refer [sh]]
             [gjoa.tools.prep.patch-header :refer [parseSecurity]]))
 (define-mode strict)
-(declare-extern [process Object parseInt] Any)
+(declare-extern [process Object parseInt Error] Any)
 
 (def REPO :- String (.cwd process))
 (def PATCHES-DIR :- String (join REPO "patches"))
@@ -444,6 +446,81 @@
       (when (and strict integrity (> (.-length findings) 0))
         (.exit process 2)))))
 
+;; ── anchor-local 3-way merge (churn lever #4) ────────────────────────────────
+
+;; One file's mechanical rebase test: feed `git merge-file` the three corners
+;; the lock already hands us — OURS (engine/<path>, the imported+patched FF
+;; source), BASE (the baseline-tag upstream blob), OTHER (the same path at the
+;; bump <ref>). merge-file replays OURS's edits (the patch) onto OTHER; its exit
+;; code is the conflict count (0 = clean). -p prints (no file is mutated). The
+;; `; printf __RC__$?` tail captures that code through sh (which would otherwise
+;; swallow a nonzero exit). Temp paths are mkdtemp-generated literals — no
+;; injection surface. Returns {status "clean"|"conflict"|"skip", ...}.
+(defn merge3-file [baseTag :- String ref :- String pth :- String tmp :- Any] :- Any
+  (let [enginePath (join REPO "engine" pth)]
+    (if (not (existsSync enginePath))
+      {:status "skip" :reason "no engine source (run import)"}
+      (let [base (sh (str "git -C " FF " show " baseTag ":" pth) {:quiet true})
+            other (sh (str "git -C " FF " show " ref ":" pth) {:quiet true})]
+        (if (or (= base "") (= other ""))
+          {:status "skip" :reason "absent at base or ref"}
+          (let [bf (join tmp "base") of (join tmp "other") uf (join tmp "ours")]
+            (writeFileSync bf base)
+            (writeFileSync of other)
+            (writeFileSync uf (readFileSync enginePath "utf8"))
+            (let [out (try (sh (str "git merge-file -p '" uf "' '" bf "' '" of "' 2>/dev/null; printf '__RC__%s' \"$?\"") {})
+                        (catch Error _e "__RC__255"))
+                  m (.match out (RegExp. "__RC__(\\d+)$"))
+                  rc (if m (parseInt (aget m 1) 10) 255)]
+              (cond
+                (= rc 0)   {:status "clean"}
+                (= rc 255) {:status "skip" :reason "merge-file error (binary/encoding?)"}
+                :else      {:status "conflict" :conflicts rc}))))))))
+
+;; For every patch file whose upstream blob MOVED at <ref> (the rebase-relevant
+;; set), attempt the anchor-local 3-way and tally auto-mergeable vs needs-human.
+;; This is what L0–L3 set up: L0 says WHICH files moved, L3 says WHY — this says
+;; "and here's the merge, already done where it's mechanical." No build.
+(defn merge3! [ref-arg :- String] :- Any
+  (when (not (ff-present?))
+    (console/log (str "provenance: Firefox clone absent (" FF ") — 3-way merge skipped")) (.exit process 0))
+  (when (not (existsSync LOCK))
+    (console/error "provenance: no lock — run `provenance lock` first") (.exit process 1))
+  (let [lock (JSON/parse (readFileSync LOCK "utf8"))
+        ref (safe-ref (or ref-arg (.-tag lock)))
+        baseTag (.-tag lock)
+        integrity (= ref baseTag)
+        lockPatches (.-patches lock)
+        pnames (.sort (.keys Object lockPatches))
+        tmp (mkdtempSync (join (tmpdir) "gjoa-merge3-"))
+        clean [] conflict [] skip []]
+    (try
+      (when integrity
+        (console/log "  (ref == baseline: nothing has moved — pass a bump ref, e.g. a later FF tag)"))
+      (doseq [n pnames]
+        (let [fobj (aget lockPatches n)]
+          (doseq [f (.sort (.keys Object fobj))]
+            (let [entry (aget fobj f)
+                  was (entry-oid entry)
+                  now (blob-oid ref f)]
+              (when (and (not= was now) (not= was "absent") (not= now "absent"))
+                (let [r (merge3-file baseTag ref f tmp)]
+                  (cond
+                    (= (.-status r) "clean")    (.push clean {:patch n :file f :tier (tier-of f)})
+                    (= (.-status r) "conflict") (.push conflict {:patch n :file f :tier (tier-of f) :conflicts (.-conflicts r)})
+                    :else (.push skip {:patch n :file f :reason (.-reason r)}))))))))
+      (finally (try (rmSync tmp {:recursive true :force true}) (catch Error _e nil))))
+    (console/log (str "anchor-local 3-way merge — patched lock @ " baseTag " replayed onto " ref))
+    (console/log (str "  " (.-length clean) " auto-mergeable · " (.-length conflict) " need human · " (.-length skip) " skipped"))
+    (when (> (.-length conflict) 0)
+      (console/log "  CONFLICTS (our edits overlap Mozilla's — human rebase, native first):")
+      (doseq [c conflict] (console/log (str "    [" (.-tier c) "] " (.-patch c) ": " (.-file c) "  (" (.-conflicts c) " conflict hunk(s))"))))
+    (when (> (.-length clean) 0)
+      (console/log "  AUTO-MERGEABLE (patch re-applies onto new upstream with no conflict):")
+      (doseq [c clean] (console/log (str "    [" (.-tier c) "] " (.-patch c) ": " (.-file c)))))
+    (when (> (.-length skip) 0)
+      (doseq [c skip] (console/log (str "    skip " (.-patch c) ": " (.-file c) " (" (.-reason c) ")"))))))
+
 (defn main! [] :- Any
   (let [argv (.slice (.-argv process) 2)
         cmd (or (aget argv 0) "check")
@@ -452,9 +529,10 @@
     (cond
       (= cmd "lock") (lock!)
       (= cmd "digest") (digest!)
+      (= cmd "merge3") (merge3! (or ref nil))
       (= cmd "check") (if (.includes argv "--security")
                         (security-check! (or ref nil) strict)
                         (check! (or ref nil) strict (.includes argv "--blame")))
-      :else (do (console/error "usage: upstream-provenance <lock | digest | check [ref] [--strict] [--blame] [--security]>") (.exit process 1)))))
+      :else (do (console/error "usage: upstream-provenance <lock | digest | merge3 [ref] | check [ref] [--strict] [--blame] [--security]>") (.exit process 1)))))
 
 (when (.-main (js/import-meta)) (main!))
