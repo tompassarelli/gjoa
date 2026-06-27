@@ -110,7 +110,12 @@ jobs:
       - name: Install Racket (beagle compiler runtime)
         uses: Bogdanp/setup-racket@v1.15
         with:
-          version: 'stable'
+          # #143: pin to the local reference Racket (v9.2). 'stable' is a MOVING
+          # target — a different Racket emits different beagle JS for the SAME
+          # pinned beagle SHA, which skewed CI's chrome bundles vs local
+          # (gjoa-tabs.uc.js byte size != local). Deterministic emit needs the
+          # same compiler RUNTIME, not just the same compiler source.
+          version: '9.2'
       - name: Checkout beagle (sibling compiler, pinned to configs/beagle.ref)
         run: |
           PIN="$(grep -vE '^\s*#' configs/beagle.ref | grep -vE '^\s*$' | head -1 | tr -d '[:space:]')"

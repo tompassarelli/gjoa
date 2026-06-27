@@ -100,7 +100,9 @@ jobs:
       - name: Install Racket (beagle compiler runtime)
         uses: Bogdanp/setup-racket@v1.15
         with:
-          version: 'stable'
+          # #143: pin to the local reference Racket — 'stable' is a moving target
+          # that skews beagle's emit vs local. See build-linux.yml for the detail.
+          version: '9.2'
       - name: Checkout beagle (sibling compiler, pinned to configs/beagle.ref)
         run: |
           PIN="$(grep -vE '^\s*#' configs/beagle.ref | grep -vE '^\s*$' | head -1 | tr -d '[:space:]')"
