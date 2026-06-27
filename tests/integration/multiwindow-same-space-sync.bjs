@@ -17,7 +17,7 @@
 ;; OpenBrowserWindow(); the runner's RESET-JS only resets the most-recent window,
 ;; so this test re-baselines BOTH windows and closes B itself.
 ;;
-;; DEFERRED pending a product-semantics decision (raised to gjoa-2 / Tom):
+;; DEFERRED pending a product-semantics decision (raised to gjoa-2 / the user):
 ;;   (Q1) Active-space policy: do two windows on the same workspace SHARE the
 ;;        active space, or view it INDEPENDENTLY? The fix keeps active-id
 ;;        window-LOCAL to preserve Spaces Invariant 3 (cross-space auto-switch),

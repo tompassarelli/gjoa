@@ -412,8 +412,8 @@
 /* STATIC drawer in the floating-card layout: #browser already lays the row out
  * with `gap: --gjoa-card-gap` + `padding: --gjoa-card-gap` (region below), so
  * [drawer][gap][#sidebar-box][gap][page] falls out for free — DON'T add an
- * inline margin here or the drawer↔panel gap doubles (the "oversized gap" Tom
- * saw). Only the block insets above are needed (FF zeroes the top padding). */
+ * inline margin here or the drawer↔panel gap doubles (the reported
+ * "oversized gap"). Only the block insets above are needed (FF zeroes the top padding). */
 
 /* COMPACT drawer (position:fixed → out of #browser flow) OR floating-cards OFF:
  * no flex gap sits between the drawer and #sidebar-box, so the panel would butt

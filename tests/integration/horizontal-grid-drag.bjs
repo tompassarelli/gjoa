@@ -85,7 +85,7 @@
     return String(window.gjoaTest.treeOf.get(t).id);"))
 
 (js/export (def tests :- Any
-  [;; The bug Tom reported: dragging a tab onto another tab's PRECISE cell must
+  [;; The reported bug: dragging a tab onto another tab's PRECISE cell must
    ;; place it there as a SIBLING (taking that column), not get stolen into a
    ;; child of the target. Aim r2 at r1's upper-left quadrant → 'before' r1.
    (deftest "horizontal: dragging a tab onto another's cell lands it as a precise sibling, not a child" [mn]
