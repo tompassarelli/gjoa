@@ -139,19 +139,7 @@
                 { "label": "figma.com, maps.google.com", "detail": "Design / map tools render in true colors, untouched, while every other site stays dark." },
                 { "label": "(empty — default)", "detail": "No sites excluded." }
               ],
-              "note": "Highest-precedence per-site rule — beats both lists above." },
-            { "pref": "gjoa.darkmode.normalize.enabled", "type": "bool", "title": "Contrast guard (experimental)", "default": false,
-              "help": "A final readability pass: after inversion settles, gjoa measures real text against its real background and re-tones any text that would fall below a legibility floor — the 'never unreadable, no black-on-black' backstop. OFF by default pending full build verification; the engine inversion already yields readable contrast in the common case.",
-              "examples": [
-                { "label": "OFF (default)", "detail": "Engine inversion handles contrast — correct for nearly every page, zero extra work." },
-                { "label": "ON", "detail": "gjoa additionally re-tones any low-contrast text it detects. Turn on if a darkened site has hard-to-read text." }
-              ] },
-            { "pref": "gjoa.darkmode.normalize.floor", "type": "int", "title": "Contrast guard strictness", "default": 45, "min": 0, "max": 100, "slider": true,
-              "help": "How strict the Contrast guard is, in APCA Lc (perceptual contrast). HIGHER = stricter (more text gets re-toned). ~45 ≈ large / secondary text; raise toward 60 for stricter body-text contrast. Only matters when the Contrast guard above is ON.",
-              "examples": [
-                { "label": "45 (default)", "detail": "Catches genuinely illegible text without over-correcting." },
-                { "label": "60", "detail": "Stricter — enforces stronger body-text contrast, re-tones more aggressively." }
-              ] }
+              "note": "Highest-precedence per-site rule — beats both lists above." }
           ] },
         { "id": "theme", "title": "Theme",
           "intro": "gjoa's OWN window chrome — the toolbar, tabs, and menus — not web-page colors. One OKLCH token system, fed by a base16 palette. Pick gjoa's canonical look, a curated variant, or dissolve into your desktop. No restart needed.",

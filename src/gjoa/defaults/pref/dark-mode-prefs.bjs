@@ -140,7 +140,10 @@
 ;; elements were black-on-black with this off and 0 with it on. It was the missing
 ;; backstop behind the recurring "dark mode is unreadable" reports. (Cost: one
 ;; drawSnapshot + per-text APCA at DOMContentLoaded on inverted pages.)
-(pref "gjoa.darkmode.normalize.enabled" true)
+;; DISABLED 2026-06-28: the normalizer re-tones already-readable text to a fixed dark-
+;; purple on every visible element (worse than the black-on-black it targeted). Off +
+;; knob hidden until the retone math is rebuilt (lodestar pin).
+(pref "gjoa.darkmode.normalize.enabled" false)
 ;; APCA Lc floor the normalizer enforces (45 ≈ large/secondary text; raise toward 60
 ;; for stricter body-text contrast). Below this, text gets re-toned.
 (pref "gjoa.darkmode.normalize.floor" 45)

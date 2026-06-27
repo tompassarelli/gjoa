@@ -196,12 +196,12 @@
       ;; dark OS → every site renders light. Dark never consults the OS, so it Just
       ;; Works. Users who want OS-follow can still pick System explicitly.
       (.setCharPref d PREF-MODE "dark")
-      ;; No-black-on-black backstop ON by default. Engine inversion alone leaves
-      ;; sub-floor text on real pages (news.mit.edu measured 7/9 text els black-on-
-      ;; black with this OFF, 0 with it ON). Set on the default branch here so it
-      ;; flips for ALREADY-BUILT binaries via `gjoa sync` — the normalize pass lives
-      ;; in the synced actor, so no engine rebuild is needed to make dark mode legible.
-      (.setBoolPref d PREF-NORMALIZE true))
+      ;; Contrast normalizer DISABLED (2026-06-28). It re-toned ALREADY-READABLE text to
+      ;; a fixed dark-purple (oklch 0.28 0.082 284) on every visible element — worse than
+      ;; the black-on-black it was meant to fix (the user reported all-text-purple across
+      ;; sites; measured normalizer ON=purple, OFF=correct light neutral). Off until the
+      ;; retone math is rebuilt (lodestar pin). Default branch so it flips via `gjoa sync`.
+      (.setBoolPref d PREF-NORMALIZE false))
     (catch Any e
       (console/error "gjoa-darkmode: set-darkmode-defaults! failed" e))))
 
