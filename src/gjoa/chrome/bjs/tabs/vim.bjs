@@ -46,6 +46,11 @@
    {:id "lastTab"       :key "`" :desc "last tab"                          :cat "Tabs"}
    {:id "back"          :key "h" :desc "history back"                      :cat "Navigation"}
    {:id "forward"       :key "l" :desc "history forward"                   :cat "Navigation"}
+   {:id "linkHints"     :key "f" :desc "link hints (follow link)"          :cat "Navigation"}
+   {:id "linkHintsNewTab" :key "F" :desc "link hints (new tab)"           :cat "Navigation"}
+   {:id "find"          :key "/" :desc "find in page"                      :cat "Navigation"}
+   {:id "findNext"      :key "n" :desc "find next"                         :cat "Navigation"}
+   {:id "findPrev"      :key "N" :desc "find previous"                     :cat "Navigation"}
    {:id "scrollDown"    :key "j" :desc "scroll down"                       :cat "Scrolling"}
    {:id "scrollUp"      :key "k" :desc "scroll up"                         :cat "Scrolling"}
    {:id "toggleCompact" :key "e" :desc "toggle compact mode"              :cat "Layout"}
@@ -149,7 +154,8 @@
            :leader-timer nil
            :which-key-el nil
            :leader-prev-focus nil
-           :leader-focus-stash nil}
+           :leader-focus-stash nil
+           :link-hints-active false}
 
         commit-tree (fn [targets]
           (.forEach targets #(.syncAnyRow rows %))
@@ -661,6 +667,49 @@
           (when (.-which-key-el vs)
             (set! (.-hidden (.-which-key-el vs)) true)))
 
+        ;; --- link hints (#130 P4) -------------------------------------------------
+        ;; The page DOM lives in the content process; the GjoaInput actor's content
+        ;; half does the labeling/activation, chrome owns the keymap. 'f'/'F' open a
+        ;; session; while :link-hints-active, the global keydown routes each char to
+        ;; the actor via sendQuery and clears the flag when the actor reports done.
+        link-hints-actor (fn [] :- Any
+          (some-> gBrowser .-selectedBrowser .-browsingContext .-currentWindowGlobal
+            (.getActor "GjoaInput")))
+
+        end-link-hints (fn [send-cancel?] :- Any
+          (set! (.-link-hints-active vs) false)
+          (when send-cancel?
+            (let [a (link-hints-actor)]
+              (when a (try (.sendQuery a "LinkHints:Cancel") (catch Any _e nil))))))
+
+        start-link-hints (fn [new-tab] :- Any
+          (let [a (link-hints-actor)]
+            (when a
+              (set! (.-link-hints-active vs) true)
+              (try
+                (.then (.sendQuery a "LinkHints:Show" {:newTab new-tab})
+                       (fn [r] (when (or (not r) (= (.-count r) 0))
+                                 (set! (.-link-hints-active vs) false)))
+                       (fn [_e] (set! (.-link-hints-active vs) false)))
+                (catch Any _e (set! (.-link-hints-active vs) false))))))
+
+        handle-link-hints-key (fn [e] :- Any
+          (if (key= e "Escape")
+            (end-link-hints true)
+            (let [k (.-key e)]
+              (when (or (= (.-length k) 1) (key= e "Backspace"))
+                (let [a (link-hints-actor)]
+                  (when a
+                    (try
+                      (.then (.sendQuery a "LinkHints:Key" {:key k})
+                             (fn [r]
+                               (when (and r (not= (.-state r) "active"))
+                                 (set! (.-link-hints-active vs) false))
+                               (when (and r (.-url r) (.-newTab r))
+                                 (try (.openTrustedLinkIn window (.-url r) "tab")
+                                      (catch Any _e nil))))
+                             (fn [_e] (set! (.-link-hints-active vs) false)))
+                      (catch Any _e (set! (.-link-hints-active vs) false)))))))))
 
         ;; id → action. The one place each command's behavior lives; dispatch and
         ;; (later) about:vim / :bind reference commands by id. `e` is the keydown.
@@ -699,6 +748,22 @@
                       (set-pref-bool! "gjoa.sidebar.compact" true))))
             (= id "toggleStrip")   (toggle-h-sidebar-strip)
             (= id "help")          (toggle-which-key)
+            (= id "linkHints")       (start-link-hints false)
+            (= id "linkHintsNewTab") (start-link-hints true)
+            ;; #130 P5: in-page find delegates to Firefox's native findbar — battle-
+            ;; tested highlight/scroll/wrap, n/N repeat. '/' opens it; n/N find-again.
+            (= id "find")
+              (try (.then (.getFindBar gBrowser)
+                          (fn [fb] (when fb (.startFind fb (.-FIND_NORMAL fb)))))
+                   (catch Any _e nil))
+            (= id "findNext")
+              (try (.then (.getFindBar gBrowser)
+                          (fn [fb] (when fb (.onFindAgainCommand fb false))))
+                   (catch Any _e nil))
+            (= id "findPrev")
+              (try (.then (.getFindBar gBrowser)
+                          (fn [fb] (when fb (.onFindAgainCommand fb true))))
+                   (catch Any _e nil))
             :else nil))
 
         try-dispatch-binding (fn [e] :- Bool
@@ -1692,6 +1757,9 @@
                                       (and (.-closest a) (.closest a ".gjoa-picker")))))
                            (not (or (key= e "Shift") (key= e "Control")
                                      (key= e "Alt") (key= e "Meta"))))
+                  (if (.-link-hints-active vs)
+                    (do (.preventDefault e) (.stopImmediatePropagation e)
+                        (handle-link-hints-key e))
                   (if (and (key= e "Escape")
                            (.-which-key-el vs)
                            (not (.-hidden (.-which-key-el vs))))
@@ -1711,7 +1779,7 @@
                               (when (not handled)
                                 (.preventDefault e)
                                 (.stopImmediatePropagation e)))))
-                        (try-dispatch-binding e))))))))
+                        (try-dispatch-binding e)))))))))
           (onc! document "keyup"
             (fn [e]
               (when (or (key= e "j") (key= e "k"))
