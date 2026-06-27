@@ -310,7 +310,8 @@
     (.registerWindowActor ChromeUtils "GjoaInput"
       {:parent {:esModuleURI "resource://gre/modules/GjoaInputParent.sys.mjs"}
        :child {:esModuleURI "resource://gre/modules/GjoaInputChild.sys.mjs"
-               :events {:focusin {:capture true :mozSystemGroup true}
+               :events {:keydown {:capture true :mozSystemGroup true}
+                        :focusin {:capture true :mozSystemGroup true}
                         :focusout {:capture true :mozSystemGroup true}
                         :pageshow {:mozSystemGroup true}
                         :pagehide {:mozSystemGroup true}

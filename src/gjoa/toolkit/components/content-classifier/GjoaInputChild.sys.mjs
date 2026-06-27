@@ -307,6 +307,16 @@ export class GjoaInputChild extends JSWindowActorChild {
 
   handleEvent(event) {
     switch (event.type) {
+      case "keydown":
+        // Key-time re-check: the LAST chance to correct _gjoaEditable before chrome
+        // reads it. focusin can be missed (page-swallowed, retargeted) or churned
+        // (focusout→focusin as a modal settles), leaving the flag stale. Re-deriving
+        // from the live activeElement here heals those cases for subsequent keys.
+        // (The first keystroke after a focus change still races the async IPC — that
+        // residual needs the content-side gate; this dedupe-guarded report is the
+        // safe, additive layer under it.)
+        this.#report();
+        break;
       case "focusin":
       case "focusout":
       case "DOMContentLoaded":
