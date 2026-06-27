@@ -37,11 +37,16 @@
 (def editable-js :- String
   "return gBrowser.selectedBrowser._gjoaEditable === true;")
 
+;; OPEN = #gjoa-picker exists AND not hidden. Close hides (picker.bjs sets
+;; pickerEl.hidden=true) but leaves it in the DOM, so an existence check
+;; false-positives on a closed/leaked picker and breaks negative assertions. The
+;; vim '/' search input IS removed on close, so existence is fine there.
 (def pickerOpen-js :- String
-  "return !!document.querySelector('[class*=picker], [id*=picker], .gjoa-search-input');")
+  "const p=document.getElementById('gjoa-picker'); return !!((p && !p.hidden) || document.querySelector('.gjoa-search-input'));")
 
+;; Close reliably: Escape (proper dismiss if reachable) AND force the closed state.
 (def closePicker-js :- String
-  "try { document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})); } catch(e){} return 1;")
+  "try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));}catch(e){} try{const p=document.getElementById('gjoa-picker'); if(p) p.hidden=true; const s=document.querySelector('.gjoa-search-input'); if(s) s.remove();}catch(e){} return 1;")
 
 (defn key-action [ch :- String] :- Any
   [{:type "key" :id "kbd"

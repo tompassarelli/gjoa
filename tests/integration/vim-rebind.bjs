@@ -22,11 +22,19 @@
 (def cleanup-js :- String
   "Services.prefs.clearUserPref('gjoa.keys.bindings'); return 1;")
 
+;; A picker is OPEN only if #gjoa-picker exists AND is not hidden — close hides it
+;; (picker.bjs reset-st! sets pickerEl.hidden=true) but leaves it in the DOM, so a
+;; plain querySelector('[class*=picker]') existence check false-positives on a
+;; CLOSED (or leaked-from-a-prior-test) picker, breaking every negative assertion.
+;; The vim '/' search input is genuinely removed on close, so existence is fine there.
 (def pickerOpen-js :- String
-  "return !!document.querySelector('[class*=picker], [id*=picker], .gjoa-search-input');")
+  "const p=document.getElementById('gjoa-picker'); return !!((p && !p.hidden) || document.querySelector('.gjoa-search-input'));")
 
+;; Close reliably: dispatch Escape (proper dismiss + active-reset if the handler is
+;; reachable) AND force the closed visual state, so a leaked/hidden picker can't
+;; survive into a negative assertion regardless of where the picker listens.
 (def closePicker-js :- String
-  "try { document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})); } catch(e){} return 1;")
+  "try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));}catch(e){} try{const p=document.getElementById('gjoa-picker'); if(p) p.hidden=true; const s=document.querySelector('.gjoa-search-input'); if(s) s.remove();}catch(e){} return 1;")
 
 (defn key-action [ch :- String] :- Any
   [{:type "key" :id "kbd"
