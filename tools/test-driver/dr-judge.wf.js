@@ -4,7 +4,9 @@ export const meta = {
   phases: [{ title: 'Discover' }, { title: 'Judge' }],
 }
 
-const OUT = (args && args.outdir) || '/tmp/dr-compare'
+let _args = args
+if (typeof _args === 'string') { try { _args = JSON.parse(_args) } catch (e) { _args = {} } }
+const OUT = (_args && _args.outdir) || '/tmp/dr-compare'
 
 const PAIRS = {
   type: 'object', additionalProperties: false, required: ['pairs'],
@@ -28,9 +30,14 @@ const VERDICT = {
   },
 }
 
+log(`judging dir: ${OUT} (args=${JSON.stringify(args || null)})`)
+const DISCOVER_BASH = 'cd ' + OUT + ' 2>/dev/null && for f in gjoa-*-1top.png; do [ -f "$f" ] || continue; s="${f#gjoa-}"; s="${s%-1top.png}"; [ -f "dr-$s-1top.png" ] && echo "$s"; done'
 phase('Discover')
 const disc = await agent(
-  `List ${OUT}/gjoa-*-1top.png. For each, derive the slug (the part between "gjoa-" and "-1top.png") and build the four paths: ${OUT}/gjoa-<slug>-1top.png, ${OUT}/gjoa-<slug>-2mid.png, ${OUT}/dr-<slug>-1top.png, ${OUT}/dr-<slug>-2mid.png. Include a pair ONLY if all four files exist (use Bash test -f). Return the pairs.`,
+  `Run EXACTLY this bash command with the Bash tool and read its stdout:\n\n${DISCOVER_BASH}\n\n` +
+  `It prints one slug per line. For EACH slug printed, emit a pair object with these four paths (substitute the slug literally):\n` +
+  `gjoaTop = ${OUT}/gjoa-<slug>-1top.png\ngjoaMid = ${OUT}/gjoa-<slug>-2mid.png\ndrTop = ${OUT}/dr-<slug>-1top.png\ndrMid = ${OUT}/dr-<slug>-2mid.png\n` +
+  `Return EVERY slug as a pair (do not drop any). If the command prints nothing, return an empty pairs array.`,
   { label: 'discover-pairs', phase: 'Discover', schema: PAIRS })
 
 const pairs = (disc && disc.pairs) || []
