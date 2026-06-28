@@ -101,10 +101,10 @@ here's the tree for understanding.
 ```mermaid
 flowchart TD
     Q1{What did you<br>change?}
-    Q1 -->|TS/CSS in chrome/src| L1["gjoa sync<br>gjoa dev<br>(seconds)"]
+    Q1 -->|TS/CSS in chrome/src| L1["gjoa sync<br>gjoa hotreload<br>(seconds)"]
     Q1 -->|Firefox .sys.mjs or patch| Q2{Mach objdir<br>exists?<br>engine/obj-*/dist/}
     Q1 -->|Version bump or<br>install-tree change| L3["WAIT FOR SUNDAY<br>then nix build"]
-    Q2 -->|Yes| L2["bun run import<br>cd engine && ./mach build faster<br>gjoa dev<br>(~30 sec)"]
+    Q2 -->|Yes| L2["bun run import<br>cd engine && ./mach build faster<br>gjoa hotreload<br>(~30 sec)"]
     Q2 -->|No| L2cold["This is Lane 3 today.<br>First mach build cold = ~45 min.<br>Confirm with Claude before running."]
 
     style L1 fill:#cfc
@@ -132,7 +132,7 @@ sequenceDiagram
     You->>Dist: gjoa sync (bun run chrome:dist)
     Note over Dist,Mach: chrome:install symlinked gjoa-dev/ → dist/<br>(one-time setup)
     Dist-->>Mach: (auto-propagates via symlink)
-    You->>Win: gjoa dev (relaunch)
+    You->>Win: gjoa hotreload (relaunch)
     Win->>Loader: app-startup
     Loader->>Mach: finds gjoa-dev/, reads .uc.js
     Loader->>Win: injects scripts into chrome window
@@ -230,10 +230,10 @@ can see when they diverge.
 | Symptom | Look at |
 |---|---|
 | "no sidebar in nix binary" | `result/bin/gjoa`'s omni.ja chrome.manifest. Should contain `content gjoa browser/content/gjoa/`. |
-| "chrome JS edit doesn't take effect" | Did you run `gjoa sync`? Did you relaunch with `gjoa dev` (mach binary), not `gjoa` (nix)? |
+| "chrome JS edit doesn't take effect" | Did you run `gjoa sync`? Did you relaunch with `gjoa hotreload` (mach binary), not `gjoa` (nix)? |
 | "patch failed to apply during import" | `patches/<N>-name.patch` line context drifted vs current Firefox version. Regen with `git diff` from inside `engine/`. |
 | "build takes forever" | Probably running `nix build` for a Lane 1/2 change. Run `gjoa status` to confirm what you actually need. |
-| "the launcher won't run" | `gjoa` requires a nix `result/bin/gjoa`. `gjoa dev` requires a mach `engine/obj-*/dist/bin/gjoa`. Build whichever's missing. |
+| "the launcher won't run" | `gjoa` requires a nix `result/bin/gjoa`. `gjoa hotreload` requires a mach `engine/obj-*/dist/bin/gjoa`. Build whichever's missing. |
 
 ---
 

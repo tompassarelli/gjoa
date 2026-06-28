@@ -1,4 +1,4 @@
-# Build pipeline — what `gjoa dev` actually loads (and why it can look broken)
+# Build pipeline — what `gjoa hotreload` actually loads (and why it can look broken)
 
 The one diagram to internalize. gjoa is **two independent artifacts** that get
 built and refreshed on *very* different cadences. Most "my app looks broken /
@@ -22,14 +22,14 @@ the other — almost never an actual code defect.
    │  Lane 1 · ~1 s · changes many times an hour                                 │
    └────────────────────────────────────────────────────────────────────────────┘
                                        │
-            gjoa dev  ──(GJOA_DEV_LOADER=1)──▶ loads chrome from gjoa-dev/,
+      gjoa hotreload  ──(GJOA_DEV_LOADER=1)──▶ loads chrome from gjoa-dev/,
                                                NOT from the binary's omni.ja
 ```
 
-**The launch glue** (`~/.local/bin/gjoa`, the `dev` case):
+**The launch glue** (`~/.local/bin/gjoa`, the `hotreload` case):
 1. `sync_if_stale` — if anything under `src/gjoa/` is newer than `.gjoa-sync-stamp`,
    it runs `chrome:dist && chrome:install` to refresh `gjoa-dev/`. So **a normal
-   `gjoa dev` launch picks up your latest chrome edits automatically.**
+   `gjoa hotreload` launch picks up your latest chrome edits automatically.**
 2. It exports `GJOA_DEV_LOADER=1` so GjoaLoader sources `gjoa-dev/` instead of the
    stale omni.ja baked into the binary.
 3. It launches **detached against your DEFAULT profile** (`t3cvidst.default`) — no
@@ -37,12 +37,12 @@ the other — almost never an actual code defect.
 
 ## The trap: a long-lived instance loads chrome *once, at launch*
 
-The chrome bundles are read **when the window opens**. If you launched `gjoa dev`
+The chrome bundles are read **when the window opens**. If you launched `gjoa hotreload`
 at 17:31, then edits/syncs land at 03:03, **the running window still shows the
 17:31 chrome** — including any half-built state if a sync was mid-flight. It will
 look broken even though HEAD is perfect.
 
-→ **Fix: fully quit and relaunch `gjoa dev`.** The relaunch re-syncs and reloads.
+→ **Fix: fully quit and relaunch `gjoa hotreload`.** The relaunch re-syncs and reloads.
 This is the #1 cause of "it looks corrupt." (For chrome-only edits you don't even
 need to quit — `gjoa sync` + restart is enough; no rebuild.)
 
@@ -51,7 +51,7 @@ need to quit — `gjoa sync` + restart is enough; no rebuild.)
 ```
 icons missing / layout corrupt / stale-looking?
 │
-├─ 1. Is a 10-hour-old instance still open?  ──▶ QUIT FULLY, relaunch `gjoa dev`.
+├─ 1. Is a 10-hour-old instance still open?  ──▶ QUIT FULLY, relaunch `gjoa hotreload`.
 │      (relaunch re-syncs current bundles)        Resolves ~all stale-chrome cases.
 │
 ├─ 2. Still broken with a FRESH window?  ──▶ verify the BUILD is fine, headless:
@@ -66,14 +66,14 @@ icons missing / layout corrupt / stale-looking?
 │      Relaunch. (Restores default toolbar/icon layout.)
 │
 └─ 4. Want a guaranteed-clean window without touching your daily profile?
-         gjoa dev -f -no-remote -profile /tmp/gjoa-clean
+         gjoa hotreload -f -no-remote -profile /tmp/gjoa-clean
        Throwaway profile, current bundles, foreground logs.
 ```
 
 ## How I verify visually now (so you don't have to QA)
 
 `tools/test-driver/chrome-gallery.sh` launches the **same binary + same chrome
-bundles `gjoa dev` uses**, headless+offscreen (can't touch your Wayland session),
+bundles `gjoa hotreload` uses**, headless+offscreen (can't touch your Wayland session),
 drives Marionette in chrome context, and screenshots the chrome UI to
 `/tmp/gjoa-gallery/<state>.png` for `default`, `flipped`, and `newtab`.
 

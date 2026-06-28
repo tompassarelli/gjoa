@@ -5,7 +5,7 @@ marionette's synthetic content keys never reach the chrome vim handler (proven
 headless AND headful — a marionette limitation). The only machine-driven path that
 produces TRUSTED keystrokes routing content->chrome exactly like a human is OS-level
 injection. So: Xvfb (virtual display) + openbox (so a window holds X focus) + the
-gjoa-dev binary headful + xdotool XTEST (real key events) + marionette only for
+mach dev binary headful + xdotool XTEST (real key events) + marionette only for
 setup/inspection. No human, fully deterministic.
 
 Run inside: nix shell nixpkgs#xvfb nixpkgs#xdotool nixpkgs#openbox -c \

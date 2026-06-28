@@ -2,7 +2,7 @@
 # Visual self-test: render the gjoa CHROME UI (sidebar / tabs / drawer / urlbar /
 # newtab) in canonical states, headless+offscreen, so a human (or I, the agent)
 # can EYEBALL the actual build instead of pushing manual QA on the user. Same
-# binary + the same chrome bundles `gjoa dev` loads (GJOA_DEV_LOADER=1) — it
+# binary + the same chrome bundles `gjoa hotreload` loads (GJOA_DEV_LOADER=1) — it
 # syncs the current src first, so the gallery always reflects HEAD.
 #
 #   bash tools/test-driver/chrome-gallery.sh                # default + flipped + newtab
@@ -22,7 +22,7 @@ mkdir -p "$OUT"
 
 [ -x "$BIN" ] || { echo "no mach dev binary at $BIN — build it first (gjoa import && gjoa build)"; exit 1; }
 
-# Sync the current chrome bundles into the dev objdir (what `gjoa dev` does on
+# Sync the current chrome bundles into the dev objdir (what `gjoa hotreload` does on
 # launch), unless told to skip. Keeps the gallery honest about HEAD.
 if [ -z "${GALLERY_NO_SYNC:-}" ]; then
   echo "=== syncing chrome bundles (chrome:dist + chrome:install) ===" >&2
@@ -31,7 +31,7 @@ if [ -z "${GALLERY_NO_SYNC:-}" ]; then
 fi
 
 # Borrow the nix wrapper's runtime lib paths so the unwrapped mach binary finds
-# GL/GTK/etc on NixOS (same trick the `gjoa dev` launcher uses).
+# GL/GTK/etc on NixOS (same trick the `gjoa hotreload` launcher uses).
 NIXBIN="$ROOT/result/bin/gjoa"
 if [ -r "$NIXBIN" ]; then
   LIBS=$(grep -oP "'/nix/store/[^']*'" "$NIXBIN" | tr -d "'" | sort -u | tr '\n' ':')

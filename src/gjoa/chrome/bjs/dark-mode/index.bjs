@@ -196,12 +196,10 @@
       ;; dark OS → every site renders light. Dark never consults the OS, so it Just
       ;; Works. Users who want OS-follow can still pick System explicitly.
       (.setCharPref d PREF-MODE "dark")
-      ;; Contrast normalizer DISABLED (2026-06-28). It re-toned ALREADY-READABLE text to
-      ;; a fixed dark-purple (oklch 0.28 0.082 284) on every visible element — worse than
-      ;; the black-on-black it was meant to fix (the user reported all-text-purple across
-      ;; sites; measured normalizer ON=purple, OFF=correct light neutral). Off until the
-      ;; retone math is rebuilt (lodestar pin). Default branch so it flips via `gjoa sync`.
-      (.setBoolPref d PREF-NORMALIZE false))
+      ;; Contrast normalizer ON v2 (2026-06-28): _correct -> neutral NEAR-WHITE (no muted-grey
+      ;; dimming) + #maybeNormalizeContrast re-runs at +3.2s for SPA-late text (canva hero).
+      ;; Bright + neutral + SPA-aware retone of dark-on-dark / low-contrast text.
+      (.setBoolPref d PREF-NORMALIZE true))
     (catch Any e
       (console/error "gjoa-darkmode: set-darkmode-defaults! failed" e))))
 

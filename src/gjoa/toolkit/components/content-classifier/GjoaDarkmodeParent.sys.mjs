@@ -137,15 +137,14 @@ function _apca(t, b) {
 // Re-tone fg over bg to clear |Lc| >= T: pick the polarity (toward white/black) with
 // the most contrast against bg, binary-search the minimal hue-preserving shift.
 function _correct(fg, bg, T) {
+  // Retone failing text to NEUTRAL max contrast — white on a dark backdrop, black on a light
+  // one. BRIGHT (not the minimal-floor grey that muted bestbuy's heading in the v1 regression)
+  // so corrected text reads as crisp as DR's; NEUTRAL so it round-trips cleanly through the
+  // engine's OKLCH inversion (a grey/white can't come back purple). The engine's inversion
+  // band caps the painted result near the ceiling (~0.9), so this lands as near-white text.
   const cw = Math.abs(_apca([255, 255, 255], bg)), cb = Math.abs(_apca([0, 0, 0], bg));
-  const toward = cw >= cb ? [255, 255, 255] : [0, 0, 0];
-  let lo = 0, hi = 1, best = toward.slice();
-  for (let i = 0; i < 18; i++) {
-    const k = (lo + hi) / 2;
-    const c = [Math.round(fg[0] + k * (toward[0] - fg[0])), Math.round(fg[1] + k * (toward[1] - fg[1])), Math.round(fg[2] + k * (toward[2] - fg[2]))];
-    if (Math.abs(_apca(c, bg)) >= T + 3) { best = c; hi = k; } else { lo = k; }
-  }
-  return best;
+  const tv = cw >= cb ? 255 : 0;
+  return [tv, tv, tv];
 }
 // The engine luminance-inverts every computed color (patch 0009, an involution). To
 // make the painted result equal `target` when inversion is ON, author invertLum(target).

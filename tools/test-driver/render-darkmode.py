@@ -68,9 +68,23 @@ def main():
         if m.exe("return !!window.gBrowser;"): break
         time.sleep(0.25)
     m.rect(1600,1000)
+    def sld(h):
+        h=(h or "").replace("www.",""); p=h.split("."); return p[-2] if len(p)>=2 else h
     for url in [u.strip() for u in a.urls.split(",") if u.strip()]:
         slug="".join(c if c.isalnum() else "_" for c in url.replace("https://","").replace("www.",""))[:32]
-        m.ctx("content"); m.navigate(url); time.sleep(a.settle)
+        want=sld(url.replace("https://","").replace("http://","").split("/")[0])
+        m.ctx("content")
+        # Clear the prior page first: a heavy SPA (x.com) can swallow the NEXT navigate,
+        # leaving the browser parked on the old site so we'd screenshot the wrong page
+        # (3 false "losses" last run). about:blank resets it; then verify we landed.
+        m.navigate("about:blank"); time.sleep(0.3)
+        m.navigate(url); time.sleep(a.settle)
+        for _try in range(2):
+            if sld(m.exe("return location.host;")) == want: break
+            m.navigate("about:blank"); time.sleep(0.3); m.navigate(url); time.sleep(a.settle)
+        if sld(m.exe("return location.host;")) != want:
+            print(f"  {a.prefix}: {slug} WRONG-PAGE want={want} (skipped, no false pair)", file=sys.stderr)
+            continue
         try: m.exe("window.scrollTo(0,0); return 1;")
         except Exception: pass
         time.sleep(0.6)

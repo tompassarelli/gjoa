@@ -325,6 +325,74 @@ POST-LOAD REFINER  (Child.DOMContentLoaded, await _explicitPromise)
 - **`migrate-mode!` is dead.** It is defined but its call is commented out of `init-!`, so the `migrated-v2` marker is never set and pre-cutover USER-branch `system` values are not rewritten — they hit the live `system` branch (now plain OS-follow), re-exposing the `system-dark?` false-read above.
 - **Per-doc override semantics inverted.** `content-override` uses `0=dark, 1=light, 2=none` (lower = darker), and `colorInversionOverride='inactive'` means *accept native* (LIGHT if the page is light), not "off-as-in-dark". Misreading either flips a site to light.
 
+## 7. Dev loop — where each change lives & how to iterate fast
+
+Dark mode spans two layers with **very different change-cost**. Knowing which layer a
+fix touches is the difference between a 1-second reload and a 45-minute build.
+
+**Layer 1 — actor JS (the supplementary passes).** `GjoaDarkmode{Child,Parent}.sys.mjs`
++ the chrome modules. These run the post-paint refinement: forced opaque root,
+`#dimLargeMedia`, `#darkenLightPanels`, the APCA text normalizer
+(`#normalizeContrast`/`_correct`), the per-site fix registry. They ship as **loose
+`.sys.mjs`** in the mach dev build (`engine/obj-*/dist/bin/modules/`), so they
+**hot-reload** — no build:
+
+```
+cp src/gjoa/toolkit/components/content-classifier/GjoaDarkmode*.sys.mjs \
+   engine/obj-*/dist/bin/modules/
+rm -rf <profile>/startupCache      # ← REQUIRED (see gotcha)
+# relaunch: GJOA_DEV_LOADER=1 engine/obj-*/dist/bin/gjoa
+```
+
+> **⚠️ startupCache gotcha.** Firefox caches compiled `.sys.mjs` in the profile's
+> `startupCache/`. After a `cp` the cache still serves the OLD module — your edit
+> silently does nothing. **Always `rm -rf <profile>/startupCache` before relaunch.**
+> (This cost hours: a "fast loop" was quietly running stale code.) `gjoa sync` for
+> chrome JS/CSS handles this; a raw loose-actor `cp` does not.
+
+**Layer 2 — engine inversion (Rust).** patch-0009's `invert_color_luminance` (the L
+band, chroma rolloff, brand-preserve, neutral-snap) + the Tier-0 default-invert (0014).
+This is **the only place pixels actually invert** — inside the style cascade, pre-paint,
+on every color incl. shadow DOM. No hot-reload; changing inversion math = a Rust compile.
+
+**Iteration speed for a Rust change (worst → best):**
+
+| Build | What | ~Time | Use for |
+|---|---|---|---|
+| `nix build .#gjoa` | LTO + PGO + `-march=native`, hermetic full rebuild | 45-60 min | the FINAL ship only |
+| `nix build .#gjoa-quickbuild` | no LTO/PGO, hermetic full | ~25 min | iteration / judging — **identical dark-mode behavior** (LTO/PGO are runtime-perf only) |
+| `mach build` (incremental) | recompiles only the changed crate (style) + relink, on the existing obj | 10-20 min | engine dev — **the right tool** |
+
+- **Never iterate on `.#gjoa`** — you pay the LTO tax (~2× compile) for zero visual
+  difference. (This was the single biggest time-sink during v2 tuning.)
+- `mach build faster` (~30 s) repackages JS/chrome only — it does NOT recompile Rust, so
+  it won't pick up an `invert_color_luminance` change.
+- **sccache is OFF** (flake punted on a sandbox-write issue, ~line 230) — turning it on
+  caches `.o` files across rebuilds.
+- **mach and nix are independent.** A nix build does NOT update the mach obj, and vice
+  versa. After a nix build the dev obj is still the old engine — `mach build` to refresh
+  it before hot-reloading actors against new inversion math.
+
+**Prototype color math in JS, bake once.** The actor carries JS models of the engine
+inversion (`_invertLum`, `_correct`); node-test a new formula on real values in seconds
+before paying the compile. **Caveat:** the JS model can drift from the Rust — the "purple
+text" regression was the actor's sRGB-luminance pre-invert not matching the engine's OKLCH
+inversion. Trust JS prototypes for *actor* logic; for *engine* math the JS is a sketch, the
+Rust is truth.
+
+**The inversion is tiered by chroma** (patch-0009, on `c_in`):
+- `c_in > 0.08` → **brand-preserve**: return the color UNCHANGED (orange banner, red logo
+  keep their original color — never muddied/inverted).
+- `c_in < 0.03` → **neutral-snap**: drop chroma to 0 before inverting (a faint-cast "white"
+  heading stays clean white, not a tinted gold).
+- else → invert L into the band, shedding chroma proportionally (the gamut rolloff that
+  keeps a darkened saturated color in sRGB instead of skidding blue→purple).
+
+Layer-1 actor passes that darken what the band leaves mid-tone: **`#darkenLightPanels`**
+forces large opaque *near-neutral* (`c ≤ 0.05`) mid/light bg blocks to the dark floor
+(a uniform L-band leaves a 0.5 grey at ~0.55 → reads as a light panel), skipping
+high-chroma blocks so brand surfaces are left to the engine's brand-preserve.
+
 ---
 
 # Part B — Dark Mode v2 (design theory + roadmap)

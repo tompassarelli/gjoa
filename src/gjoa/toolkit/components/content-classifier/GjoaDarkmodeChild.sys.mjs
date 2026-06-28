@@ -332,7 +332,17 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     // light — e.g. amazon's promo banner).
     if (resp.override === "active") {
       this.#dimLargeMedia(win, doc);
+      // #forceOpaqueRoot ran at the top BEFORE this override was set, so on a page the
+      // engine force-inverts HERE (not pre-inverted by tier0) its probe saw a still-light
+      // page and skipped — leaving a transparent html/body that bleeds (walmart/figma read
+      // washed-out). Re-run after the override repaints so the opaque dark root is laid.
+      win.requestAnimationFrame(() =>
+        win.requestAnimationFrame(() => this.#forceOpaqueRoot(win, doc)));
     }
+    // Darken light panels on ANY inverted doc (the pass self-gates on real inversion) — the
+    // engine's own default-invert leaves resp.override empty, so this can't hang off "active".
+    win.requestAnimationFrame(() =>
+      win.requestAnimationFrame(() => this.#darkenLightPanels(win, doc)));
     // Pass-2 polish (pref-gated, default off): the refiner has settled the
     // inversion state, so the image pass can now read it the right way round.
     this.#maybeRunImagePass(win, doc);
@@ -394,7 +404,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
               continue;
             }
             const tn = el.tagName;
-            let isMedia = tn === "IMG" || tn === "VIDEO" || tn === "CANVAS";
+            const isReplaced = tn === "IMG" || tn === "VIDEO" || tn === "CANVAS";
+            let isMedia = isReplaced;
             if (!isMedia) {
               // a big element whose BACKGROUND is a raster image (amazon's promo banner
               // is a tan bg-image <div>) — the engine exempts it, so it stays bright.
@@ -402,12 +413,12 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
               try { bg = win.getComputedStyle(el).backgroundImage || ""; } catch (e) {}
               isMedia = /url\(/i.test(bg);
             }
-            if (isMedia) {
-              // A WIDE hero (aspect >= 2: amazon's 1500x600 promo banner) is a designed
-              // light UNIT (light bg + dark text). Inverting the whole element flips it to
-              // a correct dark banner (dark bg + light text) — the only thing that gets
-              // both right. A non-wide hero is a PHOTO; inverting it makes a negative, so
-              // just dim it.
+            // Replaced media (<img>/<video>/<canvas>) is a PHOTO — leave it UNTOUCHED, as
+            // Dark Reader does. Dimming photos grays the whole page (target's "gray veil"
+            // regression); inverting makes a negative. Only tone a large bg-image DIV the
+            // engine cannot invert (a raster bg the engine exempts): wide -> flip to a
+            // dark banner, else dim it down so it doesn't dominate the dark page.
+            if (isMedia && !isReplaced) {
               const wide = r.width / Math.max(1, r.height) >= 2 && r.width >= 280;
               el.setAttribute("data-gjoa-dim", wide ? "inv" : "dim");
               n++;
@@ -439,6 +450,101 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
           }
         } catch (e) {}
       }, 1400);
+    } catch (e) {}
+  }
+
+  // The uniform luminance inversion leaves MID-TONE backgrounds mid-tone (a 0.5 grey
+  // inverts to ~0.55), so large panels/headers/cards read as light blocks on the dark page
+  // (target's salmon header, walmart's light-blue tiles). Force big opaque mid/light-bg
+  // blocks down to the dark floor, KEEPING hue/chroma (brand: a salmon header -> dark red,
+  // not neutral black). One delayed re-pass catches lazy/late panels.
+  #darkenLightPanels(win, doc) {
+    try {
+      if (!doc.body) {
+        return;
+      }
+      // Self-gate: only on a doc the engine actually inverted (a black probe renders light),
+      // so a genuinely-light page is never darkened.
+      const pr = doc.createElement("span");
+      pr.style.cssText = "color:#000;position:fixed;left:-9999px;top:0";
+      doc.body.appendChild(pr);
+      const cstr = win.getComputedStyle(pr).color;
+      const pc = (cstr.match(/[\d.]+/g) || []).map(Number);
+      const inv = /okl|lab|lch/i.test(cstr) ? pc[0] > 0.5 : pc[0] + pc[1] + pc[2] > 300;
+      pr.remove();
+      if (!inv) {
+        return;
+      }
+      const collect = () => {
+        const rules = [];
+        let n = this._panelN | 0;
+        let scanned = 0;
+        for (const el of doc.body.querySelectorAll("div,section,header,nav,main,aside,article,form,ul")) {
+          if (++scanned > 4000 || rules.length > 120) {
+            break;
+          }
+          if (el.hasAttribute("data-gjoa-panel")) {
+            continue;
+          }
+          const r = el.getBoundingClientRect();
+          if (r.width * r.height < 28000 || r.bottom < 0 || r.top > 3000) {
+            continue;
+          }
+          let cs;
+          try {
+            cs = win.getComputedStyle(el);
+          } catch (e) {
+            continue;
+          }
+          const m = cs.backgroundColor.match(
+            /oklch\(([\d.]+)\s+([\d.eE+-]+)\s+([\d.a-z]+)(?:\s*\/\s*([\d.]+))?/
+          );
+          if (!m) {
+            continue;
+          }
+          const L = parseFloat(m[1]);
+          const alpha = m[4] !== undefined ? parseFloat(m[4]) : 1;
+          const C = parseFloat(m[2]) || 0;
+          // Only OPAQUE, MID/LIGHT, NEAR-NEUTRAL panels. High chroma (> .05) is a BRAND
+          // surface — leave it for the engine to keep at its ORIGINAL color (user: brand
+          // stays as-is). Already-dark (< .40) is fine; near-white (> .88) is a text/icon
+          // surface; transparent layers paint no panel.
+          if (alpha < 0.6 || L < 0.40 || L > 0.88 || C > 0.05) {
+            continue;
+          }
+          const H = m[3];
+          el.setAttribute("data-gjoa-panel", n);
+          rules.push(`[data-gjoa-panel="${n}"]{background-color:oklch(0.2 ${C} ${H})!important}`);
+          n++;
+        }
+        this._panelN = n;
+        return rules;
+      };
+      const apply = () => {
+        const rules = collect();
+        if (!rules.length) {
+          return;
+        }
+        if (!this._panelSheet || !this._panelSheet.isConnected) {
+          this._panelSheet = doc.createElement("style");
+          this._panelSheet.id = "gjoa-darkmode-panels";
+          (doc.head || doc.documentElement).appendChild(this._panelSheet);
+        }
+        this._panelSheet.textContent += rules.join("");
+      };
+      apply();
+      if (!this._rePanel) {
+        this._rePanel = true;
+        // SPA panels stream in late; a few staggered re-scans catch them (each tags only
+        // newly-appeared panels — already-tagged ones are skipped).
+        for (const delay of [1500, 4000, 8000]) {
+          win.setTimeout(() => {
+            try {
+              apply();
+            } catch (e) {}
+          }, delay);
+        }
+      }
     } catch (e) {}
   }
 
@@ -489,6 +595,15 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     win.requestAnimationFrame(() =>
       win.requestAnimationFrame(() => this.#normalizeContrast(win, doc))
     );
+    // SPA backstop: heavy SPAs (canva) paint hero/headings AFTER the first pass, so the
+    // single retone misses them. Re-run once after they settle. Bounded to one extra pass
+    // (not a hot observer) to keep the cost in check.
+    if (!this._reNormalized) {
+      this._reNormalized = true;
+      win.setTimeout(() => {
+        try { this.#normalizeContrast(win, doc); } catch (e) {}
+      }, 3200);
+    }
   }
 
   // Walk visible text, tag each node (data-gjoa-cn), and ask the parent — which can

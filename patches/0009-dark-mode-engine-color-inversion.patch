@@ -460,7 +460,7 @@ index 7ed8c2c7a1..54ffa6f483 100644
 diff --git a/servo/components/style/values/specified/color.rs b/servo/components/style/values/specified/color.rs
 --- a/servo/components/style/values/specified/color.rs
 +++ b/servo/components/style/values/specified/color.rs
-@@ -860,6 +860,52 @@
+@@ -860,6 +860,60 @@
      }
  }
  
@@ -487,7 +487,15 @@ diff --git a/servo/components/style/values/specified/color.rs b/servo/components
 +    // the convert-back clamps it — skidding blue->purple and orange->mud (the HN banner).
 +    // Lightening keeps chroma (ratio capped at 1) so neutral dark text stays neutral.
 +    let c_in = oklch.c1().unwrap_or(0.0);
-+    let c_out = if l_in > 1e-4 { c_in * (l_out / l_in).min(1.0) } else { c_in };
++    // Brand preserve: a high-chroma color is a brand surface (orange banner, red logo,
++    // brand blue) -> return it UNCHANGED, never inverted, so it keeps its ORIGINAL color.
++    if c_in > 0.08 {
++        return color.clone();
++    }
++    // Neutral snap: a faint cast on a near-neutral color would invert to a tinted grey (a
++    // "white" heading drifting gold); snap near-neutral to TRUE neutral so it stays clean.
++    let c_eff = if c_in < 0.03 { 0.0 } else { c_in };
++    let c_out = if l_in > 1e-4 { c_eff * (l_out / l_in).min(1.0) } else { c_eff };
 +    AbsoluteColor::new(ColorSpace::Oklch, l_out, c_out, oklch.c2(), oklch.alpha())
 +}
 +

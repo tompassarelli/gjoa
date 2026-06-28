@@ -80,8 +80,9 @@
         #
         # TWO BUILD VARIANTS (both LOCAL/personal — portable builds for OTHER
         # people are the CI artifacts in .github/workflows/, NOT a nix package):
-        #   gjoa-dev = no PGO/LTO, portable. Fast to build — the dev loop, and
-        #              the portable target for `nix bundle`. `.#gjoa-dev`.
+        #   gjoa-quickbuild = no PGO/LTO, portable. Fast to build — the quick
+        #              local-build loop, and the portable target for
+        #              `nix bundle`. `.#gjoa-quickbuild`.
         #   gjoa     = LTO + -march=native, tuned for THIS machine's CPU. The
         #              maintainer's daily driver (what the rofi/drun "gjoa" entry
         #              launches). Fastest at runtime, but NOT portable — it
@@ -248,8 +249,8 @@
             # sandbox and already share state across runs via the objdir.
           });
 
-        # Dev variant — what you build day-to-day. Skips PGO+LTO.
-        gjoa-dev-unwrapped = mkGjoa {
+        # Quickbuild variant — what you build day-to-day. Skips PGO+LTO.
+        gjoa-quickbuild-unwrapped = mkGjoa {
           pgoSupport = false;
           ltoSupport = false;
           crashreporterSupport = false;
@@ -287,7 +288,7 @@
         # Most attrs (applicationName, binaryName, branding, mainProgram) flow
         # through from the unwrapped derivation — `wrapFirefox { }` reads them
         # from there.
-        gjoa-dev = pkgs.wrapFirefox gjoa-dev-unwrapped { };
+        gjoa-quickbuild = pkgs.wrapFirefox gjoa-quickbuild-unwrapped { };
         gjoa-native = pkgs.wrapFirefox gjoa-native-unwrapped { };
       in
       {
@@ -296,8 +297,9 @@
         # "gjoa" entry launches it. -march=native ⇒ a nixos-rebuild that touches
         # this input is a ~1.5–2h LTO compile (cache it once and you're fine).
         #
-        # `.gjoa-dev` = the fast, no-opt, PORTABLE variant — the dev loop and the
-        # target for `nix bundle .#gjoa-dev` (a relocatable Linux executable).
+        # `.gjoa-quickbuild` = the fast, no-opt, PORTABLE variant — the quick
+        # local-build loop and the target for `nix bundle .#gjoa-quickbuild`
+        # (a relocatable Linux executable).
         #
         # There is intentionally NO nix "release": portable builds for other
         # people are the cross-platform CI artifacts (.github/workflows/).
@@ -309,8 +311,8 @@
         packages.gjoa-unwrapped = gjoa-native-unwrapped;
         packages.gjoa-native = gjoa-native;
         packages.gjoa-native-unwrapped = gjoa-native-unwrapped;
-        packages.gjoa-dev = gjoa-dev;
-        packages.gjoa-dev-unwrapped = gjoa-dev-unwrapped;
+        packages.gjoa-quickbuild = gjoa-quickbuild;
+        packages.gjoa-quickbuild-unwrapped = gjoa-quickbuild-unwrapped;
 
         # ===================================================================
         # Dev shells — split into two intentionally:

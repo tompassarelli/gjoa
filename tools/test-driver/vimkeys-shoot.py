@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end verify of the #130 vim bindings against a live gjoa-dev (new chrome
+"""End-to-end verify of the #130 vim bindings against a live mach build (new chrome
 bundle): navigate a link-rich fixture, inject a REAL 'f' keydown via PerformActions
 (exercising the chrome vim dispatch, not the actor directly), assert the hint
 overlay appears + screenshot; then inject '/' and assert the native findbar opens.

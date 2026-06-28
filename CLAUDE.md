@@ -70,7 +70,7 @@ live in the gates + [`docs/stewardship/topology.md`](docs/stewardship/topology.m
 
 - **One rebuild ≠ one binary.** Mach (`engine/obj-*/`) and nix (`/nix/store/`) are
   separate builds for separate purposes; doing one doesn't give you the other.
-- **Explicit CLI, not auto-detect:** `gjoa` (nix) vs `gjoa dev` (mach) — whatever
+- **Explicit CLI, not auto-detect:** `gjoa` (nix) vs `gjoa hotreload` (mach) — whatever
   you typed runs.
 - **Production-mode paths must work in nix** — the dev overlay hides `// TODO`
   stubs that a nix build exposes.
@@ -81,7 +81,7 @@ live in the gates + [`docs/stewardship/topology.md`](docs/stewardship/topology.m
   `~/code/reference/firefox/` (mozilla-central).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — map, rebuild ladder, decision tree.
 - [`docs/build-pipeline.md`](docs/build-pipeline.md) — binary-vs-chrome cadence, what
-  `gjoa dev` loads, the "looks broken / stale chrome" recovery. **Verify chrome
+  `gjoa hotreload` loads, the "looks broken / stale chrome" recovery. **Verify chrome
   visually with `bash tools/test-driver/chrome-gallery.sh` — never push manual QA back on the user.**
 - [`docs/daily-loop.md`](docs/daily-loop.md) — command cheatsheet + verify-vs-release tree.
 - [`docs/nix-dev-options.md`](docs/nix-dev-options.md) — when mach vs nix.

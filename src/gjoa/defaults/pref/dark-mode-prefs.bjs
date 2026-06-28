@@ -140,10 +140,11 @@
 ;; elements were black-on-black with this off and 0 with it on. It was the missing
 ;; backstop behind the recurring "dark mode is unreadable" reports. (Cost: one
 ;; drawSnapshot + per-text APCA at DOMContentLoaded on inverted pages.)
-;; DISABLED 2026-06-28: the normalizer re-tones already-readable text to a fixed dark-
-;; purple on every visible element (worse than the black-on-black it targeted). Off +
-;; knob hidden until the retone math is rebuilt (lodestar pin).
-(pref "gjoa.darkmode.normalize.enabled" false)
+;; ON v2 2026-06-28: _correct now returns NEUTRAL near-white (white on dark / black on light,
+;; not the minimal-floor grey that dimmed bestbuy's heading) and #maybeNormalizeContrast
+;; re-runs once at +3.2s to catch SPA-late text (canva hero). Bright + neutral (no purple) +
+;; SPA-aware. Fixes dark-on-dark / low-contrast text.
+(pref "gjoa.darkmode.normalize.enabled" true)
 ;; APCA Lc floor the normalizer enforces (45 ≈ large/secondary text; raise toward 60
 ;; for stricter body-text contrast). Below this, text gets re-toned.
 (pref "gjoa.darkmode.normalize.floor" 45)

@@ -50,7 +50,7 @@
 ;; The input fingerprint alone is NOT enough: if dist/chrome is emptied (a clean,
 ;; a `rm -rf dist/chrome`, a failed bake) while the inputs are unchanged, the
 ;; stamp still matches and we'd skip the rebuild — leaving the dev binary with NO
-;; chrome (the bug that broke gjoa dev). So we also require the output to exist.
+;; chrome (the bug that broke gjoa hotreload). So we also require the output to exist.
 (def DIST-CHROME :- String (join REPO-ROOT "dist" "chrome"))
 (def OUT-SENTINEL :- String (join DIST-CHROME "JS" "gjoa-tabs.uc.js"))
 (def DEV-SENTINEL :- String (join GJOA-DEV "JS" "gjoa-tabs.uc.js"))

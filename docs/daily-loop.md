@@ -11,8 +11,8 @@ architecture, decision trees, and "why does it work this way", see
 |---|---|---|
 | `gjoa` | nix (packaged) | detached — closes the terminal |
 | `gjoa -f` | nix | foreground — shows stdout/stderr |
-| `gjoa dev` | mach (dev build) | detached |
-| `gjoa dev -f` | mach | foreground |
+| `gjoa hotreload` | mach (dev build) | detached |
+| `gjoa hotreload -f` | mach | foreground |
 
 ## Where am I?
 
@@ -29,7 +29,7 @@ pulls, ~1–2 sec, no cache.
 ```
 gjoa sync          # bundle src/gjoa/chrome/src/* → dist/chrome/{JS,CSS}/
                    # then symlink into <mach-install>/gjoa-dev/
-gjoa dev           # restart the mach binary to pick up the new bundles
+gjoa hotreload     # restart the mach binary to pick up the new bundles
 ```
 
 For continuous bundle-on-save:
@@ -43,7 +43,7 @@ gjoa watch         # rebundles on file change; restart browser to see
 ```
 gjoa import        # copies src/gjoa/ → engine/, applies patches, bakes branding
 gjoa build faster  # mach re-zips omni.ja (no C++ compile)
-gjoa dev
+gjoa hotreload
 ```
 
 `gjoa build faster` requires `engine/obj-*/` to already exist (one

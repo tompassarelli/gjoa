@@ -69,13 +69,13 @@ This README is the stable shape — durable claims about what the software does,
 ```sh
 bun run init                    # download mozilla-central + apply overlays
 nix build .#gjoa --impure       # personal build — LTO + -march=native (THIS CPU only)
-nix build .#gjoa-dev --impure   # dev variant — fast, no LTO, CPU-portable
+nix build .#gjoa-quickbuild --impure  # quickbuild — fast, no LTO, CPU-portable
 ./result/bin/gjoa
 ```
 
 - **Release builds** — the quickest way to try gjoa without compiling. [`.github/workflows/`](.github/workflows/) builds portable artifacts per platform (Linux + macOS + Windows) on every tag, none `-march=native`. These are the builds to hand out.
 - **Personal native build → `.#gjoa`.** Compiled `-march=native` for the CPU it's built on — fastest, but it can crash (SIGILL) on hardware that lacks those instructions, so it's a *local* build, not for arbitrary machines.
-- **Portable / dev build → `.#gjoa-dev`.** Fast, no LTO, CPU-portable; or `nix bundle .#gjoa-dev --impure` for a single relocatable Linux executable that runs on any glibc distro with no Nix on the target.
+- **Portable / quickbuild → `.#gjoa-quickbuild`.** Fast, no LTO, CPU-portable; or `nix bundle .#gjoa-quickbuild --impure` for a single relocatable Linux executable that runs on any glibc distro with no Nix on the target.
 
 The build variants and their exact flags are defined in [`flake.nix`](flake.nix); CI clones the **pinned** [Beagle](https://github.com/Autonymy/beagle) compiler — the SHA in [`configs/beagle.ref`](configs/beagle.ref) — as a sibling checkout, so every build is deterministic against a frozen compiler instead of a moving `HEAD`.
 
@@ -88,7 +88,7 @@ nix develop .#mach          # shell with mach + toolchain
 cd engine && ./mach build   # one-time, ~30-60 min cold
 # edit src/gjoa/chrome/bjs/*.bjs (or chrome/css/*.css) ...
 gjoa sync                   # compile + deploy the .bjs chrome into the mach install (~1s)
-gjoa dev                    # restart the binary
+gjoa hotreload              # restart the binary
 ```
 
 Cheatsheet: [`docs/daily-loop.md`](docs/daily-loop.md) · full map + rebuild ladder: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

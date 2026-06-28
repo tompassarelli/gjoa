@@ -350,13 +350,13 @@
                   (.push rec (str "  nix develop .#mach  &&  cd engine && ./mach build   " (dim "(~30-60 min cold; do on Sunday)"))))
                 (do
                   (.push rec (yellow "Lane 2 changes pending."))
-                  (.push rec "  bun run import  &&  (cd engine && ./mach build faster)  &&  gjoa dev")))
+                  (.push rec "  bun run import  &&  (cd engine && ./mach build faster)  &&  gjoa hotreload")))
               (.-length (:lane1 lanes))
               (do
                 (.push rec (green "Lane 1 only."))
-                (.push rec (str "  gjoa sync  &&  " (if hasMach "gjoa dev" "gjoa") (dim (str "  (" (if hasMach "mach" "nix") " binary)")))))
+                (.push rec (str "  gjoa sync  &&  " (if hasMach "gjoa hotreload" "gjoa") (dim (str "  (" (if hasMach "mach" "nix") " binary)")))))
               :else
-              (.push rec (green "Clean. Launch with `gjoa` or `gjoa dev`.")))
+              (.push rec (green "Clean. Launch with `gjoa` or `gjoa hotreload`.")))
             (doseq [line rec] (console/log (str "  " line))))
 
           (when (> (.-length (:errors oracles)) 0)

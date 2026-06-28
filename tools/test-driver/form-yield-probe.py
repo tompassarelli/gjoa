@@ -2,7 +2,7 @@
 """Direct proof that vim YIELDS to form fields: focus a real text input, type
 'test' via real key events, and assert the characters land IN the input (value
 == 'test') and NO picker opened. Then confirm vim is still live when NOT in a
-field ('f' renders hints). Drives the same gjoa-dev binary `gjoa dev` runs.
+field ('f' renders hints). Drives the same mach binary `gjoa hotreload` runs.
 """
 import argparse, base64, json, socket, sys, time
 
