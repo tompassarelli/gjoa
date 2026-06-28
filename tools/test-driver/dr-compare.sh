@@ -7,10 +7,11 @@
 # Usage: tools/test-driver/dr-compare.sh [site-list] [N] [outdir]
 set -uo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-LIST="${1:-$REPO/configs/dark-mode-100.txt}"
-N="${2:-100}"
+LIST="${1:-$REPO/configs/dark-mode-200.txt}"
+N="${2:-200}"
 OUT="${3:-/tmp/dr-compare}"
-GBIN="$(echo "$REPO"/engine/obj-*/dist/bin/gjoa)"
+# Prefer the native nix binary (baked chrome — the deliverable); fall back to the dev obj binary.
+GBIN="$REPO/result/bin/gjoa"; [ -x "$GBIN" ] || GBIN="$(echo "$REPO"/engine/obj-*/dist/bin/gjoa)"
 FF=/run/current-system/sw/bin/firefox
 GPROF_SRC="$HOME/.config/mozilla/gjoa/4859ptgk.default-default"
 DPROF_SRC="$HOME/.mozilla/firefox/bgtdfn4f.default"
@@ -25,10 +26,12 @@ run_arm() { # $1=label $2=bin $3=profile-src $4=port $5..=extra bin args
   local dst="/tmp/cmp-$label"; rm -rf "$dst"; mkdir -p "$dst"
   rsync -a "${RSX[@]}" "$psrc/" "$dst/" 2>/dev/null
   printf 'user_pref("marionette.port",%s);\nuser_pref("marionette.enabled",true);\nuser_pref("browser.sessionstore.resume_from_crash",false);\nuser_pref("extensions.autoDisableScopes",0);\n' "$port" >> "$dst/user.js"
-  MOZ_HEADLESS=1 GJOA_DEV_LOADER=1 GJOA_ALLOW_INSECURE=1 timeout 2400 "$bin" -no-remote -profile "$dst" "$@" -marionette -remote-allow-system-access about:blank >"/tmp/cmp-$label.log" 2>&1 &
+  # GJOA_DEV_LOADER only for the dev obj binary (loose chrome); the nix binary bakes it.
+  local dev=""; case "$bin" in *obj-*) dev="GJOA_DEV_LOADER=1";; esac
+  env MOZ_HEADLESS=1 GJOA_ALLOW_INSECURE=1 $dev timeout 2400 "$bin" -no-remote -profile "$dst" "$@" -marionette -remote-allow-system-access about:blank >"/tmp/cmp-$label.log" 2>&1 &
   local pid=$!
   sleep 14
-  timeout 2200 python3 "$REPO/tools/test-driver/render-darkmode.py" --port "$port" --prefix "$label" --outdir "$OUT" --urls "$URLS" --settle 8
+  timeout 2200 python3 "$REPO/tools/test-driver/render-darkmode.py" --port "$port" --prefix "$label" --outdir "$OUT" --urls "$URLS" --settle 10
   kill "$pid" 2>/dev/null
 }
 
