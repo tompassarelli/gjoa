@@ -1,11 +1,11 @@
 # Pinned fram ref — the FROZEN fram commit gjoa's projector/codegraph tooling
 # (tools/projector/*) resolves against, NOT live ~/code/fram. gjoa depends on fram
 # ONLY for the code-as-claims projector (CI Gate C), never for the browser build.
-# A dedicated fleet worktree at this ref lives at ~/code/fram-pin; .envrc points
+# A dedicated shared-pin worktree at this ref lives at ~/code/fram-pin; .envrc points
 # FRAM_PIN_ROOT there so the projector floats on a known-good fram, isolated from
 # fram-2's self-host churn (which lives in a SEPARATE worktree, ~/code/fram-lease,
 # not merged to fram main). fram's claim-engine + EDN-AST surface is stable across
 # that churn (fram-2 confirmed 2026-06-21) — so this is a deliberate floor, not a
-# break-driven pin. This is the FLEET fram pin (same SHA the lodestar coordinator
-# stages); bump DELIBERATELY together with the fleet when self-host lands in main.
+# break-driven pin. This is the shared fram pin (same SHA the tern coordinator
+# stages); bump DELIBERATELY together with the swarm when self-host lands in main.
 969bdc1
