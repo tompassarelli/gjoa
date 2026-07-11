@@ -38,8 +38,16 @@
                        " .tools-and-extensions > moz-button:not(.tools-overflow):first-of-type {"
                        "   --button-outer-padding-block-start: calc(var(--space-xxsmall) * 2) !important;"
                        " }"
+                       ;; bookmarks↔gear is an INTERNAL boundary (bookmarks is the
+                       ;; last tool, gear the sole .bottom-actions button right below),
+                       ;; so both its pads must equal the inner-icon boundary (one
+                       ;; --space-xxsmall each) — NOT the doubled cluster-edge value —
+                       ;; or the gear sits with a visibly wider gap above it (#horizontal).
                        " .tools-and-extensions > moz-button:not(.tools-overflow):last-of-type {"
-                       "   --button-outer-padding-block-end: calc(var(--space-xxsmall) * 2) !important;"
+                       "   --button-outer-padding-block-end: var(--space-xxsmall) !important;"
+                       " }"
+                       " .bottom-actions > moz-button:first-of-type {"
+                       "   --button-outer-padding-block-start: var(--space-xxsmall) !important;"
                        " }"
                        " .bottom-actions > moz-button:last-of-type {"
                        "   --button-outer-padding-block-end: calc(var(--space-xxsmall) * 2) !important;"
