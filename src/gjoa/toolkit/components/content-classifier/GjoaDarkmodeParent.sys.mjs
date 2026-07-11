@@ -121,6 +121,16 @@ function hostInPref(host, pref) {
 // the exact same math to MEASURE; here we apply it to FIX). Pure functions.
 const NORMALIZE_PREF = "gjoa.darkmode.normalize.enabled";
 const NORMALIZE_FLOOR_PREF = "gjoa.darkmode.normalize.floor";
+// The engine's inversion band (patch 0009): every color's OKLCH L is remapped to
+// L_out = ceiling - L_in*(ceiling - floor). Read the same live prefs the cascade
+// reads so we can INVERT the map and recover a text run's AUTHORED lightness.
+const INVERT_FLOOR_PREF = "gjoa.darkmode.invert.bgLightness"; // white maps here
+const INVERT_CEIL_PREF = "gjoa.darkmode.invert.fgLightness"; // black maps here
+// FG over-dimming thresholds (OKLCH L, 0..1), tuned on the mark-2 corpus.
+const FG_DARK_BG_L = 0.45; // backdrop counts as dark/saturated at or below this L
+const FG_LIGHT_MIN_L = 0.55; // a run this light is a clear light-on-dark run
+const FG_RAISE_BELOW_L = 0.85; // only raise runs dimmer than near-white (no-op above)
+const FG_AUTHORED_LIGHT_L = 0.85; // recovered authored L that counts as near-white
 
 function _lin(c) { return Math.pow(c / 255, 2.4); }
 function _Ys(p) { return 0.2126729 * _lin(p[0]) + 0.7151522 * _lin(p[1]) + 0.0721750 * _lin(p[2]); }
@@ -146,6 +156,19 @@ function _correct(fg, bg, T) {
   const tv = cw >= cb ? 255 : 0;
   return [tv, tv, tv];
 }
+// Raise a light-on-dark (or authored-light-but-floored) text run toward the
+// near-white ceiling, PRESERVING hue for chromatic runs so a link keeps its blue.
+// Returns the desired PAINTED color; the child re-inverts it (invertLum) so the
+// engine's band lands it near-white. Neutral -> pure white; chromatic -> the same
+// hue scaled so its brightest channel reaches white (raises L, keeps hue).
+function _raiseLight(fg) {
+  const mx = Math.max(fg[0], fg[1], fg[2]), mn = Math.min(fg[0], fg[1], fg[2]);
+  if (mx - mn <= 24 || mx <= 0) {
+    return [255, 255, 255];
+  }
+  const k = 255 / mx;
+  return [Math.round(fg[0] * k), Math.round(fg[1] * k), Math.round(fg[2] * k)];
+}
 // The engine luminance-inverts every computed color (patch 0009, an involution). To
 // make the painted result equal `target` when inversion is ON, author invertLum(target).
 function _invertLum(rgb) {
@@ -162,6 +185,16 @@ function _invertLum(rgb) {
 function _srgbLin(c8) { const c = c8 / 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
 function _relLum(r, g, b) { return 0.2126 * _srgbLin(r) + 0.7152 * _srgbLin(g) + 0.0722 * _srgbLin(b); }
 function _lstar(Y) { return Y <= 0.008856 ? 903.3 * Y : 116 * Math.cbrt(Y) - 16; }
+// sRGB(0..255) -> OKLab L (== OKLCH L, 0..1). The engine's band works in OKLCH L,
+// so the fg-preservation logic must reason in the SAME space (Ottosson OKLab).
+function _oklchL(rgb) {
+  const lin = _srgbLin;
+  const r = lin(rgb[0]), g = lin(rgb[1]), b = lin(rgb[2]);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+}
 
 export class GjoaDarkmodeParent extends JSWindowActorParent {
   // Decision-path trace (pref-gated, zero overhead off). Tab-delimited on
@@ -390,6 +423,15 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       return { correctives: [] };
     }
     const T = Services.prefs.getIntPref(NORMALIZE_FLOOR_PREF, 45);
+    // Live inversion band, to recover a run's authored lightness (see below).
+    const floor = Services.prefs.getIntPref(INVERT_FLOOR_PREF, 20) / 100;
+    const ceil = Services.prefs.getIntPref(INVERT_CEIL_PREF, 92) / 100;
+    const span = Math.max(0.01, ceil - floor);
+    // Only the engine's band dims a light fg — and it only runs where THIS doc is
+    // being inverted. On a native-dark site (not inverted) the muted-looking text is
+    // the site's own choice, so the raise below must NOT touch it (protects the
+    // native-dark winners). The child measured this per-doc flag with a black probe.
+    const inverted = !!data?.inverted;
     const win =
       this.browsingContext?.topChromeWindow ||
       Services.wm.getMostRecentWindow("navigator:browser");
@@ -436,6 +478,26 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       }
       samples.sort((a, c) => _Ys(a) - _Ys(c));
       const bg = samples[Math.floor(samples.length / 2)];
+      // FG over-dimming guard (wave-5). The engine band remaps EVERY color's OKLCH L
+      // role-blind (L_out = ceiling - L_in*span), so foreground text a site drew LIGHT
+      // lands muted mid-grey — or, when it was authored near-white, is floored to dark:
+      // legible but far dimmer than the near-white a reference dark theme keeps. Correct
+      // that BEFORE the APCA skip, and only ever RAISE toward the ceiling (never lower a
+      // run's L on a dark backdrop). Two faces, both scoped to a dark/saturated backdrop:
+      const fgL = _oklchL(el.fg), bgL = _oklchL(bg);
+      const authoredL = Math.max(0, Math.min(1, (ceil - fgL) / span)); // invert the band
+      const darkBg = inverted && bgL <= FG_DARK_BG_L;
+      // (1) a legible light-on-dark run the band left dimmer than near-white.
+      const mutedLight =
+        darkBg && fgL > bgL + 0.1 && fgL >= FG_LIGHT_MIN_L && fgL < FG_RAISE_BELOW_L;
+      // (2) a run authored near-WHITE that the band floored to dark.
+      const flooredWhite =
+        darkBg && authoredL >= FG_AUTHORED_LIGHT_L && fgL < FG_LIGHT_MIN_L;
+      if (mutedLight || flooredWhite) {
+        const r = _raiseLight(el.fg);
+        correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+        continue;
+      }
       if (Math.abs(_apca(el.fg, bg)) >= T) {
         continue;
       }
