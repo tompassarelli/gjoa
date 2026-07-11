@@ -24,52 +24,40 @@ LPROF_SRC="$HOME/.mozilla/firefox/bgtdfn4f.default"   # FF profile, NO Dark Read
 RSX=(--exclude='cache2/' --exclude='startupCache/' --exclude='*.lock' --exclude='lock' --exclude='.parentlock' --exclude='storage/default/*/cache/' --exclude='cache/')
 
 mkdir -p "$OUT"; rm -f "$OUT"/*.png
-URLS=$(grep -vE '^\s*#|^\s*$' "$LIST" | head -n "$N" | paste -sd,)
 echo "comparing $N sites -> $OUT"
 
-# Timeouts must scale with N: the FF arms run ~32s/site (DR extension + system FF),
-# gjoa ~22s/site. Fixed 2400s killed the FF browsers at site ~68 of a 104-site run
-# (2026-07-11 baseline: BrokenPipe mid-corpus) while gjoa squeaked under — a pace
-# divergence a 3-site smoke test cannot expose. 45s/site + slack covers the slow arm.
-TMO_BROWSER=$((N * 45 + 600))
-TMO_RENDER=$((N * 45 + 300))
+# Per-arm shards: each arm runs SHARDS concurrent browser+renderer pairs.
+# Port layout (spacing = SHARDS between arm bases, so ranges never overlap):
+#   gjoa : 2887–(2887+SHARDS-1)
+#   dr   : 2899–(2899+SHARDS-1)
+#   light: 2911–(2911+SHARDS-1)
+# 2887 is the first port above the 2860-2886 live mark-3 range.
+SHARDS=6
 
-run_arm() { # $1=label $2=bin $3=profile-src $4=port $5..=extra bin args
-  local label="$1" bin="$2" psrc="$3" port="$4"; shift 4
-  local dst="/tmp/cmp-$label"; rm -rf "$dst"; mkdir -p "$dst"
-  rsync -a "${RSX[@]}" "$psrc/" "$dst/" 2>/dev/null
-  # HW (amdgpu) rendering. The 2026-06 gfx1150 CWSR/MES ring-timeout hangs were fixed at the
-  # root via kernel param amdgpu.cwsr_enable=0, so the GPU is safe again. If those hangs ever
-  # return, force software: add gfx.webrender.software=true + layers.acceleration.disabled=true
-  # to the prefs below and LIBGL_ALWAYS_SOFTWARE=1 to the env line.
-  printf 'user_pref("marionette.port",%s);\nuser_pref("marionette.enabled",true);\nuser_pref("browser.sessionstore.resume_from_crash",false);\nuser_pref("extensions.autoDisableScopes",0);\n' "$port" >> "$dst/user.js"
-  # Light-baseline arm: pin the site's LIGHT rendering (no Dark Reader; force prefers-color-scheme:light so
-  # OS-dark doesn't make sites auto-serve their own dark theme). 1 = light per layout.css.prefers-color-scheme.content-override.
-  [ "$label" = light ] && printf 'user_pref("layout.css.prefers-color-scheme.content-override",1);\n' >> "$dst/user.js"
-  # GJOA_DEV_LOADER only for the dev obj binary (loose chrome); the nix binary bakes it.
-  local dev=""; case "$bin" in *obj-*) dev="GJOA_DEV_LOADER=1";; esac
-  env MOZ_HEADLESS=1 GJOA_ALLOW_INSECURE=1 $dev timeout "$TMO_BROWSER" "$bin" -no-remote -profile "$dst" "$@" -marionette -remote-allow-system-access about:blank >"/tmp/cmp-$label.log" 2>&1 &
-  local pid=$!
-  # FF arms need ~30s: the Dark Reader EXTENSION boots slower than the browser.
-  # 14s was enough for the browser but not DR — the 2026-07-11 baseline ran its
-  # whole "DR control" arm with DR never injected (= light Firefox). Sentinel
-  # below makes that class of silent control failure impossible.
-  case "$bin" in *firefox*) sleep 35;; *) sleep 14;; esac
-  if [ "$label" = dr ]; then
-    if ! python3 "$REPO/tools/test-driver/dr-sentinel.py" --port "$port"; then
-      echo "FATAL: dr arm sentinel FAILED — Dark Reader not injecting; aborting arm (no invalid control data)" >&2
-      kill "$pid" 2>/dev/null
-      return 1
-    fi
-  fi
-  timeout "$TMO_RENDER" python3 "$REPO/tools/test-driver/render-darkmode.py" --port "$port" --prefix "$label" --outdir "$OUT" --urls "$URLS" --settle 18
-  kill "$pid" 2>/dev/null
+run_arm() { # $1=label $2=bin $3=profile-src $4=port-base
+  local label="$1" bin="$2" psrc="$3" port_base="$4"
+
+  # Write a filtered URL list for this arm (head -N, no comments/blanks)
+  local url_file="/tmp/cmp-$label-urls.txt"
+  grep -vE '^\s*#|^\s*$' "$LIST" | head -n "$N" > "$url_file"
+
+  # Light-baseline arm: force prefers-color-scheme:light so OS-dark doesn't make
+  # sites auto-serve their own dark theme. 1 = light per content-override pref.
+  local extra_prefs=""
+  [ "$label" = light ] && extra_prefs='user_pref("layout.css.prefers-color-scheme.content-override",1);'
+
+  # DR sentinel fires on shard 0's port after browser startup — once per arm,
+  # not per shard, so one bad shard doesn't mask a whole-arm control failure.
+  local sentinel=0
+  [ "$label" = dr ] && sentinel=1
+
+  DR_SENTINEL="$sentinel" EXTRA_PREFS="$extra_prefs" \
+    "$REPO/tools/test-driver/render-arm.sh" "$label" "$bin" "$psrc" "$url_file" "$OUT" "$SHARDS" "$port_base"
 }
 
-# All three arms run concurrently (distinct ports/profiles, shared outdir with distinct prefixes) —
-# collapses wall-time, which matters at N=200. 3 headless browsers is well within budget on this box.
+# All three arms run concurrently (distinct port ranges, shared outdir, distinct prefixes).
 echo "=== rendering gjoa + dark-reader + light-baseline arms concurrently ==="
-run_arm gjoa  "$GBIN" "$GPROF_SRC" 2873 &
+run_arm gjoa  "$GBIN" "$GPROF_SRC" 2887 &
 GPID=$!
 run_arm dr    "$FF"   "$DPROF_SRC" 2899 &
 DPID=$!
