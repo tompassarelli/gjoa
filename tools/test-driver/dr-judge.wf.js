@@ -55,7 +55,7 @@ const verdicts = (await parallel(pairs.map(p => () =>
     `(4) images/photos untouched, dark logos still visible; (5) no transparent/see-through gaps; (6) overall polish.\n` +
     `Score gjoaOverall and drOverall 1-10. verdict = gjoa_wins only if gjoa >= DR on every axis; dr_wins if DR is clearly better anywhere; tie if equivalent. ` +
     `List gjoa's concrete defects vs DR (what to fix). Site: ${p.slug}.`,
-    { label: `judge:${p.slug}`, phase: 'Judge', schema: VERDICT, model: 'opus', effort: 'high' })
+    { label: `judge:${p.slug}`, phase: 'Judge', schema: VERDICT, model: 'fable', effort: 'high' })
     .then(v => ({ ...v, slug: v.slug || p.slug }))
 ))).filter(Boolean)
 
