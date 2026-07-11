@@ -24,9 +24,10 @@ untouched dark image. This makes the engine backdrop-aware where bg meets fg.
 - nsDisplayList.cpp: paints a translucent dark scrim (gjoa.darkmode.scrim.alpha,
   default 140) over a hero's bg images, below content, so text reads on the photo.
 diff --git a/servo/components/style/properties/computed_value_flags.rs b/servo/components/style/properties/computed_value_flags.rs
+index d13a344e23..443f449a32 100644
 --- a/servo/components/style/properties/computed_value_flags.rs
 +++ b/servo/components/style/properties/computed_value_flags.rs
-@@ -123,6 +123,12 @@
+@@ -123,6 +123,20 @@ bitflags! {
  
          /// Whether grid-auto-flow is author-specified.
          const HAS_AUTHOR_SPECIFIED_GRID_AUTO_FLOW = 1 << 23;
@@ -36,21 +37,31 @@ diff --git a/servo/components/style/properties/computed_value_flags.rs b/servo/c
 +        /// reads this to preserve authored text over the image instead of
 +        /// flipping it blind, and the paint stage scrims such backdrops.
 +        const SELF_OR_ANCESTOR_HAS_IMAGE_BACKDROP = 1 << 24;
++
++        /// gjoa dark mode: this element or an ancestor has an authored-DARK
++        /// background-color the engine preserved dark under inversion (a dark
++        /// region — masthead, card, top-layer dialog, scrim — on an otherwise
++        /// inverted page; see style_adjuster). The foreground-inversion hook
++        /// preserves authored-light inherited colors under it, so such regions
++        /// keep their authored light-on-dark polarity.
++        const SELF_OR_ANCESTOR_HAS_PRESERVED_DARK_BACKDROP = 1 << 25;
      }
  }
  
-@@ -144,6 +150,7 @@
+@@ -144,6 +158,8 @@ impl ComputedValueFlags {
              | Self::SELF_OR_ANCESTOR_HAS_CONTAIN_STYLE
              | Self::SELF_OR_ANCESTOR_HAS_SIZE_CONTAINER_TYPE
              | Self::IS_IN_APPEARANCE_BASE_SUBTREE
 +            | Self::SELF_OR_ANCESTOR_HAS_IMAGE_BACKDROP
++            | Self::SELF_OR_ANCESTOR_HAS_PRESERVED_DARK_BACKDROP
      }
  
      /// Flags that may be propagated to descendants.
 diff --git a/servo/components/style/style_adjuster.rs b/servo/components/style/style_adjuster.rs
+index 1756b77b9b..aebc068424 100644
 --- a/servo/components/style/style_adjuster.rs
 +++ b/servo/components/style/style_adjuster.rs
-@@ -311,6 +311,56 @@
+@@ -311,6 +311,142 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
              self.style
                  .add_flags(ComputedValueFlags::SELF_OR_ANCESTOR_HAS_SIZE_CONTAINER_TYPE);
          }
@@ -102,6 +113,92 @@ diff --git a/servo/components/style/style_adjuster.rs b/servo/components/style/s
 +            if hero {
 +                self.style
 +                    .add_flags(ComputedValueFlags::SELF_OR_ANCESTOR_HAS_IMAGE_BACKDROP);
++            }
++        }
++
++        // gjoa dark mode: PER-REGION dark preservation. The engine's inversion
++        // maps lightness linearly onto [floor, ceiling], so an authored-DARK
++        // background-color (navy masthead, dark card, top-layer cookie dialog,
++        // modal scrim) on an inverted page comes out LIGHT — a region-level
++        // double-invert the page-level pre-paint check cannot see. The band map
++        // is a bijection: a computed L uniquely recovers its authored L
++        // (= (ceiling - L) / band), so a background whose RECOVERED authored
++        // lightness is dark is RESTORED to that authored color (darkening never
++        // sheds chroma in the forward map, so C/H pass through). High-chroma
++        // (brand) backgrounds were never inverted: if dark, they only need the
++        // flag. An element that just became a preserved-dark region also gets
++        // its own already-computed text color repaired — it cascaded BEFORE the
++        // flag existed, so an authored-light color was inverted dark and would
++        // land dark-on-dark; the same bijection recovers it (chroma un-shed by
++        // the ratio the darkening applied). Descendant-declared colors resolve
++        // against the inherited flag in the cascade foreground hook instead.
++        #[cfg(feature = "gecko")]
++        if self.style.device.color_inversion() && !display.is_contents() {
++            use crate::color::{AbsoluteColor, ColorSpace};
++            let ceiling = self.style.device.color_inversion_ceiling();
++            let floor = self.style.device.color_inversion_floor();
++            let band = (ceiling - floor).max(0.01);
++            let bg = self.style.get_background().clone_background_color();
++            let mut preserved_dark = false;
++            if let Some(abs) = bg.as_absolute() {
++                // Translucent-but-visible dark layers (scrims) count as regions;
++                // a near-invisible tint must not flip descendant text handling.
++                if abs.alpha >= 0.3 {
++                    let oklch = abs.to_color_space(ColorSpace::Oklch);
++                    let l = oklch.c0().unwrap_or(0.0);
++                    let c = oklch.c1().unwrap_or(0.0);
++                    if c > 0.08 {
++                        // Brand-preserved: computed IS authored. Dark ⇒ region.
++                        preserved_dark = l < 0.40;
++                    } else {
++                        let l_auth = ((ceiling - l) / band).clamp(0.0, 1.0);
++                        if l_auth < 0.40 && l_auth < l {
++                            let restored = AbsoluteColor::new(
++                                ColorSpace::Oklch,
++                                l_auth,
++                                oklch.c1(),
++                                oklch.c2(),
++                                oklch.alpha(),
++                            );
++                            self.style.mutate_background().set_background_color(
++                                crate::values::computed::Color::Absolute(restored),
++                            );
++                            preserved_dark = true;
++                        }
++                    }
++                }
++            }
++            if preserved_dark {
++                let inherited_already = self
++                    .style
++                    .get_parent_flags()
++                    .contains(ComputedValueFlags::SELF_OR_ANCESTOR_HAS_PRESERVED_DARK_BACKDROP);
++                self.style
++                    .add_flags(ComputedValueFlags::SELF_OR_ANCESTOR_HAS_PRESERVED_DARK_BACKDROP);
++                // Own-text repair — only where the flag NEWLY appears; under an
++                // already-flagged ancestor this element's colors were resolved
++                // with the preserve rule and must not be "recovered" again.
++                if !inherited_already {
++                    let text = self.style.get_inherited_text().clone_color();
++                    let oklch = text.to_color_space(ColorSpace::Oklch);
++                    let l = oklch.c0().unwrap_or(0.0);
++                    let c = oklch.c1().unwrap_or(0.0);
++                    if c <= 0.08 && l > 1e-4 {
++                        let l_auth = ((ceiling - l) / band).clamp(0.0, 1.0);
++                        if l_auth > 0.5 && l < l_auth {
++                            // Darkening shed chroma by l_out/l_in; un-shed it.
++                            let c_auth = (c * (l_auth / l)).min(0.37);
++                            let repaired = AbsoluteColor::new(
++                                ColorSpace::Oklch,
++                                l_auth,
++                                c_auth,
++                                oklch.c2(),
++                                oklch.alpha(),
++                            );
++                            self.style.mutate_inherited_text().set_color(repaired);
++                        }
++                    }
++                }
 +            }
 +        }
      }

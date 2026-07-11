@@ -458,9 +458,10 @@ index 7ed8c2c7a1..54ffa6f483 100644
      pub(crate) fn system_nscolor(
          &self,
 diff --git a/servo/components/style/values/specified/color.rs b/servo/components/style/values/specified/color.rs
+index 9c55023eb0..48d9244a64 100644
 --- a/servo/components/style/values/specified/color.rs
 +++ b/servo/components/style/values/specified/color.rs
-@@ -860,6 +860,60 @@
+@@ -860,6 +860,60 @@ impl Color {
      }
  }
  
@@ -521,7 +522,7 @@ diff --git a/servo/components/style/values/specified/color.rs b/servo/components
  impl Color {
      /// Converts this Color into a ComputedColor.
      ///
-@@ -885,7 +939,7 @@
+@@ -885,7 +939,7 @@ impl Color {
              }};
          }
  
@@ -530,7 +531,7 @@ diff --git a/servo/components/style/values/specified/color.rs b/servo/components
              Color::CurrentColor => ComputedColor::CurrentColor,
              Color::Absolute(ref absolute) => {
                  let mut color = absolute.color;
-@@ -931,7 +985,41 @@
+@@ -931,7 +985,46 @@ impl Color {
              Color::InheritFromBodyQuirk => {
                  ComputedColor::Absolute(context.ok_or(())?.device().body_text_color())
              },
@@ -548,12 +549,17 @@ diff --git a/servo/components/style/values/specified/color.rs b/servo/components
 +        // inverting it would darken it onto the scrim. Let DARK inherited text invert
 +        // to light as usual, and let everything else (non-hero text, reset props like
 +        // background-color, system colors) invert normally so solid bgs go dark.
++        // The same preserve applies under a PRESERVED-DARK region backdrop (an
++        // authored-dark background-color the style adjuster kept dark — masthead,
++        // card, top-layer dialog, scrim): its authored-light text must stay light.
 +        if context.map_or(false, |c| c.device().color_inversion()) {
 +            if let ComputedColor::Absolute(ref abs) = computed {
++                use crate::computed_value_flags::ComputedValueFlags as CvFlags;
 +                let preserve_under_hero = context.map_or(false, |c| {
 +                    !c.for_non_inherited_property
-+                        && c.builder.get_parent_flags().contains(
-+                            crate::computed_value_flags::ComputedValueFlags::SELF_OR_ANCESTOR_HAS_IMAGE_BACKDROP,
++                        && c.builder.get_parent_flags().intersects(
++                            CvFlags::SELF_OR_ANCESTOR_HAS_IMAGE_BACKDROP |
++                                CvFlags::SELF_OR_ANCESTOR_HAS_PRESERVED_DARK_BACKDROP,
 +                        )
 +                }) && color_relative_luminance(abs) > 0.5;
 +                if !preserve_under_hero {
