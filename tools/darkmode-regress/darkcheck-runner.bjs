@@ -185,15 +185,27 @@
         (doseq [pr perRule]
           (when (> (.-count pr) 0)
             (.log console (str "  " (.-rule pr) " fails on " (.-count pr) " pages: " (.join (.-failPages pr) " ")))))
-        (.writeFileSync fs (.join path outdir "rollup.json")
-          (JSON/stringify {:total (.-length results) :failedPages (.-length failedPages)
-                           :quarantined (.-length quarantined) :errored (.-length errored)
-                           :perRule perRule :config cfg
-                           :pages (.map results (fn [r :- Any] :- Any
-                             {:slug (.-slug r) :url (.-url r) :tag (.-tag r) :expect (or (.-expect r) [])
-                              :status (or (.-status r) "err") :pass (if (.-err r) false (.-pass r))
-                              :failedRules (or (.-failedRules r) []) :err (or (.-err r) nil)}))}
-            nil 2))
+        ;; T5 (RULING 1.3): quarantine fraction published per mark/run (no-silent-caps)
+        (let [qfrac (/ (.-length quarantined) (max 1 (.-length results)))]
+          (.writeFileSync fs (.join path outdir "rollup.json")
+            (JSON/stringify {:total (.-length results) :failedPages (.-length failedPages)
+                             :quarantined (.-length quarantined) :quarantineFraction qfrac
+                             :errored (.-length errored)
+                             :perRule perRule :config cfg
+                             :pages (.map results (fn [r :- Any] :- Any
+                               ;; T4 (RULING 1.3): per-page match counts + percentiles (no-silent-caps)
+                               ;; RULING 1.1: per-page a1WarnCount + a1p10/a1p50 (improvement gradient)
+                               (let [st (.-stats r)]
+                                 {:slug (.-slug r) :url (.-url r) :tag (.-tag r) :expect (or (.-expect r) [])
+                                  :status (or (.-status r) "err") :pass (if (.-err r) false (.-pass r))
+                                  :failedRules (or (.-failedRules r) []) :err (or (.-err r) nil)
+                                  :bodyLcDist (and st (.-bodyLcDist st))
+                                  :a1WarnCount (and st (.-a1WarnCount st))
+                                  :a1p10 (and st (.-a1p10 st))
+                                  :a1p50 (and st (.-a1p50 st))
+                                  :a5MatchTotal (and st (.-a5MatchTotal st))
+                                  :a5MatchHit (and st (.-a5MatchHit st))})))}
+              nil 2)))
         (.log console (str "rollup: " outdir "/rollup.json"))
         (.exit process (if (> (.-length failedPages) 0) 1 0))))))
 

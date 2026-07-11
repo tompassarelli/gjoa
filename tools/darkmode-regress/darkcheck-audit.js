@@ -28,7 +28,10 @@ const cfg = arguments[1] || {};
 const authored = arguments[2] || null;
 
 const F = {
-  body: cfg.bodyFloor != null ? cfg.bodyFloor : 75,
+  body: cfg.bodyFloor != null ? cfg.bodyFloor : 60,       // p10 gate floor for pooled non-large body/heading/link (RULING 1.1)
+  hardFloor: cfg.hardFloor != null ? cfg.hardFloor : 45,  // per-node hard gate: body/heading/link (invisibility region)
+  warnFloor: cfg.warnFloor != null ? cfg.warnFloor : 75,  // warn threshold (reported, non-gating)
+  targetP50: cfg.targetP50 != null ? cfg.targetP50 : 90,  // target p50 (reported, non-gating)
   heading: 60, headingLarge: 45, link: 75, control: 60, placeholder: 30, disabled: 30,
   ceiling: cfg.ceiling != null ? cfg.ceiling : 90,
   islandArea: cfg.islandArea != null ? cfg.islandArea : 28000,
@@ -53,13 +56,14 @@ const hueDeg = (a, b) => {
 };
 const isLargeText = (el) => (el.fontPx >= 36 && el.fontWeight < 700) || (el.fontPx >= 24 && el.fontWeight >= 700) || el.fontPx >= 24;
 const floorFor = (el) => {
+  // body/heading/link: per-node gate is hardFloor (45); p10 pool gate is separate (RULING 1.1)
   switch (el.role) {
-    case "body": return F.body;
-    case "heading": { const vl = (el.fontPx >= 36 && el.fontWeight < 700) || (el.fontPx >= 24 && el.fontWeight >= 700); return vl ? F.headingLarge : F.heading; }
-    case "link": return F.link;
+    case "body": return F.hardFloor;
+    case "heading": return F.hardFloor;
+    case "link": return F.hardFloor;
     case "control": return F.control;
     case "placeholder": case "disabled": return F.disabled;
-    default: return F.body;
+    default: return F.hardFloor;
   }
 };
 
@@ -148,24 +152,55 @@ if (authored && authored.els) for (const a of authored.els) if (!authMap[a.sig])
     }
 
     const passthrough = nativeDark; // native-dark ⇒ floors are inapplicable (A7 governs)
-    // body |Lc| distribution — grounds the tolerance ledger (what do good/bad pages land at)
+    // body |Lc| distribution — full pool (body+heading+link, all sizes) for stats + report table
     const bodyAlc = textEls.filter((e) => !e._skip && (e.role === "body" || e.role === "heading" || e.role === "link")).map((e) => e._alc).sort((a, c) => a - c);
     const pct = (p) => bodyAlc.length ? Math.round(bodyAlc[Math.min(bodyAlc.length - 1, Math.floor(bodyAlc.length * p))]) : null;
     const bodyLcDist = { n: bodyAlc.length, p10: pct(0.1), p25: pct(0.25), p50: pct(0.5), p75: pct(0.75), p90: pct(0.9), min: bodyAlc.length ? Math.round(bodyAlc[0]) : null, max: bodyAlc.length ? Math.round(bodyAlc[bodyAlc.length - 1]) : null };
 
-    // ---- A1 floors (hard) + A1-halation (advisory) ----
+    // A1 / A5 tracking vars — declared here so they survive the passthrough conditionals
+    // and are available in the final stats block (T4 no-silent-caps, RULING 1.1 warnCount)
+    let _a1WarnCount = 0, _a1p10 = null, _a1p50 = null, _a1PoolSize = 0;
+    let _a5TotalChromatic = 0, _a5Matched = 0;
+
+    // ---- A1 floors (hard per-node + p10 pool gate) + A1-halation (advisory) ----
+    // RULING 1.1: hard-fail any node |Lc| < hardFloor(45); gate p10(non-large pool) ≥ bodyFloor(60);
+    // large-text nodes excluded from p10 pool, carry hardFloor only; warn/target reported non-gating.
     if (passthrough) skip("A1", "SKIPPED: native-dark passthrough (A7 governs; transform floors N/A)");
     else {
       const a1 = [], hal = [];
+      const p10Pool = []; // non-large-text body/heading/link only (RULING 1.1 pool definition)
       for (const el of textEls) {
         if (el._skip) continue;
-        const floor = floorFor(el);
-        if (el._alc < floor) a1.push({ selector: sel(el), role: el.role, tag: el.tag, paintedGlyph: el._glyph, paintedBg: el._pbg, computedFg: el.fg, usedComputed: !!el._usedComputed, Lc: Math.round(el._lc), floor, reason: "below-floor", fontPx: el.fontPx, weight: el.fontWeight, text: el.text });
-        if (isLargeText(el) && el._alc > F.ceiling) hal.push({ selector: sel(el), role: el.role, tag: el.tag, Lc: Math.round(el._lc), ceiling: F.ceiling, reason: "above-halation-ceiling", fontPx: el.fontPx, text: el.text });
+        const large = isLargeText(el);
+        const isBodyRole = (el.role === "body" || el.role === "heading" || el.role === "link");
+        if (isBodyRole) {
+          // Hard floor (per-node gate, RULING 1.1 "invisibility region")
+          if (el._alc < F.hardFloor) a1.push({ selector: sel(el), role: el.role, tag: el.tag, paintedGlyph: el._glyph, paintedBg: el._pbg, computedFg: el.fg, usedComputed: !!el._usedComputed, Lc: Math.round(el._lc), floor: F.hardFloor, reason: "hard-floor-violation", fontPx: el.fontPx, weight: el.fontWeight, text: el.text });
+          // p10 pool: non-large-text only (large-text carries hardFloor only per RULING 1.1)
+          if (!large) p10Pool.push(el._alc);
+          // Warn count (non-gating, reported — RULING 1.1 improvement gradient)
+          if (el._alc < F.warnFloor) _a1WarnCount++;
+          // Halation check (large-text only)
+          if (large && el._alc > F.ceiling) hal.push({ selector: sel(el), role: el.role, tag: el.tag, Lc: Math.round(el._lc), ceiling: F.ceiling, reason: "above-halation-ceiling", fontPx: el.fontPx, text: el.text });
+        } else {
+          // Control / placeholder / disabled: per-node floors unchanged (RULING 1.1 "A4 unchanged")
+          const floor = floorFor(el);
+          if (el._alc < floor) a1.push({ selector: sel(el), role: el.role, tag: el.tag, paintedGlyph: el._glyph, paintedBg: el._pbg, computedFg: el.fg, usedComputed: !!el._usedComputed, Lc: Math.round(el._lc), floor, reason: "below-floor", fontPx: el.fontPx, weight: el.fontWeight, text: el.text });
+        }
+      }
+      // p10 pool gate: p10(non-large body/heading/link) ≥ bodyFloor (RULING 1.1 distributional gate)
+      p10Pool.sort((a, c) => a - c);
+      _a1PoolSize = p10Pool.length;
+      if (p10Pool.length > 0) {
+        _a1p10 = p10Pool[Math.min(p10Pool.length - 1, Math.floor(p10Pool.length * 0.1))];
+        _a1p50 = p10Pool[Math.min(p10Pool.length - 1, Math.floor(p10Pool.length * 0.5))];
+        if (_a1p10 < F.body) a1.push({ reason: "p10-gate", p10: Math.round(_a1p10), floor: F.body, poolSize: p10Pool.length, note: "p10(non-large body+heading+link pool) < bodyFloor " + F.body });
       }
       if (cfg.ceilingGates) for (const h of hal) a1.push(h);
-      add("A1", a1, "per-role |Lc| floors (hard, PAINTED): body 75 / heading 60(45 lg) / link 75 / control 60 / placeholder+disabled 30");
-      add("A1-halation", hal, "large text |Lc|>90 (WhyAPCA halation); ADVISORY pending chief ledger sign-off", { advisory: !cfg.ceilingGates });
+      add("A1", a1,
+        "body/heading/link: hard-floor |Lc|≥" + F.hardFloor + " (per-node) + p10(non-large pool)≥" + F.body + " (gate); control 60 / placeholder+disabled 30; warn<" + F.warnFloor + " (reported)",
+        { warnCount: _a1WarnCount, p10: _a1p10 !== null ? Math.round(_a1p10) : null, p50: _a1p50 !== null ? Math.round(_a1p50) : null, targetP50: F.targetP50, poolSize: _a1PoolSize });
+      add("A1-halation", hal, "large text |Lc|>90 (WhyAPCA halation); advisory until wave-2 M4a (RULING 1.2)", { advisory: !cfg.ceilingGates });
     }
 
     // ---- A2 polarity (dark surface, transform pages only) ----
@@ -217,6 +252,12 @@ if (authored && authored.els) for (const a of authored.els) if (!authMap[a.sig])
       const a5 = [];
       for (const el of textEls) {
         if (el._skip) continue;
+        // T4 (RULING 1.3): track chromatic rendered nodes vs matched authored records (no-silent-caps)
+        const Cr_probe = oklchC(el.fg);
+        if (Cr_probe > 0.05) { // potentially chromatic rendered node
+          _a5TotalChromatic++;
+          if (authMap[el.sig] && authMap[el.sig].fg) _a5Matched++;
+        }
         const a = authMap[el.sig]; if (!a || !a.fg) continue;
         const Ca = oklchC(a.fg);
         if (Ca <= 0.08) continue; // only chromatic authored colors carry brand identity
@@ -225,7 +266,8 @@ if (authored && authored.els) for (const a of authored.els) if (!authMap[a.sig])
         const Cr = oklchC(el.fg);
         if (dh > F.hueTol || Cr < F.chromaKeep * Ca) a5.push({ selector: sel(el), tag: el.tag, authoredFg: a.fg, renderedFg: el.fg, hueDriftDeg: +dh.toFixed(1), authoredC: +Ca.toFixed(3), renderedC: +Cr.toFixed(3), hueTol: F.hueTol, reason: dh > F.hueTol ? "hue-drift" : "chroma-collapse", text: el.text });
       }
-      add("A5", a5, `authored chromatic colors: |Δhue|≤${F.hueTol}° AND C_rendered≥${F.chromaKeep}·C_authored (GJOA-chosen brand tolerance; calibrated Wave S)`);
+      add("A5", a5, `authored chromatic colors: |Δhue|≤${F.hueTol}° AND C_rendered≥${F.chromaKeep}·C_authored (GJOA-chosen brand tolerance; calibrated Wave S)`,
+        { a5MatchTotal: _a5TotalChromatic, a5MatchHit: _a5Matched });
     }
 
     // ---- A7 native-dark passthrough integrity ----
@@ -259,7 +301,17 @@ if (authored && authored.els) for (const a of authored.els) if (!authMap[a.sig])
         textEls: textEls.length, measured, tooSmall, surfaces: meta.surfaces.length, replaced: meta.replaced.length,
         rootDark: meta.rootDark, rootBgL: meta.rootBgL, nativeDark, passthrough,
         colorSchemeDark: meta.colorSchemeDark, authoredRootBgL: authored ? authored.rootBgL : null,
-        bodyLcDist, normalizedSignal: meta.normalizedSignal != null ? meta.normalizedSignal : null,
+        bodyLcDist,
+        // RULING 1.1 A1 gate stats (non-gating reported fields)
+        a1WarnCount: _a1WarnCount,
+        a1p10: _a1p10 !== null ? Math.round(_a1p10) : null,
+        a1p50: _a1p50 !== null ? Math.round(_a1p50) : null,
+        a1PoolSize: _a1PoolSize,
+        a1TargetP50: F.targetP50,
+        // RULING 1.3 T4 A5 match counts (no-silent-caps)
+        a5MatchTotal: _a5TotalChromatic,
+        a5MatchHit: _a5Matched,
+        normalizedSignal: meta.normalizedSignal != null ? meta.normalizedSignal : null,
       },
     });
   } catch (e) { done({ err: String((e && e.message) || e), stack: String(e && e.stack || "") }); }
