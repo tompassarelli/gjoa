@@ -164,6 +164,18 @@ function _relLum(r, g, b) { return 0.2126 * _srgbLin(r) + 0.7152 * _srgbLin(g) +
 function _lstar(Y) { return Y <= 0.008856 ? 903.3 * Y : 116 * Math.cbrt(Y) - 16; }
 
 export class GjoaDarkmodeParent extends JSWindowActorParent {
+  // Decision-path trace (pref-gated, zero overhead off). Tab-delimited on
+  // stdout, same channel discipline as gjoa.darkmode.normalize.logms — lets a
+  // harness assert WHY a page was (not) inverted instead of guessing from
+  // pixels.
+  #debug(line) {
+    try {
+      if (Services.prefs.getBoolPref("gjoa.darkmode.debug", false)) {
+        dump(`GJOA_DARKMODE\t${line}\n`);
+      }
+    } catch (e) {}
+  }
+
   trustedUrl() {
     try {
       return this.manager?.documentURI?.spec || "";
@@ -260,6 +272,12 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       // snapshot keeps failing was silently left LIGHT by the old "hasNativeDark ?
       // inactive" fallback (reproduced with a real logged-in profile). The user
       // chose force-every-site-dark, so force the inversion rather than leave it light.
+      // (On a probe re-measure this restores the pre-probe forced state — never leaves
+      // the retraction standing on an unmeasured page.)
+      this.#debug(
+        `decide host=${hostOf(this.trustedUrl())} L=null (snapshot failed) ` +
+          `nativeDark=${!!data?.hasNativeDark} -> active (blind force)`
+      );
       return { override: "active", css: "", inject: "" };
     }
     // A curated Tier-2 fix (override:"auto") is a "this site's dark is bad" signal, so it
@@ -273,7 +291,39 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
     const useFix = !!fix && (fix.override || "auto") === "auto";
     const LIGHT_LSTAR = 50,
       FIX_FORCE_LSTAR = 20;
-    const invert = L >= (useFix ? FIX_FORCE_LSTAR : LIGHT_LSTAR);
+    const bar = useFix ? FIX_FORCE_LSTAR : LIGHT_LSTAR;
+    if (data?.probeRetract) {
+      // Probe re-measure: the child retracted the engine's inversion ("inactive") and
+      // repainted, so L now reads the AUTHORED paint. Dark ⇒ the site's own dark theme
+      // is live (it honored our forced prefers-color-scheme:dark) — keep it native.
+      // Light ⇒ genuinely light (e.g. photo-dominated median) — force the inversion.
+      const invert = L >= bar;
+      this.#debug(
+        `decide host=${host} L=${L.toFixed(1)} fix=${useFix} PROBE ` +
+          `-> ${invert ? "active" : "inactive (native dark confirmed)"}`
+      );
+      return { override: invert ? "active" : "inactive", css: "", inject: "" };
+    }
+    if (L >= bar && data?.engineInverting) {
+      // Painted LIGHT while the engine is inverting this doc. The inversion is an
+      // involution, so light-out means dark-in: the engine's pre-paint tier-0 check
+      // missed a page that authored its OWN dark theme (under our forced
+      // prefers-color-scheme:dark) and double-inverted it back to light — the
+      // gray-wash defect (redis/kubernetes/washingtonpost, mark-1 C3). The snapshot
+      // measures DOWNSTREAM of the engine's own transform, so it cannot distinguish
+      // "site is light" from "we made it light": ask the child to retract the
+      // inversion and re-measure the authored paint (Darkmode:Decide, probeRetract).
+      this.#debug(
+        `decide host=${host} L=${L.toFixed(1)} fix=${useFix} engineInverting ` +
+          `-> probe-retract (light paint under inversion = suspected native dark)`
+      );
+      return { override: "probe-retract", css: "", inject: "" };
+    }
+    const invert = L >= bar;
+    this.#debug(
+      `decide host=${host} L=${L.toFixed(1)} fix=${useFix} ` +
+        `nativeDark=${!!data?.hasNativeDark} -> ${invert ? "active" : "none"}`
+    );
     return { override: invert ? "active" : "none", css: "", inject: "" };
   }
 
