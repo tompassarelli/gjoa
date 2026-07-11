@@ -31,6 +31,12 @@ OUTDIR="$5"
 SHARDS="${6:-6}"
 PORT_BASE="${7:-3000}"
 
+# STEALTH=1 — drop MOZ_HEADLESS; run under the live Wayland/X compositor instead.
+# Many bot-walls detect headless via canvas/WebGL fingerprint; real-profile rendering
+# passes those checks while marionette (and navigator.webdriver=true) stays intact.
+# Sites that still wall on the webdriver flag are honestly quarantined (no injection).
+STEALTH="${STEALTH:-0}"
+
 RSX=(--exclude='cache2/' --exclude='startupCache/' --exclude='*.lock' --exclude='lock' \
      --exclude='.parentlock' --exclude='storage/default/*/cache/' --exclude='cache/')
 
@@ -58,6 +64,18 @@ trap cleanup EXIT
 DEV_EXTRA=""
 case "$BIN" in *obj-*) DEV_EXTRA="GJOA_DEV_LOADER=1";; esac
 
+# Build launch env: headless (normal) or real-display (stealth)
+if [ "${STEALTH}" = "1" ]; then
+  # Drop MOZ_HEADLESS; inherit the live compositor from the calling env.
+  # WAYLAND_DISPLAY / DISPLAY must be set in the caller's environment.
+  LAUNCH_ENV="GJOA_ALLOW_INSECURE=1"
+  [ -n "${DEV_EXTRA:-}" ] && LAUNCH_ENV="${LAUNCH_ENV} ${DEV_EXTRA}"
+  echo "[$LABEL] STEALTH mode: real display (WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset} DISPLAY=${DISPLAY:-unset})"
+else
+  LAUNCH_ENV="MOZ_HEADLESS=1 GJOA_ALLOW_INSECURE=1"
+  [ -n "${DEV_EXTRA:-}" ] && LAUNCH_ENV="${LAUNCH_ENV} ${DEV_EXTRA}"
+fi
+
 # Clone profile K times and launch K browsers
 for i in $(seq 0 $((SHARDS-1))); do
   PORT=$(( PORT_BASE + i ))
@@ -71,7 +89,7 @@ for i in $(seq 0 $((SHARDS-1))); do
   # HW (amdgpu) rendering; amdgpu.cwsr_enable=0 defuses the ring-timeout hang.
   # If hangs return: add gfx.webrender.software=true + layers.acceleration.disabled=true
   # to EXTRA_PREFS and LIBGL_ALWAYS_SOFTWARE=1 to the launch env.
-  env MOZ_HEADLESS=1 GJOA_ALLOW_INSECURE=1 ${DEV_EXTRA:-} timeout "$TMO_BROWSER" "$BIN" \
+  env ${LAUNCH_ENV} timeout "$TMO_BROWSER" "$BIN" \
     -no-remote -profile "$DST" -marionette -remote-allow-system-access about:blank \
     > "/tmp/ra-$LABEL-$i.log" 2>&1 &
   BPIDS+=($!)
