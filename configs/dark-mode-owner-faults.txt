@@ -5,3 +5,4 @@ https://pvk.ca/Blog/2019/01/09/preemption-is-gc-for-memory-reordering/
 https://css-tricks.com/
 https://css-tricks.com/get-ready-for-the-powerful-css-border-shape-property/
 https://www.youtube.com/watch?v=jfKfPfyJRdk
+https://en.wikipedia.org/wiki/Arthur_Tedder,_1st_Baron_Tedder
