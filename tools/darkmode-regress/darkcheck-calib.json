@@ -1,0 +1,26 @@
+{
+  "note": "DARKCHECK v1 Channel-A calibration corpus (Wave S). 5 owner faults + 10 worst mark-2 losers (by gjoa-dr delta) + 3 native-dark passthrough winners. Acceptance of the SPEC itself: owner faults + losers FAIL on their describing A-rules; winners PASS (false-positive check). `expect` = the rule(s) the page is expected to fail (empty = expected clean). config.ceilingGates false: A1 halation reported ADVISORY (pending chief ledger sign-off).",
+  "config": { "ceilingGates": false },
+  "sites": [
+    { "url": "https://www.zdnet.com/home-and-office/networking/spacex-wants-to-launch-100000-more-starlink-satellites/", "tag": "owner-fault", "expect": ["A1"] },
+    { "url": "https://pvk.ca/Blog/2019/01/09/preemption-is-gc-for-memory-reordering/", "tag": "owner-fault", "expect": ["A2"] },
+    { "url": "https://css-tricks.com/", "tag": "owner-fault", "expect": ["A1","A3"] },
+    { "url": "https://css-tricks.com/get-ready-for-the-powerful-css-border-shape-property/", "tag": "owner-fault", "expect": ["A1"] },
+    { "url": "https://www.youtube.com/watch?v=jfKfPfyJRdk", "tag": "owner-fault", "expect": ["A4"] },
+
+    { "url": "https://www.walmart.com/", "tag": "loser", "expect": ["A1","A3"] },
+    { "url": "https://techcrunch.com/", "tag": "loser", "expect": ["A1","A3"] },
+    { "url": "https://www.nature.com/", "tag": "loser", "expect": ["A3","A8"] },
+    { "url": "https://www.paypal.com/us/home", "tag": "loser", "expect": ["A3"] },
+    { "url": "https://about.gitlab.com/", "tag": "loser", "expect": ["A1","A3"] },
+    { "url": "https://azure.microsoft.com/en-us/", "tag": "loser", "expect": ["A2","A3"] },
+    { "url": "https://nodejs.org/en", "tag": "loser", "expect": ["A5"] },
+    { "url": "https://www.sciencedirect.com/", "tag": "loser", "expect": ["A1","A3"] },
+    { "url": "https://www.theguardian.com/us", "tag": "loser", "expect": ["A8"] },
+    { "url": "https://www.bestbuy.com/", "tag": "loser", "expect": ["A1"] },
+
+    { "url": "https://redis.io/", "tag": "winner", "expect": [] },
+    { "url": "https://kubernetes.io/", "tag": "winner", "expect": [] },
+    { "url": "https://www.washingtonpost.com/", "tag": "winner", "expect": [] }
+  ]
+}

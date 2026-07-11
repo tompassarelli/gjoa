@@ -1,0 +1,202 @@
+#lang beagle/js
+;; DARKCHECK v1 — Channel A orchestrator (computed-style audit gate, ZERO model calls).
+;;
+;; TWO ARMS, reusing the proven regress rails (Marionette + chrome drawSnapshot):
+;;   Arm A (AUTHORED): spawn gjoa with dark-mode OFF and collect each site's authored
+;;     colors — engine-off computed style IS the authored value (no transform), the
+;;     reliable A7 native-dark discriminator + the A5/A8 authored reference.
+;;   Arm B (RENDERED): spawn gjoa with dark-mode ON, collect + audit each site, handing
+;;     the audit its authored record so native-dark passthrough pages are exempted from
+;;     the transform-quality floors (a floor gate judges gjoa's TRANSFORM, not the site's
+;;     own native design — which DR also leaves alone).
+;; Emits per page: dist/darkcheck/<slug>.json {page,rules,stats}, <slug>-rects.json
+;; [{x,y,w,h,tag}] (the dumb Channel-B seam), + rollup.json. Exit nonzero on any A-rule
+;; FAIL (indeterminate/under-rendered pages are quarantined, never gate). No AI, pure APCA.
+;;
+;; Usage: nix develop .#mach -c bun .beagle-tools/gjoa/tools/darkmode-regress/darkcheck-runner.js <gjoa-bin>
+;;   GJOA_DM_CORPUS=<corpus.json>  GJOA_DC_OUT=<dir>  GJOA_DC_PORT=<n≥3000, default 3838>
+(ns gjoa.tools.darkmode-regress.darkcheck-runner
+  (:require [child_process :refer [spawn]]
+            [fs :as fs]
+            [os :as os]
+            [path :as path]
+            [gjoa.tools.test-driver.marionette :refer [connect-marionette]]))
+(define-mode strict)
+(declare-extern [process console JSON Promise Error setTimeout Object URL Date parseInt Math] Any)
+
+(def RAF-JS :- String
+  "const d=arguments[arguments.length-1];requestAnimationFrame(()=>requestAnimationFrame(()=>d(true)));")
+
+;; Event-driven settle: wait until the dark-mode actor stamps data-gjoa-normalized on
+;; <html> (async normalize done → measure FINAL paint, not a white pre-paint skeleton).
+;; Native/engine-off pages never stamp it, so a 6s backstop resolves regardless. rAF poll.
+(def SETTLE-JS :- String
+  (str "const d=arguments[arguments.length-1];const t0=Date.now();"
+       "(function poll(){const de=document.documentElement;"
+       "if(de&&de.hasAttribute('data-gjoa-normalized')){return d(true);}"
+       "if(Date.now()-t0>6000){return d(false);}"
+       "requestAnimationFrame(()=>requestAnimationFrame(poll));})();"))
+
+(defn host-of [url :- String] :- String
+  (try (.-hostname (URL. url)) (catch Error e "site")))
+
+(defn slug-of [url :- String] :- String
+  (let [s (.replace (.replace url (RegExp. "^https?://" "") "") (RegExp. "[^a-zA-Z0-9]+" "g") "_")]
+    (.slice s 0 90)))
+
+;; enabled? = dark-mode on (arm B) or off (arm A, authored). port ≥3000 — never the 2828
+;; the regress runner uses.
+(defn make-profile! [port :- Any enabled? :- Any] :- String
+  (let [dir (.mkdtempSync fs (.join path (.tmpdir os) "gjoa-darkcheck-"))
+        en (if enabled? "true" "false")
+        mode (if enabled? "dark" "off")
+        ;; Arm A (authored, gjoa OFF): force prefers-color-scheme:dark so a site's OWN
+        ;; native dark theme activates. Then authored-root-dark == "site ships native dark"
+        ;; (the principled A7 discriminator: dark-when-the-user-asks, gjoa untouched) —
+        ;; distinguishing a native-dark passthrough winner from a light-only page gjoa
+        ;; must transform. Arm B leaves it default (gjoa drives the scheme).
+        scheme (if enabled? "" "user_pref(\"layout.css.prefers-color-scheme.content-override\", 1);\n")]
+    (.writeFileSync fs (.join path dir "prefs.js")
+      (str "user_pref(\"marionette.port\", " port ");\n"
+           "user_pref(\"marionette.enabled\", true);\n"
+           "user_pref(\"gjoa.darkmode.enabled\", " en ");\n"
+           "user_pref(\"gjoa.darkmode.mode\", \"" mode "\");\n"
+           "user_pref(\"gjoa.darkmode.normalize.enabled\", " en ");\n"
+           scheme))
+    dir))
+
+(defn safe-nav! [client :- Any url :- String] :- Any
+  (try (js/await (.navigate client url)) nil (catch Error e (or (.-message e) (str e)))))
+
+(defn safe-shot [client :- Any] :- Any
+  (try (js/await (.takeScreenshot client)) (catch Error e nil)))
+
+;; navigate + settle + collect (content). Shared by both arms.
+(defn collect-site! [client :- Any url :- String collect-js :- String] :- Any
+  (let [_c0 (js/await (.setContext client "content"))
+        navwarn (js/await (safe-nav! client url))
+        _raf (js/await (.executeAsyncScript client RAF-JS []))
+        _settle (js/await (.executeAsyncScript client SETTLE-JS []))
+        meta (js/await (.executeScript client collect-js []))]
+    {:meta meta :navwarn navwarn}))
+
+;; spawn an arm, connect, run f over every site, quit. f gets (client site) → any.
+(defn with-arm! [bin :- String port :- Any enabled? :- Any sites :- Any f :- Any] :- Any
+  (let [profile (make-profile! port enabled?)
+        child (spawn bin
+                     ["--profile" profile "--marionette" "--no-remote"
+                      "--remote-allow-system-access" "--headless"]
+                     {:stdio ["ignore" "ignore" "ignore"]
+                      :env (.assign Object {} (.-env process)
+                             {"GJOA_ALLOW_INSECURE" "1" "MOZ_HEADLESS" "1"})})
+        client (js/await (connect-marionette {:port port :connectTimeoutMs 60000}))
+        _ses (js/await (.newSession client {:pageLoadStrategy "eager"}))
+        _to (js/await (.setTimeouts client {:pageLoad 30000 :script 30000}))
+        results []]
+    (doseq [site sites]
+      (let [r (js/await (f client site))]
+        (.push results r)))
+    (js/await (.quit client ["eAttemptQuit"]))
+    (.disconnect client)
+    (when child (.kill child))
+    results))
+
+(defn run! [] :- Any
+  (let [bin (or (aget (.-argv process) 2) (get (.-env process) "GJOA_BIN"))]
+    (when (not bin) (.error console "usage: darkcheck-runner <gjoa-bin>") (.exit process 2))
+    (let [corpus (JSON/parse (.readFileSync fs (or (get (.-env process) "GJOA_DM_CORPUS")
+                                                   "tools/darkmode-regress/corpus.json") "utf8"))
+          sites (.-sites corpus)
+          colormath-js (.readFileSync fs "tools/darkmode-regress/colormath.js" "utf8")
+          collect-js (.readFileSync fs "tools/darkmode-regress/darkcheck-collect.js" "utf8")
+          audit-js (str colormath-js "\n" (.readFileSync fs "tools/darkmode-regress/darkcheck-audit.js" "utf8"))
+          cfg (or (.-config corpus) {})
+          port (parseInt (or (get (.-env process) "GJOA_DC_PORT") "3838") 10)
+          outdir (or (get (.-env process) "GJOA_DC_OUT") "dist/darkcheck")
+          _mk (.mkdirSync fs outdir {:recursive true})
+
+          ;; ---- Arm A: AUTHORED (engine-off) ----
+          _lA (.log console "=== arm A: authored (dark-mode OFF) ===")
+          authored (js/await (with-arm! bin port false sites
+                     (fn [client :- Any site :- Any] :- Any
+                       (try
+                         (let [c (js/await (collect-site! client (.-url site) collect-js))
+                               m (.-meta c)]
+                           {:url (.-url site)
+                            :rootBgL (or (.-rootBgL m) 255) :colorSchemeDark (.-colorSchemeDark m)
+                            :els (or (.-els m) [])})
+                         (catch Error e {:url (.-url site) :rootBgL 255 :colorSchemeDark false :els [] :err (or (.-message e) (str e))})))))
+          find-authored (fn [url :- String] :- Any
+                          (.find authored (fn [a :- Any] :- Bool (= (.-url a) url))))
+
+          ;; ---- Arm B: RENDERED + AUDIT (engine-on) ----
+          _lB (.log console "\n=== arm B: rendered + audit (dark-mode ON) ===")
+          results (js/await (with-arm! bin (+ port 1) true sites
+                    (fn [client :- Any site :- Any] :- Any
+                      (let [url (.-url site) host (host-of url) slug (slug-of url)]
+                        (try
+                          (let [c (js/await (collect-site! client url collect-js))
+                                meta (.-meta c) navwarn (.-navwarn c)
+                                auth (find-authored url)
+                                _c2 (js/await (.setContext client "chrome"))
+                                res (js/await (.executeAsyncScript client audit-js [meta cfg auth]))
+                                shot (js/await (safe-shot client))]
+                            (when shot (.writeFileSync fs (.join path outdir (str slug ".png")) shot {:encoding "base64"}))
+                            (.writeFileSync fs (.join path outdir (str slug "-rects.json"))
+                              (JSON/stringify (or (.-replaced meta) []) nil 0))
+                            (if (.-err res)
+                              {:url url :host host :slug slug :err (.-err res) :navwarn navwarn}
+                              (let [rules (or (.-rules res) [])
+                                    status (or (.-status res) "audited")
+                                    fails (.filter rules (fn [r :- Any] :- Bool (and (not (.-pass r)) (not (.-advisory r)))))
+                                    indet (= status "indeterminate")
+                                    rec {:url url :host host :slug slug :rules rules :stats (.-stats res)
+                                         :status status :tag (.-tag site) :expect (or (.-expect site) [])
+                                         :failedRules (.map fails (fn [r :- Any] :- Any (.-rule r)))
+                                         :pass (and (not indet) (= (.-length fails) 0)) :navwarn navwarn}]
+                                (.writeFileSync fs (.join path outdir (str slug ".json")) (JSON/stringify rec nil 2))
+                                rec)))
+                          (catch Error e
+                            {:url url :host host :slug slug :err (or (.-message e) (str e))}))))))]
+
+      ;; ---- report + rollup ----
+      (doseq [r results]
+        (.log console
+          (str (cond (.-err r) "ERR  " (= (.-status r) "indeterminate") "QUAR " (.-pass r) "PASS " :else "FAIL ")
+               (.-slug r) "  "
+               (if (.-err r) (.-err r)
+                 (str "[" (.join (or (.-failedRules r) []) ",") "]"
+                      " (" (.-tag r) " expect=" (.join (or (.-expect r) []) ",") ")"
+                      " els=" (.-textEls (.-stats r)) " native=" (.-nativeDark (.-stats r)))))))
+      (let [ruleKeys ["A1" "A2" "A3" "A4" "A5" "A6" "A7" "A8"]
+            fails-for (fn [k :- Any] :- Any
+                        (.filter results (fn [r :- Any] :- Bool
+                          (and (.-rules r) (.some (.-rules r) (fn [x :- Any] :- Bool (and (= (.-rule x) k) (not (.-pass x)) (not (.-advisory x)))))))))
+            perRule (.map ruleKeys (fn [k :- Any] :- Any
+                      (let [pgs (fails-for k)]
+                        {:rule k :count (.-length pgs)
+                         :failPages (.map pgs (fn [r :- Any] :- Any (.-slug r)))})))
+            failedPages (.filter results (fn [r :- Any] :- Bool (and (not (.-err r)) (not (= (.-status r) "indeterminate")) (not (.-pass r)))))
+            quarantined (.filter results (fn [r :- Any] :- Bool (= (.-status r) "indeterminate")))
+            errored (.filter results (fn [r :- Any] :- Bool (.-err r)))]
+        (.log console (str "\n=== DARKCHECK: " (.-length failedPages) "/" (.-length results)
+                           " pages FAIL A-rules · " (.-length quarantined) " quarantined · "
+                           (.-length errored) " errored ==="))
+        (doseq [pr perRule]
+          (when (> (.-count pr) 0)
+            (.log console (str "  " (.-rule pr) " fails on " (.-count pr) " pages: " (.join (.-failPages pr) " ")))))
+        (.writeFileSync fs (.join path outdir "rollup.json")
+          (JSON/stringify {:total (.-length results) :failedPages (.-length failedPages)
+                           :quarantined (.-length quarantined) :errored (.-length errored)
+                           :perRule perRule :config cfg
+                           :pages (.map results (fn [r :- Any] :- Any
+                             {:slug (.-slug r) :url (.-url r) :tag (.-tag r) :expect (or (.-expect r) [])
+                              :status (or (.-status r) "err") :pass (if (.-err r) false (.-pass r))
+                              :failedRules (or (.-failedRules r) []) :err (or (.-err r) nil)}))}
+            nil 2))
+        (.log console (str "rollup: " outdir "/rollup.json"))
+        (.exit process (if (> (.-length failedPages) 0) 1 0))))))
+
+(.catch (run!) (fn [e :- Any] :- Any
+                 (.error console (str "darkcheck failed: " (or (.-stack e) e)))
+                 (.exit process 1)))
