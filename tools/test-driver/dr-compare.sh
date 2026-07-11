@@ -22,6 +22,13 @@ mkdir -p "$OUT"; rm -f "$OUT"/*.png
 URLS=$(grep -vE '^\s*#|^\s*$' "$LIST" | head -n "$N" | paste -sd,)
 echo "comparing $N sites -> $OUT"
 
+# Timeouts must scale with N: the FF arms run ~32s/site (DR extension + system FF),
+# gjoa ~22s/site. Fixed 2400s killed the FF browsers at site ~68 of a 104-site run
+# (2026-07-11 baseline: BrokenPipe mid-corpus) while gjoa squeaked under — a pace
+# divergence a 3-site smoke test cannot expose. 45s/site + slack covers the slow arm.
+TMO_BROWSER=$((N * 45 + 600))
+TMO_RENDER=$((N * 45 + 300))
+
 run_arm() { # $1=label $2=bin $3=profile-src $4=port $5..=extra bin args
   local label="$1" bin="$2" psrc="$3" port="$4"; shift 4
   local dst="/tmp/cmp-$label"; rm -rf "$dst"; mkdir -p "$dst"
@@ -36,10 +43,10 @@ run_arm() { # $1=label $2=bin $3=profile-src $4=port $5..=extra bin args
   [ "$label" = light ] && printf 'user_pref("layout.css.prefers-color-scheme.content-override",1);\n' >> "$dst/user.js"
   # GJOA_DEV_LOADER only for the dev obj binary (loose chrome); the nix binary bakes it.
   local dev=""; case "$bin" in *obj-*) dev="GJOA_DEV_LOADER=1";; esac
-  env MOZ_HEADLESS=1 GJOA_ALLOW_INSECURE=1 $dev timeout 2400 "$bin" -no-remote -profile "$dst" "$@" -marionette -remote-allow-system-access about:blank >"/tmp/cmp-$label.log" 2>&1 &
+  env MOZ_HEADLESS=1 GJOA_ALLOW_INSECURE=1 $dev timeout "$TMO_BROWSER" "$bin" -no-remote -profile "$dst" "$@" -marionette -remote-allow-system-access about:blank >"/tmp/cmp-$label.log" 2>&1 &
   local pid=$!
   sleep 14
-  timeout 3000 python3 "$REPO/tools/test-driver/render-darkmode.py" --port "$port" --prefix "$label" --outdir "$OUT" --urls "$URLS" --settle 18
+  timeout "$TMO_RENDER" python3 "$REPO/tools/test-driver/render-darkmode.py" --port "$port" --prefix "$label" --outdir "$OUT" --urls "$URLS" --settle 18
   kill "$pid" 2>/dev/null
 }
 
