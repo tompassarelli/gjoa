@@ -131,6 +131,13 @@ const FG_DARK_BG_L = 0.45; // backdrop counts as dark/saturated at or below this
 const FG_LIGHT_MIN_L = 0.55; // a run this light is a clear light-on-dark run
 const FG_RAISE_BELOW_L = 0.85; // only raise runs dimmer than near-white (no-op above)
 const FG_AUTHORED_LIGHT_L = 0.85; // recovered authored L that counts as near-white
+// DARK-FG-ON-BRAND-BG (wave-5b). The engine brand-PRESERVES a mid/dark chromatic bg
+// (chroma > 0.08) yet still role-blind-INVERTS an authored-light fg on it to dark, breaking
+// the pair below the A1 floor with the WRONG polarity. Recover toward the authored light
+// polarity where the bg is non-dark (W-D's clauses handle dark bg) AND white is the higher-
+// contrast choice for that backdrop.
+const FG_BRAND_BG_FLOOR = 75; // A1 body floor: recover an authored-light run under this |Lc|
+const FG_HALATION_CEIL = 90; // A1 Lc90 halation ceiling: don't over-contrast the recovered fg
 
 function _lin(c) { return Math.pow(c / 255, 2.4); }
 function _Ys(p) { return 0.2126729 * _lin(p[0]) + 0.7151522 * _lin(p[1]) + 0.0721750 * _lin(p[2]); }
@@ -168,6 +175,38 @@ function _raiseLight(fg) {
   }
   const k = 255 / mx;
   return [Math.round(fg[0] * k), Math.round(fg[1] * k), Math.round(fg[2] * k)];
+}
+// Cap a recovered fg below the A1 Lc90 halation ceiling: if the near-white target
+// over-contrasts its (dark/mid) backdrop, scale its brightness down HUE-PRESERVED (a
+// uniform channel scale keeps the hue, lowers L) until |APCA| <= 90. On a mid/dark brand
+// bg pure white is typically < 90, so this is a no-op there; it only binds on the darker
+// end of the preserved-bg range. Monotonic (brighter target = more |Lc| on a dark bg), so
+// a bounded binary search finds the brightest target that still clears the ceiling.
+function _capHalation(target, bg) {
+  if (Math.abs(_apca(target, bg)) <= FG_HALATION_CEIL) {
+    return target;
+  }
+  let lo = 0, hi = 1, best = target;
+  for (let i = 0; i < 14; i++) {
+    const k = (lo + hi) / 2;
+    const t = [Math.round(target[0] * k), Math.round(target[1] * k), Math.round(target[2] * k)];
+    if (Math.abs(_apca(t, bg)) > FG_HALATION_CEIL) {
+      hi = k;
+    } else {
+      lo = k;
+      best = t;
+    }
+  }
+  return best;
+}
+// sRGB neutral gray whose OKLCH L == L. For a neutral, oklchL = cbrt(Y_lin) (the OKLab
+// matrix rows each sum to ~1), so Y_lin = L^3 and g = sRGB-gamma(L^3). This is the
+// LIGHTEST fg the engine can paint (its band ceiling = fgLightness): the achievable-
+// light-contrast bound the brand-bg clause checks before recovering (see below).
+function _neutralAtL(L) {
+  const y = Math.max(0, Math.min(1, L * L * L));
+  const g = Math.round(255 * (y <= 0.0031308 ? 12.92 * y : 1.055 * Math.pow(y, 1 / 2.4) - 0.055));
+  return [g, g, g];
 }
 // The engine luminance-inverts every computed color (patch 0009, an involution). To
 // make the painted result equal `target` when inversion is ON, author invertLum(target).
@@ -446,6 +485,11 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
     const floor = Services.prefs.getIntPref(INVERT_FLOOR_PREF, 20) / 100;
     const ceil = Services.prefs.getIntPref(INVERT_CEIL_PREF, 92) / 100;
     const span = Math.max(0.01, ceil - floor);
+    // The lightest fg the engine can paint (band ceiling). The brand-bg clause below
+    // only recovers toward it when doing so BEATS the current floored fg's contrast —
+    // on a bright preserved brand bg the ceiling-white loses to the floored-dark fg, so
+    // recovering would DROP below the DARKCHECK hard floor. That is a bg-side (A3) defect.
+    const ceilGray = _neutralAtL(ceil);
     // Only the engine's band dims a light fg — and it only runs where THIS doc is
     // being inverted. On a native-dark site (not inverted) the muted-looking text is
     // the site's own choice, so the raise below must NOT touch it (protects the
@@ -523,6 +567,36 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
         darkBg && authoredL >= FG_AUTHORED_LIGHT_L && fgL < FG_LIGHT_MIN_L;
       if (mutedLight || flooredWhite) {
         const r = _raiseLight(el.fg);
+        correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+        continue;
+      }
+      // (3) DARK-FG-ON-BRAND-BG (wave-5b): the band PRESERVED a mid/dark chromatic bg
+      // (bgL > FG_DARK_BG_L, so the dark-backdrop clauses above skipped it) but inverted an
+      // authored-near-white fg on it to dark — the pair fails the A1 floor with the WRONG
+      // polarity (bestbuy "Choose a country." white-on-blue floored to dark-tan-on-blue,
+      // |Lc| 20-37 vs floor 60/75). Recover the authored light polarity (toward white) ONLY
+      // where white is the higher-contrast choice for THIS backdrop (cw >= cb); on a
+      // genuinely LIGHT card black wins, so we fall through to _correct and keep W-D's
+      // "dark-on-light-card = no-op" invariant. Hue preserved via _raiseLight (a chromatic
+      // run keeps its hue); capped at the Lc90 halation ceiling. No bg edit.
+      const cw = Math.abs(_apca([255, 255, 255], bg));
+      const cb = Math.abs(_apca([0, 0, 0], bg));
+      const brandBg = inverted && bgL > FG_DARK_BG_L;
+      // Improve-only guard: recover ONLY when the achievable ceiling-white (ceilGray, the
+      // lightest the band can paint) actually clears MORE contrast than the current floored
+      // fg. On a bright brand bg (bestbuy's light-blue gradient hero) ceiling-white loses to
+      // the floored-dark fg, so we abstain and leave the darker (higher-contrast) run — never
+      // pushing it below the DARKCHECK hard floor. Darkening that bright island is a bg-side
+      // (A3) job, not the fg pass's. On a mid/dark brand bg, ceiling-white wins → recover.
+      const brandFloored =
+        brandBg &&
+        authoredL >= FG_AUTHORED_LIGHT_L &&
+        fgL < FG_LIGHT_MIN_L &&
+        cw >= cb &&
+        Math.abs(_apca(el.fg, bg)) < FG_BRAND_BG_FLOOR &&
+        Math.abs(_apca(ceilGray, bg)) >= Math.abs(_apca(el.fg, bg));
+      if (brandFloored) {
+        const r = _capHalation(_raiseLight(el.fg), bg);
         correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
         continue;
       }
