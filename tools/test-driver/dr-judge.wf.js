@@ -38,7 +38,7 @@ const disc = await agent(
   `It prints one slug per line. For EACH slug printed, emit a pair object with these four paths (substitute the slug literally):\n` +
   `gjoaTop = ${OUT}/gjoa-<slug>-1top.png\ngjoaMid = ${OUT}/gjoa-<slug>-2mid.png\ndrTop = ${OUT}/dr-<slug>-1top.png\ndrMid = ${OUT}/dr-<slug>-2mid.png\n` +
   `Return EVERY slug as a pair (do not drop any). If the command prints nothing, return an empty pairs array.`,
-  { label: 'discover-pairs', phase: 'Discover', schema: PAIRS })
+  { label: 'discover-pairs', phase: 'Discover', schema: PAIRS, model: 'sonnet', effort: 'low' })
 
 const pairs = (disc && disc.pairs) || []
 log(`judging ${pairs.length} site pairs`)
@@ -55,7 +55,7 @@ const verdicts = (await parallel(pairs.map(p => () =>
     `(4) images/photos untouched, dark logos still visible; (5) no transparent/see-through gaps; (6) overall polish.\n` +
     `Score gjoaOverall and drOverall 1-10. verdict = gjoa_wins only if gjoa >= DR on every axis; dr_wins if DR is clearly better anywhere; tie if equivalent. ` +
     `List gjoa's concrete defects vs DR (what to fix). Site: ${p.slug}.`,
-    { label: `judge:${p.slug}`, phase: 'Judge', schema: VERDICT, effort: 'high' })
+    { label: `judge:${p.slug}`, phase: 'Judge', schema: VERDICT, model: 'opus', effort: 'high' })
     .then(v => ({ ...v, slug: v.slug || p.slug }))
 ))).filter(Boolean)
 
