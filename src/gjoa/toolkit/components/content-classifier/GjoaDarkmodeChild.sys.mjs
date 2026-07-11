@@ -307,14 +307,32 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     // fooled by system Canvas colors under color-scheme:dark (reports dark while the
     // page paints white). Pass the viewport for the snapshot; #pageIsDark goes along
     // only as the parent's fallback when the snapshot is unavailable.
+    // engineInverting tells the parent WHOSE light it would be measuring: a light
+    // snapshot while the engine inverts this doc means the AUTHORED page is dark —
+    // the engine double-inverted a native dark theme back to light (the C3
+    // gray-wash: redis/kubernetes/washingtonpost at mark 1) — NOT that the site is
+    // light. The parent answers "probe-retract" and #probeRetract disambiguates by
+    // re-measuring with the inversion retracted.
     const hasNativeDark = this.#pageIsDark(win, doc);
+    const engineInverting = this.#engineInvertingNow(win, doc);
     const W = Math.min(win.innerWidth | 0, 1600);
     const H = Math.min(win.innerHeight | 0, 1200);
     let resp;
     try {
-      resp = await this.sendQuery("Darkmode:Decide", { w: W, h: H, hasNativeDark });
+      resp = await this.sendQuery("Darkmode:Decide", {
+        w: W,
+        h: H,
+        hasNativeDark,
+        engineInverting,
+      });
     } catch (e) {
       return;
+    }
+    if (!resp) {
+      return;
+    }
+    if (resp.override === "probe-retract") {
+      resp = await this.#probeRetract(win, doc, W, H);
     }
     if (!resp) {
       return;
@@ -327,11 +345,17 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this.browsingContext.colorInversionOverride = resp.override;
       } catch (e) {}
     }
+    if (resp.override === "inactive") {
+      // The probe confirmed a native dark theme: the engine's inversion is retracted
+      // for good, so the actor sheets authored FOR the inverted state are now wrong —
+      // the root-opaque white bg would render as a genuine white background, and
+      // panel/media rules would restyle a page that needs nothing. Remove them.
+      this.#removeInversionSheets();
+    }
     // When this doc ends up inverted, dim its large bright media (replaced <img>/
     // <video> heroes the engine exempts for fidelity but which keep a page reading
     // light — e.g. amazon's promo banner).
     if (resp.override === "active") {
-      this.#dimLargeMedia(win, doc);
       // #forceOpaqueRoot ran at the top BEFORE this override was set, so on a page the
       // engine force-inverts HERE (not pre-inverted by tier0) its probe saw a still-light
       // page and skipped — leaving a transparent html/body that bleeds (walmart/figma read
@@ -339,10 +363,15 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       win.requestAnimationFrame(() =>
         win.requestAnimationFrame(() => this.#forceOpaqueRoot(win, doc)));
     }
-    // Darken light panels on ANY inverted doc (the pass self-gates on real inversion) — the
-    // engine's own default-invert leaves resp.override empty, so this can't hang off "active".
+    // Dim large bright media + darken light panels on ANY inverted doc (each self-gates on
+    // real inversion) — the engine's own default-invert leaves resp.override empty, so these
+    // can't hang off "active". Before, #dimLargeMedia only ran on force-inverted pages, so an
+    // engine-default-inverted page (microsoft) kept its bright bg-image hero at full light.
     win.requestAnimationFrame(() =>
-      win.requestAnimationFrame(() => this.#darkenLightPanels(win, doc)));
+      win.requestAnimationFrame(() => {
+        this.#dimLargeMedia(win, doc);
+        this.#darkenLightPanels(win, doc);
+      }));
     // Pass-2 polish (pref-gated, default off): the refiner has settled the
     // inversion state, so the image pass can now read it the right way round.
     this.#maybeRunImagePass(win, doc);
@@ -351,19 +380,91 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     this.#maybeNormalizeContrast(win, doc);
     // SPA backstop: a heavy SPA (YouTube) may still be painting its loading skeleton
     // at this first refine, so the measurement read the wrong state. Re-measure ONCE
-    // after a delay to catch the settled page — but skip if we already forced dark
-    // ("active"), so this only UPGRADES a still-light page and never retracts a
-    // correctly-accepted native-dark page (no oscillation).
+    // after a delay to catch the settled page — but skip if a decision already
+    // LANDED: "active" (forced dark — only UPGRADE a still-light page, never
+    // oscillate) or "inactive" (probe-confirmed native dark — a re-measure would
+    // read the dark paint, answer "none", and hand the doc back to the engine's
+    // durable default-invert, re-creating the double-invert wash we just retracted).
     if (!this._reRefined) {
       this._reRefined = true;
       win.setTimeout(() => {
         try {
-          if (this.browsingContext.colorInversionOverride === "active") {
+          const ov = this.browsingContext.colorInversionOverride;
+          if (ov === "active" || ov === "inactive") {
             return;
           }
           this.#measureAndRefine();
         } catch (e) {}
       }, 2500);
+    }
+  }
+
+  // Is the engine luminance-inverting THIS document right now? A black probe's
+  // computed color renders LIGHT under inversion. Robust to both computed-color
+  // serializations (oklch L in 0..1 under the engine's OKLCH band; rgb 0..255) —
+  // unlike #inversionActive's strict rgb string equality, which the oklch
+  // serialization silently fails. Same dual-format read as #forceOpaqueRoot.
+  #engineInvertingNow(win, doc) {
+    try {
+      if (!doc.body) {
+        return false;
+      }
+      const pr = doc.createElement("span");
+      pr.style.cssText = "color:#000;position:fixed;left:-9999px;top:0";
+      doc.body.appendChild(pr);
+      const cs = win.getComputedStyle(pr).color;
+      const c = (cs.match(/[\d.]+/g) || []).map(Number);
+      pr.remove();
+      return /okl|lab|lch/i.test(cs)
+        ? c.length >= 1 && c[0] > 0.5
+        : c.length >= 3 && c[0] + c[1] + c[2] > 300;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Disambiguate "painted light under inversion": retract the engine's inversion
+  // ("inactive"), let the re-cascade repaint, and ask the parent to re-measure the
+  // now-AUTHORED paint (Darkmode:Decide with probeRetract). Dark answer ⇒ keep
+  // "inactive" (the site's own dark theme renders); light answer ⇒ "active" (a
+  // genuinely light page — e.g. a photo-dominated median — gets the forced invert,
+  // exactly the pre-probe behavior). Returns the parent's final decision, or null
+  // on IPC failure (caller bails, leaving the retraction to the SPA backstop's
+  // no-op guard — the next navigation starts clean).
+  async #probeRetract(win, doc, W, H) {
+    try {
+      this.browsingContext.colorInversionOverride = "inactive";
+    } catch (e) {
+      return null;
+    }
+    // Two rAFs for the re-cascade to reach paint, plus a settle for the compositor
+    // to produce the un-inverted frame drawSnapshot reads.
+    await new Promise(resolve =>
+      win.requestAnimationFrame(() =>
+        win.requestAnimationFrame(() => win.setTimeout(resolve, 150))
+      )
+    );
+    try {
+      return await this.sendQuery("Darkmode:Decide", {
+        w: W,
+        h: H,
+        probeRetract: true,
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Remove the actor's inversion-support sheets after a doc settles on its native
+  // dark theme ("inactive"): each was authored assuming the engine inverts this doc
+  // (root-opaque authors WHITE for the engine to invert to the dark floor), so on a
+  // retracted doc they'd paint literal white / restyle a page that needs nothing.
+  #removeInversionSheets() {
+    for (const key of ["_rootSheet", "_panelSheet", "_dimSheet"]) {
+      try {
+        this[key]?.remove();
+      } catch (e) {}
+      this[key] = null;
     }
   }
 
@@ -379,7 +480,13 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       try {
         pct = Services.prefs.getIntPref("gjoa.darkmode.media-dim.pct", 55);
       } catch (e) {}
-      if (pct <= 0 || pct >= 100 || !doc || !doc.documentElement) {
+      if (pct <= 0 || pct >= 100 || !doc || !doc.documentElement || !doc.body) {
+        return;
+      }
+      // Self-gate on real inversion: this now runs on ANY inverted doc (not just the
+      // force-inverted "active" ones), so a genuinely-light page must never have its media
+      // dimmed. A light page reads its swatches straight; only an inverted one flips both.
+      if (!this.#inversionActive(win, doc)) {
         return;
       }
       const dim = pct / 100;
@@ -416,11 +523,13 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
             // Replaced media (<img>/<video>/<canvas>) is a PHOTO — leave it UNTOUCHED, as
             // Dark Reader does. Dimming photos grays the whole page (target's "gray veil"
             // regression); inverting makes a negative. Only tone a large bg-image DIV the
-            // engine cannot invert (a raster bg the engine exempts): wide -> flip to a
-            // dark banner, else dim it down so it doesn't dominate the dark page.
+            // engine cannot invert (a raster bg the engine exempts). ALWAYS dim (brightness
+            // down), NEVER invert: a bg-image is just as likely a PHOTO (sciencedirect's hero
+            // photo bled through as a colour-negative under the old wide→invert path) as a
+            // graphic banner, and we can't cheaply tell them apart — dimming is the only
+            // operation that is correct for both.
             if (isMedia && !isReplaced) {
-              const wide = r.width / Math.max(1, r.height) >= 2 && r.width >= 280;
-              el.setAttribute("data-gjoa-dim", wide ? "inv" : "dim");
+              el.setAttribute("data-gjoa-dim", "dim");
               n++;
             }
           } catch (e) {}
@@ -475,12 +584,24 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       if (!inv) {
         return;
       }
-      const collect = () => {
-        const rules = [];
+      // Parse the L (lightness / relative-luminance proxy) out of a computed color,
+      // whether Gecko serialized it as oklch (L in 0..1) or rgb (0..255).
+      const lumOf = str => {
+        if (/okl|lab|lch/i.test(str)) {
+          const m = str.match(/[\d.]+/g);
+          return m && m.length ? parseFloat(m[0]) : null;
+        }
+        const m = str.match(/[\d.]+/g);
+        if (!m || m.length < 3) {
+          return null;
+        }
+        return (0.2126 * +m[0] + 0.7152 * +m[1] + 0.0722 * +m[2]) / 255;
+      };
+      const apply = () => {
         let n = this._panelN | 0;
         let scanned = 0;
         for (const el of doc.body.querySelectorAll("div,section,header,nav,main,aside,article,form,ul")) {
-          if (++scanned > 4000 || rules.length > 120) {
+          if (++scanned > 4000 || n - (this._panelN | 0) > 120) {
             break;
           }
           if (el.hasAttribute("data-gjoa-panel")) {
@@ -505,32 +626,39 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
           const L = parseFloat(m[1]);
           const alpha = m[4] !== undefined ? parseFloat(m[4]) : 1;
           const C = parseFloat(m[2]) || 0;
+          const H = m[3];
           // Only OPAQUE, MID/LIGHT, NEAR-NEUTRAL panels. High chroma (> .05) is a BRAND
           // surface — leave it for the engine to keep at its ORIGINAL color (user: brand
-          // stays as-is). Already-dark (< .40) is fine; near-white (> .88) is a text/icon
-          // surface; transparent layers paint no panel.
-          if (alpha < 0.6 || L < 0.40 || L > 0.88 || C > 0.05) {
+          // stays as-is). Already-dark (< .40) is fine; transparent layers paint no panel.
+          // The ceiling is NOT 0.88: a large near-white block (cloudflare/bestbuy/sciencedirect
+          // header bands, guardian masthead) on an inverted page is an un-inverted light
+          // panel the engine exempted — it MUST darken, not survive as a bright island. The
+          // size gate (≥28000px, above) already excludes near-white text/icon chips, so the
+          // only near-white things left here are genuine panels. Cap just below pure white
+          // (0.985) so a truly-white content sheet the engine already inverted is untouched.
+          if (alpha < 0.6 || L < 0.40 || L > 0.985 || C > 0.05) {
             continue;
           }
-          const H = m[3];
           el.setAttribute("data-gjoa-panel", n);
-          rules.push(`[data-gjoa-panel="${n}"]{background-color:oklch(0.2 ${C} ${H})!important}`);
           n++;
+          // Author a dark target — but the engine luminance-inverts every computed bg-color,
+          // so a naive `oklch(0.2 …)` gets RE-INVERTED back to light (~0.77) and the panel
+          // stays a bright island (the long-standing miss on cloudflare/bestbuy header bands).
+          // Instead: set the dark target, read what the engine PAINTS, and if it flipped it
+          // light, re-author that read-back value. The engine's inversion is an involution
+          // (patch 0009), so authoring engine(0.2) makes it paint engine(engine(0.2)) = 0.2.
+          // A panel the engine EXEMPTS stays 0.2 on the first write (no flip), so the same
+          // code darkens both inverted and exempted panels with no per-page branching.
+          try {
+            el.style.setProperty("background-color", `oklch(0.2 ${C} ${H})`, "important");
+            const got = win.getComputedStyle(el).backgroundColor;
+            const lg = lumOf(got);
+            if (lg !== null && lg > 0.4) {
+              el.style.setProperty("background-color", got, "important");
+            }
+          } catch (e) {}
         }
         this._panelN = n;
-        return rules;
-      };
-      const apply = () => {
-        const rules = collect();
-        if (!rules.length) {
-          return;
-        }
-        if (!this._panelSheet || !this._panelSheet.isConnected) {
-          this._panelSheet = doc.createElement("style");
-          this._panelSheet.id = "gjoa-darkmode-panels";
-          (doc.head || doc.documentElement).appendChild(this._panelSheet);
-        }
-        this._panelSheet.textContent += rules.join("");
       };
       apply();
       if (!this._rePanel) {
@@ -595,14 +723,22 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     win.requestAnimationFrame(() =>
       win.requestAnimationFrame(() => this.#normalizeContrast(win, doc))
     );
-    // SPA backstop: heavy SPAs (canva) paint hero/headings AFTER the first pass, so the
-    // single retone misses them. Re-run once after they settle. Bounded to one extra pass
-    // (not a hot observer) to keep the cost in check.
+    // C1 fg/bg desync backstop: the first retone samples the composited backdrop the
+    // instant DOMContentLoaded settles, but a hero whose EFFECTIVE background is a late
+    // bg-image / gradient (microsoft "Hi there", paypal) has not painted yet — so the
+    // parent's drawSnapshot reads the element's (dark, inverted) bg-COLOR, judges the
+    // light text legible, and skips it. Once the light image paints, the text is
+    // light-on-light. Re-sample on a staggered schedule so at least one pass reads the
+    // FINAL painted backdrop and couples the fg to it (light bg ⇒ dark fg). Staggered,
+    // bounded (not a hot observer); each pass is idempotent — already-legible text yields
+    // no corrective and is left as-is.
     if (!this._reNormalized) {
       this._reNormalized = true;
-      win.setTimeout(() => {
-        try { this.#normalizeContrast(win, doc); } catch (e) {}
-      }, 3200);
+      for (const delay of [1500, 3500, 8000]) {
+        win.setTimeout(() => {
+          try { this.#normalizeContrast(win, doc); } catch (e) {}
+        }, delay);
+      }
     }
   }
 
