@@ -8,19 +8,27 @@ Zero model calls. Requires: python3, imagemagick (magick command).
 Usage:
   python3 pixelcheck.py [options] [slug ...]
 
-  --dir DIR         screenshot dir (default: /tmp/dr-mark2)
-  --arm PREFIX      screenshot arm prefix (default: gjoa)
-  --light-arm PFX   light-arm prefix for B3; skip B3 if absent (default: light)
-  --rects-dir DIR   dir containing <slug>-rects.json; run unmasked + flag
-                    LOW-CONFIDENCE if file missing (default: same as --dir)
-  --out FILE        write JSON results to FILE (default: stdout)
-  --calib           print calibration summary (PASS/FAIL per rule per slug)
+  --dir DIR             screenshot dir (default: /tmp/dr-mark2)
+  --arm PREFIX          screenshot arm prefix (default: gjoa)
+  --light-arm PFX       light-arm prefix for B3; skip B3 if absent (default: light)
+  --rects-dir DIR       dir containing <slug>-rects.json; run unmasked + flag
+                        LOW-CONFIDENCE if file missing (default: same as --dir)
+  --channel-a-rollup F  Channel A rollup.json; quarantined (indeterminate) pages
+                        are excluded from the B denominator entirely.
+  --out FILE            write JSON results to FILE (default: stdout)
+  --calib               print calibration summary (PASS/FAIL per rule per slug)
+  --b3-calib-dir DIR    run B3 calibration against mark-3 light arm in DIR;
+                        reports known-good/known-fault pass/fail counts.
 
 Output JSON: array of result records:
   {page, arm, shot, rule, result, confidence, evidence}
-  result = "PASS" | "FAIL"
+  result = "PASS" | "FAIL" | "SKIP" | "DRAFT" | "ERROR"
   confidence = "normal" | "low"  (low when rects.json missing)
   evidence: rule-specific dict
+
+Quarantine (--channel-a-rollup): pages with Channel A status="indeterminate" are
+excluded from the B denominator. B-rollup carries confidence:normal on all pages
+with a rects.json (masked pages).
 """
 
 import os, sys, json, subprocess, re, math, tempfile, argparse
@@ -46,10 +54,13 @@ B2_ISLAND_PX = int(VIEWPORT_PX * 0.05)  # 80,000
 # Draft for chief sign-off.
 B3_DELTA_E_MAX = 30.0
 
-# B4: internal L* std-dev within header band must be ≥ threshold
-# (measures logo visibility: too uniform = logo invisible)
-B4_HEADER_HEIGHT = 150  # px from top
-B4_MIN_LSTAR_STDDEV = 20.0  # L* units; below this → logo region flat → FAIL
+# B4: logo visibility — rect-scoped internal L* contrast (ruling 1.4)
+# B4_LOGO_THRESHOLD: None = not yet calibrated (emit DRAFT); set mechanically
+# after calibration proves ≥2x separation (worst true-negative / best true-positive).
+# Full-band fallback when no logo rects available:
+B4_HEADER_HEIGHT = 150      # px from top (fallback header-band legacy)
+B4_MIN_LSTAR_STDDEV = 20.0  # legacy full-band threshold (DRAFT only)
+B4_LOGO_THRESHOLD = None    # rect-scoped threshold — UNSET pending calibration
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
@@ -334,49 +345,95 @@ def rule_B3(gjoa_path, light_path, rects, shot):
     return results
 
 
-def rule_B4(img_path, shot):
+def rule_B4(img_path, shot, logo_rects=None):
     """
-    B4: header/nav logo visibility.
-    DRAFT rule — requires DOM logo rects from Channel A for accurate operationalization.
-    (Spec §4 Wave S: "exact operationalization piloted in wave 1"; threshold for chief
-    sign-off.)
+    B4: header/nav logo visibility — RECT-SCOPED when Channel A logo rects available.
 
-    Current heuristic: L* std-dev in top B4_HEADER_HEIGHT px on dark pages.
-    Emits result='DRAFT' (not PASS/FAIL) pending chief calibration of threshold.
-    Threshold B4_MIN_LSTAR_STDDEV is a draft value.
+    When logo_rects is provided (kind:"logo" rects from Channel A's <slug>-rects.json),
+    measures internal L* contrast (std-dev) within each logo rect. A logo invisible in
+    dark mode has near-zero L* variation (dark-on-dark); a visible logo has ≥threshold.
+
+    Threshold: set MECHANICALLY from calibration per chief ruling 1.4 — required
+    separation ≥2x between worst true-negative (visible winner logos) and best
+    true-positive (invisible fault logos: bbc, nature). If not yet calibrated,
+    B4_LOGO_THRESHOLD is None and result is always DRAFT.
+
+    B4 is non-gating regardless of verdict (ruling 1.4, stays non-gating until chief flips).
+
+    Fallback: when no logo_rects, falls back to the legacy full-band header heuristic
+    (DRAFT, not calibrated for this purpose).
     """
-    try:
-        stddev = lstar_stddev_region(img_path, 0, 0, VIEWPORT_W, B4_HEADER_HEIGHT)
-        mean_l = mean_lstar_region(img_path, 0, 0, VIEWPORT_W, B4_HEADER_HEIGHT)
-    except Exception as e:
+    if not logo_rects:
+        # Legacy fallback: full-band header band (high false-positive rate, DRAFT only)
+        try:
+            stddev = lstar_stddev_region(img_path, 0, 0, VIEWPORT_W, B4_HEADER_HEIGHT)
+            mean_l = mean_lstar_region(img_path, 0, 0, VIEWPORT_W, B4_HEADER_HEIGHT)
+        except Exception as e:
+            return {'rule': 'B4', 'result': 'ERROR',
+                    'evidence': {'error': str(e)[:100], 'shot': shot}}
         return {
             'rule': 'B4',
-            'result': 'ERROR',
-            'evidence': {'error': str(e)[:100], 'shot': shot}
+            'result': 'DRAFT',
+            'evidence': {
+                'shot': shot, 'mode': 'fallback_header_band',
+                'header_mean_lstar': round(mean_l, 1),
+                'header_lstar_stddev': round(stddev, 1),
+                'note': 'no logo rects from Channel A — full-band heuristic (unreliable)',
+                'region': {'x': 0, 'y': 0, 'w': VIEWPORT_W, 'h': B4_HEADER_HEIGHT},
+            }
         }
 
-    # Compute a provisional verdict (for data, not for gate)
-    if mean_l >= 50.0:
-        provisional = 'PASS'
-        note = 'exempt: header is light (mean L*≥50)'
-    elif stddev >= B4_MIN_LSTAR_STDDEV:
-        provisional = 'PASS'
-        note = 'header has internal contrast (logo likely visible)'
+    # Rect-scoped: measure each logo rect
+    per_rect = []
+    for rect in logo_rects[:10]:   # cap at 10 logo rects for speed
+        x, y, w, h = rect['x'], rect['y'], rect['w'], rect['h']
+        w = max(1, min(w, VIEWPORT_W - x))
+        h = max(1, min(h, VIEWPORT_H - y))
+        try:
+            stddev = lstar_stddev_region(img_path, x, y, w, h)
+            mean_l = mean_lstar_region(img_path, x, y, w, h)
+            per_rect.append({
+                'rect': {'x': x, 'y': y, 'w': w, 'h': h},
+                'mean_lstar': round(mean_l, 1),
+                'stddev_lstar': round(stddev, 1),
+                'tag': rect.get('tag', '?'),
+            })
+        except Exception as e:
+            per_rect.append({'rect': {'x': x, 'y': y, 'w': w, 'h': h},
+                             'error': str(e)[:60]})
+
+    valid = [r for r in per_rect if 'stddev_lstar' in r]
+    if not valid:
+        return {'rule': 'B4', 'result': 'ERROR',
+                'evidence': {'shot': shot, 'per_rect': per_rect,
+                             'error': 'all logo rect measurements failed'}}
+
+    # Worst-case: the logo with the LOWEST internal contrast determines visibility.
+    # A logo invisible dark-on-dark → very low stddev_lstar.
+    min_stddev = min(r['stddev_lstar'] for r in valid)
+
+    # Threshold: set mechanically from calibration (see B4_LOGO_THRESHOLD).
+    # None = not yet calibrated; emit DRAFT with measurements so the calibration
+    # run can compute the separation table.
+    if B4_LOGO_THRESHOLD is None:
+        result = 'DRAFT'
+        note = ('threshold not calibrated — separation table required; '
+                'see darkcheck-b2-report.md §B4-calibration')
     else:
-        provisional = 'FAIL'
-        note = 'header is uniform dark — logo may be invisible'
+        result = 'PASS' if min_stddev >= B4_LOGO_THRESHOLD else 'FAIL'
+        note = f'min logo stddev_L*={min_stddev:.1f} vs threshold={B4_LOGO_THRESHOLD}'
 
     return {
         'rule': 'B4',
-        'result': 'DRAFT',          # never PASS/FAIL until chief signs off threshold
+        'result': result,
         'evidence': {
             'shot': shot,
-            'header_mean_lstar': round(mean_l, 1),
-            'header_lstar_stddev': round(stddev, 1),
-            'draft_threshold_stddev': B4_MIN_LSTAR_STDDEV,
-            'provisional': provisional,
+            'mode': 'rect_scoped',
+            'logo_rect_count': len(valid),
+            'min_stddev_lstar': min_stddev,
+            'threshold': B4_LOGO_THRESHOLD,
+            'per_rect': per_rect,
             'note': note,
-            'region': {'x': 0, 'y': 0, 'w': VIEWPORT_W, 'h': B4_HEADER_HEIGHT},
         }
     }
 
@@ -389,7 +446,7 @@ def audit_slug(slug, screenshot_dir, arm, light_arm, rects_dir):
     """
     results = []
 
-    # Load rects.json
+    # Load rects.json (all rects for B1/B2 masking; logo rects for B4)
     rects_path = Path(rects_dir) / f'{slug}-rects.json'
     rects = None
     confidence = 'normal'
@@ -402,10 +459,15 @@ def audit_slug(slug, screenshot_dir, arm, light_arm, rects_dir):
         confidence = 'low'
         rects = []  # run unmasked
 
+    # Split out logo rects (kind:"logo") for B4 rect-scoped measurement
+    logo_rects = [r for r in rects if r.get('kind') == 'logo']
+    # Masking rects: all rects regardless of kind (B1/B2 mask replaced content + logos)
+    mask_rects = rects
+
     with tempfile.TemporaryDirectory(prefix='pixelcheck_') as tmp:
         # Build mask image (shared across shots for this slug)
         mask_path = os.path.join(tmp, 'mask.png')
-        build_mask_image(rects, mask_path)
+        build_mask_image(mask_rects, mask_path)
 
         for shot in ('1top', '2mid'):
             img_filename = f'{arm}-{slug}-{shot}.png'
@@ -462,10 +524,10 @@ def audit_slug(slug, screenshot_dir, arm, light_arm, rects_dir):
                                 'confidence': confidence,
                                 'evidence': {'error': str(e)[:200]}})
 
-            # --- B4 (1top only — logo check at page top) ---
+            # --- B4 (1top only — logo check at page top; rect-scoped when logo_rects) ---
             if shot == '1top':
                 try:
-                    r = rule_B4(str(img_path), shot)
+                    r = rule_B4(str(img_path), shot, logo_rects=logo_rects if logo_rects else None)
                     r.update({'page': slug, 'arm': arm, 'confidence': confidence})
                     results.append(r)
                 except Exception as e:
@@ -551,6 +613,98 @@ def print_calib_summary(all_results):
     print()
 
 
+# ── B3 calibration harness (task d) ─────────────────────────────────────────
+#
+# Known-good pages: images should pass through unchanged (B3 PASS).
+# Known-fault pages: images were grayscaled/vanished/washed (B3 FAIL).
+# Source: chief-engineer-verdict §3 B3 + chief ruling 1.4.
+#
+B3_CALIB_KNOWN_GOOD = [
+    # wikipedia: photo-heavy pages; images pass through in dark mode
+    'en_wikipedia_org_wiki_Photosynth',
+    'en_wikipedia_org_wiki_Python_programming_language_',
+    # redis: native dark, images pass through
+    'redis_io_',
+]
+B3_CALIB_KNOWN_FAULT = [
+    # vuejs: sponsor logos grayscaled by gjoa image analysis
+    'vuejs_org_',
+    # linkedin: hero image vanished / replaced with dark solid
+    'www_linkedin_com_',
+    # cloud.google: product imagery washed out / desaturated
+    'cloud_google_com_',
+]
+
+
+def run_b3_calibration(b3_calib_dir, arm, light_arm, rects_dir):
+    """
+    Run B3 calibration against mark-3 arms in b3_calib_dir.
+    Reports known-good/known-fault pass/fail per page.
+    Partial results OK — reports counts of found vs expected.
+    """
+    calib_dir = Path(b3_calib_dir)
+    all_known = [(s, 'PASS') for s in B3_CALIB_KNOWN_GOOD] + \
+                [(s, 'FAIL') for s in B3_CALIB_KNOWN_FAULT]
+
+    print(f"\n=== B3 CALIBRATION (mark-3 arms in {b3_calib_dir}) ===")
+    print(f"{'SLUG':<45} {'B3':^6} {'EXPECTED':^8}  MATCH")
+    print('-' * 70)
+
+    found_count = 0
+    correct_count = 0
+    total_expected = len(all_known)
+    rows = []
+
+    for slug, expected_verdict in all_known:
+        # Check if screenshots exist in calib dir
+        gjoa_img = calib_dir / f'{arm}-{slug}-1top.png'
+        light_img = calib_dir / f'{light_arm}-{slug}-1top.png'
+        if not gjoa_img.exists() or not light_img.exists():
+            print(f"  {slug:<43}   SKIP  {expected_verdict:<8}  (no mark-3 arms yet)")
+            continue
+
+        # Load rects
+        rects_path = Path(rects_dir) / f'{slug}-rects.json'
+        rects = []
+        if rects_path.exists():
+            try:
+                rects = json.loads(rects_path.read_text())
+            except Exception:
+                pass
+
+        # Run B3 for 1top shot
+        b3_list = rule_B3(str(gjoa_img), str(light_img), rects, '1top')
+        if b3_list is None:
+            result_str = 'SKIP'
+            print(f"  {slug:<43}  {result_str:^6} {expected_verdict:<8}  (no media rects)")
+            continue
+
+        # Page-level B3: FAIL if any rect fails
+        page_fail = any(r['result'] == 'FAIL' for r in b3_list)
+        result_str = 'FAIL' if page_fail else ('PASS' if b3_list else 'SKIP')
+
+        found_count += 1
+        match = result_str == expected_verdict
+        if match:
+            correct_count += 1
+
+        worst_de = max((r['evidence'].get('delta_e76', 0) for r in b3_list
+                       if r.get('result') in ('PASS', 'FAIL')), default=0)
+        rows.append({'slug': slug, 'result': result_str, 'expected': expected_verdict,
+                     'match': match, 'worst_de': worst_de})
+        print(f"  {slug:<43}  {result_str:^6} {expected_verdict:<8}  "
+              f"{'✓' if match else '✗'}  (worst ΔE76={worst_de:.1f})")
+
+    print(f"\nFound {found_count}/{total_expected} expected pages in {b3_calib_dir}")
+    if found_count > 0:
+        print(f"Calibration accuracy: {correct_count}/{found_count} correct "
+              f"({100*correct_count/found_count:.0f}%)")
+    else:
+        print("No mark-3 light-arm files found — harness ready, awaiting mark-3 render.")
+    print()
+    return rows
+
+
 # ── module-level worker (picklable for multiprocessing) ─────────────────────
 
 def _audit_one_task(args_tuple):
@@ -577,16 +731,40 @@ def main():
                     help='Light arm prefix for B3 (default: light)')
     ap.add_argument('--rects-dir', default=None,
                     help='Dir containing <slug>-rects.json (default: --dir)')
+    ap.add_argument('--channel-a-rollup', default=None, metavar='FILE',
+                    help='Channel A rollup.json; pages with status=indeterminate '
+                         'are excluded from the B denominator (C2 quarantine).')
     ap.add_argument('--out', default=None,
                     help='Output JSON file (default: stdout)')
     ap.add_argument('--calib', action='store_true',
                     help='Run calibration set and print summary')
+    ap.add_argument('--b3-calib-dir', default=None, metavar='DIR',
+                    help='Run B3 calibration against mark-3 light arm in DIR.')
     ap.add_argument('slugs', nargs='*',
                     help='Slugs to audit (default: all in --dir)')
     args = ap.parse_args()
 
     screenshot_dir = args.dir
     rects_dir = args.rects_dir or args.dir
+
+    # Task (a): load Channel A quarantine list
+    quarantined_slugs = set()
+    if args.channel_a_rollup:
+        try:
+            rollup = json.loads(Path(args.channel_a_rollup).read_text())
+            for page in rollup.get('pages', []):
+                if page.get('status') == 'indeterminate':
+                    quarantined_slugs.add(page['slug'])
+            print(f"[pixelcheck] Channel A quarantine: {len(quarantined_slugs)} slugs excluded "
+                  f"from B denominator: {sorted(quarantined_slugs)}", file=sys.stderr)
+        except Exception as e:
+            print(f"[pixelcheck] WARNING: could not read --channel-a-rollup: {e}", file=sys.stderr)
+
+    # Task (d): B3 calibration harness
+    if args.b3_calib_dir:
+        run_b3_calibration(args.b3_calib_dir, args.arm, args.light_arm, rects_dir)
+        if not args.slugs and not args.calib:
+            return  # calibration-only run
 
     # Discover slugs
     if args.calib and not args.slugs:
@@ -603,8 +781,17 @@ def main():
                 found.add(m.group(1))
         slugs = sorted(found)
 
+    # Task (a): exclude quarantined slugs from B denominator entirely
+    if quarantined_slugs:
+        original_count = len(slugs)
+        slugs = [s for s in slugs if s not in quarantined_slugs]
+        excluded = original_count - len(slugs)
+        if excluded:
+            print(f"[pixelcheck] excluded {excluded} quarantined slugs from B denominator",
+                  file=sys.stderr)
+
     if not slugs:
-        print(f"No slugs found in {screenshot_dir}", file=sys.stderr)
+        print(f"No slugs found in {screenshot_dir} (after quarantine exclusions)", file=sys.stderr)
         sys.exit(1)
 
     workers = min(max(2, cpu_count() - 1), len(slugs), 8)
@@ -631,10 +818,31 @@ def main():
     if args.calib:
         print_calib_summary(all_results)
 
+    # B-rollup: summary for coordinator (confidence counts, quarantine summary)
+    audited_slugs = set(r['page'] for r in all_results)
+    normal_conf = len(set(r['page'] for r in all_results if r.get('confidence') == 'normal'))
+    low_conf    = len(set(r['page'] for r in all_results if r.get('confidence') == 'low'))
+    b_rollup = {
+        'denominator': len(audited_slugs),
+        'quarantined_excluded': len(quarantined_slugs),
+        'confidence_normal': normal_conf,  # pages with rects.json (masked)
+        'confidence_low': low_conf,        # pages without rects.json (unmasked)
+        'b4_threshold_set': B4_LOGO_THRESHOLD is not None,
+    }
+    print(f"[pixelcheck] B-rollup: denominator={b_rollup['denominator']} "
+          f"quarantined_excluded={b_rollup['quarantined_excluded']} "
+          f"confidence_normal={b_rollup['confidence_normal']} "
+          f"confidence_low={b_rollup['confidence_low']}",
+          file=sys.stderr)
+
     out_json = json.dumps(all_results, indent=2)
     if args.out:
-        Path(args.out).write_text(out_json)
-        print(f"[pixelcheck] wrote {args.out}", file=sys.stderr)
+        # Write results + sidecar rollup
+        out_path = Path(args.out)
+        out_path.write_text(out_json)
+        rollup_path = out_path.with_suffix('.rollup.json')
+        rollup_path.write_text(json.dumps(b_rollup, indent=2))
+        print(f"[pixelcheck] wrote {args.out} + {rollup_path}", file=sys.stderr)
     else:
         print(out_json)
 

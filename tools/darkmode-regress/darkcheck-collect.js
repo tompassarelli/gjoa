@@ -206,6 +206,53 @@ for (const el of rall) {
   });
 }
 
+// logo-candidate rects (B4 seam): header/nav img/svg in the top band with wordmark aspect
+// + link-to-root or header/nav ancestor heuristic (chief-engineer-verdict §3 B4).
+// Emitted with kind:"logo". B4 measures internal contrast WITHIN these rects.
+// B1/B2 masking uses all rects uniformly; kind field is advisory for B4 only.
+const LOGO_TOP_BAND_PX = 200;  // px — logos live here
+const LOGO_MIN_ASPECT = 1.5;   // w/h — wordmark/horizontal logo shape
+const hasHeaderNavAncestor = (el) => {
+  let cur = el.parentElement, hops = 0;
+  while (cur && hops < 20) {
+    const t = cur.tagName, role = (cur.getAttribute("role") || "").toLowerCase();
+    if (t === "HEADER" || t === "NAV" || role === "banner" || role === "navigation") return true;
+    cur = cur.parentElement; hops++;
+  }
+  return false;
+};
+const hasRootLinkAncestor = (el) => {
+  // ancestor <a> whose href is the site root: "/", domain-only, or root + fragment/query
+  let cur = el.parentElement, hops = 0;
+  while (cur && hops < 12) {
+    if (cur.tagName === "A") {
+      const href = (cur.getAttribute("href") || "").trim();
+      // "/" alone, "#fragment", "/?q=…", "https://domain/", "https://domain"
+      return /^(\/([#?].*)?|https?:\/\/[^/]+(\/([#?].*)?)?)$/.test(href) || href === "";
+    }
+    cur = cur.parentElement; hops++;
+  }
+  return false;
+};
+const logoCandidates = document.body ? document.body.querySelectorAll("img,svg") : [];
+for (const el of logoCandidates) {
+  const r = el.getBoundingClientRect();
+  if (r.width < 10 || r.height < 6) continue;
+  if (r.top > LOGO_TOP_BAND_PX || r.top >= H || r.left >= W || r.bottom <= 0 || r.right <= 0) continue;
+  const cs = getComputedStyle(el);
+  if (cs.visibility === "hidden" || cs.display === "none" || +cs.opacity === 0) continue;
+  if (r.width / r.height < LOGO_MIN_ASPECT) continue;
+  if (!hasHeaderNavAncestor(el) && !hasRootLinkAncestor(el)) continue;
+  replaced.push({
+    x: Math.max(0, Math.round(r.left)),
+    y: Math.max(0, Math.round(r.top)),
+    w: Math.round(Math.min(W, r.right) - Math.max(0, r.left)),
+    h: Math.round(Math.min(H, r.bottom) - Math.max(0, r.top)),
+    tag: el.tagName.toLowerCase(),
+    kind: "logo",
+  });
+}
+
 return {
   w: W, h: H, dpr, inverted,
   rootDark, rootBgL: Math.round(rootBgL), colorSchemeDark, normalizedSignal,
