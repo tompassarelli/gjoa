@@ -25,15 +25,20 @@
       (when og-icon-style
         (set! (.-listStyleImage (.-style button)) og-icon-style))
 
-      ;; Order: sidebar button sits AFTER the extension (puzzle) button, so the
-      ;; nav-bar reads hamburger → extension → sidebar (user swap). Fall back to
-      ;; after the hamburger, then after the native sidebar button.
+      ;; Order (owner spec 2026-07-11): sidebar-toggle sits immediately RIGHT of
+      ;; the refresh (stop-reload) button, INSIDE nav-bar-customization-target's
+      ;; left cluster. Horizontal mode then reads [← → ↻ □] …url… [🧩 ☰]: sidebar
+      ;; right of refresh, and extensions (last target child) left of the hamburger.
+      ;; Because the button is now a target grandchild (not a direct #nav-bar child),
+      ;; the `#nav-bar > #gjoa-sidebar-button` order rules stop matching it — per-mode
+      ;; CSS positions it from here (see chrome/css/gjoa.uc.css nav-bar layout block).
+      ;; Fall back to after the hamburger, then after the native sidebar button.
       (let [nav-bar (by-id "nav-bar")
-            ext-btn (by-id "unified-extensions-button")
+            reload-btn (by-id "stop-reload-button")
             panel-ui (by-id "PanelUI-button")]
         (cond
-          (and nav-bar ext-btn (= (.-parentNode ext-btn) nav-bar))
-          (.after ext-btn button)
+          reload-btn
+          (.after reload-btn button)
           (and nav-bar panel-ui (= (.-parentNode panel-ui) nav-bar))
           (.after panel-ui button)
           :else

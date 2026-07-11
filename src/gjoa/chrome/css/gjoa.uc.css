@@ -578,11 +578,12 @@
 #nav-bar > #nav-bar-customization-target {
   flex: 1 1 auto !important;
 }
-/* gjoa-sidebar-button is DOM-inserted after PanelUI-button (see
- * src/drawer/sidebar-button.ts). In compact mode we want
- *   [...customization-target with URL][gjoa-sidebar-button][PanelUI]
- * — so explicitly order them. taskbar-tabs-favicon (the 151+
- * vertical-tabs sidebar toggle) sits between them if visible. */
+/* Since 2026-07-11 gjoa-sidebar-button is DOM-inserted INSIDE
+ * nav-bar-customization-target, right after stop-reload (see
+ * chrome/bjs/drawer/sidebar-button.bjs) — so in horizontal/compact mode it
+ * flows at its natural DOM slot (immediately right of refresh) and this
+ * `#nav-bar > ...` child rule no longer matches it. Kept for the rare
+ * direct-child fallback (stop-reload absent at install). */
 #nav-bar > #gjoa-sidebar-button {
   order: 1 !important;
   flex: 0 0 auto !important;
@@ -603,7 +604,12 @@
 #sidebar-main #nav-bar > #PanelUI-button {
   order: -10 !important;
 }
-#sidebar-main #nav-bar > #gjoa-sidebar-button {
+/* Descendant (not `>`): since 2026-07-11 the button is DOM-inserted INSIDE
+ * nav-bar-customization-target (after stop-reload), so it's a target grandchild
+ * here, not a direct #nav-bar child. order -9 still lands it leftmost — below
+ * extensions (-2) and the spring (-1) inside the target — giving [☰][□][🧩].
+ * Also matches the rare direct-child fallback (stop-reload absent at install). */
+#sidebar-main #nav-bar #gjoa-sidebar-button {
   order: -9 !important;
 }
 #sidebar-main #nav-bar > #taskbar-tabs-favicon {
