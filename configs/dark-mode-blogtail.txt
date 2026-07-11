@@ -137,3 +137,51 @@ https://jakewharton.com/
 
 # === Hand-rolled + misc ===
 https://ben.computer/
+
+# === Chromatic design / CSS & front-end === (round 2 — 2026-07-12)
+https://jvns.ca/
+https://maggieappleton.com/
+https://mxb.dev/
+https://www.taniarascia.com/
+https://piccalil.li/
+https://frankchimero.com/blog/
+https://jhey.dev/
+https://www.bram.us/
+https://www.zachleat.com/web/
+https://andy-bell.co.uk/
+https://meyerweb.com/eric/thoughts/
+https://heydonworks.com/
+https://scottohara.me/
+https://blog.jim-nielsen.com/
+https://joshcollinsworth.com/blog
+
+# === Visual / interactive / illustrated === (round 2)
+https://ciechanow.ski/
+https://www.redblobgames.com/blog/
+https://waitbutwhy.com/
+https://brr.fyi/
+https://animatedmachines.com/
+https://bfnightly.bracketproductions.com/
+https://thecreativeindependent.com/
+
+# === Dev writing / personal tech === (round 2)
+https://www.swyx.io/
+https://kentcdodds.com/blog
+https://fly.io/blog/
+https://catonmat.net/
+https://www.drmaciver.com/
+https://bounded-regret.ghost.io/
+https://www.rkg.blog/
+https://dubroy.com/blog/
+https://blog.reverberate.org/
+https://tidyverse.org/blog/
+https://poolp.org/posts/
+
+# === Language / systems / PL === (round 2)
+https://harelang.org/blog/
+https://kristoff.it/blog/
+https://odin-lang.org/news/
+https://lambdaland.org/
+https://peppe.rs/posts/
+https://mort.coffee/home/
+https://www.jakef.science/
