@@ -598,19 +598,24 @@
 }
 
 /* --- EXPANDED-mode nav-bar (inside #sidebar-main) ----------------------
- * Target: [☰][□][🧩] ──gap── [← → ↻]
+ * Target (owner spec v2 2026-07-11): [☰ settings][🧩 ext] ──gap── [← → ↻][□ sidebar]
+ * i.e. hamburger, extensions, gap, back, forward, refresh, sidebar-toggle.
+ * (Superseded the v1 [☰][□][🧩]─[← → ↻]: owner wants sidebar-toggle on the
+ * FAR RIGHT after refresh, and extensions glued to the hamburger.)
  *
  * Higher specificity (3 IDs) overrides compact-mode rules above. */
 #sidebar-main #nav-bar > #PanelUI-button {
   order: -10 !important;
 }
-/* Descendant (not `>`): since 2026-07-11 the button is DOM-inserted INSIDE
+/* Descendant (not `>`): the button is DOM-inserted INSIDE
  * nav-bar-customization-target (after stop-reload), so it's a target grandchild
- * here, not a direct #nav-bar child. order -9 still lands it leftmost — below
- * extensions (-2) and the spring (-1) inside the target — giving [☰][□][🧩].
- * Also matches the rare direct-child fallback (stop-reload absent at install). */
+ * here, not a direct #nav-bar child. order 1 lands it RIGHTMOST — after back/
+ * forward/stop-reload (order 0), past the spring (-1) and extensions (-2) —
+ * giving the trailing [□] in [☰][🧩] ─gap─ [← → ↻][□]. Matches the rare
+ * direct-child fallback too (compact `#nav-bar > #gjoa-sidebar-button` is
+ * also order 1). */
 #sidebar-main #nav-bar #gjoa-sidebar-button {
-  order: -9 !important;
+  order: 1 !important;
 }
 #sidebar-main #nav-bar > #taskbar-tabs-favicon {
   order: -8 !important;
