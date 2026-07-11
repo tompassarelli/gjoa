@@ -44,6 +44,12 @@
                   (when (or (= (.-key e) "l") (= (.-key e) "L"))
                     (.activateFloating (.-urlbar-api state) "current")))))))
 
+        ;; Expose the SAME compact API the sidebar button drives, so the vim
+        ;; layer's Shift+E anchor/float toggle hits the identical code path
+        ;; (.toggle) — no duplicated toggle logic. Mirrors gjoaBlocking /
+        ;; gjoaDarkMode / gjoaTheme window-global convention.
+        (set! (.-gjoaCompact window) compact)
+
         (let [sidebar-button (make-sidebar-button! {:sidebarMain sidebar-main
                                                     :compact compact})
               banner (make-banner!)]
@@ -58,6 +64,7 @@
               (.destroy layout)
               (.destroy drag-overlay)
               (.destroy compact)
+              (set! (.-gjoaCompact window) nil)
               (when (.-urlbar-api state) (.destroy (.-urlbar-api state)))
               (.destroy sidebar-button)
               (.destroy banner)))

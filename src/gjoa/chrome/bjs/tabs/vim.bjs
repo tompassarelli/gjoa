@@ -54,7 +54,11 @@
    {:id "visualMode"    :key "v" :desc "visual select (hjkl/w/b extend, y yank)" :cat "Navigation"}
    {:id "scrollDown"    :key "j" :desc "scroll down"                       :cat "Scrolling"}
    {:id "scrollUp"      :key "k" :desc "scroll up"                         :cat "Scrolling"}
-   {:id "toggleCompact" :key "e" :desc "toggle compact mode"              :cat "Layout"}
+   ;; summon = brief reveal; the sidebar auto-dismisses after enter→leave. E
+   ;; (Shift+e) = anchor/float, the persistent toggle the custom sidebar button
+   ;; fires — both call the one compact.toggle via window.gjoaCompact.
+   {:id "summonSidebar" :key "e" :desc "summon sidebar (brief; self-dismisses)"  :cat "Layout"}
+   {:id "anchorSidebar" :key "E" :desc "anchor / float sidebar (persistent)"     :cat "Layout"}
    {:id "toggleStrip"   :key "b" :desc "toggle sidebar strip (horizontal)" :cat "Layout"}
    {:id "exCommand"     :key ":" :desc "command palette"                  :cat "Command"}
    {:id "help"          :key "?" :desc "show this help"                   :cat "Help"}])
@@ -783,9 +787,12 @@
                 (try (some-> gBrowser .-selectedBrowser .-browsingContext .-currentWindowGlobal
                        (.getActor "GjoaInput") (.sendAsyncMessage "GjoaInput:ScrollStart" {:dy -1}))
                      (catch Any _e nil)))
-            (= id "toggleCompact")
-              ;; #127: mode-aware. In COMPACT mode `e` toggles the overlay reveal
-              ;; (pin/unpin); in STATIC mode it hides the sidebar (switches to compact).
+            (= id "summonSidebar")
+              ;; #127: SUMMON — brief reveal, meant for a quick peek; the sidebar
+              ;; dismisses itself after enter→leave. Mode-aware: in COMPACT mode
+              ;; it pins/unpins the overlay reveal; in STATIC mode it tucks the
+              ;; sidebar back into compact. (Behavior unchanged by the rename —
+              ;; the id now names the intent; the reveal logic is untouched.)
               (let [sb (by-id "sidebar-main")]
                 (if (pref-bool "gjoa.sidebar.compact" false)
                   (when sb
@@ -795,6 +802,12 @@
                       (.setAttribute sb "gjoa-pinned" "true")))
                   (do (when sb (.removeAttribute sb "gjoa-pinned"))
                       (set-pref-bool! "gjoa.sidebar.compact" true))))
+            (= id "anchorSidebar")
+              ;; ANCHOR/FLOAT — the persistent toggle the custom sidebar button
+              ;; fires. Route through the SAME compact.toggle the button drives
+              ;; (window.gjoaCompact) so there is one anchor/float code path.
+              (let [c (.-gjoaCompact window)]
+                (when c (.toggle c)))
             (= id "toggleStrip")   (toggle-h-sidebar-strip)
             (= id "help")          (toggle-which-key)
             (= id "linkHints")       (start-link-hints false)
