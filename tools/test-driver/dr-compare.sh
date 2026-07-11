@@ -45,7 +45,18 @@ run_arm() { # $1=label $2=bin $3=profile-src $4=port $5..=extra bin args
   local dev=""; case "$bin" in *obj-*) dev="GJOA_DEV_LOADER=1";; esac
   env MOZ_HEADLESS=1 GJOA_ALLOW_INSECURE=1 $dev timeout "$TMO_BROWSER" "$bin" -no-remote -profile "$dst" "$@" -marionette -remote-allow-system-access about:blank >"/tmp/cmp-$label.log" 2>&1 &
   local pid=$!
-  sleep 14
+  # FF arms need ~30s: the Dark Reader EXTENSION boots slower than the browser.
+  # 14s was enough for the browser but not DR — the 2026-07-11 baseline ran its
+  # whole "DR control" arm with DR never injected (= light Firefox). Sentinel
+  # below makes that class of silent control failure impossible.
+  case "$bin" in *firefox*) sleep 35;; *) sleep 14;; esac
+  if [ "$label" = dr ]; then
+    if ! python3 "$REPO/tools/test-driver/dr-sentinel.py" --port "$port"; then
+      echo "FATAL: dr arm sentinel FAILED — Dark Reader not injecting; aborting arm (no invalid control data)" >&2
+      kill "$pid" 2>/dev/null
+      return 1
+    fi
+  fi
   timeout "$TMO_RENDER" python3 "$REPO/tools/test-driver/render-darkmode.py" --port "$port" --prefix "$label" --outdir "$OUT" --urls "$URLS" --settle 18
   kill "$pid" 2>/dev/null
 }
