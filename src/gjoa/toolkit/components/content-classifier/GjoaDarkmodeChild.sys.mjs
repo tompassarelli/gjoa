@@ -1167,6 +1167,42 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       // capture phase: img load events don't bubble.
       doc.addEventListener("load", onLoad, true);
     }
+    // TOP-VIEW TIMING / coverage (wave6 W-H). The element walk above is viewport-clipped
+    // (#normalizeContrast skips r.top >= innerHeight) and the PARENT's drawSnapshot only
+    // covers the viewport, so ONLY above-the-fold text is ever measured + corrected. The
+    // correction (W-G's hue-preserving _solveAccent) therefore lands on the fold's links
+    // but never on the ones below it — which keep the engine's role-blind band output. A
+    // page renders TWO link palettes: the top-shot's corrected accents and the mid-shot's
+    // un-corrected engine tones (owner fault #6 — wikipedia article links: top 146,184,255,
+    // scrolled 101,154,255). The defect is COVERAGE, not colour: re-run the SAME idempotent
+    // normalize when new content scrolls into view, so every region gets the identical
+    // decision the fold got. Debounced on scroll-STOP (not a per-event pass) and passive, so
+    // it never costs a scroll frame; the parent snapshots the CURRENT viewport, so a pass at
+    // scrollY>0 reads the now-visible rows' real backdrops. Idempotent — a link already
+    // clearing the accent floor yields no corrective, so re-entering a region can't oscillate
+    // (no restyle beyond the first correction of each newly-revealed row). Threshold gates out
+    // sub-row jitter / horizontal scroll that reveal no new text.
+    if (!this._scrollHooked) {
+      this._scrollHooked = true;
+      this._scrollNormLastY = 0;
+      const onScroll = () => {
+        try {
+          const y = win.scrollY | 0;
+          if (Math.abs(y - this._scrollNormLastY) < 200) {
+            return; // no new rows revealed — skip
+          }
+          if (this._scrollNormTimer) {
+            win.clearTimeout(this._scrollNormTimer);
+          }
+          this._scrollNormTimer = win.setTimeout(() => {
+            this._scrollNormTimer = null;
+            this._scrollNormLastY = win.scrollY | 0;
+            try { this.#normalizeContrast(win, doc); } catch (e2) {}
+          }, 250);
+        } catch (e2) {}
+      };
+      win.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    }
   }
 
   // Parse a COMPUTED color string to sRGB [r,g,b] (0..255), or null. Handles BOTH
@@ -1236,6 +1272,16 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       pr.remove();
     } catch (e) {}
     const els = [];
+    // Unique cn NAMESPACE per pass. data-gjoa-cn is re-tagged every pass but the attribute
+    // PERSISTS across passes. A re-pass over a DIFFERENT region (scroll coverage) that
+    // restarted cn at 0 collides with a prior pass's stale tags: `querySelector([data-gjoa-cn
+    // ="69"])` then resolves to the FIRST (stale, above-fold) match, so the corrective the
+    // parent computed for the MID-region node lands on the wrong element and the mid link
+    // silently keeps the engine tone — the top-view/mid-view split survives the re-pass. A
+    // monotonic per-pass base makes every tag globally unique, so each corrective maps to the
+    // exact node the parent judged. (The old same-region staggered re-passes only dodged this
+    // by re-tagging the same nodes in the same order — cn 69 always meant one node.)
+    const cnBase = (this._normPassSeq = (this._normPassSeq | 0) + 1) * 1000000;
     let cn = 0;
     const sel =
       "h1,h2,h3,h4,h5,h6,p,a,span,li,td,th,div,button,label,strong,em,blockquote,figcaption,dt,dd";
@@ -1262,9 +1308,9 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       if (!fg) {
         continue;
       }
-      el.setAttribute("data-gjoa-cn", cn);
+      el.setAttribute("data-gjoa-cn", cnBase + cn);
       els.push({
-        cn,
+        cn: cnBase + cn,
         x: Math.round(r.left),
         y: Math.round(r.top),
         w: Math.round(r.width),
