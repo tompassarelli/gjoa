@@ -1,0 +1,23 @@
+# Long-tail personal/tech blogs — the population the top-100 corpus under-samples
+# (owner daily-driver reality; added 2026-07-11 after pvk.ca fault). Old/custom
+# CSS, hand-rolled themes, no framework semantics.
+https://pvk.ca/Blog/2019/01/09/preemption-is-gc-for-memory-reordering/
+https://danluu.com/
+https://jvns.ca/
+https://rachelbythebay.com/w/
+https://drewdevault.com/
+https://www.joelonsoftware.com/
+https://paulgraham.com/articles.html
+https://matklad.github.io/
+https://fasterthanli.me/
+https://blog.codinghorror.com/
+https://apenwarr.ca/log/
+https://research.swtch.com/
+https://www.brendangregg.com/blog/
+https://nullprogram.com/
+https://eli.thegreenplace.net/
+https://lemire.me/blog/
+https://mtlynch.io/
+https://xeiaso.net/blog
+https://brooker.co.za/blog/
+https://tratt.net/laurie/blog/
