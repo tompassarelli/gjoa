@@ -293,6 +293,25 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
     if (!this.#hybridActive()) {
       return { override: "none", css: "", inject: "" };
     }
+    // Transparent root, snapshot untrustworthy: the child measured html AND body as
+    // authored-alpha-0 while the engine is NOT inverting this doc. Such a page has
+    // no page background and is authored LIGHT (it relied on the UA white canvas) —
+    // but the drawSnapshot reads the DARK browser backdrop bleeding through the
+    // transparent root and lies "already dark" (pvk.ca: L=10 → "none" → never
+    // inverted → white header/cards glare over the backdrop, body text stays dark).
+    // Do NOT measure it: force the inversion. The child then lays the opaque dark
+    // root (#forceOpaqueRoot fires on "active"), replacing the backdrop bleed with
+    // real dark paint. A native-dark page has an OPAQUE root and never reaches here;
+    // a transparent-root page the engine already inverts reads opaque (oklch) and is
+    // gated out by !engineInverting. Skip on the probe re-measure (that path
+    // deliberately retracted the inversion to read the authored paint).
+    if (data?.transparentRoot && !data?.engineInverting && !data?.probeRetract) {
+      this.#debug(
+        `decide host=${hostOf(this.trustedUrl())} transparentRoot ` +
+          `-> active (authored-light; snapshot over transparent root untrusted)`
+      );
+      return { override: "active", css: "", inject: "" };
+    }
     let L = null;
     try {
       L = await this.#paintedMedianLstar(data?.w | 0, data?.h | 0);

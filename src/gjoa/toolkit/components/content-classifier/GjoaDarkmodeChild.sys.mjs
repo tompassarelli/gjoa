@@ -303,6 +303,23 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     if (!/^https?:/.test(url)) {
       return;
     }
+    // Transparent root (html AND body authored bg alpha 0) = the page has NO page
+    // background and relied on the UA white canvas: it is authored LIGHT. Every
+    // painted-pixel probe (the parent's snapshot median, the black probe) reads the
+    // DARK browser backdrop bleeding THROUGH the transparent root and lies "already
+    // dark", so the engine's tier-0 skips it and the decision defers to "none" — the
+    // page never inverts and its white header/cards glare over the backdrop while the
+    // body text stays dark (pvk.ca false-native-dark). Read it HERE, BEFORE
+    // #forceOpaqueRoot paints an opaque root over the authored transparency (the
+    // wave-3 note: "#forceOpaqueRoot corrupts the computed-bg read it feeds" — the
+    // ordering bug). Cache the first authored read so a later re-measure (post
+    // opaque-root) can't flip it. A page the engine IS inverting reads opaque
+    // (inverted colors serialize oklch) so this is 0-alpha only on the un-inverted
+    // transparent-root case — exactly the class the decision misses.
+    if (this._transparentRootAuthored === undefined) {
+      this._transparentRootAuthored = this.#rootIsTransparent(win, doc);
+    }
+    const transparentRoot = this._transparentRootAuthored;
     this.#forceOpaqueRoot(win, doc);
     // Tier-1 "did we get dark?" is decided by the PARENT from a drawSnapshot of the
     // real painted pixels (the scorer's coverage), because getComputedStyle(body) is
@@ -326,6 +343,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         h: H,
         hasNativeDark,
         engineInverting,
+        transparentRoot,
       });
     } catch (e) {
       return;
@@ -421,6 +439,45 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       return /okl|lab|lch/i.test(cs)
         ? c.length >= 1 && c[0] > 0.5
         : c.length >= 3 && c[0] + c[1] + c[2] > 300;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Does the page author NO root background — html AND body both computed
+  // background-color alpha 0? Such a page relies on the UA canvas (white when we
+  // are not forcing) and is authored LIGHT. This is the discriminator that
+  // separates the false-native-dark case (pvk.ca: html+body both transparent, so
+  // the dark browser backdrop bleeds through and every dark-probe is fooled) from
+  // both a themeless page with an opaque white body (wikipedia: html transparent,
+  // body opaque) and a genuine native-dark page (opaque dark root: redis body
+  // navy, k8s/github opaque). Requiring BOTH transparent is what makes it precise.
+  // Reads authored alpha ONLY when the engine is not inverting this doc — an
+  // inverted page serializes its computed bg as opaque oklch, so alpha 0 here means
+  // a truly un-painted root. Call BEFORE #forceOpaqueRoot lays an opaque root.
+  #rootIsTransparent(win, doc) {
+    try {
+      const html = doc.documentElement;
+      const body = doc.body;
+      if (!html || !body) {
+        return false;
+      }
+      const alphaOf = el => {
+        const c = win.getComputedStyle(el).backgroundColor || "";
+        if (!c || c === "transparent") {
+          return 0;
+        }
+        // Opaque named/oklch/lab surfaces don't serialize as rgb() — treat as
+        // painted. rgb()/rgba() in comma OR space/slash syntax: a 4th channel is
+        // the alpha; its absence means fully opaque.
+        const m = c.match(/^rgba?\(([^)]*)\)/i);
+        if (!m) {
+          return 1;
+        }
+        const parts = m[1].split(/[,/\s]+/).filter(Boolean);
+        return parts.length >= 4 ? parseFloat(parts[3]) : 1;
+      };
+      return alphaOf(html) === 0 && alphaOf(body) === 0;
     } catch (e) {
       return false;
     }
