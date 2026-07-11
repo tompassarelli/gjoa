@@ -14,7 +14,12 @@ OUT="${3:-/tmp/dr-compare}"
 GBIN="$REPO/result/bin/gjoa"; [ -x "$GBIN" ] || GBIN="$(echo "$REPO"/engine/obj-*/dist/bin/gjoa)"
 FF=/run/current-system/sw/bin/firefox
 GPROF_SRC="$HOME/.config/mozilla/gjoa/4859ptgk.default-default"
-DPROF_SRC="$HOME/.mozilla/firefox/tom"                # FF profile with Dark Reader ACTIVE — the control
+# STOCK Dark Reader control (fresh profile + AMO XPI, defaults = darken every
+# site). The user's live profile runs DR in whitelist mode ("invert listed
+# only") — using it as control benchmarked gjoa against a personal site list,
+# not against Dark Reader (discovered 2026-07-11: example.com 0 darkreader
+# styles / HN 9, same browser). Build/refresh: tools/test-driver/make-dr-stock-profile.sh
+DPROF_SRC="/tmp/dr-stock-profile-src"
 LPROF_SRC="$HOME/.mozilla/firefox/bgtdfn4f.default"   # FF profile, NO Dark Reader — the light baseline (3rd leg of the triple)
 RSX=(--exclude='cache2/' --exclude='startupCache/' --exclude='*.lock' --exclude='lock' --exclude='.parentlock' --exclude='storage/default/*/cache/' --exclude='cache/')
 

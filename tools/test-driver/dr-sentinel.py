@@ -31,12 +31,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, required=True)
     ap.add_argument("--retries", type=int, default=3, help="re-check cycles (DR may still be booting)")
+    # example.com, NOT a popular site: a whitelist-mode DR config (user profile
+    # with "invert listed only") passes a popular-site check while skipping the
+    # rest of the corpus — exactly the false confidence that burned the HN-based
+    # sentinel on 2026-07-11. Nobody whitelists example.com; only default
+    # darken-everything DR touches it.
+    ap.add_argument("--url", default="https://example.com/")
     a = ap.parse_args()
     try:
         m = M(a.port)
         m.send("WebDriver:NewSession", {})
         for attempt in range(a.retries):
-            m.send("WebDriver:Navigate", {"url": "https://news.ycombinator.com/"})
+            m.send("WebDriver:Navigate", {"url": a.url})
             time.sleep(8)
             r = m.send("WebDriver:ExecuteScript", {
                 "script": "const cs=getComputedStyle(document.body);"
