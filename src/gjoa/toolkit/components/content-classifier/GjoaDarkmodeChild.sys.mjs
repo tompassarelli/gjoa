@@ -29,6 +29,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     // default OFF). Per-src verdict cache so repeats are free, the injected
     // <style> id, and a debounce handle for the optional one re-run.
     this._imgVerdictCache = new Map();
+    // C5 dark-logo lift: per-src verdict cache (null = tainted/failed, skip).
+    this._logoVerdictCache = new Map();
     this._imgStyleEl = null;
     this._dimSheet = null;
     this._imgPassScheduled = false;
@@ -371,6 +373,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       win.requestAnimationFrame(() => {
         this.#dimLargeMedia(win, doc);
         this.#darkenLightPanels(win, doc);
+        this.#liftDarkLogos(win, doc);
       }));
     // Pass-2 polish (pref-gated, default off): the refiner has settled the
     // inversion state, so the image pass can now read it the right way round.
@@ -460,11 +463,52 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // (root-opaque authors WHITE for the engine to invert to the dark floor), so on a
   // retracted doc they'd paint literal white / restyle a page that needs nothing.
   #removeInversionSheets() {
-    for (const key of ["_rootSheet", "_panelSheet", "_dimSheet"]) {
+    for (const key of ["_rootSheet", "_panelSheet", "_dimSheet", "_logoSheet"]) {
       try {
         this[key]?.remove();
       } catch (e) {}
       this[key] = null;
+    }
+    // Sheets are not the whole story: the panel pass authors INLINE background-colors (for the
+    // engine to re-invert), which are NOT in any sheet. Once the inversion is retracted they'd
+    // render as literal light. Revert every inline authoring + drop the marker attributes so a
+    // settled-inactive doc carries none of our inverted-state paint.
+    this.#revertInlinePaint();
+  }
+
+  // Undo every inline style + marker the inverted-state passes authored. Called when a doc
+  // settles INACTIVE (native dark theme, engine inversion retracted): #darkenLightPanels wrote
+  // inline background-colors authored to be re-inverted by the engine; with inversion gone they
+  // paint literal light (the owner-reported YouTube player-control pills + Volume tooltip). Restore
+  // each element's prior inline value (or remove ours), and clear the dim/logo marker attributes
+  // whose sheets are already gone. Resets the pass state so a later re-invert re-runs clean.
+  #revertInlinePaint() {
+    for (const rec of this._panelInline || []) {
+      try {
+        if (!rec.el || !rec.el.isConnected) {
+          continue;
+        }
+        if (rec.prev) {
+          rec.el.style.setProperty("background-color", rec.prev, rec.prio || "");
+        } else {
+          rec.el.style.removeProperty("background-color");
+        }
+      } catch (e) {}
+    }
+    this._panelInline = [];
+    this._panelN = 0;
+    this._rePanel = false;
+    this._reLogo = false;
+    const doc = this.document;
+    if (!doc) {
+      return;
+    }
+    for (const attr of ["data-gjoa-panel", "data-gjoa-dim", "data-gjoa-logolift"]) {
+      try {
+        for (const el of doc.querySelectorAll(`[${attr}]`)) {
+          el.removeAttribute(attr);
+        }
+      } catch (e) {}
     }
   }
 
@@ -562,6 +606,165 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     } catch (e) {}
   }
 
+  // C5: dark logos/wordmarks invisible on a darkened page. The engine exempts
+  // replaced <img> from inversion (photo fidelity), but a mostly-DARK, mostly-
+  // TRANSPARENT image — a wordmark/logo drawn for a light page — then sits
+  // invisible on the now-dark backdrop. Pixel-verdict such images (dark strokes +
+  // real transparency + logo-scale footprint + dark painted backdrop) and flip
+  // them with invert(1) hue-rotate(180deg), Dark Reader's dark-logo treatment:
+  // dark strokes go light, hue is roughly kept for colored marks. Photos never
+  // qualify (opaque), light logos never qualify (light pixels), icons cost one
+  // 24x24 rasterize each (capped). Cross-origin images without CORS taint the
+  // canvas and are skipped (verdict null, cached).
+  #liftDarkLogos(win, doc) {
+    try {
+      // Gate on the oklch-robust probe: #inversionActive's strict rgb string
+      // equality is silently FALSE under the engine's oklch serialization, so
+      // gating on it would disable this pass on exactly the inverted docs it
+      // exists for.
+      if (!doc || !doc.body || !this.#engineInvertingNow(win, doc)) {
+        return;
+      }
+      const CAP = 40;
+      const MAX_AREA = 120000; // above ~600x200 it's a hero/banner, not a mark
+      const MIN_AREA = 64;
+      const parse = s => GjoaDarkmodeChild.parseComputedColor(s);
+      const lumOf = rgb => (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+      // Effective PAINTED backdrop of an element: nearest ancestor with a
+      // visible (alpha >= .5) computed background-color. Computed == painted
+      // here — the engine inverts at style resolution, so no re-read is needed.
+      const alphaOf = c => {
+        // "rgba(r, g, b, a)" -> 4th number; "oklch(L C H / a)" -> after the
+        // slash; plain rgb()/oklch() are opaque.
+        if (/^rgba/i.test(c)) {
+          const mm = c.match(/[\d.]+/g);
+          return mm && mm.length >= 4 ? +mm[3] : 1;
+        }
+        if (c.includes("/")) {
+          const mm = c.match(/\/\s*([\d.]+)/);
+          return mm ? +mm[1] : 1;
+        }
+        return 1;
+      };
+      const backdropDark = el => {
+        let e = el.parentElement;
+        while (e) {
+          let c = "";
+          try { c = win.getComputedStyle(e).backgroundColor || ""; } catch (e2) { return false; }
+          if (c && c !== "transparent" && alphaOf(c) >= 0.5) {
+            const rgb = parse(c);
+            if (rgb) {
+              return lumOf(rgb) < 0.35;
+            }
+          }
+          e = e.parentElement;
+        }
+        return false;
+      };
+      // Pixel classification; THROWS on a tainted canvas so the caller can
+      // retry with a CORS re-fetch. Callers must ensure the image is decoded.
+      const analyze = img => {
+        const cv = doc.createElement("canvas");
+        cv.width = 24; cv.height = 24;
+        const ctx = cv.getContext("2d", { willReadFrequently: true });
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0, 24, 24);
+        const d = ctx.getImageData(0, 0, 24, 24).data; // throws if tainted
+        let trans = 0, dark = 0, light = 0, opaque = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 13) { trans++; continue; }
+          opaque++;
+          const l = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+          if (l < 0.4) dark++;
+          else if (l > 0.7) light++;
+        }
+        const total = 576;
+        return opaque > 0 && trans / total >= 0.1 &&
+               dark / opaque >= 0.6 && light / opaque < 0.2;
+      };
+      const verdict = async img => {
+        const key = img.currentSrc || img.src || "";
+        if (!key) {
+          return false;
+        }
+        if (this._logoVerdictCache.has(key)) {
+          return this._logoVerdictCache.get(key);
+        }
+        if (!img.complete || !img.naturalWidth || !img.naturalHeight) {
+          // Still loading (lazy partner rows). Do NOT cache — a later pass
+          // (1600 ms / image-load-triggered) must be able to re-judge it;
+          // caching false here permanently blinded the re-passes.
+          return false;
+        }
+        let v = null; // null = no analysis ran; never cached
+        try {
+          v = analyze(img); // same-origin fast path
+        } catch (e) {
+          // Tainted: a page <img> is fetched no-cors, so even an ACAO-friendly
+          // CDN taints the canvas. Re-fetch in CORS mode (hits the cache when
+          // the server allows it) and retry; hosts without ACAO stay skipped.
+          let im = null;
+          try {
+            im = new win.Image();
+            im.crossOrigin = "anonymous";
+            im.src = key;
+            await Promise.race([
+              im.decode(),
+              new Promise((_, rj) => win.setTimeout(rj, 1500)),
+            ]);
+            v = analyze(im);
+          } catch (e2) {
+            // Decode finished but tainted/failed => definitively skip (cache);
+            // timed out mid-load => transient, leave uncached for a re-pass.
+            v = im && im.complete ? false : null;
+          }
+        }
+        if (v !== null) {
+          this._logoVerdictCache.set(key, v);
+        }
+        return !!v;
+      };
+      const apply = async () => {
+        let scanned = 0, tagged = 0;
+        for (const img of doc.querySelectorAll("img")) {
+          if (++scanned > 400 || tagged > CAP) break;
+          try {
+            if (img.hasAttribute("data-gjoa-logolift")) continue;
+            const r = img.getBoundingClientRect();
+            const area = r.width * r.height;
+            if (area < MIN_AREA || area > MAX_AREA) continue;
+            if (r.bottom < 0 || r.top > (win.innerHeight || 0) * 3) continue;
+            if (!backdropDark(img)) continue;
+            if (await verdict(img)) {
+              img.setAttribute("data-gjoa-logolift", "1");
+              tagged++;
+            }
+          } catch (e) {}
+        }
+        if (tagged && (!this._logoSheet || !this._logoSheet.isConnected)) {
+          const s = doc.createElement("style");
+          s.id = "gjoa-darkmode-logo-lift";
+          s.textContent =
+            '[data-gjoa-logolift="1"]{filter:invert(1) hue-rotate(180deg)!important}';
+          (doc.head || doc.documentElement).appendChild(s);
+          this._logoSheet = s;
+        }
+      };
+      apply().catch(() => {});
+      if (!this._reLogo) {
+        this._reLogo = true;
+        // Lazy-loaded marks (partner rows) stream in late AND are too small to
+        // trip the large-image load hook — bounded staggered re-passes instead
+        // (verdicts are cached, so re-passes only pay for new images).
+        for (const delay of [1600, 4500]) {
+          win.setTimeout(() => {
+            try { apply().catch(() => {}); } catch (e) {}
+          }, delay);
+        }
+      }
+    } catch (e) {}
+  }
+
   // The uniform luminance inversion leaves MID-TONE backgrounds mid-tone (a 0.5 grey
   // inverts to ~0.55), so large panels/headers/cards read as light blocks on the dark page
   // (target's salmon header, walmart's light-blue tiles). Force big opaque mid/light-bg
@@ -570,18 +773,6 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   #darkenLightPanels(win, doc) {
     try {
       if (!doc.body) {
-        return;
-      }
-      // Self-gate: only on a doc the engine actually inverted (a black probe renders light),
-      // so a genuinely-light page is never darkened.
-      const pr = doc.createElement("span");
-      pr.style.cssText = "color:#000;position:fixed;left:-9999px;top:0";
-      doc.body.appendChild(pr);
-      const cstr = win.getComputedStyle(pr).color;
-      const pc = (cstr.match(/[\d.]+/g) || []).map(Number);
-      const inv = /okl|lab|lch/i.test(cstr) ? pc[0] > 0.5 : pc[0] + pc[1] + pc[2] > 300;
-      pr.remove();
-      if (!inv) {
         return;
       }
       // Parse the L (lightness / relative-luminance proxy) out of a computed color,
@@ -597,10 +788,94 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         }
         return (0.2126 * +m[0] + 0.7152 * +m[1] + 0.0722 * +m[2]) / 255;
       };
+      // Is the engine luminance-inverting THIS document right now? A black probe renders LIGHT under
+      // inversion. Recomputed per apply() pass so a staggered re-scan sees the CURRENT state after a
+      // probe-retract settles (an SPA can flip inverting → native-dark mid-flight).
+      const engineInverting = () => {
+        const pr = doc.createElement("span");
+        pr.style.cssText = "color:#000;position:fixed;left:-9999px;top:0";
+        doc.body.appendChild(pr);
+        const cstr = win.getComputedStyle(pr).color;
+        const pc = (cstr.match(/[\d.]+/g) || []).map(Number);
+        pr.remove();
+        return /okl|lab|lch/i.test(cstr) ? pc[0] > 0.5 : pc[0] + pc[1] + pc[2] > 300;
+      };
+      // Alpha out of a computed bg-color, both serializations: "oklch(L C H / a)" and "rgba(...)".
+      const bgAlpha = str => {
+        const mm = str.match(/\/\s*([\d.]+)\s*\)/);
+        if (mm) {
+          return parseFloat(mm[1]);
+        }
+        const rr = str.match(/rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)/i);
+        return rr ? parseFloat(rr[1]) : 1;
+      };
+      // Is the element's nearest PAINTED backdrop already dark? On an inverted page computed ==
+      // painted, so a dark ancestor bg means the surroundings render dark — a light island inside
+      // it (a segmented-control track, a pill strip) is residue worth darkening even below the
+      // large-panel size gate.
+      const backdropDark = el => {
+        let e = el.parentElement, hops = 0;
+        while (e && hops++ < 12) {
+          let c = "";
+          try {
+            c = win.getComputedStyle(e).backgroundColor || "";
+          } catch (e2) {
+            return false;
+          }
+          if (c && c !== "transparent" && bgAlpha(c) >= 0.5) {
+            const l = lumOf(c);
+            if (l !== null) {
+              return l < 0.35;
+            }
+          }
+          e = e.parentElement;
+        }
+        return false;
+      };
       const apply = () => {
+        const inv = engineInverting();
+        // A7 native-dark passthrough. When the engine is NOT inverting this doc (its own dark theme,
+        // or a retracted probe), gjoa authors NOTHING — rendered ≡ authored. First SELF-HEAL: if a
+        // previously-tagged panel now carries a LIGHT inline bg, it was authored via the involution
+        // during a transient inverting window that has since settled (an SPA flipping to native-dark)
+        // and now paints literal light — the owner's YouTube control pills. Revert + untag it. THEN
+        // bail without authoring anything new: the panel darkener fires ONLY on an engine-INVERTED
+        // page (the A8/B1/B2 residue class), never a native-dark one (A7).
+        if (!inv && this._panelInline && this._panelInline.length) {
+          const keep = [];
+          for (const rec of this._panelInline) {
+            let healed = false;
+            try {
+              const el = rec.el;
+              if (el && el.isConnected) {
+                const cur = win.getComputedStyle(el).backgroundColor;
+                const cl = lumOf(cur);
+                if (cl !== null && cl > 0.4) {
+                  if (rec.prev) {
+                    el.style.setProperty("background-color", rec.prev, rec.prio || "");
+                  } else {
+                    el.style.removeProperty("background-color");
+                  }
+                  el.removeAttribute("data-gjoa-panel");
+                  healed = true;
+                }
+              }
+            } catch (e) {}
+            if (!healed && rec.el && rec.el.isConnected) {
+              keep.push(rec);
+            }
+          }
+          this._panelInline = keep;
+          this._panelN = doc.querySelectorAll("[data-gjoa-panel]").length;
+        }
+        if (!inv) {
+          return; // A7: native-dark / retracted — author nothing.
+        }
         let n = this._panelN | 0;
         let scanned = 0;
-        for (const el of doc.body.querySelectorAll("div,section,header,nav,main,aside,article,form,ul")) {
+        const SEL =
+          "div,section,header,nav,main,aside,article,form,ul,input,select,textarea";
+        for (const el of doc.body.querySelectorAll(SEL)) {
           if (++scanned > 4000 || n - (this._panelN | 0) > 120) {
             break;
           }
@@ -608,8 +883,25 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
             continue;
           }
           const r = el.getBoundingClientRect();
-          if (r.width * r.height < 28000 || r.bottom < 0 || r.top > 3000) {
+          if (r.bottom < 0 || r.top > 3000) {
             continue;
+          }
+          const tn = el.tagName;
+          const isControl = tn === "INPUT" || tn === "SELECT" || tn === "TEXTAREA";
+          const area = r.width * r.height;
+          // Large surfaces darken outright. Form controls (search fields, selects) are chrome
+          // that must match the dark UI — a far lower floor and no backdrop test (a light field
+          // on an inverted page is always residue). Other SMALL light blocks (segmented-control
+          // tracks, pill strips) only darken when their painted backdrop is already dark: a
+          // bright island inside a dark region is residue, a light block on a light section is not.
+          if (isControl) {
+            if (area < 600) {
+              continue;
+            }
+          } else if (area < 28000) {
+            if (area < 6000 || !backdropDark(el)) {
+              continue;
+            }
           }
           let cs;
           try {
@@ -617,40 +909,81 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
           } catch (e) {
             continue;
           }
-          const m = cs.backgroundColor.match(
+          const bg = cs.backgroundColor;
+          // Parse the computed background in EITHER serialization. The engine serializes what it
+          // INVERTS as oklch; a panel it EXEMPTS (a saturated brand band, a translucent card) keeps
+          // its authored rgb()/rgba(). Matching only oklch silently skipped every exempted light
+          // panel — django's mint survey band, gitlab's hero cards, paypal's cyan hero all stayed
+          // bright. srcRgb != null flags the rgb path (darken by hue-preserving channel scale).
+          let L, alpha, C, H, srcRgb = null;
+          const mo = bg.match(
             /oklch\(([\d.]+)\s+([\d.eE+-]+)\s+([\d.a-z]+)(?:\s*\/\s*([\d.]+))?/
           );
-          if (!m) {
-            continue;
+          if (mo) {
+            L = parseFloat(mo[1]);
+            alpha = mo[4] !== undefined ? parseFloat(mo[4]) : 1;
+            C = parseFloat(mo[2]) || 0;
+            H = mo[3];
+          } else {
+            const mr = bg.match(
+              /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?/i
+            );
+            if (!mr) {
+              continue;
+            }
+            const R = +mr[1], G = +mr[2], B = +mr[3];
+            alpha =
+              mr[4] === undefined
+                ? 1
+                : mr[4].endsWith("%")
+                  ? parseFloat(mr[4]) / 100
+                  : parseFloat(mr[4]);
+            L = (0.2126 * R + 0.7152 * G + 0.0722 * B) / 255;
+            srcRgb = [R, G, B];
           }
-          const L = parseFloat(m[1]);
-          const alpha = m[4] !== undefined ? parseFloat(m[4]) : 1;
-          const C = parseFloat(m[2]) || 0;
-          const H = m[3];
-          // Only OPAQUE, MID/LIGHT, NEAR-NEUTRAL panels. High chroma (> .05) is a BRAND
-          // surface — leave it for the engine to keep at its ORIGINAL color (user: brand
-          // stays as-is). Already-dark (< .40) is fine; transparent layers paint no panel.
-          // The ceiling is NOT 0.88: a large near-white block (cloudflare/bestbuy/sciencedirect
-          // header bands, guardian masthead) on an inverted page is an un-inverted light
-          // panel the engine exempted — it MUST darken, not survive as a bright island. The
-          // size gate (≥28000px, above) already excludes near-white text/icon chips, so the
-          // only near-white things left here are genuine panels. Cap just below pure white
-          // (0.985) so a truly-white content sheet the engine already inverted is untouched.
-          if (alpha < 0.6 || L < 0.40 || L > 0.985 || C > 0.05) {
+          // OPAQUE, MID/LIGHT-to-WHITE panels. Chroma is NOT a skip: a LIGHT brand band glares exactly
+          // as a neutral one does, and DR's winning move is to DARKEN it while KEEPING hue — saturated
+          // bands to a MEDIUM floor (hue stays legible), neutral ones to the dark floor. Already-dark
+          // (< .40) is fine. NO near-white ceiling: on an INVERTED page any large L*>60 surface is
+          // residue that B1/B2 forbid — a pure-white header/hero/article-card the engine exempted
+          // (pvk.ca title band, azure hero) MUST darken, not survive as a bright island; an inverted
+          // white content sheet computes DARK and never reaches here. Translucent overlays are NOT
+          // handled: a see-through layer composites over what's behind it, and authoring it misfires on
+          // transient glass (YouTube touch-feedback ripples). Opaque panels are the safe target.
+          if (alpha < 0.6 || L < 0.40) {
             continue;
           }
           el.setAttribute("data-gjoa-panel", n);
           n++;
-          // Author a dark target — but the engine luminance-inverts every computed bg-color,
-          // so a naive `oklch(0.2 …)` gets RE-INVERTED back to light (~0.77) and the panel
-          // stays a bright island (the long-standing miss on cloudflare/bestbuy header bands).
-          // Instead: set the dark target, read what the engine PAINTS, and if it flipped it
-          // light, re-author that read-back value. The engine's inversion is an involution
-          // (patch 0009), so authoring engine(0.2) makes it paint engine(engine(0.2)) = 0.2.
-          // A panel the engine EXEMPTS stays 0.2 on the first write (no flip), so the same
-          // code darkens both inverted and exempted panels with no per-page branching.
+          // Author the dark target and, because the engine luminance-inverts what it does NOT exempt,
+          // read the paint back and re-author the read-back if it flipped light (the involution:
+          // authoring engine(x) paints engine(engine(x)) = x; patch 0009). An exempted panel stays
+          // dark on the first write. RECORD the prior inline value FIRST: this is inline authoring, so
+          // on a doc that later settles INACTIVE (native dark) it must be reverted (#revertInlinePaint)
+          // or it persists as literal light paint — the YouTube player-control pills the owner reported.
           try {
-            el.style.setProperty("background-color", `oklch(0.2 ${C} ${H})`, "important");
+            const prev = el.style.getPropertyValue("background-color");
+            const prio = el.style.getPropertyPriority("background-color");
+            (this._panelInline || (this._panelInline = [])).push({ el, prev, prio });
+            let target;
+            if (srcRgb) {
+              // rgb source: scale channels to the target luminance, preserving hue. Saturated → a
+              // medium floor (brand hue stays legible); neutral → the dark floor.
+              const mx = Math.max(srcRgb[0], srcRgb[1], srcRgb[2]);
+              const mn = Math.min(srcRgb[0], srcRgb[1], srcRgb[2]);
+              const sat = mx > 0 ? (mx - mn) / mx : 0;
+              const targetLum = sat > 0.15 ? 0.30 : 0.18;
+              const scale = L > 0.001 ? Math.min(1, targetLum / L) : 0;
+              target =
+                `rgb(${Math.round(srcRgb[0] * scale)}, ${Math.round(srcRgb[1] * scale)}, ` +
+                `${Math.round(srcRgb[2] * scale)})`;
+            } else {
+              const brand = C > 0.05;
+              const targetL = brand ? 0.32 : 0.2;
+              const targetC = brand ? Math.min(C, 0.11) : C;
+              target = `oklch(${targetL} ${targetC} ${H})`;
+            }
+            el.style.setProperty("background-color", target, "important");
             const got = win.getComputedStyle(el).backgroundColor;
             const lg = lumOf(got);
             if (lg !== null && lg > 0.4) {
@@ -740,6 +1073,87 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         }, delay);
       }
     }
+    // The staggered re-passes LOSE THE RACE to a hero image that decodes after
+    // the last one (a large exempt <img> under engine-lightened text: the 8 s
+    // pass reads the dark skeleton, judges the light text legible, and the
+    // light-on-light wash appears when the image paints at 10-15 s). Make the
+    // trigger EVENT-DRIVEN instead of guessing at timers: any LARGE image
+    // finishing load schedules one debounced re-pass, so the normalizer always
+    // re-reads the FINAL painted backdrop. Bounded (≤4 extra passes) and
+    // idempotent — already-legible text yields no corrective.
+    if (!this._imgLoadHooked) {
+      this._imgLoadHooked = true;
+      this._imgLoadPasses = 0;
+      const onLoad = e => {
+        try {
+          const t = e.target;
+          if (!t || t.tagName !== "IMG" || this._imgLoadPasses >= 4) {
+            return;
+          }
+          const r = t.getBoundingClientRect();
+          if (r.width * r.height < 40000) {
+            return; // thumbnails/icons can't wash a heading's backdrop
+          }
+          if (this._imgLoadTimer) {
+            win.clearTimeout(this._imgLoadTimer);
+          }
+          this._imgLoadTimer = win.setTimeout(() => {
+            this._imgLoadTimer = null;
+            this._imgLoadPasses++;
+            try {
+              this.#normalizeContrast(win, doc);
+              this.#liftDarkLogos(win, doc);
+            } catch (e2) {}
+          }, 350);
+        } catch (e2) {}
+      };
+      // capture phase: img load events don't bubble.
+      doc.addEventListener("load", onLoad, true);
+    }
+  }
+
+  // Parse a COMPUTED color string to sRGB [r,g,b] (0..255), or null. Handles BOTH
+  // serializations Gecko emits: legacy rgb()/rgba() AND oklch() — the engine's
+  // luminance inversion (patch 0009) produces OKLCH values, so every color the
+  // engine touched serializes as oklch. The old rgb-only regex read
+  // "oklch(0.77 0.03 260)" as R=0.77 G=0.03 B=260 — a garbage near-black — which
+  // made the APCA judge see "dark text" wherever the engine had inverted text
+  // LIGHT: exactly the elements the normalizer exists to check (an exempt light
+  // image backdrop under engine-lightened text was judged legible and skipped).
+  static parseComputedColor(s) {
+    if (!s) {
+      return null;
+    }
+    // Achromatic components serialize as the literal keyword none —
+    // "oklch(0.92 0 none)", the engine's own inverted-black output — so map
+    // none -> 0 BEFORE the numeric match or the 3-component gate drops the
+    // color and the caller silently skips the element.
+    const m = s.replace(/\bnone\b/g, "0").match(/-?[\d.]+(?:e[+-]?\d+)?/gi);
+    if (!m || m.length < 3) {
+      return null;
+    }
+    if (/^oklch/i.test(s)) {
+      const L = +m[0], C = +m[1], H = +m[2];
+      // oklch -> oklab -> LMS' -> linear sRGB -> sRGB (Björn Ottosson's OKLab).
+      const hr = (H * Math.PI) / 180;
+      const a = C * Math.cos(hr), b = C * Math.sin(hr);
+      const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+      const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+      const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+      const l3 = l_ ** 3, m3 = m_ ** 3, s3 = s_ ** 3;
+      const rl = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
+      const gl = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
+      const bl = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3;
+      const gam = x => {
+        x = Math.max(0, Math.min(1, x));
+        return Math.round(255 * (x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055));
+      };
+      return [gam(rl), gam(gl), gam(bl)];
+    }
+    if (/^rgb/i.test(s)) {
+      return [+m[0], +m[1], +m[2]];
+    }
+    return null; // lab()/lch()/color() — not produced by this engine's paths
   }
 
   // Walk visible text, tag each node (data-gjoa-cn), and ask the parent — which can
@@ -750,10 +1164,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       return;
     }
     const _t0 = win.performance.now();   // #137: normalizer phase timing
-    const parse = s => {
-      const m = s && s.match(/[\d.]+/g);
-      return m && m.length >= 3 ? [+m[0], +m[1], +m[2]] : null;
-    };
+    const parse = s => GjoaDarkmodeChild.parseComputedColor(s);
     const W = win.innerWidth,
       H = win.innerHeight;
     // Is the engine inverting THIS doc? A black probe renders light if so — which
