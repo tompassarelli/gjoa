@@ -1,0 +1,7 @@
+# OWNER-REPORTED FAULTS 2026-07-11 — mandatory verification set for wave-5+.
+# A class fix does not land until every row here renders clean (before/after).
+https://www.zdnet.com/home-and-office/networking/spacex-wants-to-launch-100000-more-starlink-satellites/
+https://pvk.ca/Blog/2019/01/09/preemption-is-gc-for-memory-reordering/
+https://css-tricks.com/
+https://css-tricks.com/get-ready-for-the-powerful-css-border-shape-property/
+https://www.youtube.com/watch?v=jfKfPfyJRdk
