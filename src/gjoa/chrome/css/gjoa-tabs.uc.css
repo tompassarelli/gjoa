@@ -402,6 +402,17 @@
   border-radius: 4px;
 }
 
+/* Horizontal mode: tab cells are fixed-width grid tracks (minmax(0,200px))
+ * that don't grow for the rename field. The vertical-mode default of
+ * overflow:visible spills the typed text past the narrow cell — clipped at
+ * the toolbar's right edge or painted over the adjacent tab, so you can't see
+ * what you type. Scroll the editable label horizontally instead: the box
+ * stays put inside its cell and Firefox keeps the caret in view, exactly like
+ * a normal narrow text input. */
+:is(#gjoa-tab-panel, #gjoa-pinned-container)[gjoa-horizontal] .gjoa-tab-label.gjoa-renaming {
+  overflow: hidden;
+}
+
 /* #endregion rename input */
 
 
