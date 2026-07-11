@@ -138,6 +138,18 @@ const FG_AUTHORED_LIGHT_L = 0.85; // recovered authored L that counts as near-wh
 // contrast choice for that backdrop.
 const FG_BRAND_BG_FLOOR = 75; // A1 body floor: recover an authored-light run under this |Lc|
 const FG_HALATION_CEIL = 90; // A1 Lc90 halation ceiling: don't over-contrast the recovered fg
+// CHROMATIC ACCENT / LINK (wave6). The engine (0009 invert_color_luminance) brand-
+// PRESERVES every C>0.08 color and applies that role-blind, so a chromatic FOREGROUND
+// (a link, a brand accent) is returned UNCHANGED — never lifted — and lands illegible
+// or hue-flat on the dark canvas. These own the fg-side repair for such runs.
+// OKLCH chroma above which a run carries a hue worth preserving. Aligned to the
+// engine's OWN neutral-snap boundary (0009 zeroes c_in < 0.03): any run the engine
+// kept chromatic (incl. a blue the band DESATURATED, e.g. akr #323b4d at c≈0.034) is
+// a link/accent to preserve; a true neutral snaps to c=0 below this and falls through
+// to the neutral clauses. (The band's over-desaturation of saturated links is the
+// engine-side root — see wave6 report §engine; this recovers the muted hue it left.)
+const FG_ACCENT_CHROMA = 0.03;
+const FG_ACCENT_FLOOR = 60; // chromatic accents read at >= Lc 60 (A5 / done-when), brighter than the 45 legibility floor
 
 function _lin(c) { return Math.pow(c / 255, 2.4); }
 function _Ys(p) { return 0.2126729 * _lin(p[0]) + 0.7151522 * _lin(p[1]) + 0.0721750 * _lin(p[2]); }
@@ -233,6 +245,84 @@ function _oklchL(rgb) {
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
   return 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+}
+// ── OKLCH ⇄ sRGB (Ottosson) + the hue-preserving accent solve ──────────────────────
+// Ported from tools/darkmode-regress/colormath.js (the canonical operator, the SAME
+// math patch 0013 runs at paint) so a CHROMATIC accent/link the engine left illegible
+// is re-solved HUE-EXACT toward legibility — the fg-side answer to the role-blind
+// brand-preserve (0009 exempts every C>0.08 fg from lift; see wave6-link-class-report).
+function _oklab(rgb) {
+  const r = _srgbLin(rgb[0]), g = _srgbLin(rgb[1]), b = _srgbLin(rgb[2]);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+  ];
+}
+function _oklchC(rgb) { const [, a, b] = _oklab(rgb); return Math.hypot(a, b); }
+function _toSrgb8(x) {
+  x = Math.min(1, Math.max(0, x));
+  const s = x <= 0.0031308 ? x * 12.92 : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
+  return Math.min(255, Math.max(0, Math.round(s * 255)));
+}
+function _oklabToLinear(L, a, b) {
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+  const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+  return [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+  ];
+}
+function _inGamut(c) {
+  const e = 1e-4;
+  return c[0] >= -e && c[0] <= 1 + e && c[1] >= -e && c[1] <= 1 + e && c[2] >= -e && c[2] <= 1 + e;
+}
+// OKLCH -> sRGB8, gamut-mapped by REDUCING CHROMA at fixed L,h (never a hue-shifting
+// clip) — so hue is held EXACTLY; only saturation sheds if the tone is out of gamut.
+function _oklchToSrgb(L, C, h) {
+  let lin = _oklabToLinear(L, C * Math.cos(h), C * Math.sin(h));
+  if (!_inGamut(lin)) {
+    let lo = 0, hi = C;
+    for (let i = 0; i < 20; i++) {
+      const mid = (lo + hi) / 2;
+      if (_inGamut(_oklabToLinear(L, mid * Math.cos(h), mid * Math.sin(h)))) lo = mid; else hi = mid;
+    }
+    lin = _oklabToLinear(L, lo * Math.cos(h), lo * Math.sin(h));
+  }
+  return [_toSrgb8(lin[0]), _toSrgb8(lin[1]), _toSrgb8(lin[2])];
+}
+// THE OPERATOR: land |APCA(fg,bg)| in [T..ceiling], moving ONLY OKLCH lightness,
+// holding hue EXACTLY, never adding chroma. Polarity-pick the higher-contrast side for
+// THIS backdrop, then binary-search the MINIMAL lightness shift that clears T (+3
+// hysteresis). Returns the desired PAINTED rgb (the child pre-inverts as needed).
+// Mirrors colormath.correct() / patch-0013 GjoaDarkText::Correct exactly.
+function _solveAccent(fg, bg, T, ceiling) {
+  const lab = _oklab(fg);
+  const L0 = lab[0], C0 = Math.hypot(lab[1], lab[2]), h0 = Math.atan2(lab[2], lab[1]);
+  const cw = Math.abs(_apca([255, 255, 255], bg)), cb = Math.abs(_apca([0, 0, 0], bg));
+  const Lext = cw >= cb ? 1 : 0;
+  const at = k => _oklchToSrgb(L0 + k * (Lext - L0), C0, h0);
+  if (Math.abs(_apca(at(1), bg)) < T + 3) return at(1); // backdrop-capped: return the extreme
+  let lo = 0, hi = 1, best = at(1);
+  for (let i = 0; i < 24; i++) {
+    const k = (lo + hi) / 2, c = at(k);
+    if (Math.abs(_apca(c, bg)) >= T + 3) { best = c; hi = k; } else { lo = k; }
+  }
+  if (Math.abs(_apca(best, bg)) > ceiling) {
+    let lo2 = 0, hi2 = 1;
+    for (let i = 0; i < 20; i++) {
+      const k = (lo2 + hi2) / 2, c = at(k), lc = Math.abs(_apca(c, bg));
+      if (lc > ceiling) { hi2 = k; } else if (lc < T) { lo2 = k; } else { best = c; break; }
+      best = c;
+    }
+  }
+  return best;
 }
 
 export class GjoaDarkmodeParent extends JSWindowActorParent {
@@ -557,6 +647,21 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       // that BEFORE the APCA skip, and only ever RAISE toward the ceiling (never lower a
       // run's L on a dark backdrop). Two faces, both scoped to a dark/saturated backdrop:
       const fgL = _oklchL(el.fg), bgL = _oklchL(bg);
+      // CHROMATIC ACCENT / LINK (wave6): own every chromatic run here. The engine
+      // brand-preserved it (C>0.08 → returned UNCHANGED, role-blind) so it was never
+      // lifted; the old neutral clauses below then flattened it (_correct → white) or
+      // under-lifted it (_raiseLight channel-scale left #0000AA at #0000FF, APCA 15).
+      // Re-solve HUE-EXACT toward the accent floor so the link keeps its blue/red/
+      // orange AND reads. Gated on `inverted` — a native-dark site keeps its accents.
+      // A run already clearing the floor is left exactly as the engine painted it.
+      const fgC = _oklchC(el.fg);
+      if (inverted && fgC > FG_ACCENT_CHROMA) {
+        if (Math.abs(_apca(el.fg, bg)) < FG_ACCENT_FLOOR) {
+          const r = _solveAccent(el.fg, bg, FG_ACCENT_FLOOR, FG_HALATION_CEIL);
+          correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+        }
+        continue;
+      }
       const authoredL = Math.max(0, Math.min(1, (ceil - fgL) / span)); // invert the band
       const darkBg = inverted && bgL <= FG_DARK_BG_L;
       // (1) a legible light-on-dark run the band left dimmer than near-white.
