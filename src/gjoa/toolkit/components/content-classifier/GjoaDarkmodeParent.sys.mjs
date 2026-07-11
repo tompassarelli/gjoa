@@ -478,6 +478,15 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       }
       samples.sort((a, c) => _Ys(a) - _Ys(c));
       const bg = samples[Math.floor(samples.length / 2)];
+      // Per-element decision trace (same pref/channel discipline as normalize.logms).
+      try {
+        if (Services.prefs.getBoolPref("gjoa.darkmode.normalize.logms", false)) {
+          dump(
+            `GJOA_NORMALIZE_EL\tcn=${el.cn}\tfg=${el.fg}\tbg=${bg}\t` +
+              `apca=${_apca(el.fg, bg).toFixed(1)}\trect=${el.x},${el.y},${el.w},${el.h}\n`
+          );
+        }
+      } catch (e) {}
       // FG over-dimming guard (wave-5). The engine band remaps EVERY color's OKLCH L
       // role-blind (L_out = ceiling - L_in*span), so foreground text a site drew LIGHT
       // lands muted mid-grey — or, when it was authored near-white, is floored to dark:
