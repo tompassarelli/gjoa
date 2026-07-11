@@ -1,23 +1,139 @@
 # Long-tail personal/tech blogs — the population the top-100 corpus under-samples
 # (owner daily-driver reality; added 2026-07-11 after pvk.ca fault). Old/custom
 # CSS, hand-rolled themes, no framework semantics.
+# All URLs verified 200 on 2026-07-11. Natively-dark sites kept ≤15% of list.
+
+# === Rust / systems ===
 https://pvk.ca/Blog/2019/01/09/preemption-is-gc-for-memory-reordering/
+https://smallcultfollowing.com/babysteps/
+https://www.ralfj.de/blog/
+https://without.boats/blog/
+https://manishearth.github.io/
+https://nnethercote.github.io/
+https://os.phil-opp.com/
+https://blog.burntsushi.net/
+https://jneem.github.io/
+https://mcyoung.xyz/
+
+# === Go / distributed systems ===
+https://research.swtch.com/
+https://dave.cheney.net/
+https://peter.bourgon.org/blog/
+https://crawshaw.io/
+https://blog.filippo.io/
+https://brooker.co.za/blog/
+
+# === C / C++ / low-level / security ===
+https://nullprogram.com/
+https://www.imperialviolet.org/
+https://lcamtuf.coredump.cx/
+https://noncombatant.org/
+https://yosefk.com/blog/
+https://www.brendangregg.com/blog/
+
+# === Haskell / FP ===
+https://www.stephendiehl.com/posts/
+https://www.parsonsmatt.org/
+https://reasonablypolymorphic.com/
+https://jaspervdj.be/
+https://abhinavsarkar.net/
+https://srid.ca/
+https://tratt.net/laurie/blog/
+
+# === ML / data / research ===
+https://ruder.io/
+https://eugeneyan.com/
+https://www.micahlerner.com/
+https://mlochbaum.github.io/
+
+# === Hand-rolled HTML / vintage static sites ===
 https://danluu.com/
-https://jvns.ca/
-https://rachelbythebay.com/w/
+https://mcsweeneys.net/
+https://apenwarr.ca/log/
+https://eli.thegreenplace.net/
+https://lucumr.pocoo.org/
+https://blog.plover.com/
+https://wingolog.org/
+https://neugierig.org/software/blog/
+https://utcc.utoronto.ca/~cks/space/blog/
+https://mrale.ph/
+https://catern.com/
+https://two-wrongs.com/
+https://beza1e1.tuxen.de/
+https://www.pathsensitive.com/
+https://eklitzke.org/
+https://chrisdone.com/
+https://dhh.dk/
+https://norvig.com/
+https://www.gwern.net/
+
+# === Jekyll / Octopress / Hugo / Zola themes ===
+https://matklad.github.io/
 https://drewdevault.com/
+https://scattered-thoughts.net/
+https://notes.eatonphil.com/
+https://ferd.ca/
+https://arp242.net/
+https://stuffwithstuff.com/
+https://lethain.com/
+https://aphyr.com/posts
+https://gregoryszorc.com/blog/
+https://brandur.org/articles
+https://ntietz.com/blog/
+https://endler.dev/
+https://alexwlchan.net/articles/
+https://fnordig.de/posts/
+https://bernsteinbear.com/
+https://kerkour.com/
+https://antonz.org/
+https://blog.separateconcerns.com/
+https://ahelwer.ca/
+https://akr.am/blog/
+https://tech.davis-hansson.com/
+https://www.jmeiners.com/
+
+# === Gatsby / Next.js / Eleventy custom themes ===
+https://overreacted.io/
+https://www.joshwcomeau.com/
+https://tonsky.me/
+https://thesephist.com/posts/
+https://simonwillison.net/
+https://martin.kleppmann.com/
+https://www.hillelwayne.com/
+https://samwho.dev/
+https://borretti.me/article/
+https://tontinton.com/
+
+# === WordPress custom themes ===
+https://fasterthanli.me/
 https://www.joelonsoftware.com/
 https://paulgraham.com/articles.html
-https://matklad.github.io/
-https://fasterthanli.me/
 https://blog.codinghorror.com/
-https://apenwarr.ca/log/
-https://research.swtch.com/
-https://www.brendangregg.com/blog/
-https://nullprogram.com/
-https://eli.thegreenplace.net/
+https://blog.acolyer.org/
+https://blog.ploeh.dk/
+https://blog.regehr.org/
 https://lemire.me/blog/
+
+# === Personal / indie web / non-tech ===
 https://mtlynch.io/
 https://xeiaso.net/blog
-https://brooker.co.za/blog/
-https://tratt.net/laurie/blog/
+https://sive.rs/blog
+https://daringfireball.net/
+https://kottke.org/
+https://craphound.com/
+https://www.metafilter.com/
+https://astralcodexten.com/
+https://www.marginalia.nu/
+https://100r.co/site/home.html
+https://ludic.mataroa.blog/
+https://dbohdan.com/
+https://inkdroid.org/journal/
+https://blog.meain.io/
+
+# === Academic homepages with blogs ===
+https://web.evanchen.cc/
+https://gendignoux.com/blog/
+https://jakewharton.com/
+
+# === Hand-rolled + misc ===
+https://ben.computer/
