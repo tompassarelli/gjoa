@@ -11,6 +11,9 @@
 #     - cpp-symbol nsPresContext::ColorInversion
 #     - cpp-symbol nsLayoutUtils::GetTextColor
 #     - cpp-symbol nsLayoutUtils::DarkenColorIfNeeded
+#     - cpp-symbol nsCSSRendering::FindEffectiveBackgroundColor
+#     - cpp-symbol mozilla::GjoaDarkText::Correct   (created by patch 0013; resolves
+#       at build time -- 0012 only adds the #include, applied before 0013 in order)
 #
 # M1 dark-mode v2: role-aware layout color resolver (precondition for per-role
 # retone in a later milestone; NO pixel change yet).
@@ -25,10 +28,13 @@
 #
 # This patch threads a ColorRole tag through every layout-level color resolver and
 # routes each through one choke-point, nsLayoutUtils::ResolveDarkModeRole(frame,
-# color, role). For M1 that function is the IDENTITY whether inversion is off or
-# on -- it changes no pixels. M2 replaces its body with the tone-space per-role
-# retone (mirroring tools/darkmode-regress/colormath.js), keyed on (input color,
-# role, sampled backdrop bucket). Centralising the gate now means M2 is a single-
+# color, role). M1 shipped that function as the IDENTITY (no pixel change); the
+# wave-2 M2 step now fills the ColorRole::Text branch: under active inversion a
+# foreground text mark is re-solved against the frozen effective backdrop with the
+# hue-preserving OKLCh/APCA operator (GjoaDarkText::Correct, patch 0013), at the
+# accent floor 57. This overrides 0009's role-blind brand-preserve for text fg so
+# chromatic links/accents get lifted PRE-PAINT (wave6 §5). Background/Border/SvgFill
+# branches stay identity for now. Centralising the gate meant M2 was a single-
 # function change instead of a re-hunt of every resolver.
 #
 # Roles wired:
@@ -53,10 +59,18 @@
 #   not touched here; the Border role value exists in the enum so M2 can add them
 #   without re-versioning the surface contract.
 diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
-index 4696715..28c5ca6 100644
+index 46967151f9..5d385bfca5 100644
 --- a/layout/base/nsLayoutUtils.cpp
 +++ b/layout/base/nsLayoutUtils.cpp
-@@ -5294,6 +5294,22 @@ nscolor nsLayoutUtils::DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor) {
+@@ -10,6 +10,7 @@
+ #include "ActiveLayerTracker.h"
+ #include "AnchorPositioningUtils.h"
+ #include "DisplayItemClip.h"
++#include "GjoaDarkText.h"
+ #include "ImageContainer.h"
+ #include "ImageOps.h"
+ #include "ImageRegion.h"
+@@ -5294,6 +5295,36 @@ nscolor nsLayoutUtils::DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor) {
    return ShouldDarkenColors(aFrame) ? DarkenColor(aColor) : aColor;
  }
 
@@ -72,7 +86,21 @@ index 4696715..28c5ca6 100644
 +  if (!aFrame || !aFrame->PresContext()->ColorInversion()) {
 +    return aColor;
 +  }
-+  (void)aRole;  // M2: dispatch the retone on the role.
++  // gjoa dark-mode v2 (M2): role-aware retone, foreground text.
++  // Patch 0009's brand-preserve (c_in > 0.08 => UNCHANGED at Stylo) is ROLE-BLIND,
++  // so a chromatic FOREGROUND (a link, a brand accent) is returned unlifted and
++  // lands illegible on the dark canvas (wave6 §1/§5). For ColorRole::Text under
++  // active inversion, override that exemption pre-paint: re-solve the mark against
++  // the frozen effective backdrop with the same hue-preserving OKLCh/APCA operator
++  // patch 0013 runs (GjoaDarkText::Correct), at the accent floor. Only an OPAQUE
++  // backdrop can be solved (Correct requires a frozen ground); a non-opaque backdrop
++  // falls through unchanged and the actor's accent clause backstops it (wave6 §5).
++  if (aRole == ColorRole::Text) {
++    auto bg = nsCSSRendering::FindEffectiveBackgroundColor(aFrame);
++    if (NS_GET_A(bg.mColor) == 255) {
++      return GjoaDarkText::Correct(aColor, bg.mColor, 57.0f, 90.0f);
++    }
++  }
 +  return aColor;
 +}
 +

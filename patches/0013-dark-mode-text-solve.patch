@@ -235,7 +235,7 @@ diff --git a/layout/generic/nsTextPaintStyle.cpp b/layout/generic/nsTextPaintSty
 +  if (mResolveColors && mPresContext->ColorInversion()) {
 +    InitCommonColors();
 +    if (NS_GET_A(mFrameBackgroundColor) == 255) {
-+      color = GjoaDarkText::Correct(color, mFrameBackgroundColor, 45.0f, 90.0f);
++      color = GjoaDarkText::Correct(color, mFrameBackgroundColor, 57.0f, 90.0f);
 +    }
 +  }
 +  return color;
