@@ -55,7 +55,11 @@ const verdicts = (await parallel(pairs.map(p => () =>
     `(4) images/photos untouched, dark logos still visible; (5) no transparent/see-through gaps; (6) overall polish.\n` +
     `Score gjoaOverall and drOverall 1-10. verdict = gjoa_wins only if gjoa >= DR on every axis; dr_wins if DR is clearly better anywhere; tie if equivalent. ` +
     `List gjoa's concrete defects vs DR (what to fix). Site: ${p.slug}.`,
-    { label: `judge:${p.slug}`, phase: 'Judge', schema: VERDICT, model: 'fable', effort: 'high' })
+    // Judge pinned opus/xhigh (owner directive 2026-07-12: no bulk fable fan-out —
+    // the blogtail bar's own wording allows "opus-xhigh or fable high", so marks stay
+    // valid; fable is reserved for single-verdict escalations, never per-pair judging).
+    // Marks ≤4 were judged fable-high — note the judge change when comparing across marks.
+    { label: `judge:${p.slug}`, phase: 'Judge', schema: VERDICT, model: 'opus', effort: 'xhigh' })
     .then(v => ({ ...v, slug: v.slug || p.slug }))
 ))).filter(Boolean)
 
