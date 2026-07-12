@@ -37,7 +37,7 @@ accuracy:
   size-dependent large-text halation ceiling stays in the paint-time text solve.
 
 diff --git a/layout/painting/nsDisplayList.cpp b/layout/painting/nsDisplayList.cpp
-index 0243566311..32aea4afac 100644
+index 0243566..f8a4069 100644
 --- a/layout/painting/nsDisplayList.cpp
 +++ b/layout/painting/nsDisplayList.cpp
 @@ -3137,6 +3137,63 @@ static nsDisplayBackgroundColor* CreateBackgroundColor(
@@ -104,25 +104,7 @@ index 0243566311..32aea4afac 100644
  static void DealWithWindowsAppearanceHacks(nsIFrame* aFrame,
                                             nsDisplayListBuilder* aBuilder) {
    if (!XRE_IsParentProcess()) {
-@@ -3269,9 +3326,16 @@ AppendedBackgroundType nsDisplayBackgroundImage::AppendBackgroundItemsToTop(
-       }
-     }
- 
-+    // gjoa dark-mode v2 (M1): tag the solid background color with its role at the
-+    // CreateBackgroundColor boundary (where nsDisplayBackgroundColor::mColor is
-+    // stored). Wrapped here, not inside CreateBackgroundColor, so 0010's already-
-+    // composited dark scrim -- which also calls CreateBackgroundColor -- is not
-+    // double-processed. M1 identity; M2 freezes the surface tone.
-+    const nscolor bgRoleColor = nsLayoutUtils::ResolveDarkModeRole(
-+        aFrame, color, nsLayoutUtils::ColorRole::Background);
-     nsDisplayBackgroundColor* bgItem = CreateBackgroundColor(
-         aBuilder, aFrame, aSecondaryReferenceFrame, bgColorRect, bgSC,
--        drawBackgroundColor ? color : NS_RGBA(0, 0, 0, 0));
-+        drawBackgroundColor ? bgRoleColor : NS_RGBA(0, 0, 0, 0));
- 
-     if (bgItem) {
-       bgItemList.AppendToTop(bgItem);
-@@ -3419,6 +3483,10 @@ AppendedBackgroundType nsDisplayBackgroundImage::AppendBackgroundItemsToTop(
+@@ -3419,6 +3476,10 @@ AppendedBackgroundType nsDisplayBackgroundImage::AppendBackgroundItemsToTop(
              nsDisplayItem::ContainerASRType::Constant));
    }
  
@@ -134,7 +116,7 @@ index 0243566311..32aea4afac 100644
      aList->AppendToTop(&bgItemList);
      return AppendedBackgroundType::Background;
 diff --git a/servo/components/style/properties/computed_value_flags.rs b/servo/components/style/properties/computed_value_flags.rs
-index d13a344e23..443f449a32 100644
+index d13a344..443f449 100644
 --- a/servo/components/style/properties/computed_value_flags.rs
 +++ b/servo/components/style/properties/computed_value_flags.rs
 @@ -123,6 +123,20 @@ bitflags! {
@@ -168,7 +150,7 @@ index d13a344e23..443f449a32 100644
  
      /// Flags that may be propagated to descendants.
 diff --git a/servo/components/style/style_adjuster.rs b/servo/components/style/style_adjuster.rs
-index 1756b77b9b..e666bf31f8 100644
+index 1756b77..e666bf3 100644
 --- a/servo/components/style/style_adjuster.rs
 +++ b/servo/components/style/style_adjuster.rs
 @@ -311,6 +311,177 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
