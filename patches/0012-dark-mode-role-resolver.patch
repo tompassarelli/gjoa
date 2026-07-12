@@ -59,7 +59,6 @@
 #   not touched here; the Border role value exists in the enum so M2 can add them
 #   without re-versioning the surface contract.
 diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
-index 46967151f9..5d385bfca5 100644
 --- a/layout/base/nsLayoutUtils.cpp
 +++ b/layout/base/nsLayoutUtils.cpp
 @@ -10,6 +10,7 @@
@@ -70,10 +69,10 @@ index 46967151f9..5d385bfca5 100644
  #include "ImageContainer.h"
  #include "ImageOps.h"
  #include "ImageRegion.h"
-@@ -5294,6 +5295,36 @@ nscolor nsLayoutUtils::DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor) {
+@@ -5294,6 +5295,41 @@ nscolor nsLayoutUtils::DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor) {
    return ShouldDarkenColors(aFrame) ? DarkenColor(aColor) : aColor;
  }
-
+ 
 +// gjoa dark-mode v2 (M1): role-aware choke point for layout color resolvers.
 +// Gated on this document's per-document inversion flag (added by patch 0009).
 +// M1 is intentionally the identity -- it changes no pixels; its only job is to
@@ -98,7 +97,12 @@ index 46967151f9..5d385bfca5 100644
 +  if (aRole == ColorRole::Text) {
 +    auto bg = nsCSSRendering::FindEffectiveBackgroundColor(aFrame);
 +    if (NS_GET_A(bg.mColor) == 255) {
-+      return GjoaDarkText::Correct(aColor, bg.mColor, 57.0f, 90.0f);
++      // M4a: enforce the halation ceiling for LARGE text only (size-gated); body
++      // text keeps its floor lift and is never ceiling-clamped.
++      const nsStyleFont* font = aFrame->StyleFont();
++      const bool large = GjoaDarkText::IsLargeText(
++          font->mFont.size.ToCSSPixels(), font->mFont.weight.ToFloat());
++      return GjoaDarkText::Correct(aColor, bg.mColor, 57.0f, 90.0f, large);
 +    }
 +  }
 +  return aColor;
