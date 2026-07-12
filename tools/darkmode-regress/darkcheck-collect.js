@@ -152,6 +152,14 @@ for (const el of all) {
     underline: hasUnderline(cs),
     inProse: effRole === "link" ? inProse(el) : false,
     text: (el.textContent || "").trim().slice(0, 60),
+    // ---- RAW-RECORD schema (T2.5 gate replay, dev-loop-assessment §8.2), ADDITIVE ----
+    // This node record IS the content-side half of the raw record replay consumes:
+    //   computed fg = `fg`, effective bg = `bg`, authored linkage = `sig` (→ authored arm),
+    //   role/fontPx/fontWeight/rect + provenance (`bgIndeterminate`, `ownBgAlpha`).
+    // The PAINTED half cannot be produced content-side (needs the chrome drawSnapshot);
+    // the auditor fills paintedFg/paintedBg from the glyph sample. Null placeholders here
+    // keep the record self-describing so an offline replay knows painted was unresolved.
+    paintedFg: null, paintedBg: null,
   });
   dc++;
 }
@@ -258,4 +266,8 @@ return {
   rootDark, rootBgL: Math.round(rootBgL), colorSchemeDark, normalizedSignal,
   rootBg: [Math.round(rootBgRendered[0]), Math.round(rootBgRendered[1]), Math.round(rootBgRendered[2])],
   els: out, surfaces, replaced,
+  // ADDITIVE: marks `els` as the T2.5 raw-record schema (content-side complete; painted
+  // half filled by the auditor). Persisting `els`+painted per node makes the gate replayable
+  // offline for ALL A-rules — see darkcheck-replay.js. Existing consumers ignore this key.
+  dcSchema: "raw/1",
 };
