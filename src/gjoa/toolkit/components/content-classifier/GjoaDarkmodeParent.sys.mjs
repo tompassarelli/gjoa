@@ -324,6 +324,27 @@ function _solveAccent(fg, bg, T, ceiling) {
   }
   return best;
 }
+// wave-A LINK re-saturation. The engine band (invertBand) brand-PRESERVES chroma > 0.08
+// but remaps a LOW-chroma authored link (a slate/muted blue near the 0.03 neutral-snap)
+// to a washed mid-light that clears the legibility floor yet reads NEUTRAL — the blue
+// affordance is gone (marginalia/antonz/fnordig link-flatten). _solveAccent alone can't
+// fix it: it holds chroma FIXED, so a washed run stays washed. This RE-synthesises a
+// healthy link chroma at the run's SURVIVING hue (the band preserves hue direction, only
+// sheds magnitude), holding hue EXACTLY and clamping to the sRGB gamut. The boosted run
+// carries C ≈ 0.11 > 0.08, so the engine brand-preserves it on re-band (verified via the
+// colormath oracle: invertBand(boosted) == boosted) — the vivid link survives to paint.
+// Returns null when the painted run has no trustworthy hue (a genuine neutral link), so
+// the caller leaves it neutral rather than inventing a tint.
+const FG_LINK_VIVID_C = 0.1; // painted chroma below this = a washed link worth re-saturating
+const FG_LINK_TARGET_C = 0.11; // synthesised link chroma (> 0.08 so the band preserves it)
+function _boostLinkChroma(fg) {
+  const lab = _oklab(fg);
+  const L = lab[0], C = Math.hypot(lab[1], lab[2]), h = Math.atan2(lab[2], lab[1]);
+  if (C < 0.008) {
+    return null; // no hue to hold — a real neutral link
+  }
+  return _oklchToSrgb(L, Math.max(C, FG_LINK_TARGET_C), h);
+}
 
 export class GjoaDarkmodeParent extends JSWindowActorParent {
   // Decision-path trace (pref-gated, zero overhead off). Tab-delimited on
@@ -655,6 +676,25 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       // orange AND reads. Gated on `inverted` — a native-dark site keeps its accents.
       // A run already clearing the floor is left exactly as the engine painted it.
       const fgC = _oklchC(el.fg);
+      // LINK-ROLE re-saturation (wave-A A6 link-flatten). A hyperlink whose painted run
+      // is WASHED (chroma below a healthy link level) or still ILLEGIBLE gets its hue
+      // recovered + re-saturated to a vivid in-gamut accent (see _boostLinkChroma). This
+      // catches the low-chroma links the chroma-gated clause below misses or under-lifts
+      // (the band snapped their blue toward neutral so it reads white/gray — marginalia/
+      // antonz/fnordig). A run with no trustworthy hue (a genuine neutral link) returns
+      // null and falls through to the neutral clauses (no invented tint).
+      if (inverted && el.link) {
+        const washed = fgC < FG_LINK_VIVID_C;
+        const illegible = Math.abs(_apca(el.fg, bg)) < FG_ACCENT_FLOOR;
+        if (washed || illegible) {
+          const boosted = _boostLinkChroma(el.fg);
+          if (boosted) {
+            const r = _solveAccent(boosted, bg, FG_ACCENT_FLOOR, FG_HALATION_CEIL);
+            correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+            continue;
+          }
+        }
+      }
       if (inverted && fgC > FG_ACCENT_CHROMA) {
         if (Math.abs(_apca(el.fg, bg)) < FG_ACCENT_FLOOR) {
           const r = _solveAccent(el.fg, bg, FG_ACCENT_FLOOR, FG_HALATION_CEIL);
@@ -703,6 +743,24 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       if (brandFloored) {
         const r = _capHalation(_raiseLight(el.fg), bg);
         correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+        continue;
+      }
+      // PRESERVED-BG PAIRING (wave-A white-pill). A run whose OWN element background is
+      // opaque and LIGHT (a preserved white pill / consent button) but whose fg fails the
+      // floor against THAT bg is a white-on-white pair — regardless of what the racing
+      // viewport snapshot sampled for its rect. The snapshot can read the dark page
+      // backdrop behind a late/fixed overlay and falsely judge the white label legible
+      // (the top-view/mid-view split: reddit/npr/fifa/docker consent buttons). Re-solve
+      // against the element's OWN bg so the pairing is pass-order-independent: a preserved
+      // light bg ⇒ fg MUST flip to its max-contrast (black) polarity. The child's
+      // per-element pre-invert then lands it whether or not the button subtree inverted.
+      if (
+        el.ownBg &&
+        _oklchL(el.ownBg) >= FG_LIGHT_MIN_L &&
+        Math.abs(_apca(el.fg, el.ownBg)) < T
+      ) {
+        const c = _correct(el.fg, el.ownBg, T);
+        correctives.push({ cn: el.cn, color: `rgb(${c[0]},${c[1]},${c[2]})` });
         continue;
       }
       if (Math.abs(_apca(el.fg, bg)) >= T) {

@@ -392,6 +392,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this.#dimLargeMedia(win, doc);
         this.#darkenLightPanels(win, doc);
         this.#liftDarkLogos(win, doc);
+        this.#darkScrollbars(win, doc);
+        this.#rescueBlendedPhotos(win, doc);
       }));
     // Pass-2 polish (pref-gated, default off): the refiner has settled the
     // inversion state, so the image pass can now read it the right way round.
@@ -673,6 +675,91 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // qualify (opaque), light logos never qualify (light pixels), icons cost one
   // 24x24 rasterize each (capped). Cross-origin images without CORS taint the
   // canvas and are skipped (verdict null, cached).
+  // wave-A scrollbar-strip fix. Force dark scrollbars on any inverted doc. Firefox honors
+  // the standard `scrollbar-color: <thumb> <track>`; an unthemed overflow container
+  // otherwise paints a glaring light scrollbar/track on the dark canvas (odin-lang sidebar
+  // strip, drmaciver code-block track, cloudflare/hub-docker right-edge strips).
+  // `::-webkit-scrollbar` is ignored by Gecko, so `scrollbar-color` is the whole fix. One
+  // idempotent id'd <style>; gated on real inversion (a native-dark site keeps its own).
+  // True when the PAINTED page root is dark — a probe-INDEPENDENT "is this a dark page"
+  // signal. The engine darkens pages that #engineInvertingNow / #inversionActive misreport
+  // (the latter is documented-broken under the engine's oklch color serialization), so
+  // page-state gating beats the inversion probes for passes that must fire on any dark page.
+  #docIsDark(win, doc) {
+    try {
+      const parse = s => GjoaDarkmodeChild.parseComputedColor(s);
+      for (const rel of [doc.body, doc.documentElement]) {
+        if (!rel) {
+          continue;
+        }
+        let c = null;
+        try { c = parse(win.getComputedStyle(rel).backgroundColor || ""); } catch (e) {}
+        if (c) {
+          return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255 <= 0.35;
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  #darkScrollbars(win, doc) {
+    try {
+      if (!doc || !doc.documentElement || !this.#docIsDark(win, doc)) {
+        return;
+      }
+      if (doc.getElementById("gjoa-dark-scrollbars")) {
+        return;
+      }
+      const s = doc.createElement("style");
+      s.id = "gjoa-dark-scrollbars";
+      s.textContent = "*{scrollbar-color:#6b6b6b #1e1e1e !important}";
+      (doc.head || doc.documentElement).appendChild(s);
+    } catch (e) {}
+  }
+
+  // wave-A photo-blend rescue (A4). A bg-image PHOTO composited with its background-color
+  // via a non-normal blend-mode (tonsky avatar: background-blend-mode:multiply over a
+  // yellow bg) is destroyed once the engine inverts that bg-color to dark olive —
+  // multiply(photo, olive) → uniform near-black, face gone. Neutralise the blend so the
+  // opaque photo paints over the (now dark) bg-color and survives. Gated on page-darkness,
+  // NOT #inversionActive (oklch-broken, the wall #dimLargeMedia hits). Rare pattern → tiny blast.
+  #rescueBlendedPhotos(win, doc) {
+    try {
+      if (!doc || !doc.body || !this.#docIsDark(win, doc)) {
+        return;
+      }
+      let tagged = 0, scanned = 0;
+      let list;
+      try { list = doc.querySelectorAll("div,span,a,figure,header,section,aside,li,td"); } catch (e) { return; }
+      for (const el of list) {
+        if (++scanned > 3000) {
+          break;
+        }
+        if (el.hasAttribute("data-gjoa-photo-bg")) {
+          continue;
+        }
+        let cs;
+        try { cs = win.getComputedStyle(el); } catch (e) { continue; }
+        const bm = cs.backgroundBlendMode || "normal";
+        if (bm === "normal" || bm === "" || !/url\(/i.test(cs.backgroundImage || "")) {
+          continue;
+        }
+        const r = el.getBoundingClientRect();
+        if (r.width * r.height < 1600) {
+          continue;
+        }
+        el.setAttribute("data-gjoa-photo-bg", "1");
+        tagged++;
+      }
+      if (tagged && !doc.getElementById("gjoa-photo-bg-rescue")) {
+        const s = doc.createElement("style");
+        s.id = "gjoa-photo-bg-rescue";
+        s.textContent = "[data-gjoa-photo-bg]{background-blend-mode:normal!important}";
+        (doc.head || doc.documentElement).appendChild(s);
+      }
+    } catch (e) {}
+  }
+
   #liftDarkLogos(win, doc) {
     try {
       // Gate on the oklch-robust probe: #inversionActive's strict rgb string
@@ -1309,6 +1396,32 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         continue;
       }
       el.setAttribute("data-gjoa-cn", cnBase + cn);
+      // Link-role: a hyperlink whose authored hue the engine's involution may have
+      // washed below the parent's chroma gate — the parent re-saturates it by role
+      // even at low painted chroma, so the blue link affordance survives (wave-A A6).
+      const link = el.tagName === "A" && el.hasAttribute("href");
+      // Nearest opaque-ish ancestor background — a SNAPSHOT-INDEPENDENT bg signal. The
+      // parent's viewport drawSnapshot can sample the dark page backdrop behind a
+      // late/fixed overlay (a cookie-consent pill not yet composited) and miss the
+      // preserved-white button bg, leaving a white label on it in one pass but not the
+      // other (the white-pill top/mid race). This lets the parent re-solve the pairing
+      // deterministically from the element's OWN bg (wave-A white-pill).
+      let ownBg = null;
+      for (let a = el, hops = 0; a && hops < 6; a = a.parentElement, hops++) {
+        const raw = win.getComputedStyle(a).backgroundColor || "";
+        let alpha = 1;
+        if (raw.startsWith("rgba")) {
+          const parts = raw.slice(raw.indexOf("(") + 1, raw.indexOf(")")).split(",");
+          alpha = parts.length > 3 ? parseFloat(parts[3]) : 1;
+        }
+        if (alpha >= 0.5) {
+          const bc = parse(raw);
+          if (bc) {
+            ownBg = bc;
+            break;
+          }
+        }
+      }
       els.push({
         cn: cnBase + cn,
         x: Math.round(r.left),
@@ -1316,6 +1429,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         w: Math.round(r.width),
         h: Math.round(r.height),
         fg,
+        link,
+        ownBg,
       });
       cn++;
     }
