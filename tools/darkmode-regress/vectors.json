@@ -1,0 +1,668 @@
+{
+  "_meta": {
+    "source": "tools/darkmode-regress/colormath.cjs",
+    "generator": "tools/darkmode-regress/gen-vectors.cjs",
+    "note": "inputs->expected for the dark-mode oracle. rgb are exact (sRGB8); scalars carry the precision shown. f64 oracle vs f32 engine agree to f32-representable tolerance (see colormath.cjs precision note). Regenerate with the generator; verify with vectors.cjs.",
+    "floor": 0.16,
+    "ceiling": 0.92,
+    "bg": [
+      13,
+      13,
+      13
+    ]
+  },
+  "probe_6_1": {
+    "correct_0_0_238": {
+      "fg": [
+        0,
+        0,
+        238
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 60,
+      "ceiling": 90,
+      "expect": [
+        147,
+        183,
+        255
+      ],
+      "drift": 0.44,
+      "c": 0.111,
+      "spec": "dev-loop-assessment §6.1: -> [147,183,255], drift 0.4deg, C 0.111"
+    },
+    "gamutMaxC_Lc576": {
+      "L": 0.744,
+      "h": -1.674608,
+      "expect": 0.1312,
+      "spec": "§6.1: gamutMaxC at Lc~57.6 (L~0.744) ~= 0.132"
+    },
+    "gamutMaxC_Lc666": {
+      "L": 0.79,
+      "h": -1.674608,
+      "expect": 0.1057,
+      "spec": "§6.1: gamutMaxC at Lc~66.6 (L~0.790) ~= 0.105"
+    }
+  },
+  "correct": [
+    {
+      "fg": [
+        0,
+        0,
+        238
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 60,
+      "ceiling": 90,
+      "expect": [
+        147,
+        183,
+        255
+      ],
+      "lc": 63.24,
+      "drift": 0.44,
+      "c": 0.1107
+    },
+    {
+      "fg": [
+        0,
+        0,
+        238
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "expect": [
+        139,
+        177,
+        255
+      ],
+      "lc": 60.14,
+      "drift": 0.14,
+      "c": 0.1202
+    },
+    {
+      "fg": [
+        204,
+        0,
+        0
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "expect": [
+        255,
+        147,
+        132
+      ],
+      "lc": 60.01,
+      "drift": 0.39,
+      "c": 0.1329
+    },
+    {
+      "fg": [
+        255,
+        78,
+        0
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "expect": [
+        255,
+        149,
+        117
+      ],
+      "lc": 60.26,
+      "drift": 0.39,
+      "c": 0.1357
+    },
+    {
+      "fg": [
+        214,
+        44,
+        122
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "expect": [
+        255,
+        142,
+        181
+      ],
+      "lc": 60.18,
+      "drift": 0.09,
+      "c": 0.1423
+    },
+    {
+      "fg": [
+        0,
+        102,
+        204
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 60,
+      "ceiling": 90,
+      "expect": [
+        133,
+        186,
+        255
+      ],
+      "lc": 63.31,
+      "drift": 0.46,
+      "c": 0.114
+    },
+    {
+      "fg": [
+        0,
+        102,
+        204
+      ],
+      "bg": [
+        220,
+        218,
+        215
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "expect": [
+        0,
+        91,
+        184
+      ],
+      "lc": 60.27,
+      "drift": 0.12,
+      "c": 0.1644
+    },
+    {
+      "fg": [
+        136,
+        136,
+        136
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "expect": [
+        178,
+        178,
+        177
+      ],
+      "lc": 60.35,
+      "drift": 0,
+      "c": 0.0014
+    }
+  ],
+  "invertBand": [
+    {
+      "rgb": [
+        255,
+        255,
+        255
+      ],
+      "floor": 0.16,
+      "ceiling": 0.92,
+      "chromaIn": 0,
+      "expect": [
+        13,
+        13,
+        13
+      ],
+      "note": "white -> floor (dark)"
+    },
+    {
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "floor": 0.16,
+      "ceiling": 0.92,
+      "chromaIn": 0,
+      "expect": [
+        228,
+        228,
+        228
+      ],
+      "note": "black -> ceiling (light)"
+    },
+    {
+      "rgb": [
+        228,
+        228,
+        228
+      ],
+      "floor": 0.16,
+      "ceiling": 0.92,
+      "chromaIn": 0,
+      "expect": [
+        27,
+        27,
+        27
+      ],
+      "note": "near-white neutral"
+    },
+    {
+      "rgb": [
+        13,
+        13,
+        13
+      ],
+      "floor": 0.16,
+      "ceiling": 0.92,
+      "chromaIn": 0,
+      "expect": [
+        189,
+        189,
+        189
+      ],
+      "note": "near-black neutral"
+    },
+    {
+      "rgb": [
+        255,
+        78,
+        0
+      ],
+      "floor": 0.16,
+      "ceiling": 0.92,
+      "chromaIn": 0.2228,
+      "expect": [
+        255,
+        78,
+        0
+      ],
+      "note": "orange c>0.08 -> brand preserve UNCHANGED"
+    },
+    {
+      "rgb": [
+        0,
+        0,
+        238
+      ],
+      "floor": 0.16,
+      "ceiling": 0.92,
+      "chromaIn": 0.2973,
+      "expect": [
+        0,
+        0,
+        238
+      ],
+      "note": "saturated blue c>0.08 -> brand preserve UNCHANGED"
+    },
+    {
+      "rgb": [
+        200,
+        199,
+        196
+      ],
+      "floor": 0.16,
+      "ceiling": 0.92,
+      "chromaIn": 0.0043,
+      "expect": [
+        43,
+        43,
+        43
+      ],
+      "note": "faint cast c<0.03 -> neutral snap"
+    },
+    {
+      "rgb": [
+        120,
+        130,
+        150
+      ],
+      "floor": 0.16,
+      "ceiling": 0.92,
+      "chromaIn": 0.0327,
+      "expect": [
+        81,
+        88,
+        102
+      ],
+      "note": "low-chroma 0.03<c<0.08 -> inverted + chroma shed"
+    },
+    {
+      "rgb": [
+        90,
+        90,
+        92
+      ],
+      "floor": 0.16,
+      "ceiling": 0.92,
+      "chromaIn": 0.0032,
+      "expect": [
+        117,
+        117,
+        117
+      ],
+      "note": "very faint c<0.03 -> snapped neutral"
+    }
+  ],
+  "correctA2": [
+    {
+      "fg": [
+        228,
+        228,
+        228
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "px": 40,
+      "weight": 400,
+      "large": true,
+      "expect": [
+        228,
+        227,
+        227
+      ],
+      "lc": 89.63
+    },
+    {
+      "fg": [
+        228,
+        228,
+        228
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "px": 16,
+      "weight": 400,
+      "large": false,
+      "expect": [
+        228,
+        228,
+        228
+      ],
+      "lc": 90.13
+    },
+    {
+      "fg": [
+        255,
+        255,
+        255
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "px": 40,
+      "weight": 400,
+      "large": true,
+      "expect": [
+        228,
+        227,
+        227
+      ],
+      "lc": 89.63
+    },
+    {
+      "fg": [
+        255,
+        255,
+        255
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "px": 16,
+      "weight": 400,
+      "large": false,
+      "expect": [
+        255,
+        255,
+        255
+      ],
+      "lc": 107.62
+    },
+    {
+      "fg": [
+        141,
+        178,
+        255
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "px": 40,
+      "weight": 400,
+      "large": true,
+      "expect": [
+        141,
+        178,
+        255
+      ],
+      "lc": 60.71
+    },
+    {
+      "fg": [
+        141,
+        178,
+        255
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "px": 16,
+      "weight": 400,
+      "large": false,
+      "expect": [
+        141,
+        178,
+        255
+      ],
+      "lc": 60.71
+    },
+    {
+      "fg": [
+        228,
+        228,
+        228
+      ],
+      "bg": [
+        13,
+        13,
+        13
+      ],
+      "T": 57,
+      "ceiling": 90,
+      "px": 24,
+      "weight": 700,
+      "large": true,
+      "expect": [
+        228,
+        227,
+        227
+      ],
+      "lc": 89.63
+    }
+  ],
+  "ramp": {
+    "surfaceCeiling": {
+      "floor": 0.16,
+      "expect": 0.34
+    },
+    "vectors": [
+      {
+        "rgb": [
+          140,
+          140,
+          140
+        ],
+        "floor": 0.16,
+        "ceiling": 0.92,
+        "expect": [
+          63,
+          63,
+          63
+        ],
+        "band": "preserved-dark",
+        "lAuth": 0.3683,
+        "note": "mid grey computed surface"
+      },
+      {
+        "rgb": [
+          90,
+          90,
+          90
+        ],
+        "floor": 0.16,
+        "ceiling": 0.92,
+        "expect": [
+          29,
+          29,
+          29
+        ],
+        "band": "ramped",
+        "lAuth": 0.5953,
+        "note": "darker grey surface"
+      },
+      {
+        "rgb": [
+          228,
+          228,
+          228
+        ],
+        "floor": 0.16,
+        "ceiling": 0.92,
+        "expect": [
+          0,
+          0,
+          0
+        ],
+        "band": "preserved-dark",
+        "lAuth": 0.0015,
+        "note": "band-mapped black surface -> frozen dark"
+      },
+      {
+        "rgb": [
+          40,
+          40,
+          40
+        ],
+        "floor": 0.16,
+        "ceiling": 0.92,
+        "expect": [
+          19,
+          19,
+          19
+        ],
+        "band": "ramped",
+        "lAuth": 0.8463,
+        "note": "already-dark surface (unchanged/darken-only)"
+      },
+      {
+        "rgb": [
+          255,
+          78,
+          0
+        ],
+        "floor": 0.16,
+        "ceiling": 0.92,
+        "expect": [
+          255,
+          78,
+          0
+        ],
+        "band": "brand",
+        "lAuth": 0.3307,
+        "note": "brand surface c>0.08 -> unchanged"
+      }
+    ]
+  },
+  "gamutMaxC": [
+    {
+      "L": 0.744,
+      "h": -1.674608,
+      "expect": 0.1312,
+      "note": "Lc~57.6 anchor -> ~0.132"
+    },
+    {
+      "L": 0.79,
+      "h": -1.674608,
+      "expect": 0.1057,
+      "note": "Lc~66.6 anchor -> ~0.105"
+    },
+    {
+      "L": 0.5,
+      "h": -1.674608,
+      "expect": 0.281,
+      "note": "mid L"
+    },
+    {
+      "L": 0.6,
+      "h": 0,
+      "expect": 0.2433,
+      "note": "hue 0 (red axis)"
+    },
+    {
+      "L": 0.7,
+      "h": 1.570796,
+      "expect": 0.1431,
+      "note": "hue 90 (yellow-green axis)"
+    },
+    {
+      "L": 0.85,
+      "h": -1.674608,
+      "expect": 0.0737,
+      "note": "high L"
+    }
+  ]
+}

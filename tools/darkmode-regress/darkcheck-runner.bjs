@@ -107,7 +107,7 @@
     (let [corpus (JSON/parse (.readFileSync fs (or (get (.-env process) "GJOA_DM_CORPUS")
                                                    "tools/darkmode-regress/corpus.json") "utf8"))
           sites (.-sites corpus)
-          colormath-js (.readFileSync fs "tools/darkmode-regress/colormath.js" "utf8")
+          colormath-js (.readFileSync fs "tools/darkmode-regress/colormath.cjs" "utf8")
           collect-js (.readFileSync fs "tools/darkmode-regress/darkcheck-collect.js" "utf8")
           audit-js (str colormath-js "\n" (.readFileSync fs "tools/darkmode-regress/darkcheck-audit.js" "utf8"))
           cfg (or (.-config corpus) {})
