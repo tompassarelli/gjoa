@@ -9,53 +9,86 @@
 #     - cpp-method nsPresContext::ApplyHybridDefaultInvertIfThemeless
 #     - cpp-method nsPresContext::DefaultBackgroundColorScheme
 #     - cpp-method LookAndFeel::ColorSchemeForFrame
+#     - cpp-method mozilla::dom::Document::GetColorSchemeBits
 #
-# gjoa dark-mode v2 (M4 Tier-0): color-scheme-bit native detection. The hybrid
-# default-invert decision in nsPresContext::ApplyHybridDefaultInvertIfThemeless
-# used a luminance-only test (lum >= 0.22) to decide "is this page already dark?",
-# which is racy: a dark page read before its CSS settles looks light (wrongly
-# inverted), and a page that flashes dark looks native (wrongly left alone). Tier-0
-# replaces it with the page's USED color-scheme -- the resolved `color-scheme` CSS
-# property via LookAndFeel::ColorSchemeForFrame(frame), NOT the <meta>-only
-# Document::mColorSchemeBits -- gated by a luminance backstop: a page keeps its own
-# theme only if it BOTH declares dark AND actually renders dark, so a page that
-# merely claims dark but paints light still inverts. The same signal is exposed to
-# the style system as Device::used_color_scheme_is_dark() over a new
-# Gecko_UsedColorSchemeIsDark(doc) binding wrapping the public
-# nsPresContext::DefaultBackgroundColorScheme(), mirroring Gecko_IsDarkColorScheme.
+# gjoa dark-mode v2 (M4b Tier-0 re-key): declared-color-scheme native detection.
+# The hybrid default-invert decision in
+# nsPresContext::ApplyHybridDefaultInvertIfThemeless used a luminance-only test
+# (lum >= 0.22) to decide "is this page already dark?", which is racy: a dark
+# page read before its CSS settles looks light (wrongly inverted), and a page
+# that flashes dark looks native (wrongly left alone). Tier-0 re-keys the
+# decision onto the page's DECLARED `color-scheme` -- the root-frame
+# `color-scheme` CSS property (StyleUI()->mColorScheme.bits), falling back to
+# Document::GetColorSchemeBits() when it is `normal`, the same flag source
+# LookAndFeel::ColorSchemeForStyle resolves the USED scheme from -- three-way:
+#   * dark-ONLY declaration  -> passthrough pre-paint, NO luminance backstop
+#     (a dark-only author committed to dark; trusting it kills the flash + the
+#     JS probe-retract round-trip on true natives whose CSS has not settled).
+#   * `light dark` (dark-CAPABLE) -> discriminate on AUTHORED ROOT LUMINANCE
+#     only (renders dark -> passthrough, renders light -> invert); never the
+#     color-scheme substring alone (the zdnet false-native trap).
+#   * light-only / no declaration -> themeless, invert.
+# The used-scheme signal is still exposed to the style system as
+# Device::used_color_scheme_is_dark() over the Gecko_UsedColorSchemeIsDark(doc)
+# binding wrapping the public nsPresContext::DefaultBackgroundColorScheme(),
+# mirroring Gecko_IsDarkColorScheme (latent; band code not yet wired).
 # Tier-0 only -- the M4 band-clamp / halation ceiling is already handled by M3 (0013).
 #
 diff --git a/layout/base/nsPresContext.cpp b/layout/base/nsPresContext.cpp
-index d89fbba8d5..553b1e6838 100644
+index d89fbba8d5..e496d65c9e 100644
 --- a/layout/base/nsPresContext.cpp
 +++ b/layout/base/nsPresContext.cpp
-@@ -855,9 +855,12 @@ void nsPresContext::UpdateColorInversion(bool aNotify) {
+@@ -855,10 +855,23 @@ void nsPresContext::UpdateColorInversion(bool aNotify) {
  // un-inverted; only ApplyHybridDefaultInvertIfThemeless flips it). If the page
  // did NOT author a dark theme -- background is light or transparent (the UA white
  // canvas shows through) -- flip the whole document to inverted pre-paint so it
 -// renders dark from the first paint with no flash. A native-dark page (authored
 -// luminance < 0.22, matching the JS actor's #luminance threshold) is left alone
 -// and keeps its own theme. The decision is recorded in mHybridDefaultInvert so it
-+// renders dark from the first paint with no flash. A page is left alone (keeps its
-+// own theme) only when it USES a dark color-scheme -- the `color-scheme` CSS
-+// property resolved on the root frame (LookAndFeel::ColorSchemeForFrame), not a
-+// bare <meta> claim -- AND a luminance backstop confirms it actually renders dark,
-+// so a page that merely claims dark but paints light still inverts. The decision is
-+// recorded in mHybridDefaultInvert so it
- // survives later UpdateColorInversion re-derives (durable).
+-// survives later UpdateColorInversion re-derives (durable).
++// renders dark from the first paint with no flash. M4b tier-0 re-key: the
++// native-dark decision is three-way on the page's DECLARED `color-scheme`
++// (root-frame CSS property, falling back to the <meta> bits -- the same flag
++// source LookAndFeel::ColorSchemeForStyle resolves the USED scheme from):
++//   * dark-ONLY declaration  -> keep the page's theme (passthrough) with NO
++//     luminance backstop. A dark-only author committed to dark, so trust it
++//     pre-paint; this kills the flash + JS probe-retract round-trip on true
++//     natives whose dark CSS has not settled at this instant (the old
++//     luminance test read them light and wrongly inverted -> double-invert).
++//   * `light dark` (dark-CAPABLE; resolves Dark under our forced
++//     prefers-dark) -> NOT dark by declaration. Discriminate on AUTHORED ROOT
++//     LUMINANCE only: renders dark -> passthrough; renders light -> invert.
++//     Never the color-scheme substring alone (the zdnet false-native trap:
++//     `light dark` + authored-light must still invert).
++//   * light-only / no declaration -> themeless, invert.
++// The decision is recorded in mHybridDefaultInvert so it survives later
++// UpdateColorInversion re-derives (durable).
  void nsPresContext::ApplyHybridDefaultInvertIfThemeless() {
    if (mColorInversion || mHybridDefaultInvert) {
-@@ -878,8 +881,11 @@ void nsPresContext::ApplyHybridDefaultInvertIfThemeless() {
+     return;  // already inverting: explicit override, global pref, or prior call
+@@ -878,8 +891,23 @@ void nsPresContext::ApplyHybridDefaultInvertIfThemeless() {
    }
    auto bg = nsCSSRendering::FindEffectiveBackgroundColor(
        frame, /* aStopAtThemed = */ true, /* aPreferBodyToCanvas = */ true);
 -  const bool themeless = NS_GET_A(bg.mColor) == 0 ||
 -                         RelativeLuminanceUtils::Compute(bg.mColor) >= 0.22f;
-+  const bool usedDark =
-+      LookAndFeel::ColorSchemeForFrame(frame) == ColorScheme::Dark;
++  // Declared color-scheme flags: root-frame `color-scheme` property, falling
++  // back to the document's <meta> bits when the property is `normal` -- mirrors
++  // LookAndFeel::ColorSchemeForStyle's own flag source.
++  StyleColorSchemeFlags csFlags(frame->StyleUI()->mColorScheme.bits);
++  if (!csFlags) {
++    csFlags._0 = mDocument->GetColorSchemeBits();
++  }
++  const bool declaresDark = bool(csFlags & StyleColorSchemeFlags::DARK);
++  const bool declaresLight = bool(csFlags & StyleColorSchemeFlags::LIGHT);
 +  const bool rendersDark = NS_GET_A(bg.mColor) != 0 &&
 +                           RelativeLuminanceUtils::Compute(bg.mColor) < 0.22f;
-+  const bool themeless = !(usedDark && rendersDark);
++  // dark-ONLY declaration is native pre-paint (fast-path, no luminance test);
++  // `light dark` is dark-CAPABLE and defers to the authored-root luminance
++  // backstop; everything else is themeless and inverts.
++  const bool nativeDark = (declaresDark && !declaresLight) ||
++                          (declaresDark && declaresLight && rendersDark);
++  const bool themeless = !nativeDark;
    if (themeless) {
      mHybridDefaultInvert = true;
      UpdateColorInversion(/* aNotify = */ true);  // mColorInversion=true + restyle
