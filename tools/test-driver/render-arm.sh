@@ -68,7 +68,9 @@ case "$BIN" in *obj-*) DEV_EXTRA="GJOA_DEV_LOADER=1";; esac
 if [ "${STEALTH}" = "1" ]; then
   # Drop MOZ_HEADLESS; inherit the live compositor from the calling env.
   # WAYLAND_DISPLAY / DISPLAY must be set in the caller's environment.
-  LAUNCH_ENV="GJOA_ALLOW_INSECURE=1"
+  # MOZ_APP_REMOTINGNAME sets the Wayland app-id -> niri window-rule routes
+  # these windows to the "render" workspace, unfocused (owner never sees them).
+  LAUNCH_ENV="GJOA_ALLOW_INSECURE=1 MOZ_APP_REMOTINGNAME=gjoa-render"
   [ -n "${DEV_EXTRA:-}" ] && LAUNCH_ENV="${LAUNCH_ENV} ${DEV_EXTRA}"
   echo "[$LABEL] STEALTH mode: real display (WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset} DISPLAY=${DISPLAY:-unset})"
 else
