@@ -150,7 +150,11 @@
   (if (not (existsSync ENGINE))
     {:verdict "ambiguous" :detail (str kind " " sym " — engine/ not extracted (no `bun run import`); can't verify C++ anchors")}
     (let [parts (.split sym "::")
-          klass (if (>= (.-length parts) 2) (aget parts 0) "")
+          ;; class is the LAST namespace-qualifier before the member, not the
+          ;; outermost namespace: mozilla::dom::Document::GetColorSchemeBits ->
+          ;; class Document, not `namespace mozilla`. (aget parts 0) false-negated
+          ;; every 3+-part qualified symbol.
+          klass (if (>= (.-length parts) 2) (aget parts (- (.-length parts) 2)) "")
           member (aget parts (- (.-length parts) 1))
           roots (cpp-search-roots)
           ;; (1) qualified `Class::Member` anywhere — strongest signal.
@@ -182,7 +186,10 @@
   (let [at-m (.exec (RegExp. "@\\s*(\\S+)") rest)
         acc-m (.exec (RegExp. "accessor=(\\S+)") rest)
         read-m (.exec (RegExp. "must-be-read-by:\\s*(\\S+)") rest)
-        sym (.trim (aget (.split rest (RegExp. "\\s*[@|]\\s*|\\s*must-be-read-by:")) 0))]
+        ;; also stop at a trailing inline comment (2+ spaces or ` (`) so a
+        ;; declaration like `cpp-symbol X::Y   (created by patch NNNN)` yields the
+        ;; bare symbol, not the whole line.
+        sym (.trim (aget (.split rest (RegExp. "\\s*[@|]\\s*|\\s*must-be-read-by:|\\s{2,}|\\s+\\(")) 0))]
     {:kind kind :symbol sym
      :at (if at-m (aget at-m 1) nil)
      :accessor (if acc-m (aget acc-m 1) nil)
