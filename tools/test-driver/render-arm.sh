@@ -52,11 +52,47 @@ TMO_RENDER=$(( N_PER * 45 + 300 ))
 
 echo "[$LABEL] $TOTAL URLs → $SHARDS shards, ports ${PORT_BASE}-$((PORT_BASE+SHARDS-1)), tmo browser=${TMO_BROWSER}s render=${TMO_RENDER}s"
 
+# Hidden "render" workspace lifecycle (STEALTH only). The niri window-rule
+# routes app-id gjoa-render there by NAME, but the workspace is deliberately
+# not declared in config.kdl — declared workspaces are permanent even when
+# empty. We name the trailing empty workspace at launch (--workspace <idx>
+# never steals focus) and unname it on cleanup so it evaporates when empty.
+arm_render_ws() {
+  command -v niri >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || return 0
+  local ws; ws=$(niri msg --json workspaces 2>/dev/null) || return 0
+  # already armed (concurrent arm, or user) — leave it alone
+  printf '%s' "$ws" | jq -e 'any(.[]; .name == "render")' >/dev/null && return 0
+  local idx
+  idx=$(printf '%s' "$ws" | jq -r '
+    (first(.[] | select(.is_focused)) | .output) as $out
+    | [.[] | select(.output == $out and .active_window_id == null and .name == null)]
+    | (max_by(.idx) | .idx) // empty')
+  [ -n "$idx" ] && niri msg action set-workspace-name --workspace "$idx" render
+}
+
+disarm_render_ws() {
+  command -v niri >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || return 0
+  # await-true: give niri up to 5s to reap our just-killed windows
+  for _ in 1 2 3 4 5; do
+    niri msg --json windows 2>/dev/null \
+      | jq -e 'any(.[]; .app_id == "gjoa-render")' >/dev/null || break
+    sleep 1
+  done
+  # unname only if empty — a concurrent arm may still have windows on it
+  niri msg --json workspaces 2>/dev/null \
+    | jq -e 'any(.[]; .name == "render" and .active_window_id == null)' >/dev/null \
+    && niri msg action unset-workspace-name render
+}
+
 BPIDS=()
 cleanup() {
   for pid in "${BPIDS[@]:-}"; do
     kill "$pid" 2>/dev/null || true
   done
+  if [ "${STEALTH}" = "1" ]; then
+    wait "${BPIDS[@]:-}" 2>/dev/null
+    disarm_render_ws
+  fi
 }
 trap cleanup EXIT
 
@@ -73,6 +109,7 @@ if [ "${STEALTH}" = "1" ]; then
   LAUNCH_ENV="GJOA_ALLOW_INSECURE=1 MOZ_APP_REMOTINGNAME=gjoa-render"
   [ -n "${DEV_EXTRA:-}" ] && LAUNCH_ENV="${LAUNCH_ENV} ${DEV_EXTRA}"
   echo "[$LABEL] STEALTH mode: real display (WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset} DISPLAY=${DISPLAY:-unset})"
+  arm_render_ws
 else
   LAUNCH_ENV="MOZ_HEADLESS=1 GJOA_ALLOW_INSECURE=1"
   [ -n "${DEV_EXTRA:-}" ] && LAUNCH_ENV="${LAUNCH_ENV} ${DEV_EXTRA}"
