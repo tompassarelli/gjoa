@@ -943,26 +943,35 @@ Preserve these (security warnings):
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
 }
 
-/* #149 ATOMIC TEARDOWN: deactivate sets `gjoa-urlbar-teardown` on :root for ONE
- * frame BEFORE removing `gjoa-urlbar-floating`. While teardown is set the
- * floating bar (and its backdrop) is instantly opacity:0 / non-interactive with
- * NO transition or animation, so the geometry-restore reflow back to the resting
- * in-sidebar inline urlbar happens entirely behind a hidden box — the
- * intermediate "small inline search box flashing in the sidebar" frame is never
- * painted. Must out-specify the float-in animation + box-shadow rules above, so
- * it carries the same `:root[gjoa-urlbar-floating]` prefix plus the teardown
- * attr. */
+/* #149 ATOMIC TEARDOWN: deactivate sets `gjoa-urlbar-teardown` on :root, which
+ * FADES the floating bar (and its backdrop) out — opacity 1->0 plus a subtle
+ * scale-down that MIRRORS the float-in — and the JS restores the resting geometry
+ * only AFTER the fade completes (setTimeout matched to the duration). So the
+ * inline-restore reflow back to the in-sidebar urlbar happens entirely behind the
+ * now-invisible box: the intermediate "small inline search box flashing in the
+ * sidebar" frame is never painted, AND the dismiss reads as a smooth close instead
+ * of the abrupt opacity snap that looked janky. Must out-specify the float-in
+ * animation + box-shadow rules above (same `[gjoa-urlbar-floating]` prefix + the
+ * teardown attr). */
 :root[gjoa-urlbar-floating][gjoa-urlbar-teardown] #urlbar {
   opacity: 0 !important;
+  scale: 0.97 !important;
   animation: none !important;
-  transition: none !important;
+  transition: opacity 130ms ease-in, scale 130ms ease-in !important;
   pointer-events: none !important;
 }
 :root[gjoa-urlbar-teardown] #gjoa-urlbar-backdrop {
   opacity: 0 !important;
   animation: none !important;
-  transition: none !important;
+  transition: opacity 130ms ease-in !important;
   pointer-events: none !important;
+}
+/* Reduced motion: instant dismiss (matches the disabled float-in above). */
+@media (prefers-reduced-motion: reduce) {
+  :root[gjoa-urlbar-floating][gjoa-urlbar-teardown] #urlbar,
+  :root[gjoa-urlbar-teardown] #gjoa-urlbar-backdrop {
+    transition: none !important;
+  }
 }
 
 /* Breathing room at the panel top so the input doesn't butt against (and look

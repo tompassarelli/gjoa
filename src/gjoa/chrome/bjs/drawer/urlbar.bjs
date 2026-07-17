@@ -55,10 +55,14 @@
           (when (.-activated state)
             (set! (.-activated state) false)
             (log "deactivateFloating")
-            ;; Hide FIRST (this frame), restore geometry NEXT frame behind the
-            ;; hidden box — no intermediate inline-sidebar frame is ever painted.
+            ;; Fade the floating bar/backdrop out (CSS transition on the teardown
+            ;; attr, ~130ms), then restore resting geometry AFTER the fade so the
+            ;; inline-restore reflow paints behind the now-invisible box — smooth
+            ;; close, no inline-sidebar flash. Matched to the 130ms CSS transition
+            ;; (+ small buffer). A re-summon within the window clears teardown and
+            ;; finish-teardown bails (guards on activated).
             (attr! root "gjoa-urlbar-teardown" "")
-            (.requestAnimationFrame window finish-teardown)))
+            (.setTimeout window finish-teardown 150)))
 
         activate-floating (fn [new-intent]
           (set! (.-intent state) new-intent)
