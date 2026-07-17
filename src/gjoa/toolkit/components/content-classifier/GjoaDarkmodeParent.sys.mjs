@@ -783,6 +783,17 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       if (
         el.ownBg &&
         _oklchL(el.ownBg) >= FG_LIGHT_MIN_L &&
+        // Corroborate the light ownBg against the REAL painted backdrop (snapshot)
+        // before darkening. On a native-dark site that declares color-scheme (reddit),
+        // an ancestor's COMPUTED background-color serializes LIGHT (the authored var)
+        // while the engine PAINTS it dark — so a legible light-on-dark comment run reads
+        // here as "light-on-light" and, without this guard, gets flipped to black-on-dark
+        // (the vanishing-comment-text bug; the +3.2s/scroll re-passes spread it). Only
+        // trust the light ownBg when the SNAPSHOT sees a light backdrop too. If the painted
+        // pixels are dark, the run is on dark → never darken it. A genuinely light pill not
+        // yet composited (snapshot reads the dark page behind it) is recovered on a later
+        // re-pass once it paints — we do NOT darken live legible text to catch it.
+        _oklchL(bg) > FG_DARK_BG_L &&
         Math.abs(_apca(el.fg, el.ownBg)) < T
       ) {
         const c = _correct(el.fg, el.ownBg, T);
