@@ -90,6 +90,29 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this._explicitApplied = true;
         return;
       }
+      // colorScheme:"light"/"dark" curated directive — force a native-dark site to
+      // serve that theme pre-paint (Firefox's built-in prefersColorSchemeOverride),
+      // then colorInversionOverride "active" makes the engine invert it to a uniform
+      // dark. Matches Dark Reader on native-dark sites whose OWN dark theme is
+      // off-brand/imperfect under gjoa: theverge green→purple, django white
+      // search-pill→dark. Handled here alongside force mode — set _explicitApplied so
+      // the post-paint refiner does NOT re-measure and retract the forced scheme
+      // (the bug that left theverge native-green when this ran in #syncExplicitOverride).
+      {
+        let csHost = "";
+        try { csHost = this.document.location.hostname || ""; } catch (e) {}
+        const cs = csHost ? this.#colorSchemeForHost(csHost) : null;
+        if (cs) {
+          try {
+            this.browsingContext.prefersColorSchemeOverride = cs;
+          } catch (e) {}
+          try {
+            this.browsingContext.colorInversionOverride = "active";
+          } catch (e) {}
+          this._explicitApplied = true;
+          return;
+        }
+      }
       // Reset any override INHERITED from the previous same-tab page so this
       // fresh document starts from the engine's pre-paint default, then apply
       // the curated/user decision (if any) at document-start. Store the promise
@@ -167,6 +190,16 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     if (resp.css) {
       this.#injectSheet(win, resp.css);
     }
+    // colorScheme:"light"/"dark" — force the site to serve that theme (Firefox's
+    // built-in per-BC override); paired with override "active" below, the engine
+    // then inverts the now-light theme to a uniform dark. Reliable async path (the
+    // pre-paint sync path in handleEvent may miss if the mirror pref isn't warm on
+    // the first page); a post-paint scheme flip just triggers one re-style.
+    if (resp.colorScheme) {
+      try {
+        this.browsingContext.prefersColorSchemeOverride = resp.colorScheme;
+      } catch (e) {}
+    }
     if (resp.override && resp.override !== "none") {
       try {
         this.browsingContext.colorInversionOverride = resp.override;
@@ -206,6 +239,31 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this.browsingContext.colorInversionOverride = override;
       }
     } catch (e) {}
+  }
+
+  // Curated colorScheme mirror (host -> "light"/"dark"), kept in sync by the parent
+  // from fixes.json `colorScheme` fields — read SYNC pre-paint like the override mirror.
+  #colorSchemeForHost(host) {
+    try {
+      const raw = Services.prefs.getStringPref(
+        "gjoa.darkmode.fix-colorscheme",
+        ""
+      );
+      if (raw) {
+        const map = JSON.parse(raw);
+        let h = host;
+        let v = map[h];
+        let i;
+        while (v === undefined && (i = h.indexOf(".")) !== -1) {
+          h = h.slice(i + 1);
+          v = map[h];
+        }
+        if (v) {
+          return v;
+        }
+      }
+    } catch (e) {}
+    return null;
   }
 
   #explicitOverrideForHost(host) {

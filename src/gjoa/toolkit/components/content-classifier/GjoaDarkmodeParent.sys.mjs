@@ -62,16 +62,27 @@ async function loadFixes() {
 function mirrorOverridesPref(fixes) {
   try {
     const overrides = {};
+    const colorSchemes = {};
     for (const host of Object.keys(fixes || {})) {
       const ov = fixes[host].override || "inactive";
-      if (ov === "auto") {
-        continue; // "auto" is decided at runtime by the measured refiner, not pre-paint
+      if (ov !== "auto") {
+        overrides[host] = ov; // "auto" is decided at runtime by the refiner, not pre-paint
       }
-      overrides[host] = ov;
+      // colorScheme:"light"/"dark" — force a native-dark site to serve that theme
+      // pre-paint (then the engine inverts). Mirrored like overrides so the content
+      // actor applies it SYNC at document-start via prefersColorSchemeOverride.
+      const cs = fixes[host].colorScheme;
+      if (cs) {
+        colorSchemes[host] = cs;
+      }
     }
     Services.prefs.setStringPref(
       "gjoa.darkmode.fix-overrides",
       JSON.stringify(overrides)
+    );
+    Services.prefs.setStringPref(
+      "gjoa.darkmode.fix-colorscheme",
+      JSON.stringify(colorSchemes)
     );
   } catch (e) {}
 }
@@ -405,6 +416,21 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
     // with gjoa's engine inversion, so they DON'T ship css — they only signal "force"
     // to the measured #auto refiner.
     const fix = fixForHost(await loadFixes(), host);
+    // colorScheme:"light"/"dark" — a HARD pre-paint decision that takes precedence
+    // over the override field: force the site to serve that theme (child sets
+    // prefersColorSchemeOverride) and force-invert it ("active"), yielding a uniform
+    // dark that matches Dark Reader on native-dark sites whose own dark theme is
+    // off-brand/imperfect (theverge green→purple, django white search-pill→dark).
+    if (fix && fix.colorScheme) {
+      return {
+        colorScheme: fix.colorScheme,
+        override: "active",
+        css: fix.css || "",
+        inject: fix.inject || "",
+        ignoreImageAnalysis: fix.ignoreImageAnalysis ?? false,
+        ignoreInlineStyle: fix.ignoreInlineStyle ?? false,
+      };
+    }
     if (fix && (fix.override || "auto") !== "auto") {
       return {
         override: fix.override,
