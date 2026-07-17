@@ -257,6 +257,13 @@ function _oklchL(rgb) {
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
   return 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
 }
+// True when a corrective would DARKEN the run (lower its OKLCH lightness). The
+// never-darken-on-native-dark guard uses this: on a page the engine is not inverting,
+// the normalizer may only lighten, never darken (the site owns its text colors). Pure
+// mirror of the invariant tested in tools/darkmode-regress/normalize-guard.test.js.
+function _decideCorrectiveDarkens(corrective, fg) {
+  return _oklchL(corrective) < _oklchL(fg);
+}
 // ── OKLCH ⇄ sRGB (Ottosson) + the hue-preserving accent solve ──────────────────────
 // Ported from tools/darkmode-regress/colormath.js (the canonical operator, the SAME
 // math patch 0013 runs at paint) so a CHROMATIC accent/link the engine left illegible
@@ -797,6 +804,14 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
         Math.abs(_apca(el.fg, el.ownBg)) < T
       ) {
         const c = _correct(el.fg, el.ownBg, T);
+        // Same never-darken-on-native-dark guard (see the final fallback below): a
+        // color-scheme-declaring native-dark site (reddit) can serialize an ancestor's
+        // authored-light var via getComputedStyle while the engine PAINTS it dark, so a
+        // legible light run reads as light-on-light here — never darken it on a page the
+        // engine isn't inverting.
+        if (!inverted && _decideCorrectiveDarkens(c, el.fg)) {
+          continue;
+        }
         correctives.push({ cn: el.cn, color: `rgb(${c[0]},${c[1]},${c[2]})` });
         continue;
       }
@@ -808,6 +823,19 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       // re-author invertLum so it renders the target). Page-level inversion flags are
       // wrong on mixed pages (a non-inverted light card inside an inverted dark page).
       const c = _correct(el.fg, bg, T);
+      // NEVER-DARKEN-ON-NATIVE-DARK guard (reddit vanishing-text). On a page the engine
+      // is NOT inverting, the SITE authored its text colors — the normalizer may only
+      // LIGHTEN genuinely-too-dark runs, never DARKEN. A light snapshot median for an
+      // already-light run here is a racing/scroll re-pass that sampled an adjacent
+      // bright element (image, thumbnail) while the text actually sits on dark; flipping
+      // that legible light text to black-on-dark is the vanishing-comment-text failure.
+      // (Extends the same principle the raise clauses already honor for native-dark —
+      // see the `inverted` comment above. Inverted pages keep the darken polarity for
+      // engine-inverted labels on preserved-light pills.) Tested in
+      // tools/darkmode-regress/normalize-guard.test.js.
+      if (!inverted && _decideCorrectiveDarkens(c, el.fg)) {
+        continue;
+      }
       correctives.push({ cn: el.cn, color: `rgb(${c[0]},${c[1]},${c[2]})` });
     }
     return { correctives };
