@@ -198,6 +198,24 @@
           (writeFileSync branding-pref-file (str existing @pref-blocks)))
         (.info log (str "compiled + appended " (.-length gjoa-pref-files) " gjoa pref files to branding/" (.-binaryName cfg) "/pref/firefox-branding.js"))))
 
+    ;; 1c. UA COMPAT: present as Firefox in the User-Agent product token
+    ;;     (Firefox/<version>) even though the app basename is Gjoa. MOZ_APP_UA_NAME
+    ;;     defaults to "" (toolkit/moz.configure), so Gecko falls back to
+    ;;     MOZ_APP_BASENAME (Gjoa) — which made the UA read "Gjoa/152.0.6" and broke
+    ;;     sites that sniff for a known engine (bloomberg flagged it out-of-date;
+    ;;     stock Firefox reads "Firefox" only because ITS basename is "Firefox").
+    ;;     confvars.sh is shell-sourced by configure, so setting it here is reliable
+    ;;     for BOTH the nix build (buildMozillaMach) and direct mach builds — unlike
+    ;;     an env var, which does not reach mach's configure cleanly (see
+    ;;     mozconfig.bjs). Idempotent. Branding stays Gjoa everywhere else.
+    (let [confvars (join (dirname ENGINE-BRANDING-DIR) "confvars.sh")]
+      (when (existsSync confvars)
+        (let [text (readFileSync confvars "utf8")]
+          (when (not (.includes text "MOZ_APP_UA_NAME"))
+            (writeFileSync confvars
+              (str text "\n# gjoa: UA product token = Firefox/<version> for site compat (tools/prep/branding.bjs).\nMOZ_APP_UA_NAME=Firefox\n"))
+            (.info log "appended MOZ_APP_UA_NAME=Firefox to browser/confvars.sh (UA compat)")))))
+
     ;; 2. Overlay our own logo PNGs from configs/branding/gjoa/. Mozilla's
     ;;    convention: defaultNN.png at the branding root for sizes the desktop
     ;;    integration needs (16/22/24/32/48/64/128/256/512). We expect logoNN.png

@@ -65,6 +65,15 @@
                  (str "ac_add_options --with-app-name=" (.-binaryName cfg))
                  (str "ac_add_options --with-app-basename=" (.-shortName (.-branding cfg)))
                  ""
+                 ;; UA COMPAT: present as Firefox in the User-Agent product token
+                 ;; (Firefox/<version>) even though the app basename is Gjoa. Without
+                 ;; this MOZ_APP_UA_NAME defaults to "" -> Gecko falls back to
+                 ;; MOZ_APP_BASENAME (Gjoa), so the UA read "Gjoa/152.0.6" and sites
+                 ;; that sniff for a known engine (bloomberg, etc.) flagged it as an
+                 ;; unknown/out-of-date browser. Every Firefox fork keeps Firefox/<v>
+                 ;; in the UA for exactly this reason; branding stays Gjoa everywhere else.
+                 "export MOZ_APP_UA_NAME=Firefox"
+                 ""
                  "# Skip wasm-sandboxed libraries (would need wasi-sysroot we don't ship)."
                  "ac_add_options --without-wasm-sandboxed-libraries"
                  ""
