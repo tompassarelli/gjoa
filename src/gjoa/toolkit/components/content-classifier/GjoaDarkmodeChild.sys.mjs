@@ -449,6 +449,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       win.requestAnimationFrame(() => {
         this.#dimLargeMedia(win, doc);
         this.#darkenLightPanels(win, doc);
+        this.#darkenStrayLightBands(win, doc);
         this.#liftDarkLogos(win, doc);
         this.#darkScrollbars(win, doc);
         this.#rescueBlendedPhotos(win, doc);
@@ -644,10 +645,15 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       if (pct <= 0 || pct >= 100 || !doc || !doc.documentElement || !doc.body) {
         return;
       }
-      // Self-gate on real inversion: this now runs on ANY inverted doc (not just the
-      // force-inverted "active" ones), so a genuinely-light page must never have its media
-      // dimmed. A light page reads its swatches straight; only an inverted one flips both.
-      if (!this.#inversionActive(win, doc)) {
+      // Gate on the oklch-robust page-darkness probe, NOT #inversionActive: the
+      // latter's strict rgb-string equality is silently FALSE under the engine's
+      // oklch color serialization (it is "the wall #dimLargeMedia hits", see
+      // #rescueBlendedPhotos), so gating on it skipped media-dim on exactly the
+      // inverted docs that need it — e.g. gregoryszorc, whose whole #wrapper is a
+      // light bg-image (img02.jpg) the engine exempts and never dims → page reads
+      // light. #docIsDark fires on any dark-rendering page; a genuinely-light page
+      // (docIsDark false) is still skipped, so light pages keep reading straight.
+      if (!this.#docIsDark(win, doc)) {
         return;
       }
       const dim = pct / 100;
@@ -720,6 +726,169 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
           }
         } catch (e) {}
       }, 1400);
+    } catch (e) {}
+  }
+
+  // NATIVE-DARK stray-band darkener. A native-dark site (its own dark theme, so the
+  // engine does A7 passthrough and #darkenLightPanels bails) sometimes ships an
+  // INCOMPLETE dark theme: a large full-width near-white band it left light —
+  // animatedmachines' white <header>, nasa's white <body>/section bands. It glares
+  // on the dark page and loses to Dark Reader, which darkens everything.
+  //
+  // A7 protects INTENTIONAL light accents on native-dark sites (the YouTube control
+  // pills the owner flagged), so this stays deliberately TIGHT: only LARGE, roughly
+  // FULL-WIDTH, OPAQUE, NEAR-WHITE (L>0.75) solid bands — never the small light
+  // pills/controls A7 guards, never a bg-image (that is #dimLargeMedia's job). The
+  // band's bg-color is overridden to the page's OWN dark surface (child-safe: an
+  // override on the band does not cascade to descendants' colors, which keep the
+  // site's dark-theme values). Runs only on a dark-rendering page the engine is NOT
+  // inverting; inverted pages belong to #darkenLightPanels.
+  #darkenStrayLightBands(win, doc) {
+    try {
+      if (!doc || !doc.body) {
+        return;
+      }
+      const parse = s => GjoaDarkmodeChild.parseComputedColor(s);
+      const lum = c => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+      // Dark-PAGE gate, but NOT #docIsDark: that checks <body> first and nasa ships
+      // an opaque-WHITE body over a BLACK <html> root, so #docIsDark reads it light
+      // and bails — the very stray-band case we exist to fix. Here a page is "dark"
+      // if EITHER the root OR the body renders dark; a genuinely light page (both
+      // light) is still skipped. The white body itself becomes a stray-band candidate.
+      const rootDark = (() => {
+        const c = parse(win.getComputedStyle(doc.documentElement).backgroundColor || "");
+        return c ? lum(c) <= 0.3 : false;
+      })();
+      const bodyC = parse(win.getComputedStyle(doc.body).backgroundColor || "");
+      const bodyDark = bodyC ? lum(bodyC) <= 0.3 : false;
+      if (!rootDark && !bodyDark) {
+        return;
+      }
+      // Only on NATIVE-DARK (engine NOT inverting). A black color probe renders LIGHT
+      // under inversion; inverted docs are #darkenLightPanels' domain.
+      const pr = doc.createElement("span");
+      pr.style.cssText = "color:#000;position:fixed;left:-9999px;top:0";
+      doc.body.appendChild(pr);
+      const cstr = win.getComputedStyle(pr).color;
+      const pc = (cstr.match(/[\d.]+/g) || []).map(Number);
+      pr.remove();
+      const inverting = /okl|lab|lch/i.test(cstr) ? pc[0] > 0.5 : pc[0] + pc[1] + pc[2] > 300;
+      if (inverting) {
+        return;
+      }
+      // Dark target = the page's own dark root/body surface (fallback near-black), so
+      // the darkened band blends with the site's real dark theme.
+      let darkTarget = "rgb(22, 22, 24)";
+      for (const rel of [doc.documentElement, doc.body]) {
+        if (!rel) {
+          continue;
+        }
+        const c = parse(win.getComputedStyle(rel).backgroundColor || "");
+        if (c && lum(c) <= 0.3) {
+          darkTarget = `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+          break;
+        }
+      }
+      // Alpha out of the computed bg-color (opaque-only; a translucent overlay
+      // composites over what is behind it and must not be repainted).
+      const bgAlpha = str => {
+        const mm = str.match(/\/\s*([\d.]+)\s*\)/);
+        if (mm) {
+          return parseFloat(mm[1]);
+        }
+        const rr = str.match(/rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)/i);
+        return rr ? parseFloat(rr[1]) : 1;
+      };
+      const W = win.innerWidth || 0, H = win.innerHeight || 0;
+      let n = this._strayN | 0, scanned = 0;
+      // <body> itself is a candidate: nasa's opaque-white body IS the stray sheet.
+      const candidates = [doc.body, ...doc.body.querySelectorAll("div,section,header,nav,main,article")];
+      for (const el of candidates) {
+        if (++scanned > 4000 || n - (this._strayN | 0) > 40) {
+          break;
+        }
+        if (el.hasAttribute("data-gjoa-stray")) {
+          continue;
+        }
+        const r = el.getBoundingClientRect();
+        // LARGE + roughly FULL-WIDTH + within a couple viewports (bands stream in).
+        if (r.width < 0.55 * W || r.width * r.height < 120000 || r.top > H * 2 || r.bottom < 0) {
+          continue;
+        }
+        let cs;
+        try {
+          cs = win.getComputedStyle(el);
+        } catch (e) {
+          continue;
+        }
+        if (/url\(/i.test(cs.backgroundImage || "")) {
+          continue; // bg-image band -> #dimLargeMedia, not here
+        }
+        const bg = cs.backgroundColor || "";
+        const c = parse(bg);
+        if (!c) {
+          continue;
+        }
+        // Regression-critical gate (unit-tested: stray-band-gate.functional.mjs).
+        // Deliberately TIGHT so proper native-dark themes' small light accents /
+        // dark surfaces are NEVER darkened — only a large, roughly full-width,
+        // opaque, near-white band qualifies.
+        if (!GjoaDarkmodeChild.isStrayLightBand(r.width / (W || 1), r.width * r.height, bgAlpha(bg), lum(c))) {
+          continue;
+        }
+        el.setAttribute("data-gjoa-stray", n++);
+        // The bg-override is child-safe (descendants keep their colors) — but the
+        // band's OWN text was authored DARK for the (now removed) light bg, so it is
+        // now dark-on-dark. Lift the band's dark LEAF text to light (nasa's "Featured
+        // News" heading). Leaf text only — never containers or media — so the safe
+        // no-cascade property holds; capped across the whole doc.
+        try {
+          this._strayTxt = this._strayTxt | 0;
+          if (this._strayTxt < 900) {
+            const TXT = "h1,h2,h3,h4,h5,h6,p,span,a,li,dt,dd,td,th,label,strong,em,small,figcaption,blockquote,cite,time,b,i";
+            for (const t of el.querySelectorAll(TXT)) {
+              if (this._strayTxt >= 900) {
+                break;
+              }
+              if (t.hasAttribute("data-gjoa-stray-txt") || t.hasAttribute("data-gjoa-stray")) {
+                continue;
+              }
+              let tc;
+              try {
+                tc = parse(win.getComputedStyle(t).color || "");
+              } catch (e) {
+                continue;
+              }
+              if (tc && lum(tc) < 0.4) {
+                t.setAttribute("data-gjoa-stray-txt", t.tagName === "A" ? "l" : "n");
+                this._strayTxt++;
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      if (n > (this._strayN | 0)) {
+        let s = doc.getElementById("gjoa-stray-bands");
+        if (!s) {
+          s = doc.createElement("style");
+          s.id = "gjoa-stray-bands";
+          (doc.head || doc.documentElement).appendChild(s);
+        }
+        s.textContent =
+          `[data-gjoa-stray]{background-color:${darkTarget}!important}` +
+          `[data-gjoa-stray-txt="n"]{color:#e6e6e6!important}` +
+          `[data-gjoa-stray-txt="l"]{color:#8ab4f8!important}`;
+        this._strayN = n;
+      }
+      // One delayed re-scan for late/lazy bands (nasa streams sections in).
+      if (!this._reStray) {
+        this._reStray = true;
+        win.setTimeout(() => {
+          try {
+            this.#darkenStrayLightBands(win, doc);
+          } catch (e) {}
+        }, 2500);
+      }
     } catch (e) {}
   }
 
@@ -1358,6 +1527,17 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // made the APCA judge see "dark text" wherever the engine had inverted text
   // LIGHT: exactly the elements the normalizer exists to check (an exempt light
   // image backdrop under engine-lightened text was judged legible and skipped).
+  // Regression-critical gate for #darkenStrayLightBands: does a candidate element
+  // qualify as a stray light BAND worth darkening on a native-dark page? Kept pure
+  // + static so its truth table is unit-tested (stray-band-gate.functional.mjs).
+  // TIGHT by design — only a LARGE (>=120k px²), roughly FULL-WIDTH (>=55% viewport),
+  // OPAQUE (alpha>=0.9), NEAR-WHITE (relative-luminance>=0.75) band. Everything else
+  // (small light pills/controls, translucent glass, narrow accents, already-dark or
+  // mid-tone surfaces) is spared, so proper native-dark themes are never touched.
+  static isStrayLightBand(widthFrac, areaPx, alpha, lum) {
+    return widthFrac >= 0.55 && areaPx >= 120000 && alpha >= 0.9 && lum >= 0.75;
+  }
+
   static parseComputedColor(s) {
     if (!s) {
       return null;
