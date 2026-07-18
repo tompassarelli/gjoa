@@ -51,5 +51,22 @@ if (eStart >= 0 && eEnd > eStart) {
   ok(/\.stopImmediatePropagation e/.test(branch), "Escape stops propagation to FF's window listener");
 }
 
+// --- (3) finish-teardown hides the popover in EVERY mode, not just compact ---
+// The floating palette always showPopover()s the urlbar into the top layer, so a
+// dismiss must hidePopover regardless of mode — else the resting urlbar is left
+// :popover-open, stuck in the top layer over its empty sidebar slot (the visual
+// artifact on exit). Regression guard: finish-teardown must call hidePopover, and
+// that call must NOT be gated behind a compact-mode check (`compact-on`).
+const fStart = bjs.indexOf("finish-teardown (fn []");
+const fEnd = bjs.indexOf("deactivate-floating (fn []", fStart);
+ok(fStart >= 0 && fEnd > fStart, "found finish-teardown");
+if (fStart >= 0 && fEnd > fStart) {
+  const body = bjs.slice(fStart, fEnd);
+  const code = body.replace(/;;[^\n]*/g, ""); // strip beagle comments before matching
+  ok(/\.hidePopover urlbar/.test(code), "finish-teardown hides the popover");
+  ok(!/compact-on/.test(code), "popover-hide is NOT gated on compact mode [the bug]");
+  ok(/breakout-extend/.test(code), "popover-hide still skips a raced click-to-expand (breakout-extend)");
+}
+
 console.log(`\nurlbar-teardown invariants: ${pass} pass, ${fail} fail`);
 process.exit(fail ? 1 : 0);

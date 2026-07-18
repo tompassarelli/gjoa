@@ -29,6 +29,24 @@
           ;; set activated=true + re-added the floating attrs, so tearing down now
           ;; would clobber the fresh activation. Leave it fully armed.
           (when (not (.-activated state))
+            ;; HIDE THE POPOVER FIRST, in EVERY mode (not just compact) — the
+            ;; floating palette ALWAYS showPopover()s the urlbar into the top layer,
+            ;; so a dismiss must take it back OUT or the resting urlbar stays a
+            ;; :popover-open top-layer element hovering over its now-empty sidebar
+            ;; slot: the "visual artifact on exit". (Previously gated on compact-on,
+            ;; so non-compact never released it — verified popoverOpen=true post-
+            ;; teardown.) Do it while the box is still invisible (teardown opacity:0)
+            ;; and BEFORE dropping the floating/teardown attrs, so the urlbar returns
+            ;; to normal in-flow (position:static) and paints its resting state in ONE
+            ;; settled frame. Skip only when a click-to-expand (breakout-extend) raced
+            ;; in — that owns the popover and must not be clobbered.
+            (when (not (bool (has? urlbar "breakout-extend")))
+              (try
+                (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
+                  (.hidePopover urlbar))
+                (rmattr! urlbar "popover")
+                (catch Any e
+                  (log "deactivateFloating:popover-sync-error" {:msg (String e)}))))
             (rmattr! root "gjoa-urlbar-floating")
             (rmattr! root "gjoa-urlbar-intent")
             (rmattr! root "gjoa-urlbar-teardown")
@@ -37,19 +55,7 @@
               (set! (.-backdrop state) nil))
             (when (.-ghost state)
               (.remove (.-ghost state))
-              (set! (.-ghost state) nil))
-
-            (let [compact-vertical (bool (q document "#sidebar-main[data-gjoa-compact]"))
-                  compact-horizontal (has? root "data-gjoa-compact-horizontal")
-                  compact-on (or compact-vertical compact-horizontal)
-                  breakout (bool (has? urlbar "breakout-extend"))]
-              (when (and compact-on (not breakout))
-                (try
-                  (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
-                    (.hidePopover urlbar))
-                  (rmattr! urlbar "popover")
-                  (catch Any e
-                    (log "deactivateFloating:popover-sync-error" {:msg (String e)})))))))
+              (set! (.-ghost state) nil))))
 
         deactivate-floating (fn []
           (when (.-activated state)
