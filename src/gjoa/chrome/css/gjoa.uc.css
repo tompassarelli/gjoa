@@ -944,20 +944,23 @@ Preserve these (security warnings):
 }
 
 /* #149 ATOMIC TEARDOWN: deactivate sets `gjoa-urlbar-teardown` on :root, which
- * FADES the floating bar (and its backdrop) out — opacity 1->0 plus a subtle
- * scale-down that MIRRORS the float-in — and the JS restores the resting geometry
- * only AFTER the fade completes (setTimeout matched to the duration). So the
- * inline-restore reflow back to the in-sidebar urlbar happens entirely behind the
- * now-invisible box: the intermediate "small inline search box flashing in the
- * sidebar" frame is never painted, AND the dismiss reads as a smooth close instead
- * of the abrupt opacity snap that looked janky. Must out-specify the float-in
- * animation + box-shadow rules above (same `[gjoa-urlbar-floating]` prefix + the
- * teardown attr). */
+ * FADES the floating bar (and its backdrop) out — PURE opacity 1->0 — and the JS
+ * restores the resting geometry only AFTER the fade completes (setTimeout matched
+ * to the duration). So the inline-restore reflow back to the in-sidebar urlbar
+ * happens entirely behind the now-invisible box: the intermediate "small inline
+ * search box flashing in the sidebar" frame is never painted, AND the dismiss
+ * reads as a smooth close.
+ *
+ * NO SCALE on teardown (regression fix 2026-07-18): scaling the floating #urlbar
+ * also scales its child .urlbarView-results — a tall panel of suggestion text.
+ * Sub-pixel scale re-rasterizes all that text every frame, so the whole result
+ * list went BLURRY mid-dismiss (the "artifact degradation" the owner saw). A
+ * text panel cross-fades cleanly on opacity alone; drop the scale entirely.
+ * Must out-specify the float-in animation + box-shadow rules above. */
 :root[gjoa-urlbar-floating][gjoa-urlbar-teardown] #urlbar {
   opacity: 0 !important;
-  scale: 0.97 !important;
   animation: none !important;
-  transition: opacity 130ms ease-in, scale 130ms ease-in !important;
+  transition: opacity 130ms ease-in !important;
   pointer-events: none !important;
 }
 :root[gjoa-urlbar-teardown] #gjoa-urlbar-backdrop {

@@ -145,15 +145,32 @@
           (when (and (not (bool (handle-accel e))) (.-activated state))
               (cond
                 (= (.-key e) "Escape")
-                  (setTimeout (fn []
+                  (do
+                    ;; We OWN the floating-palette dismiss. FF's UrlbarController
+                    ;; Escape is a window-level BUBBLE listener that calls
+                    ;; view.close() synchronously — with results showing that
+                    ;; snaps the tall suggestion list shut BEFORE our fade even
+                    ;; starts (the visible teardown jank). Our handler is
+                    ;; capture-phase on #urlbar, so it runs first; stop the event
+                    ;; here and FF never closes the view — the whole palette
+                    ;; (input + results) fades as ONE unit.
+                    (.preventDefault e)
+                    (.stopImmediatePropagation e)
                     (deactivate-floating)
-                    (try
-                      (let [a (.-activeElement document)]
-                        (when (or (= a urlbar) (and a (.contains urlbar a)))
-                          (some-> window .-gBrowser .-selectedBrowser .focus)))
-                      (catch Any err
-                        (log "escape:focus-content-error" {:msg (String err)}))))
-                    0)
+                    ;; Close the view + return focus to content AFTER the fade is
+                    ;; visually done (opacity 0 by ~130ms) but BEFORE finish-teardown
+                    ;; restores the resting geometry (150ms) — so the results
+                    ;; neither snap early nor flash at the in-sidebar position. All
+                    ;; of this happens behind opacity 0, invisibly.
+                    (setTimeout (fn []
+                      (try
+                        (some-> window .-gURLBar .-view .close)
+                        (let [a (.-activeElement document)]
+                          (when (or (= a urlbar) (and a (.contains urlbar a)))
+                            (some-> window .-gBrowser .-selectedBrowser .focus)))
+                        (catch Any err
+                          (log "escape:teardown-error" {:msg (String err)}))))
+                      135))
 
                 (= (.-key e) "Enter")
                   (do
