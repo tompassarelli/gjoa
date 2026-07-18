@@ -8,6 +8,19 @@
 
 (declare-extern [gBrowser] Any)
 
+;; PURE collapse-decision helper (functional-tested: collapse-flags.functional.mjs).
+;; Given the AUTHORITATIVE launcher state + compact/hover, decide the two flags
+;; that drive the collapsed favicon-rail: `iconsOnly` hides labels & shrinks the
+;; strip; `sidebarCollapsed` stamps the doc-level collapsed layout. Kept pure and
+;; keyed on `launcher-expanded` (FF's `sidebar-launcher-expanded`) — NOT the
+;; toolbox's live parent, which lags the collapse (a separate module reparents it)
+;; and caused the half-width labelled-rail regression (#collapse-width). The
+;; invariant it locks: launcher collapsed (and not a compact reveal) ⇒ iconsOnly.
+(js/export (defn collapse-flags [launcher-expanded :- Bool compact :- Bool hover :- Bool] :- Any
+  (let [compact-revealed (and compact hover)]
+    {:iconsOnly (and (not launcher-expanded) (not compact-revealed))
+     :sidebarCollapsed (or (not launcher-expanded) compact)})))
+
 (js/export (defn make-layout! [deps :- Any] :- Any
   (let [sidebar-main (.-sidebarMain deps)
         rows (.-rows deps)
@@ -109,14 +122,26 @@
                 (set! (.-toolboxResizeObs priv) nil))
 
               (let [toolbox (by-id "navigator-toolbox")
-                    toolbox-in-sidebar (and toolbox (= (.-parentNode toolbox) sidebar-main))]
+                    toolbox-in-sidebar (and toolbox (= (.-parentNode toolbox) sidebar-main))
+                    ;; The AUTHORITATIVE collapsed signal is FF's own
+                    ;; `sidebar-launcher-expanded` attribute — NOT the toolbox's
+                    ;; parent. The toolbox is reparented in/out of the sidebar by
+                    ;; a SEPARATE module (drawer/layout.bjs collapse/expand)
+                    ;; reacting to the SAME attribute, so `toolbox-in-sidebar`
+                    ;; LAGS during the collapse (worsened by FF's launcher
+                    ;; animation): positionPanel could read toolbox-still-in and
+                    ;; wrongly skip icons-only, leaving a half-width labelled rail
+                    ;; instead of the favicon strip (#collapse-width regression).
+                    ;; Decide icons-only/collapsed off the settled attribute; keep
+                    ;; toolbox-in-sidebar only for the physical panel arrangement.
+                    launcher-expanded (has? sidebar-main "sidebar-launcher-expanded")]
 
                 (if vertical
-                  (let [sidebar-collapsed (or (not toolbox-in-sidebar)
-                                              (has? sidebar-main "data-gjoa-compact"))
-                        compact-revealed (and (has? sidebar-main "data-gjoa-compact")
+                  (let [flags (collapse-flags launcher-expanded
+                                              (has? sidebar-main "data-gjoa-compact")
                                               (has? sidebar-main "gjoa-has-hover"))
-                        icons-only (and (not toolbox-in-sidebar) (not compact-revealed))]
+                        sidebar-collapsed (.-sidebarCollapsed flags)
+                        icons-only (.-iconsOnly flags)]
                     (toggle! (.-panel state) "gjoa-icons-only" icons-only)
                     (when (.-pinnedContainer state)
                       (toggle! (.-pinnedContainer state) "gjoa-icons-only" icons-only))
