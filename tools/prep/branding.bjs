@@ -213,11 +213,11 @@
           mm-match (.match ver (RegExp. "^(\\d+\\.\\d+)"))
           mm (if mm-match (aget mm-match 1) ver)
           ua (str "Mozilla/5.0 (X11; Linux x86_64; rv:" mm ") Gecko/20100101 Firefox/" mm)
-          branding-pref-file (join target "pref" "firefox-branding.js")]
-      (when (existsSync branding-pref-file)
-        (let [existing (readFileSync branding-pref-file "utf8")]
+          ua-pref-file (join target "pref" "firefox-branding.js")]
+      (when (existsSync ua-pref-file)
+        (let [existing (readFileSync ua-pref-file "utf8")]
           (when (not (.includes existing "general.useragent.override"))
-            (writeFileSync branding-pref-file
+            (writeFileSync ua-pref-file
               (str existing
                    "\n// gjoa UA compat: present as Firefox so UA-sniffing sites recognise the\n"
                    "// engine; branding stays Gjoa everywhere else (tools/prep/branding.bjs).\n"
