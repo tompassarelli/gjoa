@@ -1,6 +1,6 @@
 #lang beagle/js
 (ns gjoa.drawer.urlbar
-  (:require [gjoa.macros :refer [q html-new attr! on! onc! offc! off! bool has? rmattr!]]
+  (:require [gjoa.macros :refer [q html-new attr! on! onc! offc! off! bool has? rmattr! css!]]
             [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
@@ -89,39 +89,49 @@
                   ;; collapse the slot / look like the bar "flew out" — the resting
                   ;; bar visually STAYS put. Capture the resting box FIRST, before
                   ;; the floating attr takes it position:fixed.
-                  ;; The ghost is a FROZEN CLONE of the whole resting urlbar (identity
-                  ;; shield + the placeholder input), not a bare box — so the sidebar
-                  ;; slot keeps reading as the real, still urlbar while the palette is
-                  ;; open (owner: "should still show identity icon + placeholder …
-                  ;; treated as frozen"). Cloned BEFORE the floating attr makes the
-                  ;; real one position:fixed, so it captures the true resting look.
-                  ;; Descendant ids are stripped so the clone can never shadow the real
-                  ;; urlbar's elements (getElementById returns the first match), and it
-                  ;; is made inert (aria-hidden, no pointer events, no focused/open
-                  ;; state) so it is purely decorative.
+                  ;; Leave a static look-alike (#gjoa-urlbar-ghost) in the resting slot
+                  ;; so the real urlbar lifting to the palette doesn't leave an empty
+                  ;; box — the slot reads as the still urlbar (owner: "should still show
+                  ;; identity icon + placeholder … frozen"). NOT a cloneNode of #urlbar:
+                  ;; the input lives in a shadow root, which cloneNode does NOT copy, so
+                  ;; a clone renders as a hollow box with the placeholder spilling out.
+                  ;; Instead build a plain styled div — shield glyph + placeholder text —
+                  ;; sized/bordered to match the resting bar. Captured BEFORE the floating
+                  ;; attr so the box metrics are the true resting ones.
                   (when (not (.-ghost state))
                     (let [parent (.-parentNode urlbar)]
                       (when parent
                         (let [rect (.getBoundingClientRect urlbar)
-                              g (.cloneNode urlbar true)]
+                              cs (.getComputedStyle window urlbar)
+                              g (html-new "div")
+                              icon (html-new "div")
+                              txt (html-new "div")
+                              ph (or (some-> window .-gURLBar .-inputField .-placeholder)
+                                     "Search with Google or enter address")
+                              ;; Shield rendered via a CSS mask (data-URI SVG) — NOT
+                              ;; innerHTML: setting innerHTML with an inline <svg> throws
+                              ;; in the chrome XHTML document, which aborted ghost
+                              ;; creation entirely (empty slot + placeholder spilling).
+                              shield (str "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'"
+                                          " viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.3'"
+                                          " stroke-linejoin='round'%3E%3Cpath d='M8 1.6 13 3.6 V8 C13 11 8 14.4"
+                                          " 8 14.4 8 14.4 3 11 3 8 V3.6 Z'/%3E%3C/svg%3E")]
                           (set! (.-id g) "gjoa-urlbar-ghost")
-                          (.forEach (Array/from (.querySelectorAll g "[id]"))
-                                    #(rmattr! % "id"))
                           (attr! g "aria-hidden" "true")
-                          (rmattr! g "focused")
-                          (rmattr! g "open")
-                          (rmattr! g "popover")
-                          (set! (.-pointerEvents (.-style g)) "none")
-                          (set! (.-width (.-style g)) (str (.-width rect) "px"))
-                          ;; The placeholder is a JS-set property on the live input, not
-                          ;; a cloned attribute, so carry it over explicitly (and blank
-                          ;; the value) so the frozen slot reads "Search with Google or
-                          ;; enter address" like the resting bar, not an empty box.
-                          (let [gi (.querySelector g "input, .urlbar-input, moz-input-box")
-                                ph (some-> window .-gURLBar .-inputField .-placeholder)]
-                            (when (and gi ph)
-                              (attr! gi "placeholder" ph)
-                              (try (set! (.-value gi) "") (catch Any _e nil))))
+                          (css! g (str "display:flex;align-items:center;gap:8px;box-sizing:border-box;"
+                                       "width:" (.-width rect) "px;height:" (.-height rect) "px;"
+                                       "padding-inline:12px;pointer-events:none;overflow:hidden;"
+                                       "white-space:nowrap;"
+                                       "border:" (.-border cs) ";border-radius:" (.-borderRadius cs) ";"
+                                       "background:" (.-backgroundColor cs) ";"
+                                       "font:" (.-font cs) ";color:" (.-color cs) ";"))
+                          (css! icon (str "flex:0 0 16px;width:16px;height:16px;opacity:.75;"
+                                          "background-color:currentColor;"
+                                          "mask:url(\"" shield "\") center/contain no-repeat;"
+                                          "-webkit-mask:url(\"" shield "\") center/contain no-repeat;"))
+                          (set! (.-textContent txt) ph)
+                          (css! txt (str "flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;opacity:.55;"))
+                          (.append g icon txt)
                           (.appendChild parent g)
                           (set! (.-ghost state) g)))))
                   (attr! root "gjoa-urlbar-floating" "")

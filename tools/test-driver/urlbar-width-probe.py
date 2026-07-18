@@ -12,17 +12,21 @@ cs = import_module("chrome-shoot")
 MEAS = r"""
   const u=document.getElementById('urlbar'); const rc=u.getBoundingClientRect();
   const g=document.getElementById('gjoa-urlbar-ghost');
-  const gInput = g ? g.querySelector('input,.urlbar-input,[anonid=input],moz-input-box') : null;
-  const gIdentity = g ? g.querySelector('[class*=identity],[class*=tracking-protection],.urlbar-input-box>*, image, .toolbarbutton-icon') : null;
+  const gr = g ? g.getBoundingClientRect() : null;
+  const icon = g ? g.firstElementChild : null;
+  const txt  = g ? g.lastElementChild : null;
+  const iconMasked = icon ? (getComputedStyle(icon).maskImage!=='none' || getComputedStyle(icon).webkitMaskImage!=='none') : false;
+  // the placeholder text must sit INSIDE the ghost box (not spill below it)
+  const txtRc = txt ? txt.getBoundingClientRect() : null;
+  const txtInsideBox = (gr && txtRc) ? (txtRc.top >= gr.top-2 && txtRc.bottom <= gr.bottom+2) : false;
   return JSON.stringify({iw:window.innerWidth, expectW:Math.min(860,window.innerWidth-40),
     urlbarW:Math.round(rc.width), urlbarLeft:Math.round(rc.left),
     popoverOpen:u.matches(':popover-open'),
     floating:document.documentElement.hasAttribute('gjoa-urlbar-floating'),
     ghost: !!g,
-    ghostChildCount: g ? g.querySelectorAll('*').length : 0,
-    ghostHasInput: !!gInput,
-    ghostPlaceholder: gInput ? (gInput.getAttribute('placeholder')||gInput.placeholder||null) : null,
-    ghostHasIdentity: !!gIdentity});
+    ghostHasIdentity: iconMasked,
+    ghostPlaceholder: (txt && txt!==icon) ? txt.textContent : null,
+    ghostTextInsideBox: txtInsideBox});
 """
 SUMMON = "document.dispatchEvent(new CustomEvent('gjoa-urlbar-activate',{detail:{intent:'current'}}));try{window.focus();gURLBar.focus();}catch(e){} return 'ok';"
 DISMISS = "document.dispatchEvent(new CustomEvent('gjoa-urlbar-deactivate')); return 'ok';"
@@ -50,8 +54,9 @@ def main():
       "fresh_popover": f["popoverOpen"] is True,
       "resummon_full_width": p["urlbarW"] >= 0.90*exp,      # regression: re-summon must also expand
       "resummon_popover": p["popoverOpen"] is True,
-      "ghost_frozen_urlbar": f["ghost"] is True and f["ghostHasInput"] is True and f["ghostHasIdentity"] is True,
+      "ghost_has_identity_icon": f["ghost"] is True and f["ghostHasIdentity"] is True,
       "ghost_shows_placeholder": bool(f["ghostPlaceholder"]),
+      "ghost_text_inside_box": f["ghostTextInsideBox"] is True,   # regression: text must NOT spill below the box
     }
     print(json.dumps(out,indent=1)); m.quit()
     bad=[k for k,v in out["checks"].items() if not v]
