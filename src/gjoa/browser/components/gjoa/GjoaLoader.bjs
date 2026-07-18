@@ -281,10 +281,16 @@
     (catch Any e
       (console/error "gjoa-loader: registerWindowActor failed" e))))
 
-;; Registers the per-site dark-mode HYBRID actor. Top documents only (subframes
-;; inherit the top BrowsingContext's colorInversionOverride); the child measures
-;; the rendered background after first paint and sets the per-document inversion
-;; override for sites with no native dark theme.
+;; Registers the per-site dark-mode HYBRID actor. On the TOP document the child
+;; measures the rendered background after first paint and sets the per-document
+;; colorInversionOverride for sites with no native dark theme. allFrames so it ALSO
+;; runs in subframes — NOT to set a per-subframe override (colorInversionOverride is
+;; a top-BC-only field: CanSet=IsTop), but because the engine derives a subframe's
+;; inversion from bc->Top()'s override, so on a native-dark top (Top()=inactive) a
+;; cross-origin light widget — OneTrust consent, Google One Tap, chat/ad iframes — is
+;; force-left white with no engine invert to refine. The child's subframe branch
+;; CSS-darkens exactly that suppressed case (gated on the engine NOT already
+;; inverting the subframe, so themeless/force tops are untouched).
 (defn register-darkmode-actor [] :- Any
   (try
     (.registerWindowActor ChromeUtils "GjoaDarkmode"
@@ -294,7 +300,7 @@
                         ;; document-start: run per-site inject scriptlets (e.g.
                         ;; YouTube html[dark]) before the page reads its theme.
                         :DOMWindowCreated {:mozSystemGroup true}}}
-       :allFrames false
+       :allFrames true
        :messageManagerGroups ["browsers"]})
     (console/log "gjoa-loader: registered GjoaDarkmode window actor")
     (catch Any e

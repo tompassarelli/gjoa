@@ -48,7 +48,32 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
 
   async handleEvent(event) {
     if (this.browsingContext !== this.browsingContext.top) {
-      return; // subframes inherit the top document's decision (bc->Top())
+      // Subframe branch. A subframe CANNOT set its own colorInversionOverride
+      // (that field is top-BC-only: CanSet=IsTop), and the engine derives a
+      // subframe's inversion from bc->Top()'s override (nsPresContext
+      // UpdateColorInversion). So on a NATIVE-DARK top — whose actor pins
+      // Top()=inactive to hold its own dark theme — that inactive value force-
+      // suppresses every subframe's own hybrid invert: a cross-origin white
+      // widget (OneTrust consent, Google One Tap, chat/ad iframes) then stays
+      // glaring white (measured). We can't give the subframe an engine invert,
+      // so darken it in CSS. GATED on the engine NOT already inverting this
+      // subframe, which is exactly the suppressed case — a themeless/force top
+      // already inverts subframes (Top()=none/active), so this no-ops there and
+      // cannot double-invert. DOMContentLoaded only; DOMWindowCreated in a
+      // subframe would just hit the top-only override writes below and throw.
+      if (event.type !== "DOMContentLoaded") {
+        return;
+      }
+      if (!Services.prefs.getBoolPref("gjoa.darkmode.enabled", true)) {
+        return;
+      }
+      const sw = this.contentWindow;
+      if (sw) {
+        sw.requestAnimationFrame(() =>
+          sw.requestAnimationFrame(() => this.#maybeDarkenSuppressedSubframe())
+        );
+      }
+      return;
     }
     // Master gate: when dark mode is fully disabled the actor does NOTHING — no
     // per-page colorInversionOverride write, no curated-override IPC, no refiner.
@@ -941,6 +966,103 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       s.id = "gjoa-dark-scrollbars";
       s.textContent = "*{scrollbar-color:#6b6b6b #1e1e1e !important}";
       (doc.head || doc.documentElement).appendChild(s);
+    } catch (e) {}
+  }
+
+  // SUBFRAME-only darkener for the native-dark-top suppression class. The engine
+  // reads a subframe's inversion from bc->Top()'s colorInversionOverride
+  // (nsPresContext), and that field is TOP-only (CanSet=IsTop) — a subframe can
+  // never invert itself. So a cross-origin light widget under a native-dark top
+  // (Top()=inactive) is force-left light by the engine and gets NO engine invert
+  // to refine. Since we can't reach the servo inverter here, apply Dark Reader's
+  // filter-mode fallback: filter-invert the subframe root (white->near-black,
+  // text->light), counter-inverting replaced media so photos stay positive. Runs
+  // ONLY when the engine is NOT inverting this subframe (the suppressed case) AND
+  // it renders light/transparent — so a themeless/force top (already inverting its
+  // subframes) and a widget with its OWN dark theme are both left untouched.
+  // Idempotent (id'd sheet); a couple of staggered re-checks catch late-injected
+  // banners (OneTrust) that paint white after their own DOMContentLoaded.
+  #maybeDarkenSuppressedSubframe() {
+    try {
+      const win = this.contentWindow;
+      const doc = this.document;
+      if (!win || !doc || !doc.documentElement) {
+        return;
+      }
+      const url = doc.documentURI || "";
+      if (!/^https?:/.test(url)) {
+        return; // about:blank / data: / chrome — not a web widget
+      }
+      // Size/visibility gate: skip tracker pixels and hidden/zero-area frames.
+      const vw = win.innerWidth | 0, vh = win.innerHeight | 0;
+      if (vw < 60 || vh < 40) {
+        return;
+      }
+      const apply = () => {
+        try {
+          if (!doc.body || !doc.documentElement) {
+            return false;
+          }
+          // Engine inverting this subframe already (themeless/force top, or a
+          // same-origin subframe inheriting Top()=active)? Then leave it — this is
+          // the double-invert guard: we only ever act on a NON-inverted subframe.
+          if (this.#engineInvertingNow(win, doc)) {
+            return true; // settled: engine owns it, stop re-checking
+          }
+          // Does the subframe render dark on its OWN? A widget with an opaque dark
+          // root/body authored its own dark theme — leave it. Otherwise (opaque
+          // light, or transparent-root relying on the canvas) it reads light and is
+          // the suppressed-white class we exist to darken.
+          const parse = s => GjoaDarkmodeChild.parseComputedColor(s);
+          const lum = c => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+          const alphaOf = str => {
+            if (!str || str === "transparent") {
+              return 0;
+            }
+            const m = str.match(/^rgba?\(([^)]*)\)/i);
+            if (!m) {
+              return 1; // opaque named/oklch surface
+            }
+            const parts = m[1].split(/[,/\s]+/).filter(Boolean);
+            return parts.length >= 4 ? parseFloat(parts[3]) : 1;
+          };
+          let authoredDark = false;
+          for (const rel of [doc.documentElement, doc.body]) {
+            let cstr = "";
+            try { cstr = win.getComputedStyle(rel).backgroundColor || ""; } catch (e) {}
+            const c = parse(cstr);
+            if (c && alphaOf(cstr) >= 0.5 && lum(c) <= 0.3) {
+              authoredDark = true;
+              break;
+            }
+          }
+          if (authoredDark) {
+            return true; // widget's own dark theme — done, stop re-checking
+          }
+          if (!doc.getElementById("gjoa-subframe-darken")) {
+            const s = doc.createElement("style");
+            s.id = "gjoa-subframe-darken";
+            // Root filter-invert + opaque backdrop so transparent-root widgets get a
+            // dark fill after inversion; replaced media counter-inverted to stay
+            // positive. Nested iframes are left to their OWN subframe pass.
+            s.textContent =
+              "html{filter:invert(1) hue-rotate(180deg)!important;background:#fff!important}" +
+              "img,video,canvas,picture,svg image{filter:invert(1) hue-rotate(180deg)!important}";
+            (doc.head || doc.documentElement).appendChild(s);
+          }
+          return false; // applied; keep the short re-check window open for late paint
+        } catch (e) {
+          return true;
+        }
+      };
+      if (apply()) {
+        return;
+      }
+      // Late-injected consent banners paint white after their DCL — re-check a
+      // couple of times (verdicts are cheap; the sheet write is idempotent).
+      for (const delay of [900, 2200]) {
+        win.setTimeout(() => { try { apply(); } catch (e) {} }, delay);
+      }
     } catch (e) {}
   }
 
