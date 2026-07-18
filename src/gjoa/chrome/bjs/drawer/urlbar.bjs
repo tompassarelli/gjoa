@@ -89,17 +89,39 @@
                   ;; collapse the slot / look like the bar "flew out" — the resting
                   ;; bar visually STAYS put. Capture the resting box FIRST, before
                   ;; the floating attr takes it position:fixed.
+                  ;; The ghost is a FROZEN CLONE of the whole resting urlbar (identity
+                  ;; shield + the placeholder input), not a bare box — so the sidebar
+                  ;; slot keeps reading as the real, still urlbar while the palette is
+                  ;; open (owner: "should still show identity icon + placeholder …
+                  ;; treated as frozen"). Cloned BEFORE the floating attr makes the
+                  ;; real one position:fixed, so it captures the true resting look.
+                  ;; Descendant ids are stripped so the clone can never shadow the real
+                  ;; urlbar's elements (getElementById returns the first match), and it
+                  ;; is made inert (aria-hidden, no pointer events, no focused/open
+                  ;; state) so it is purely decorative.
                   (when (not (.-ghost state))
                     (let [parent (.-parentNode urlbar)]
                       (when parent
                         (let [rect (.getBoundingClientRect urlbar)
-                              cs (.getComputedStyle window urlbar)
-                              g (html-new "div")]
+                              g (.cloneNode urlbar true)]
                           (set! (.-id g) "gjoa-urlbar-ghost")
-                          (set! (.-textContent g) (or (some-> window .-gURLBar .-value) ""))
+                          (.forEach (Array/from (.querySelectorAll g "[id]"))
+                                    #(rmattr! % "id"))
+                          (attr! g "aria-hidden" "true")
+                          (rmattr! g "focused")
+                          (rmattr! g "open")
+                          (rmattr! g "popover")
+                          (set! (.-pointerEvents (.-style g)) "none")
                           (set! (.-width (.-style g)) (str (.-width rect) "px"))
-                          (set! (.-height (.-style g)) (str (.-height rect) "px"))
-                          (set! (.-borderRadius (.-style g)) (.-borderRadius cs))
+                          ;; The placeholder is a JS-set property on the live input, not
+                          ;; a cloned attribute, so carry it over explicitly (and blank
+                          ;; the value) so the frozen slot reads "Search with Google or
+                          ;; enter address" like the resting bar, not an empty box.
+                          (let [gi (.querySelector g "input, .urlbar-input, moz-input-box")
+                                ph (some-> window .-gURLBar .-inputField .-placeholder)]
+                            (when (and gi ph)
+                              (attr! gi "placeholder" ph)
+                              (try (set! (.-value gi) "") (catch Any _e nil))))
                           (.appendChild parent g)
                           (set! (.-ghost state) g)))))
                   (attr! root "gjoa-urlbar-floating" "")
