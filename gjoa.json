@@ -8,8 +8,8 @@
   "license": "MPL-2.0",
   "github": "tompassarelli/gjoa",
   "firefox": {
-    "version": "152.0.1",
-    "candidate": "152.0.1",
+    "version": "152.0.6",
+    "candidate": "152.0.6",
     "candidateBuild": 1
   },
   "branding": {

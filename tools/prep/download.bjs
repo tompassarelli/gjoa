@@ -125,10 +125,29 @@
             (let [ver (.spawnSync Bun ["gpg" "--no-default-keyring" "--keyring" kr
                                        "--status-fd" "1" "--verify" ascPath sumsPath]
                                   {:stdout "pipe" :stderr "ignore"})
-                  out (.toString (.-stdout ver))]
-              (when-not (.includes out (str "VALIDSIG " MOZILLA-SIGNING-FPR))
+                  out (.toString (.-stdout ver))
+                  ;; gpg VALIDSIG line fields:
+                  ;;   VALIDSIG <signing-key-fpr> <date> <sig-ts> <expire-ts> <ver>
+                  ;;            <reserved> <pk-algo> <hash-algo> <sig-class> <PRIMARY-KEY-FPR>
+                  ;; Mozilla signs SHA256SUMS.asc with a ROTATING SUBKEY, so the FIRST
+                  ;; field is the subkey fpr while the LAST field is the primary-key fpr
+                  ;; gpg resolved. We pin to the PRIMARY key (the durable trust anchor
+                  ;; that survives subkey rotation), so assert a VALIDSIG line whose
+                  ;; primary-key-fpr field == our pinned fingerprint. (A direct
+                  ;; primary-key signature repeats the primary as both fields, so this
+                  ;; also covers that case — strictly more correct than matching the
+                  ;; first field, which only held while Mozilla signed with the primary.)
+                  ;; --status-fd lines are prefixed "[GNUPG:] ", so match on `includes`
+                  ;; not `startsWith`; the primary-key-fpr is still the LAST field.
+                  valid (.some (.split out "\n")
+                          (fn [line :- String]
+                            (and (.includes line "VALIDSIG ")
+                                 (let [f (.split (.trim line) (RegExp. "\\s+"))]
+                                   (= (aget f (- (.-length f) 1)) MOZILLA-SIGNING-FPR)))))]
+              (when-not valid
                 (throw (Error. (str "SHA256SUMS.asc not signed by pinned Mozilla key "
-                                    MOZILLA-SIGNING-FPR "\n  gpg --status output:\n" out))))
+                                    MOZILLA-SIGNING-FPR " (no VALIDSIG line whose primary-key fpr matches)"
+                                    "\n  gpg --status output:\n" out))))
               (.ok log (str "SHA256SUMS.asc GPG-verified against pinned Mozilla key " MOZILLA-SIGNING-FPR))
               true))))))))
 
