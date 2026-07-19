@@ -1327,6 +1327,17 @@
                       (set! (.-textContent label) original)
                       (attr! label "contenteditable" "plaintext-only")
                       (.add (.-classList label) "gjoa-renaming")
+                      ;; RENAME GUARD (2026-07-20): mark rename active so the two
+                      ;; capture-phase vim keydown handlers bail for the WHOLE duration.
+                      ;; They gate on document.activeElement being editable, but focusing
+                      ;; an HTML contenteditable span INSIDE the XUL panel leaves
+                      ;; document.activeElement reading as the panel at handler-entry for a
+                      ;; frame — so the "printable key while panel-focused → leave panel to
+                      ;; content" path fired on the first letter, yanked focus to the page,
+                      ;; and tore the rename down (owner: "rename activates but I can't type").
+                      ;; A state flag is immune to that focus-read race. Enter/Escape are
+                      ;; still handled by the label's own keydown below.
+                      (set! (.-renaming vs) true)
                       (.removeProperty (.-style label) "overflow")
                       (.removeProperty (.-style label) "text-overflow")
                       (.focus label)
@@ -1343,6 +1354,7 @@
                                        (let [value (.trim (or (.-textContent label) ""))]
                                          (rmattr! label "contenteditable")
                                          (.remove (.-classList label) "gjoa-renaming")
+                                         (set! (.-renaming vs) false)
                                          (when (and (.-getSelection window) (.getSelection window))
                                            (.removeAllRanges (.getSelection window)))
                                          (when commit
@@ -1806,6 +1818,7 @@
             (fn [e]
               (let [a (.-activeElement document)]
                 (when (and (not (.isActive picker))
+                           (not (.-renaming vs))
                            (not (is-privileged-uri))
                            (not (.contentInputFocused contentFocus))
                            (not (current-host-blacklisted))
@@ -1859,7 +1872,7 @@
           (attr! (.-panel state) "tabindex" "0")
           (onc! document "keydown"
             (fn [e]
-              (when (and (not (.isActive picker)) (.-panel-active vs))
+              (when (and (not (.isActive picker)) (.-panel-active vs) (not (.-renaming vs)))
                 (let [active (.-activeElement document)]
                     (if (and active (not= active (.-panel state))
                              (or (= (.-tagName active) "INPUT") (= (.-tagName active) "input")
