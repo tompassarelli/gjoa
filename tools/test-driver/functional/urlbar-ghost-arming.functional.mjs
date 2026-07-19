@@ -29,22 +29,30 @@ const css = readFileSync(join(root, "src/gjoa/chrome/css/gjoa.uc.css"), "utf8");
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.log("FAIL:", msg); } };
 
-// --- BUG 2: ghost derives from the real urlbar's live layout ---
+// --- BUG 2: ghost FREEZES the resting bar exactly (value text + every leading icon) ---
 ok(/\.urlbar-input-container/.test(bjs),
-   "ghost reads the real .urlbar-input-container to find the leading icon");
-ok(/\.urlbar-input\b/.test(bjs) || /-inputField/.test(bjs),
-   "ghost measures the real .urlbar-input (or inputField) for the text start-x");
-// text-x + icon-x come from getBoundingClientRect deltas, not a hardcoded padding
-ok(/text-left/.test(bjs) && /icon-left/.test(bjs),
-   "ghost positions text + icon from measured offsets (text-left / icon-left)");
-ok(/getBoundingClientRect/.test(bjs),
-   "ghost derives offsets from live getBoundingClientRect");
-// glyph is copied from the real icon's computed image (list-style-image / background)
+   "ghost reads the real .urlbar-input-container to reproduce the leading icons");
+ok(/-inputField/.test(bjs) || /\.urlbar-input\b/.test(bjs),
+   "ghost measures the real .urlbar-input (inputField) for the text start-x");
+// TEXT = the real resting value (gURLBar.value), placeholder ONLY when empty —
+// not always the placeholder (the owner saw 'Search…' where the URL should be).
+ok(/\.-value/.test(bjs) && /has-value\?/.test(bjs),
+   "ghost text = the real resting gURLBar.value (placeholder only when the bar is empty)");
+// EVERY visible leading icon reproduced (not one hand-drawn shield): iterate leading + glyph-of
+ok(/glyph-of/.test(bjs) && /\bleading\b/.test(bjs) && /doseq/.test(bjs),
+   "ghost reproduces EVERY visible leading icon (iterates leading via glyph-of)");
+ok(/input-left/.test(bjs) && /getBoundingClientRect/.test(bjs),
+   "ghost positions text + icons from live getBoundingClientRect offsets");
+// glyph copied from iconsrc (moz-button switcher) / <img src> / list-style / background
+ok(/iconsrc/.test(bjs),
+   "ghost honours the moz-button `iconsrc` attr (search-mode switcher's shadow glyph)");
+ok(/shadowRoot/.test(bjs),
+   "ghost pierces the open shadow root for icons rendered there");
 ok(/listStyleImage/.test(bjs) && /backgroundImage/.test(bjs),
-   "ghost copies the real leading-icon glyph (listStyleImage / backgroundImage)");
+   "ghost copies computed list-style / background glyphs too");
 ok(/-moz-context-properties\s*:\s*fill/.test(bjs),
    "ghost tints copied chrome SVG glyphs via -moz-context-properties: fill");
-// the old hardcoded ghost shape must be gone (guessed padding + flex text)
+// the old hardcoded ghost shape must be gone (guessed padding + single flex text)
 ok(!/padding-inline:12px/.test(bjs),
    "ghost no longer uses the old hardcoded padding-inline:12px (the 52px-off form)");
 ok(!/flex:1 1 auto/.test(bjs),

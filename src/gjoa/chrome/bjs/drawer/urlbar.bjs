@@ -145,19 +145,22 @@
                         (let [rect (.getBoundingClientRect urlbar)
                               cs (.getComputedStyle window urlbar)
                               g (html-new "div")
-                              icon (html-new "div")
                               txt (html-new "div")
                               ph (or (some-> window .-gURLBar .-inputField .-placeholder)
                                      "Search with Google or enter address")
-                              ;; #150b (2026-07-19): the ghost is what the user SEES in the
-                              ;; resting slot the instant the real urlbar lifts to float, so
-                              ;; it must pixel-match the resting bar or the swap reads as a
-                              ;; jump ("icon isn't the same / text shifts"). Derive icon glyph
-                              ;; + icon-x + text-x from the REAL urlbar's LIVE layout (not a
-                              ;; hand-drawn shield at a guessed padding — that measured 52px
-                              ;; off the real text start, and drew a plain shield where the
-                              ;; real bar shows the identity/tracking icon). Self-corrects per
-                              ;; page/site since it reads whatever the resting bar renders now.
+                              ;; #150c (2026-07-20): FREEZE the resting bar EXACTLY. The ghost
+                              ;; fills the slot the instant the real urlbar lifts to float, so
+                              ;; ANY difference reads as a swap. Two things the owner still saw
+                              ;; wrong: (1) it showed the PLACEHOLDER instead of the loaded
+                              ;; page's URL, and (2) it drew ONE plain shield where the resting
+                              ;; bar shows several icons (search-mode switcher + trust/identity).
+                              ;; Fix: text = the REAL resting value (gURLBar.value; placeholder
+                              ;; only when the bar is truly empty), and reproduce EVERY visible
+                              ;; leading icon at its real x by copying its rendered glyph —
+                              ;; piercing shadow roots + honouring <img src> (the moz-button
+                              ;; switcher renders its glyph in a shadow root, so light-DOM-only
+                              ;; copying missed it, and cloneNode drops custom elements + un-hides
+                              ;; state-hidden buttons; both verified in cage).
                               container (or (.querySelector urlbar ".urlbar-input-container") urlbar)
                               visible? (fn [el]
                                          (let [r (.getBoundingClientRect el)
@@ -165,55 +168,90 @@
                                            (and (> (.-width r) 0) (> (.-height r) 0)
                                                 (not= (.-display c) "none")
                                                 (not= (.-visibility c) "hidden"))))
-                              icon-el (.find (.from Array (.querySelectorAll container "*"))
-                                        (fn [el]
-                                          (and (visible? el)
-                                               (let [r (.getBoundingClientRect el)
-                                                     c (.getComputedStyle window el)]
-                                                 (and (<= (.-width r) 28)
-                                                      (or (not= (.-listStyleImage c) "none")
-                                                          (not= (.-backgroundImage c) "none")))))))
-                              icon-cs (when icon-el (.getComputedStyle window icon-el))
-                              icon-left (if icon-el
-                                          (- (.-left (.getBoundingClientRect icon-el)) (.-left rect))
-                                          8)
-                              icon-img (when icon-cs
-                                         (if (not= (.-listStyleImage icon-cs) "none")
-                                           (.-listStyleImage icon-cs)
-                                           (if (not= (.-backgroundImage icon-cs) "none")
-                                             (.-backgroundImage icon-cs) nil)))
-                              input-el (or (.querySelector urlbar ".urlbar-input")
-                                           (some-> window .-gURLBar .-inputField))
-                              text-left (if input-el
-                                          (- (.-left (.getBoundingClientRect input-el)) (.-left rect))
-                                          36)
-                              ;; fallback shield (rendered via CSS mask, NOT innerHTML — an
-                              ;; inline <svg> string throws in the chrome XHTML doc) for the
-                              ;; rare case no leading icon is found.
-                              shield (str "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'"
-                                          " viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.3'"
-                                          " stroke-linejoin='round'%3E%3Cpath d='M8 1.6 13 3.6 V8 C13 11 8 14.4"
-                                          " 8 14.4 8 14.4 3 11 3 8 V3.6 Z'/%3E%3C/svg%3E")]
+                              ;; glyph of an element: an `iconsrc` attr (moz-button, e.g. the
+                              ;; search-mode switcher's engine icon — a system blob:), else the
+                              ;; first visible descendant (incl. open shadow root) that renders an
+                              ;; image — <img src>, list-style / background / mask.
+                              glyph-of (fn [el]
+                                (let [isrc (or (.getAttribute el "iconsrc")
+                                               (some-> (.querySelector el "[iconsrc]") (.getAttribute "iconsrc")))
+                                      sr (.-shadowRoot el)
+                                      cands (.concat (.from Array (.querySelectorAll el "*"))
+                                                     (if sr (.from Array (.querySelectorAll sr "*")) [])
+                                                     [el])
+                                      hit (.find cands
+                                            (fn [e]
+                                              (and (visible? e)
+                                                   (let [c (.getComputedStyle window e)]
+                                                     (or (and (= (.-tagName e) "IMG") (.-src e) (not= (.-src e) ""))
+                                                         (not= (.-listStyleImage c) "none")
+                                                         (not= (.-backgroundImage c) "none")
+                                                         (not= (.-maskImage c) "none"))))))]
+                                  (cond
+                                    (and isrc (not= isrc ""))
+                                      {:css (str "background:url(\"" isrc "\") center/contain no-repeat;")}
+                                    (not hit) nil
+                                    :else
+                                      (let [c (.getComputedStyle window hit)]
+                                        (cond
+                                          (and (= (.-tagName hit) "IMG") (.-src hit) (not= (.-src hit) ""))
+                                            {:css (str "background:url(\"" (.-src hit) "\") center/contain no-repeat;")}
+                                          (not= (.-listStyleImage c) "none")
+                                            {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
+                                                       "background:" (.-listStyleImage c) " center/contain no-repeat;")}
+                                          (not= (.-backgroundImage c) "none")
+                                            {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
+                                                       "background:" (.-backgroundImage c) " center/contain no-repeat;")}
+                                          :else
+                                            {:css (str "background-color:" (.-color c) ";"
+                                                       "mask:" (.-maskImage c) " center/contain no-repeat;"
+                                                       "-webkit-mask:" (.-maskImage c) " center/contain no-repeat;")})))))
+                              ;; input-box = the container's direct child holding the field (for
+                              ;; slicing the leading icons); text-el = the actual .urlbar-input the
+                              ;; text renders in (its left is where the URL text starts — the
+                              ;; moz-input-box wrapper has ~26px of leading padding, so measuring
+                              ;; the wrapper would shift the ghost text left of the real text).
+                              input-box (.querySelector container "moz-input-box, .urlbar-input-box")
+                              text-el (or (some-> window .-gURLBar .-inputField)
+                                          (.querySelector urlbar ".urlbar-input")
+                                          input-box)
+                              input-left (if text-el
+                                           (- (.-left (.getBoundingClientRect text-el)) (.-left rect))
+                                           36)
+                              kids (.from Array (.-children container))
+                              input-idx (.indexOf kids input-box)
+                              leading (.filter (if (>= input-idx 0) (.slice kids 0 input-idx) kids) visible?)
+                              value (or (some-> window .-gURLBar .-value) "")
+                              has-value? (not= (.trim value) "")
+                              text-str (if has-value? value ph)]
                           (set! (.-id g) "gjoa-urlbar-ghost")
                           (attr! g "aria-hidden" "true")
                           (css! g (str "position:relative;display:block;box-sizing:border-box;padding:0;"
                                        "width:" (.-width rect) "px;height:" (.-height rect) "px;"
                                        "pointer-events:none;overflow:hidden;white-space:nowrap;"
                                        "border:" (.-border cs) ";border-radius:" (.-borderRadius cs) ";"
+                                       "background:" (.-backgroundColor cs) ";"
                                        "font:" (.-font cs) ";color:" (.-color cs) ";"))
-                          (css! icon (str "position:absolute;top:50%;transform:translateY(-50%);"
-                                          "left:" icon-left "px;width:16px;height:16px;opacity:.85;"
-                                          (if icon-img
-                                            (str "-moz-context-properties:fill;fill:currentColor;"
-                                                 "background:" icon-img " center/contain no-repeat;")
-                                            (str "background-color:currentColor;"
-                                                 "mask:url(\"" shield "\") center/contain no-repeat;"
-                                                 "-webkit-mask:url(\"" shield "\") center/contain no-repeat;"))))
-                          (set! (.-textContent txt) ph)
+                          ;; one ghost icon per real visible leading icon, at its real x/width
+                          (doseq [ch leading]
+                            (let [r (.getBoundingClientRect ch)
+                                  left (- (.-left r) (.-left rect))
+                                  w (.-width r)
+                                  gl (glyph-of ch)
+                                  slot (html-new "div")]
+                              (when gl
+                                (css! slot (str "position:absolute;top:0;bottom:0;display:flex;"
+                                                "align-items:center;justify-content:center;"
+                                                "left:" left "px;width:" w "px;"))
+                                (let [ic (html-new "div")]
+                                  (css! ic (str "width:16px;height:16px;opacity:.9;" (.-css gl)))
+                                  (.appendChild slot ic)
+                                  (.appendChild g slot)))))
+                          (set! (.-textContent txt) text-str)
                           (css! txt (str "position:absolute;top:0;bottom:0;display:flex;align-items:center;"
-                                         "left:" text-left "px;right:8px;overflow:hidden;"
-                                         "text-overflow:ellipsis;opacity:.55;"))
-                          (.append g icon txt)
+                                         "left:" input-left "px;right:8px;overflow:hidden;"
+                                         "text-overflow:ellipsis;opacity:" (if has-value? ".95" ".55") ";"))
+                          (.appendChild g txt)
                           (.appendChild parent g)
                           (set! (.-ghost state) g)))))
                   ;; #150b (2026-07-19): ARM opacity:0 (no transition) BEFORE the popover

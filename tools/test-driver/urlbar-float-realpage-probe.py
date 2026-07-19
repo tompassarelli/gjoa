@@ -143,8 +143,24 @@ def main():
     m.exec_chrome("try{window.docShell.isActive=true;window.focus();}catch(e){} return 1;")
     time.sleep(0.5)
     sweep = json.loads(V(m.exec_chrome(SWEEP)))
+    # FREEZE check (r2): capture the RESTING bar (value + visible leading-icon count) BEFORE
+    # Ctrl+L, then compare the ghost that fills the slot — it must show the same URL text (not
+    # the placeholder) and the same number of leading icons (not one plain shield).
+    resting_frozen = json.loads(V(m.exec_chrome(r"""
+      const u=document.getElementById('urlbar');const c=u.querySelector('.urlbar-input-container');
+      const ib=c.querySelector('moz-input-box,.urlbar-input-box');
+      function vis(e){const r=e.getBoundingClientRect();const s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';}
+      const kids=Array.from(c.children);const idx=kids.indexOf(ib);
+      const lead=(idx>=0?kids.slice(0,idx):kids).filter(vis);
+      return JSON.stringify({value:gURLBar.value, leadCount:lead.length});""")))
     m.exec_chrome(CTRL_L); time.sleep(0.5)
     state = json.loads(V(m.exec_chrome(STATE)))
+    ghost_frozen = json.loads(V(m.exec_chrome(r"""
+      const g=document.getElementById('gjoa-urlbar-ghost');if(!g)return JSON.stringify({ghost:false});
+      const slots=Array.from(g.children).slice(0,-1);
+      const withGlyph=slots.filter(s=>{const ic=s.firstElementChild;const cs=ic?getComputedStyle(ic):null;
+        return cs&&(cs.backgroundImage!=='none'||cs.maskImage!=='none');}).length;
+      return JSON.stringify({ghost:true, slotCount:slots.length, glyphCount:withGlyph, text:g.lastElementChild.textContent});""")))
     # also drive a query so the results view opens (breakout-extend) — the exact state in
     # the owner's screenshot (results showing) — and re-measure centering there.
     m.exec_chrome("try{gURLBar.focus();gURLBar.value='reddit.com';"
@@ -194,8 +210,20 @@ def main():
           (st.get("breakoutExtend"), uw2, ul2, exp2, off2), file=sys.stderr)
     if iw2 and off2 > 40:
         print("FAIL: palette NOT centered with results open (off %spx)." % off2, file=sys.stderr); fail = True
+    # FREEZE verdict (r2): ghost must show the resting URL + every leading icon
+    gf = ghost_frozen
+    if gf.get("ghost"):
+        print("freeze: resting value=%r ghost text=%r | resting leadIcons=%s ghost glyphs=%s" %
+              (resting_frozen.get("value"), gf.get("text"), resting_frozen.get("leadCount"), gf.get("glyphCount")), file=sys.stderr)
+        rv = (resting_frozen.get("value") or "").strip()
+        if rv and gf.get("text") != resting_frozen.get("value"):
+            print("FAIL: ghost text %r != resting URL %r (shows placeholder instead of the URL)." % (gf.get("text"), resting_frozen.get("value")), file=sys.stderr); fail = True
+        if resting_frozen.get("leadCount", 0) and gf.get("glyphCount", 0) < resting_frozen.get("leadCount", 0):
+            print("FAIL: ghost reproduced %s/%s leading icons (an icon was dropped/swapped)." % (gf.get("glyphCount"), resting_frozen.get("leadCount")), file=sys.stderr); fail = True
+    else:
+        print("FAIL: no ghost created on float.", file=sys.stderr); fail = True
     if fail: sys.exit(1)
-    print("PASS: floating palette activated + centered on a real page (empty AND results-open).", file=sys.stderr)
+    print("PASS: palette centered (empty AND results-open) + ghost freezes resting URL + all leading icons.", file=sys.stderr)
 
 
 if __name__ == "__main__":

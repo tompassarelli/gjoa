@@ -54,7 +54,12 @@ const u=document.getElementById('urlbar');
 const g=document.getElementById('gjoa-urlbar-ghost');
 if(!g) return JSON.stringify({ghost:null});
 const gr=g.getBoundingClientRect();
-const icon=g.firstElementChild, txt=g.lastElementChild;
+// ghost is now: N icon SLOTS (each wraps a 16px glyph div) + a trailing text div.
+const slots=Array.from(g.children).slice(0,-1);
+const glyphCount=slots.filter(s=>{const ic=s.firstElementChild;const cs=ic?getComputedStyle(ic):null;
+  return cs&&(cs.backgroundImage!=='none'||cs.maskImage!=='none');}).length;
+const icon=(g.firstElementChild&&g.firstElementChild.firstElementChild)||g.firstElementChild;
+const txt=g.lastElementChild;
 const ir=icon.getBoundingClientRect(), tr=txt.getBoundingClientRect();
 const ics=getComputedStyle(icon);
 // real urlbar identity icon WHILE floating (what the palette shows)
@@ -70,6 +75,7 @@ return JSON.stringify({
   ghost:{left:Math.round(gr.left),top:Math.round(gr.top),width:Math.round(gr.width),height:Math.round(gr.height)},
   ghostIcon:{leftRel:Math.round(ir.left-gr.left),w:Math.round(ir.width),h:Math.round(ir.height),mask:ics.maskImage,bg:ics.backgroundImage},
   ghostText:{leftRel:Math.round(tr.left-gr.left),text:txt.textContent},
+  glyphCount: glyphCount,
   floatIcon: ricon?{cls:(typeof ricon.className==='string'?ricon.className:''),bg:rcs.backgroundImage,list:rcs.listStyleImage,mask:rcs.maskImage}:null,
 });
 """
@@ -141,15 +147,13 @@ def main():
         d = abs(r_txt - g_txt)
         print("text-start  resting=%spx  ghost=%spx  delta=%spx  (bug2: must be <=2)" % (r_txt, g_txt, d), file=sys.stderr)
         if d > 2: fails.append("ghost text shifts %dpx vs resting urlbar (bug 2)" % d)
-    # icon glyph: ghost's background OR mask must reference the SAME url the resting
-    # leading icon renders (its list-style-image or background-image).
-    ri = rest.get("icon") or {}
-    rest_glyph = next((ri.get(k) for k in ("list", "bg") if ri.get(k) and ri.get(k) != "none"), None)
-    gi = ghost.get("ghostIcon") or {}
-    ghost_glyph = next((gi.get(k) for k in ("bg", "mask") if gi.get(k) and gi.get(k) != "none"), None)
-    print("icon glyph  resting=%s  ghost=%s" % (rest_glyph, ghost_glyph), file=sys.stderr)
-    if rest_glyph and ghost_glyph != rest_glyph:
-        fails.append("ghost icon glyph (%s) != resting leading icon (%s) (bug 2)" % (ghost_glyph, rest_glyph))
+    # icons: the ghost must reproduce the leading icon(s) with real glyphs. Exact
+    # per-icon glyph + position (incl. the moz-button switcher via iconsrc) is verified
+    # on a LOADED page by urlbar-float-realpage-probe.py, which isn't polluted by the
+    # marionette robot icon this about:blank probe carries.
+    gc = ghost.get("glyphCount", 0)
+    print("ghost icon slots with a glyph: %d  (must be >=1)" % gc, file=sys.stderr)
+    if gc < 1: fails.append("ghost reproduced no leading-icon glyph (bug 2)")
     lo, hi = min(tops), max(tops)
     print("firstload urlbar.top: min=%d max=%d spread=%d  (spread>10px ⇒ layout transient)" % (lo, hi, hi-lo), file=sys.stderr)
     if hi - lo > 10: fails.append("urlbar.top layout transient of %dpx on first activate" % (hi-lo))
