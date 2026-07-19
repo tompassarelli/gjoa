@@ -51,12 +51,17 @@ if (eStart >= 0 && eEnd > eStart) {
   ok(/\.stopImmediatePropagation e/.test(branch), "Escape stops propagation to FF's window listener");
 }
 
-// --- (3) finish-teardown hides the popover in EVERY mode, not just compact ---
-// The floating palette always showPopover()s the urlbar into the top layer, so a
-// dismiss must hidePopover regardless of mode — else the resting urlbar is left
-// :popover-open, stuck in the top layer over its empty sidebar slot (the visual
-// artifact on exit). Regression guard: finish-teardown must call hidePopover, and
-// that call must NOT be gated behind a compact-mode check (`compact-on`).
+// --- (3) finish-teardown COLLAPSES the focused/expanded residue ---
+// The floating palette showPopover()s the urlbar into the top layer AND focuses it. A
+// non-Escape dismiss (backdrop / focus-out) leaves the urlbar FOCUSED, and Firefox
+// re-expands a focused resting urlbar into breakout-extend — the empty bar at the slot
+// with top-sites results showing (the janky teardown state, owner-reported 2026-07-19).
+// The prior code GATED hidePopover behind `not breakout-extend` to "preserve a raced
+// click-to-expand" — but the backdrop intercepts every click while floating, so that race
+// can't happen; the guard only ever fired on focus-induced breakout-extend and left the
+// mess. Regression guard: finish-teardown must return focus to CONTENT
+// (selectedBrowser.focus), close the view, hidePopover UNCONDITIONALLY, and clear
+// breakout-extend — and must NOT gate the popover-hide behind a breakout-extend check.
 const fStart = bjs.indexOf("finish-teardown (fn []");
 const fEnd = bjs.indexOf("deactivate-floating (fn []", fStart);
 ok(fStart >= 0 && fEnd > fStart, "found finish-teardown");
@@ -64,8 +69,13 @@ if (fStart >= 0 && fEnd > fStart) {
   const body = bjs.slice(fStart, fEnd);
   const code = body.replace(/;;[^\n]*/g, ""); // strip beagle comments before matching
   ok(/\.hidePopover urlbar/.test(code), "finish-teardown hides the popover");
-  ok(!/compact-on/.test(code), "popover-hide is NOT gated on compact mode [the bug]");
-  ok(/breakout-extend/.test(code), "popover-hide still skips a raced click-to-expand (breakout-extend)");
+  ok(!/compact-on/.test(code), "popover-hide is NOT gated on compact mode");
+  ok(/selectedBrowser[\s\S]*?\.focus/.test(code),
+     "finish-teardown returns focus to CONTENT — kills the focused breakout-extend residue [the bug]");
+  ok(/-view[\s\S]{0,6}\.close/.test(code), "finish-teardown closes the urlbar view (collapses results)");
+  ok(/rmattr! urlbar "breakout-extend"/.test(code), "finish-teardown clears breakout-extend");
+  ok(!/\(when \(not \(bool \(has\? urlbar "breakout-extend"\)\)\)/.test(code),
+     "hidePopover is NOT gated behind a breakout-extend skip [the janky-teardown bug]");
 }
 
 console.log(`\nurlbar-teardown invariants: ${pass} pass, ${fail} fail`);

@@ -40,13 +40,24 @@
             ;; to normal in-flow (position:static) and paints its resting state in ONE
             ;; settled frame. Skip only when a click-to-expand (breakout-extend) raced
             ;; in — that owns the popover and must not be clobbered.
-            (when (not (bool (has? urlbar "breakout-extend")))
-              (try
-                (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
-                  (.hidePopover urlbar))
-                (rmattr! urlbar "popover")
-                (catch Any e
-                  (log "deactivateFloating:popover-sync-error" {:msg (String e)}))))
+            ;; RETURN FOCUS TO CONTENT first: a non-Escape dismiss (backdrop / focus-out)
+            ;; leaves the urlbar FOCUSED, and FF re-expands a focused resting urlbar into
+            ;; breakout-extend (empty bar at the slot with top-sites results showing) — the
+            ;; janky teardown residue the owner hit. Blurring to content collapses it. The
+            ;; backdrop intercepts every click while floating, so a genuine click-to-expand
+            ;; cannot race here; leftover focus is the ONLY source of breakout-extend at
+            ;; teardown, so close the view + hide the popover + clear breakout unconditionally.
+            (try
+              (let [a (.-activeElement document)]
+                (when (or (= a urlbar) (and a (.contains urlbar a)))
+                  (some-> window .-gBrowser .-selectedBrowser .focus)))
+              (some-> window .-gURLBar .-view .close)
+              (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
+                (.hidePopover urlbar))
+              (rmattr! urlbar "popover")
+              (rmattr! urlbar "breakout-extend")
+              (catch Any e
+                (log "finishTeardown:collapse-error" {:msg (String e)})))
             ;; #150: suppress urlbar transitions for the restore frame so the resting
             ;; geometry reverts INSTANTLY (matching the ghost look-alike) instead of
             ;; retracting through the breakout-extend width transition while opacity
