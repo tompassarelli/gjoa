@@ -88,9 +88,10 @@
                          (flush)))))
 
           diag (fn []
-                 (let [out :- Any {}]
-                   (.forEach DOMAIN-ORDER
-                     #(set! (aget out %) (or (.get pending %) [])))
+                 (let [out (reduce (fn [acc domain]
+                                     (assoc acc domain (or (.get pending domain) [])))
+                                   {}
+                                   DOMAIN-ORDER)]
                    {:pending out
                     :nextFlushPending (not= (.-pendingFlush state) nil)
                     :lastReconcileMs (.-lastReconcileMs state)}))

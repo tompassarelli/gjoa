@@ -322,12 +322,12 @@
     (doseq [block blocks]
       (let [lines (.split (.trimEnd block) "\n")
             patterns []
-            sections {}
+            sections (atom {})
             cur-name (atom nil)
             cur-lines (atom [])
             flush! (fn []
                      (when @cur-name
-                       (set! (get sections @cur-name) (.trim (.join @cur-lines "\n"))))
+                       (reset! sections (assoc @sections @cur-name (.trim (.join @cur-lines "\n")))))
                      (reset! cur-lines []))]
         (doseq [line lines]
           (let [trimmed (.trim line)]
@@ -346,7 +346,7 @@
               (.push @cur-lines line))))
         (flush!)
         (when (> (.-length patterns) 0)
-          (.push out {:patterns patterns :sections sections}))))
+          (.push out {:patterns patterns :sections @sections}))))
     out))
 
 ;; ---------------------------------------------------------------------------
@@ -580,14 +580,14 @@ Reads the local snapshot at tools/prep/darkreader-fixes.snapshot.
                 (.exit process 1))))
           (if (= (.-length generated) 0)
             (let [warn (.-warn log)] (warn "nothing to write (no hosts produced entries)"))
-            (let [existing (if (existsSync REGISTRY-PATH)
-                             (JSON/parse (readFileSync REGISTRY-PATH "utf8"))
-                             {})
+            (let [existing (atom (if (existsSync REGISTRY-PATH)
+                                   (JSON/parse (readFileSync REGISTRY-PATH "utf8"))
+                                   {}))
                   added []]
               (doseq [r generated]
-                (set! (get existing (.-host r)) (.-entry r))
+                (reset! existing (assoc @existing (.-host r) (.-entry r)))
                 (.push added (.-host r)))
-              (writeFileSync REGISTRY-PATH (str (JSON/stringify existing nil 2) "\n"))
+              (writeFileSync REGISTRY-PATH (str (JSON/stringify @existing nil 2) "\n"))
               (let [ok (.-ok log)]
                 (ok (str "merged " (.-length added) " entr" (if (= (.-length added) 1) "y" "ies")
                          " into darkmode-fixes.json: " (.join added ", ")))))))))))

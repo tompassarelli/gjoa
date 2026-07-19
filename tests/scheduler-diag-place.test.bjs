@@ -1,0 +1,48 @@
+#lang beagle/js
+;; Regression test for the scheduler diag() place-safety bug (Beagle E009,
+;; ~019f79cd): `diag` used to build its dynamic domain->pending-array object
+;; with `(set! (aget out %) ...)`, which targets `(aget ...)` — not an
+;; assignable place on the js target (aset/set! don't take a String key
+;; either — beagle/docs/dogfood-codegen-findings.md #8). The compiler flags
+;; this the moment scheduler.bjs is checked; a real (non-seeded) instance of
+;; it broke both gjoa's own pinned `bun run check` gate and the real
+;; five-consumer downstream C2 run. The fix rebuilds `out` functionally with
+;; `reduce`/`assoc` over DOMAIN-ORDER instead of mutating a non-place.
+;; The cheapest regression guard: assert the invalid pattern is gone and the
+;; canonical replacement (still keyed off DOMAIN-ORDER, still defaulting a
+;; domain's pending reasons to []) is present. No browser/build — instant.
+;; Fails against the old source; passes against the canonical replacement.
+(ns gjoa.tests.scheduler-diag-place
+  (:require [fs :refer [existsSync readFileSync]]
+            [path :refer [join]]))
+(define-mode strict)
+(declare-extern [describe expect test process RegExp] Any)
+
+(def REPO :- String (.cwd process))
+(def SCHEDULER :- String
+  (join REPO "src" "gjoa" "chrome" "bjs" "platform" "scheduler.bjs"))
+
+(defn has? [s :- String pat :- String] :- Any (.test (RegExp. pat) s))
+
+(describe "scheduler diag() place-safety (E009 019f79cd)"
+  (fn []
+    (test "source exists"
+      (fn []
+        (.toBe (expect (existsSync SCHEDULER)) true)))
+
+    ;; The regression itself: set! must never target an (aget ...) non-place.
+    (test "diag no longer assigns through (set! (aget ...))"
+      (fn []
+        (let [src (readFileSync SCHEDULER "utf8")]
+          (.toBe (expect (has? src "\\(set!\\s*\\(aget")) false))))
+
+    ;; The canonical replacement: functional reduce/assoc over DOMAIN-ORDER,
+    ;; still defaulting a domain's pending reasons to [] when untouched —
+    ;; preserves the dynamic domain-keys + pending-array semantics diag()
+    ;; callers (gjoa.platform.index diag) depend on.
+    (test "diag rebuilds pending map via reduce/assoc over DOMAIN-ORDER"
+      (fn []
+        (let [src (readFileSync SCHEDULER "utf8")]
+          (.toBe (expect (has? src "reduce[\\s\\S]{0,80}assoc")) true)
+          (.toBe (expect (has? src "\\(or \\(\\.get pending domain\\) \\[\\]\\)")) true)
+          (.toBe (expect (has? src "DOMAIN-ORDER")) true))))))
