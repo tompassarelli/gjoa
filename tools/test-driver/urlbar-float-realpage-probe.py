@@ -151,7 +151,10 @@ def main():
       const ib=c.querySelector('moz-input-box,.urlbar-input-box');
       function vis(e){const r=e.getBoundingClientRect();const s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';}
       const kids=Array.from(c.children);const idx=kids.indexOf(ib);
-      const lead=(idx>=0?kids.slice(0,idx):kids).filter(vis);
+      // exclude the search-mode switcher — the ghost deliberately drops it (its engine
+      // logo, e.g. Google, is clutter in the frozen slot), so compare apples-to-apples.
+      const sw=e=>(e.classList&&e.classList.contains('searchmode-switcher'))||e.getAttribute('iconsrc');
+      const lead=(idx>=0?kids.slice(0,idx):kids).filter(e=>vis(e)&&!sw(e));
       return JSON.stringify({value:gURLBar.value, leadCount:lead.length});""")))
     m.exec_chrome(CTRL_L); time.sleep(0.5)
     state = json.loads(V(m.exec_chrome(STATE)))
@@ -160,7 +163,11 @@ def main():
       const slots=Array.from(g.children).slice(0,-1);
       const withGlyph=slots.filter(s=>{const ic=s.firstElementChild;const cs=ic?getComputedStyle(ic):null;
         return cs&&(cs.backgroundImage!=='none'||cs.maskImage!=='none');}).length;
-      return JSON.stringify({ghost:true, slotCount:slots.length, glyphCount:withGlyph, text:g.lastElementChild.textContent});""")))
+      // a blob: background == the engine-logo switcher icon leaked into the frozen slot
+      const engineLeak=slots.some(s=>{const ic=s.firstElementChild;const cs=ic?getComputedStyle(ic):null;
+        return cs&&(cs.backgroundImage||'').includes('blob:');});
+      return JSON.stringify({ghost:true, slotCount:slots.length, glyphCount:withGlyph,
+        engineLeak, text:g.lastElementChild.textContent});""")))
     # also drive a query so the results view opens (breakout-extend) — the exact state in
     # the owner's screenshot (results showing) — and re-measure centering there.
     m.exec_chrome("try{gURLBar.focus();gURLBar.value='reddit.com';"
@@ -220,6 +227,8 @@ def main():
             print("FAIL: ghost text %r != resting URL %r (shows placeholder instead of the URL)." % (gf.get("text"), resting_frozen.get("value")), file=sys.stderr); fail = True
         if resting_frozen.get("leadCount", 0) and gf.get("glyphCount", 0) < resting_frozen.get("leadCount", 0):
             print("FAIL: ghost reproduced %s/%s leading icons (an icon was dropped/swapped)." % (gf.get("glyphCount"), resting_frozen.get("leadCount")), file=sys.stderr); fail = True
+        if gf.get("engineLeak"):
+            print("FAIL: search-engine logo (blob:) leaked into the frozen ghost slot (the Google-icon bug).", file=sys.stderr); fail = True
     else:
         print("FAIL: no ghost created on float.", file=sys.stderr); fail = True
     if fail: sys.exit(1)

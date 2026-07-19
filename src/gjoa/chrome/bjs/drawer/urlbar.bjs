@@ -220,7 +220,16 @@
                                            36)
                               kids (.from Array (.-children container))
                               input-idx (.indexOf kids input-box)
-                              leading (.filter (if (>= input-idx 0) (.slice kids 0 input-idx) kids) visible?)
+                              ;; EXCLUDE the search-mode switcher (2026-07-20): it's the
+                              ;; engine-picker affordance and its `iconsrc` is the current
+                              ;; engine's logo (Google), which showed up as a loud Google "G"
+                              ;; in the frozen slot — clutter, not part of the resting identity.
+                              ;; A frozen ghost is the security/identity icon(s) + the URL.
+                              switcher? (fn [ch]
+                                          (or (and (.-classList ch) (.contains (.-classList ch) "searchmode-switcher"))
+                                              (.getAttribute ch "iconsrc")))
+                              leading (.filter (if (>= input-idx 0) (.slice kids 0 input-idx) kids)
+                                        (fn [ch] (and (visible? ch) (not (switcher? ch)))))
                               value (or (some-> window .-gURLBar .-value) "")
                               has-value? (not= (.trim value) "")
                               text-str (if has-value? value ph)]
