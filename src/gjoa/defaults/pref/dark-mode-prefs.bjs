@@ -128,6 +128,20 @@
 ;; with a code default of 55, so it is live even before this baked default applies.
 (pref "gjoa.darkmode.media-dim.pct" 55)
 
+;; Full-bleed HERO replaced-media dimming. The rule above dims large background-IMAGE divs
+;; but leaves replaced <img>/<video>/<canvas> untouched (dimming content photos grays the
+;; page — a 'gray veil' regression). But a viewport-SPANNING bright <img> is a background
+;; panel, not content (azure.microsoft.com mint/teal hero illustration; imdb '<img.ipc-image>'
+;; poster wall) — it glares in the dark page and loses to Dark Reader. Dim ONLY a replaced
+;; element that is full-bleed: width >= hero-wpct% of the viewport AND area >= hero-apct% of
+;; it. A content photo/thumbnail is bounded (fails hero-wpct) and stays untouched — preserving
+;; gjoa's 'photos untouched' advantage. hero = master toggle; hero-pct = brightness (68 =
+;; toned, not crushed); wpct/apct = the full-bleed thresholds (tuned via the cage render harness).
+(pref "gjoa.darkmode.media-dim.hero" true)
+(pref "gjoa.darkmode.media-dim.hero-pct" 68)
+(pref "gjoa.darkmode.media-dim.hero-wpct" 85)
+(pref "gjoa.darkmode.media-dim.hero-apct" 30)
+
 ;; Backdrop-aware APCA contrast normalization (GjoaDarkmode actor pass-3). After the
 ;; inversion state settles, the content actor walks visible text, the parent
 ;; drawSnapshots the REAL composited content and computes a corrective tone for any
