@@ -21,7 +21,8 @@ def main():
     # open (ghost created same-exec) — grab ghost state + shot
     st=V(m.exec_chrome("document.dispatchEvent(new CustomEvent('gjoa-urlbar-activate',{detail:{intent:'current'}}));"
         "const g=document.getElementById('gjoa-urlbar-ghost');const r=g?g.getBoundingClientRect():null;const tx=g?g.lastElementChild:null;"
-        "return JSON.stringify({ghost:!!g,txt:tx?tx.textContent:null,masked:g?getComputedStyle(g.firstElementChild).maskImage!=='none':null});"))
+        "const ic=g?getComputedStyle(g.firstElementChild):null;"
+        "return JSON.stringify({ghost:!!g,txt:tx?tx.textContent:null,masked:ic?(ic.maskImage!=='none'||ic.backgroundImage!=='none'):null});"))
     shot("1-open.png")
     # dismiss + rapid frames through the ~150ms teardown
     m.exec_chrome("document.dispatchEvent(new CustomEvent('gjoa-urlbar-deactivate'));return 1;")

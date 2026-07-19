@@ -15,7 +15,10 @@ MEAS = r"""
   const gr = g ? g.getBoundingClientRect() : null;
   const icon = g ? g.firstElementChild : null;
   const txt  = g ? g.lastElementChild : null;
-  const iconMasked = icon ? (getComputedStyle(icon).maskImage!=='none' || getComputedStyle(icon).webkitMaskImage!=='none') : false;
+  // ghost icon renders its glyph via background-image (copied live from the real
+  // resting leading icon, #150b) OR a CSS mask (the fallback shield) — accept either.
+  const gcs = icon ? getComputedStyle(icon) : null;
+  const iconMasked = icon ? (gcs.maskImage!=='none' || gcs.webkitMaskImage!=='none' || gcs.backgroundImage!=='none') : false;
   // the placeholder text must sit INSIDE the ghost box (not spill below it)
   const txtRc = txt ? txt.getBoundingClientRect() : null;
   const txtInsideBox = (gr && txtRc) ? (txtRc.top >= gr.top-2 && txtRc.bottom <= gr.bottom+2) : false;

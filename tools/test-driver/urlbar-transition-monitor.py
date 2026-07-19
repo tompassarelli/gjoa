@@ -173,13 +173,19 @@ def analyze(seq, data):
             if frames[i-1]["floating"] and not frames[i]["floating"]:
                 despawn_t = frames[i]["t"]; break
 
-    # 1) any component spawning during the despawn window (the owner's core failure).
-    # Allow the palette's own results to build DURING open (before despawn); flag builds
-    # that happen as it closes. Ghost/backdrop add/del are the expected lifecycle.
+    # 1) any STRAY component spawning during the despawn window (the owner's core failure:
+    # an EXTRA popup/modal appearing as the palette closes). Palette-internal late-builds
+    # are NOT flagged: the whole palette (input + its urlbarView results, including FF's
+    # search one-offs that finish building a beat after the query) fades out as ONE unit
+    # under the teardown opacity, so anything inside #urlbar/.urlbarView is invisible mid-
+    # dismiss. `stray` already encodes "not inside the palette" (INSTALL's expected()),
+    # so gate on it — otherwise the slower dev binary false-flags the one-offs finishing
+    # ~260ms after DEACTIVATE (verified: identical on baseline chrome; native completes
+    # them pre-teardown). Ghost/backdrop add/del are the expected lifecycle.
     if despawn_t is not None:
         for m in muts:
-            if m["op"] == "add" and m["t"] >= despawn_t - 10 and "gjoa-urlbar" not in m["node"]:
-                v.append((m, "component spawned during DESPAWN: %s @%dms (teardown began ~%dms)"
+            if m["op"] == "add" and m["t"] >= despawn_t - 10 and m.get("stray"):
+                v.append((m, "STRAY component spawned during DESPAWN: %s @%dms (teardown began ~%dms)"
                           % (m["node"], m["t"], despawn_t)))
     # 2) explicitly-stray spawns any time (non-palette, non-ghost/backdrop element)
     for m in muts:
