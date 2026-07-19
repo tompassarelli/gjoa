@@ -17,7 +17,7 @@ target="${repo_root}/src/gjoa/toolkit/components/content-classifier/scriptlet-re
 # The single source of truth, kept in lockstep with the PROVENANCE note. If you
 # legitimately refresh the bundle from a pinned uBO commit, update BOTH this value
 # and scriptlet-resources.PROVENANCE.md.
-expected="f27354411da54d8a34438f542dcf0694ecd1dd4ab961f0a68de2b29f76f6dc56"
+expected="156b8d4c9cf833c141687ba33139fa98e8777c0bc95fee3ec05449760fb60e0a"
 
 if [[ ! -f "${target}" ]]; then
   echo "verify-scriptlet-resources: FAIL — missing ${target}" >&2
