@@ -690,17 +690,6 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         return;
       }
       const dim = pct / 100;
-      // Full-bleed HERO replaced-media dimming (azure/imdb): a bright <img> that spans the
-      // viewport IS a background panel, not content — dim it. Content photos/thumbnails are
-      // bounded (< heroWFrac of viewport width) and stay untouched. All pref-gated + tunable.
-      let heroImg = true, heroPct = 68, heroWFrac = 0.85, heroAFrac = 0.30;
-      try {
-        heroImg = Services.prefs.getBoolPref("gjoa.darkmode.media-dim.hero", true);
-        heroPct = Services.prefs.getIntPref("gjoa.darkmode.media-dim.hero-pct", 68);
-        heroWFrac = Services.prefs.getIntPref("gjoa.darkmode.media-dim.hero-wpct", 85) / 100;
-        heroAFrac = Services.prefs.getIntPref("gjoa.darkmode.media-dim.hero-apct", 30) / 100;
-      } catch (e) {}
-      const heroDim = heroPct / 100;
       const MIN_AREA = 150 * 150; // hero/banner scale; smaller = icon/thumb, skip
       const W = win.innerWidth || 0, H = win.innerHeight || 0;
       const tag = () => {
@@ -745,18 +734,6 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
             if (isMedia && !isReplaced) {
               el.setAttribute("data-gjoa-dim", "dim");
               n++;
-            } else if (isReplaced && heroImg &&
-                       r.width >= heroWFrac * W &&
-                       r.width * r.height >= heroAFrac * W * H) {
-              // FULL-BLEED replaced hero (azure mint/teal <img> illustration, imdb poster
-              // wall <img.ipc-image>): the engine exempts replaced media so a viewport-
-              // spanning bright hero glares in the dark page. This is a BACKGROUND panel,
-              // not content — a content photo/thumbnail is bounded (fails heroWFrac), so it
-              // stays untouched (the "photos untouched" win). Tone the hero down (brightness,
-              // never invert — a negative photo is worse). Separate "hero" bucket so its dim
-              // is tuned independently of bg-image dims.
-              el.setAttribute("data-gjoa-dim", "hero");
-              n++;
             }
           } catch (e) {}
         }
@@ -770,7 +747,6 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         s.id = "gjoa-darkmode-media-dim";
         s.textContent =
           `[data-gjoa-dim="dim"]{filter:brightness(${dim})!important}` +
-          `[data-gjoa-dim="hero"]{filter:brightness(${heroDim})!important}` +
           `[data-gjoa-dim="inv"]{filter:invert(1) hue-rotate(180deg)!important}`;
         (doc.head || doc.documentElement).appendChild(s);
         this._dimSheet = s;
