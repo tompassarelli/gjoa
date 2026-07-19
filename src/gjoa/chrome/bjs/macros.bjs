@@ -67,8 +67,18 @@
      (_walk ,start)))
 (defmacro on! [el event handler]
   `(.addEventListener ,el ,event ,handler))
+;; Register a once-listener. For window "unload" handlers this ALSO pushes the
+;; handler into the loader's hot-reload teardown registry (window.__gjoaHR) — so
+;; a dev chrome-bundle change tears the bundle down + re-runs it cleanly, and no
+;; bundle can forget to register its teardown (by construction: every bundle's
+;; main teardown IS its unload handler). Non-window / non-unload uses are inert:
+;; the runtime guard skips anything without __gjoaHR.
 (defmacro on1! [el event handler]
-  `(.addEventListener ,el ,event ,handler {:once true}))
+  `(let [_el ,el _ev ,event _h ,handler]
+     (.addEventListener _el _ev _h {:once true})
+     (when (and (= _ev "unload") (.-__gjoaHR _el) (.-teardowns (.-__gjoaHR _el)))
+       (.push (.-teardowns (.-__gjoaHR _el)) _h))
+     _h))
 (defmacro xul [tag cls]
   `(let [_e (.createXULElement document ,tag)]
      (set! (.-className _e) ,cls) _e))
