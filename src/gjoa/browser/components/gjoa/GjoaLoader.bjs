@@ -174,6 +174,57 @@
 (defn register-style-sheet [file :- Any] :- Any
   (register-style-sheet-url (.-spec (.newFileURI (.-io Services) file)) (.-leafName file)))
 
+;; --- Dev live-reload: a running browser can NEVER hold a stale bundle ----------
+;; chrome:dist writes <bundle>/.bundle-stamp (content hash; mtime bumps every build).
+;; In dev mode the loader polls that file's mtime and, on change, tears down every
+;; bundle (each bundle pushes its teardown into window.__gjoaHR.teardowns) + drops all
+;; registered stylesheets, then re-runs load-into-chrome-window — so the running chrome
+;; becomes the freshly-compiled bundle within ~1s. By construction there is no window
+;; in which the browser and the compiled bundle disagree. (owner: "never stale by
+;; construction".) Production (omni.ja) has no loose files, so a launch is always the
+;; built bundle — nothing to watch.
+
+(defn unregister-sheets [] :- Any
+  (doseq [url (Array.from (.-loaded-sheets st))]
+    (try
+      (let [uri (.newURI (.-io Services) url)]
+        (when (.sheetRegistered STYLE-SHEET-SERVICE uri (.-AGENT_SHEET STYLE-SHEET-SERVICE))
+          (.unregisterSheet STYLE-SHEET-SERVICE uri (.-AGENT_SHEET STYLE-SHEET-SERVICE))))
+      (catch Any _e nil)))
+  (.clear (.-loaded-sheets st)))
+
+(defn stamp-mtime [dev-dir :- Any] :- Number
+  (try
+    (let [f (.clone dev-dir)]
+      (.append f ".bundle-stamp")
+      (if (.exists f) (.-lastModifiedTime f) 0))
+    (catch Any _e 0)))
+
+(defn hot-reload [window :- Any] :- Any
+  (try
+    (let [hr (.-__gjoaHR window)]
+      (when hr
+        (doseq [f (Array.from (.-teardowns hr))]
+          (try (f) (catch Any _e nil)))
+        (set! (.-teardowns hr) [])))
+    (unregister-sheets)
+    (load-into-chrome-window window)
+    (console/log "gjoa-loader: chrome hot-reloaded (dev bundle changed)")
+    (catch Any e
+      (console/error "gjoa-loader: hot-reload failed" e))))
+
+(defn start-dev-watch [window :- Any dev-dir :- Any] :- Any
+  (when (not (.-__gjoaHRWatching window))
+    (set! (.-__gjoaHRWatching window) true)
+    (let [state :- Any {:last (stamp-mtime dev-dir)}]
+      (.setInterval window
+        (fn []
+          (let [cur (stamp-mtime dev-dir)]
+            (when (and (> cur 0) (not= cur (.-last state)))
+              (set! (.-last state) cur)
+              (hot-reload window))))
+        750))))
+
 (defn load-into-chrome-window [window :- Any] :- Any
   ;; .uc.js bundles reference the beagle value-semantics runtime, which a
   ;; loadSubScript bundle can't `import` (not an ESM context). Expose the
@@ -191,6 +242,11 @@
   ;; files keep the real import via BEAGLE_JS_RUNTIME_PREFIX; see overlay.bjs.)
   (set! (.-$$bc window)
         (.importESModule ChromeUtils "resource:///modules/gjoa/beagle/core.js"))
+  ;; Hot-reload teardown registry: each bundle's init! pushes its teardown fn here so
+  ;; the loader can tear it down + re-run on a dev bundle change. Created once; a
+  ;; hot-reload resets .teardowns to [] (in hot-reload) before re-running the bundles.
+  (when (not (.-__gjoaHR window))
+    (set! (.-__gjoaHR window) {:teardowns []}))
   (let [dev (dev-mode-dir)]
     (if dev
       (let [js-dir (.clone dev)
@@ -200,7 +256,8 @@
         (doseq [css (list-files css-dir ".uc.css")]
           (register-style-sheet css))
         (doseq [js (list-files js-dir ".uc.js")]
-          (load-script-into window js)))
+          (load-script-into window js))
+        (start-dev-watch window dev))
       ;; Production: load from chrome://gjoa/content/{scripts,styles}/, baked
       ;; into omni.ja by `bun run chrome:dist` + tools/prep/chrome-bake.bjs.
       (do

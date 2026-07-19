@@ -59,15 +59,21 @@
           (try (make-omni-icon! {})
             (catch Any e (.error console "gjoa-drawer: omni-icon failed" e)))
 
-          (on1! window "unload"
-            (fn []
-              (.destroy layout)
-              (.destroy drag-overlay)
-              (.destroy compact)
-              (set! (.-gjoaCompact window) nil)
-              (when (.-urlbar-api state) (.destroy (.-urlbar-api state)))
-              (.destroy sidebar-button)
-              (.destroy banner)))
+          ;; Single teardown fn, registered BOTH on window-unload (real close) AND in
+          ;; the loader's hot-reload registry (window.__gjoaHR) so a dev bundle change
+          ;; tears this down + re-runs init! cleanly — no stale bundle, no duplicate
+          ;; listeners/DOM on live-reload.
+          (let [teardown (fn []
+                           (.destroy layout)
+                           (.destroy drag-overlay)
+                           (.destroy compact)
+                           (set! (.-gjoaCompact window) nil)
+                           (when (.-urlbar-api state) (.destroy (.-urlbar-api state)))
+                           (.destroy sidebar-button)
+                           (.destroy banner))]
+            (on1! window "unload" teardown)
+            (when (and (.-__gjoaHR window) (.-teardowns (.-__gjoaHR window)))
+              (.push (.-teardowns (.-__gjoaHR window)) teardown)))
 
           (.log console "gjoa-drawer: initialized"))))))
 

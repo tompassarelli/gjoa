@@ -13,7 +13,7 @@
 ;; No fx-autoconfig step. The loader is baked into omni.ja by the one-time
 ;; `mach build faster` after `bun run import`.
 (ns gjoa.tools.chrome-bundle.dist
-  (:require [fs :refer [existsSync]]
+  (:require [fs :refer [existsSync readFileSync readdirSync writeFileSync]]
             [fs/promises :refer [mkdir copyFile readdir rm]]
             [path :refer [join]]))
 (define-mode strict)
@@ -72,6 +72,22 @@
       (step "staging chrome/CSS"
         (fn []
           (js/await (copy-dir (join SRC-CHROME "css") (join DIST-CHROME "CSS"))))))
+
+    ;; Content STAMP over every bundled JS+CSS file — the dev loader watches this
+    ;; file and hot-reloads the running chrome the instant it changes, so a running
+    ;; browser can never hold a stale bundle (owner: "never stale by construction").
+    (js/await
+      (step "writing bundle stamp"
+        (fn []
+          (let [Hasher (.-CryptoHasher Bun)
+                hasher (Hasher. "sha256")]
+            (doseq [sub ["JS" "CSS"]]
+              (let [dir (join DIST-CHROME sub)
+                    names (.sort (readdirSync dir))]
+                (doseq [name names]
+                  (.update hasher name)
+                  (.update hasher (readFileSync (join dir name))))))
+            (writeFileSync (join DIST-CHROME ".bundle-stamp") (.digest hasher "hex"))))))
 
     (console/log "\n✓ chrome distribution ready at dist/")
     (console/log "  install: bun run chrome:install")))
