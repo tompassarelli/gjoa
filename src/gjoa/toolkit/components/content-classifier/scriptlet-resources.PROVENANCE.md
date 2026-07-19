@@ -1,7 +1,7 @@
 # scriptlet-resources.json — provenance & integrity
 
 `scriptlet-resources.json` is a vendored, uBO-derived library of scriptlet /
-redirect resources (163 entries: 52 `fn/javascript` + 111
+redirect resources (162 entries: 52 `fn/javascript` + 110
 `application/javascript`). Each entry's `content` is **base64-encoded
 JavaScript** that the RS client hands to
 `nsIContentClassifierService.setScriptletResources(json)`; adblock-rust then
@@ -35,8 +35,26 @@ has not changed. It deliberately does **not** alter the shipped JSON.
 ## Integrity
 
 - **Committed SHA-256:**
-  `f27354411da54d8a34438f542dcf0694ecd1dd4ab961f0a68de2b29f76f6dc56`
+  `156b8d4c9cf833c141687ba33139fa98e8777c0bc95fee3ec05449760fb60e0a`
 - **File:** `scriptlet-resources.json` (this directory)
+
+### 2026-07-19 remediation — one entry removed (live credential)
+
+A security audit (thread `019f79cd-a853` / S1 `019f79f3-0a1f`) found the entry
+formerly named `async-sugarcoat-8a459c41783885dc83d30f5b7da2359091f4e607.js`
+(`application/javascript`, ~71KB decoded) was **not** a genuine uBO scriptlet:
+its decoded body was a large minified third-party analytics/marketing bundle
+unrelated to uBO's `+js()` scriptlet catalog, and it carried a live
+GCP-shaped API key consumed as a URL query parameter in an executable request
+to a Google endpoint. It has been **removed outright** (not redacted in
+place, since it was not legitimate vendored content to begin with) and the
+committed hash above updated accordingly. Required upstream remediation
+(credential rotation/revocation) is out of this repo's control and is tracked
+on the security thread, not here. A sibling entry with the same
+`async-sugarcoat-<sha1>.js` naming (`04394153a7ce417b88e3fe1790a4e6a269bfebe5`)
+is similarly non-uBO-shaped but carries no detected credential; it was left
+in place as out of scope for this remediation and is flagged here as a
+provenance debt for a follow-up audit.
 
 Verify the committed JSON still matches the recorded hash with:
 
