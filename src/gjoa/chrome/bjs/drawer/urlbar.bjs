@@ -47,6 +47,11 @@
                 (rmattr! urlbar "popover")
                 (catch Any e
                   (log "deactivateFloating:popover-sync-error" {:msg (String e)}))))
+            ;; #150: suppress urlbar transitions for the restore frame so the resting
+            ;; geometry reverts INSTANTLY (matching the ghost look-alike) instead of
+            ;; retracting through the breakout-extend width transition while opacity
+            ;; restores to 1 — the "deformity after Enter" the cage frame-monitor caught.
+            (attr! root "gjoa-urlbar-snap" "")
             (rmattr! root "gjoa-urlbar-floating")
             (rmattr! root "gjoa-urlbar-intent")
             (rmattr! root "gjoa-urlbar-teardown")
@@ -55,7 +60,13 @@
               (set! (.-backdrop state) nil))
             (when (.-ghost state)
               (.remove (.-ghost state))
-              (set! (.-ghost state) nil))))
+              (set! (.-ghost state) nil))
+            ;; release the snap after the instant revert has painted (double-rAF: frame
+            ;; one applies the snapped resting layout, frame two re-enables transitions
+            ;; so later focus/expand animations still work).
+            (.requestAnimationFrame window
+              (fn [] (.requestAnimationFrame window
+                       (fn [] (rmattr! root "gjoa-urlbar-snap")))))))
 
         deactivate-floating (fn []
           (when (.-activated state)
@@ -68,7 +79,25 @@
             ;; (+ small buffer). A re-summon within the window clears teardown and
             ;; finish-teardown bails (guards on activated).
             (attr! root "gjoa-urlbar-teardown" "")
-            (.setTimeout window finish-teardown 150)))
+            ;; #150: fire finish-teardown when the opacity fade ACTUALLY completes
+            ;; (transitionend on #urlbar's opacity), not on a guessed 150ms timer that
+            ;; raced the fade — firing early restored the resting geometry while the box
+            ;; was still visible (the retraction-through-the-tab-row deformity). One-shot
+            ;; guard + removeEventListener; a fallback timer covers reduced-motion
+            ;; (transition:none → no transitionend) and any dropped event.
+            (let [h {:done false :f nil}
+                  fire (fn [e]
+                         (when (and (not (.-done h))
+                                    (or (not e)
+                                        (and (= (.-target e) urlbar)
+                                             (= (.-propertyName e) "opacity"))))
+                           (set! (.-done h) true)
+                           (try (.removeEventListener urlbar "transitionend" (.-f h))
+                                (catch Any _ nil))
+                           (finish-teardown)))]
+              (set! (.-f h) fire)
+              (.addEventListener urlbar "transitionend" fire)
+              (.setTimeout window (fn [] (fire nil)) 260))))
 
         activate-floating (fn [new-intent]
           (set! (.-intent state) new-intent)

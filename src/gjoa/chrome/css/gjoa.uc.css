@@ -977,6 +977,21 @@ Preserve these (security warnings):
   }
 }
 
+/* #150 GEOMETRY SNAP (2026-07-19): the ghost look-alike holds the resting slot the
+ * whole time the palette floats; on finish-teardown the REAL #urlbar must revert to
+ * that slot in ONE frame so the ghost→real swap is seamless. Without this, dropping
+ * `gjoa-urlbar-floating` lets #urlbar's width/position animate back through the
+ * breakout-extend WIDTH transition — a visible retraction of the bar through the tab
+ * row while opacity restores to 1 (the "deformity after Enter" caught by the
+ * cage-headless frame monitor: cap-enter/f-023→f-024). Kill every transition/animation
+ * on the urlbar for the single restore frame so the revert is instant + matches the
+ * ghost exactly. JS sets `gjoa-urlbar-snap`, then clears it on the next rAF. */
+:root[gjoa-urlbar-snap] #urlbar,
+:root[gjoa-urlbar-snap] #urlbar * {
+  transition: none !important;
+  animation: none !important;
+}
+
 /* Breathing room at the panel top so the input doesn't butt against (and look
  * clipped by) the rounded command-palette edge — the FF152 urlbar restyle left
  * the input flush. Applies in both the floating and in-toolbar expanded popouts.
