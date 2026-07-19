@@ -478,6 +478,14 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this.#liftDarkLogos(win, doc);
         this.#darkScrollbars(win, doc);
         this.#rescueBlendedPhotos(win, doc);
+        // COVERAGE (cluster B): the three background passes above are
+        // viewport-clipped and fire only on load-time timers (all at scrollY=0),
+        // so a light section revealed by SCROLLING keeps the engine's bright
+        // output (stripe cards, azure page-bg, cloud.google carousel). Install one
+        // debounced scroll-STOP listener that re-runs the same idempotent passes so
+        // now-visible rows get the darkening the fold got. Mirrors #normalizeContrast's
+        // wave6 W-H hook.
+        this.#hookBgScrollRescan(win, doc);
       }));
     // Pass-2 polish (pref-gated, default off): the refiner has settled the
     // inversion state, so the image pass can now read it the right way round.
@@ -699,7 +707,10 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
               continue;
             }
             const r = el.getBoundingClientRect();
-            if (r.width * r.height < MIN_AREA || r.top > H || r.bottom < 0 || r.left > W) {
+            // ~2-viewport below-fold buffer (was r.top > H): a scroll-STOP re-scan
+            // (#hookBgScrollRescan) sees now-visible heroes at small r.top; the buffer
+            // pre-dims just-below-fold media to blunt the brightness flash on scroll.
+            if (r.width * r.height < MIN_AREA || r.top > H * 2 || r.bottom < 0 || r.left > W) {
               continue;
             }
             const tn = el.tagName;
@@ -1263,6 +1274,45 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // (target's salmon header, walmart's light-blue tiles). Force big opaque mid/light-bg
   // blocks down to the dark floor, KEEPING hue/chroma (brand: a salmon header -> dark red,
   // not neutral black). One delayed re-pass catches lazy/late panels.
+  // Scroll-coverage hook (cluster B) for the three below-the-fold background passes
+  // (#dimLargeMedia / #darkenLightPanels / #darkenStrayLightBands). Those scans are
+  // viewport-clipped and only re-run on fixed load-time timers, ALL evaluated at
+  // scrollY=0 — so a light panel/band/hero-image revealed only by scrolling keeps
+  // the engine's bright output and loses to Dark Reader. ONE passive listener,
+  // debounced on scroll-STOP (not per-event), that fans out to all three passes;
+  // each pass is idempotent (data-gjoa-panel / -dim / -stray tags skip already-done
+  // elements) so a re-scan only pays for newly-revealed rows and can never re-tag or
+  // oscillate. Threshold-gated (<200px delta = no new rows) + debounced so it never
+  // costs a scroll frame. Mirrors #normalizeContrast's wave6 W-H scroll hook.
+  #hookBgScrollRescan(win, doc) {
+    try {
+      if (this._bgScrollHooked) {
+        return;
+      }
+      this._bgScrollHooked = true;
+      this._bgScrollLastY = win.scrollY | 0;
+      const onScroll = () => {
+        try {
+          const y = win.scrollY | 0;
+          if (Math.abs(y - this._bgScrollLastY) < 200) {
+            return; // no new rows revealed — skip
+          }
+          if (this._bgScrollTimer) {
+            win.clearTimeout(this._bgScrollTimer);
+          }
+          this._bgScrollTimer = win.setTimeout(() => {
+            this._bgScrollTimer = null;
+            this._bgScrollLastY = win.scrollY | 0;
+            try { this.#dimLargeMedia(win, doc); } catch (e2) {}
+            try { this.#darkenLightPanels(win, doc); } catch (e2) {}
+            try { this.#darkenStrayLightBands(win, doc); } catch (e2) {}
+          }, 250);
+        } catch (e2) {}
+      };
+      win.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    } catch (e) {}
+  }
+
   #darkenLightPanels(win, doc) {
     try {
       if (!doc.body) {
@@ -1376,7 +1426,11 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
             continue;
           }
           const r = el.getBoundingClientRect();
-          if (r.bottom < 0 || r.top > 3000) {
+          // Buffer ~2 viewports below the fold (min 3000px): on a scroll-STOP re-scan
+          // (#hookBgScrollRescan) getBoundingClientRect is viewport-relative so
+          // now-visible panels have a small r.top and pass, while the buffer catches
+          // just-below-fold rows proactively to blunt the darken flash on the next scroll.
+          if (r.bottom < 0 || r.top > Math.max(3000, (win.innerHeight | 0) * 2)) {
             continue;
           }
           const tn = el.tagName;
