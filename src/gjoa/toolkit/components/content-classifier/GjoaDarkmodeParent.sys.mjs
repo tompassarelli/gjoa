@@ -161,6 +161,23 @@ const FG_HALATION_CEIL = 90; // A1 Lc90 halation ceiling: don't over-contrast th
 // engine-side root — see wave6 report §engine; this recovers the muted hue it left.)
 const FG_ACCENT_CHROMA = 0.03;
 const FG_ACCENT_FLOOR = 60; // chromatic accents read at >= Lc 60 (A5 / done-when), brighter than the 45 legibility floor
+// PURPLE-SHIFT / periwinkle cast (cluster D). invertBand brand-PRESERVES hue+chroma for any
+// run whose chroma sits in [0.03, 0.08] (its neutral-snap only zeroes c < 0.03). So a text a
+// site authored a FAINT slate / blue-violet (chroma just above the 0.03 snap, a cool hue)
+// keeps that faint cast through the L-remap and, at the light OUTPUT lightness, reads as a
+// visible LAVENDER / PERIWINKLE — the classic dark-mode purple-shift (cambridge headings +
+// body). The wave6 accent clause below then PRESERVES it (a chromatic run clearing the floor
+// is left exactly as painted), so the cast survives to screen. But a genuine brand accent is
+// VIVIDLY chromatic (the engine brand-preserves it at c > 0.08; even a muted link sits well
+// above this), so a NON-LINK run carrying only a faint cool cast is an inversion ARTIFACT, not
+// authored intent: snap it to a same-lightness neutral gray, exactly what Dark Reader renders.
+// Narrowly gated so it can never touch a real accent: NON-LINK only (a link keeps its
+// affordance re-solve / chroma-boost below), FAINT chroma only (vivid brand accents untouched),
+// and the COOL/VIOLET hue band only — a warm muted brand heading (gold / red / orange) is left
+// exactly as the engine painted it.
+const FG_CAST_CHROMA_CEIL = 0.07; // a faint cool cast; a real (even muted) accent sits at/above this
+const FG_CAST_HUE_LO = 255; // OKLCH blue-violet …
+const FG_CAST_HUE_HI = 330; // … through magenta: the purple-shift artifact band
 
 function _lin(c) { return Math.pow(c / 255, 2.4); }
 function _Ys(p) { return 0.2126729 * _lin(p[0]) + 0.7151522 * _lin(p[1]) + 0.0721750 * _lin(p[2]); }
@@ -709,6 +726,24 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       // orange AND reads. Gated on `inverted` — a native-dark site keeps its accents.
       // A run already clearing the floor is left exactly as the engine painted it.
       const fgC = _oklchC(el.fg);
+      // Cluster D purple-shift: a NON-LINK run carrying only a faint COOL cast is an
+      // inversion artifact (a near-neutral the band preserved into visible lavender), not a
+      // brand accent — neutralize it to a same-lightness gray BEFORE the hue-preserving
+      // accent solve below would otherwise lock the periwinkle in. See FG_CAST_* above.
+      if (inverted && !el.link && fgC > FG_ACCENT_CHROMA && fgC < FG_CAST_CHROMA_CEIL) {
+        const lab = _oklab(el.fg);
+        const hue = ((Math.atan2(lab[2], lab[1]) * 180) / Math.PI + 360) % 360;
+        if (hue >= FG_CAST_HUE_LO && hue <= FG_CAST_HUE_HI) {
+          // Retone to a NEUTRAL max-contrast tone (via _correct — the same crisp-neutral
+          // operator the fallback uses). It kills the cast (chroma -> 0) and lands the run
+          // at the legible polarity for THIS backdrop; a mid-grey target can't be placed
+          // through the child's extreme-only pre-invert (invertLum round-trips cleanly only
+          // near white/black), so a neutral extreme is both correct and machinery-safe.
+          const r = _correct(el.fg, bg, T);
+          correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+          continue;
+        }
+      }
       // LINK-ROLE re-saturation (wave-A A6 link-flatten). A hyperlink whose painted run
       // is WASHED (chroma below a healthy link level) or still ILLEGIBLE gets its hue
       // recovered + re-saturated to a vivid in-gamut accent (see _boostLinkChroma). This
@@ -774,6 +809,35 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
         Math.abs(_apca(el.fg, bg)) < FG_BRAND_BG_FLOOR &&
         Math.abs(_apca(ceilGray, bg)) >= Math.abs(_apca(el.fg, bg));
       if (brandFloored) {
+        const r = _capHalation(_raiseLight(el.fg), bg);
+        correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+        continue;
+      }
+      // OVERLAY-LIGHT-ON-IMAGE (cluster C — dark-on-bright hero text). An authored-near-white
+      // run the band floored to dark, sitting on a BRIGHT backdrop that is NOT a solid light
+      // surface of its own — a hero PHOTO or brand GRADIENT the engine exempts / brand-preserves
+      // (nba "WATCH LIVE" over the hero image, bestbuy "Choose a country." over the blue
+      // gradient). The improve-only brandFloored clause above ABSTAINS here: on a bright island
+      // ceiling-white loses raw |Lc| to the floored-dark fg, so it keeps the darker (higher-
+      // contrast) run and defers darkening the island to a bg-side pass. But the SITE authored
+      // the text LIGHT and the reference dark theme (Dark Reader) keeps it light — overlay text
+      // on imagery is DESIGNED light, and max-contrast black on a bright photo is the WRONG
+      // polarity (the judged defect). Recover the authored LIGHT polarity (hue-preserved,
+      // halation-capped) so the overlay reads as intended. The discriminator vs W-D's "dark text
+      // on a light card / white pill stays dark" invariant is the run's OWN background: a solid
+      // light surface serializes an opaque LIGHT ownBg (ownBgLight) and is left to the pairing
+      // clause below; only a transparent / dark ownBg means the bright pixels come from an exempt
+      // image or gradient BEHIND the text, which is the overlay class. authoredL >= near-white
+      // keeps this to originally-light runs only — a dark-authored run (low authoredL) is never
+      // flipped. Darkening the bright island itself remains a bg-side job; this fixes only the fg
+      // polarity so the intended light overlay is legible-as-designed rather than inverted dark.
+      const ownBgLight = el.ownBg && _oklchL(el.ownBg) >= FG_LIGHT_MIN_L;
+      const overlayFloored =
+        brandBg &&
+        !ownBgLight &&
+        authoredL >= FG_AUTHORED_LIGHT_L &&
+        fgL < FG_LIGHT_MIN_L;
+      if (overlayFloored) {
         const r = _capHalation(_raiseLight(el.fg), bg);
         correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
         continue;
