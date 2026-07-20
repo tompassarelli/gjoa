@@ -111,6 +111,23 @@
               (.addEventListener urlbar "transitionend" fire)
               (.setTimeout window (fn [] (fire nil)) 260))))
 
+        ;; SINGLE OWNER of the top-layer promotion. The palette escapes the sidebar's
+        ;; (transformed, in compact mode) stacking context ONLY by being a manual popover
+        ;; in the top layer. This asserts that idempotently — popover=manual + showPopover
+        ;; if not already open + focus — so it's safe to call on every summon (fresh OR
+        ;; re-arm) and self-heals a popover that another writer (compact.bjs / teardown)
+        ;; pulled out from under the `activated` flag.
+        ensure-floating-promoted (fn []
+          (try
+            (when (not= (.getAttribute urlbar "popover") "manual")
+              (attr! urlbar "popover" "manual"))
+            (when (and (not (bool (.matches urlbar ":popover-open"))) (.-showPopover urlbar))
+              (.showPopover urlbar))
+            (some-> window .-gURLBar .focus)
+            (some-> window .-gURLBar .select)
+            (catch Any e
+              (log "activateFloating:promote-error" {:msg (String e)}))))
+
         activate-floating (fn [new-intent]
           (set! (.-intent state) new-intent)
           ;; If a prior dismiss is still mid-teardown (teardown attr set, rAF
@@ -122,7 +139,17 @@
           (let [attr-val (intent-attr (.-intent state))]
             (if (.-activated state)
               (do (log "activateFloating:re-arm" {:intent (.-intent state)})
-                  (attr! root "gjoa-urlbar-intent" attr-val))
+                  (attr! root "gjoa-urlbar-intent" attr-val)
+                  ;; SELF-HEAL (2026-07-20): `activated` is a flag that can DESYNC from the
+                  ;; real DOM state — the `popover` attr (what puts the palette in the top
+                  ;; layer so it escapes the sidebar's transformed stacking context) is also
+                  ;; written by compact.bjs's observer and by teardown, so it can be pulled
+                  ;; out from under us while `activated` stays true. Without re-asserting it,
+                  ;; a re-summon leaves the palette OUT of the top layer, positioned by its
+                  ;; containing block (the compact sidebar) → clipped under the page content.
+                  ;; Owner correctly called this a state-management failure, not a compositor
+                  ;; bug. Re-assert the promotion here so every summon lands in the top layer.
+                  (ensure-floating-promoted))
               (do (set! (.-activated state) true)
                   (log "activateFloating" {:intent (.-intent state)})
                   ;; Leave a static look-alike (#gjoa-urlbar-ghost) in the resting
@@ -280,15 +307,7 @@
                       (.appendChild root bd)
                       (set! (.-backdrop state) bd)))
 
-                  (try
-                    (when (not= (.getAttribute urlbar "popover") "manual")
-                      (attr! urlbar "popover" "manual"))
-                    (when (and (not (bool (.matches urlbar ":popover-open"))) (.-showPopover urlbar))
-                      (.showPopover urlbar))
-                    (some-> window .-gURLBar .focus)
-                    (some-> window .-gURLBar .select)
-                    (catch Any e
-                      (log "activateFloating:error" {:msg (String e)})))
+                  (ensure-floating-promoted)
                   ;; reveal once the popover has promoted + positioned (double-rAF); a
                   ;; setTimeout fallback covers a starved rAF (e.g. uncomposited window) so
                   ;; the bar can never get stuck invisible.

@@ -99,5 +99,25 @@ if (sidebarRule) {
      "in-sidebar de-centering rule is scoped :root:not([gjoa-urlbar-floating]) so floating centers");
 }
 
+// --- TOP-LAYER SELF-HEAL: single owner, re-asserted on every summon ---
+// The palette escapes the sidebar's (compact = transformed) stacking context only by
+// being a top-layer popover. `popover` has multiple writers (compact.bjs, activate,
+// teardown), so it can desync from the `activated` flag. activate-floating must
+// re-assert the promotion on BOTH the fresh AND the re-arm path via one owner, so a
+// re-summon can never leave the palette stranded out of the top layer (clipped under
+// content). Behavioural proof: urlbar-promote-selfheal.py.
+ok(/ensure-floating-promoted/.test(bjs),
+   "there is a single top-layer-promotion owner (ensure-floating-promoted)");
+// it must be invoked from the re-arm branch (activated already true) — the desync path
+const rearmIdx = bjs.indexOf("activateFloating:re-arm");
+const rearmScope = rearmIdx !== -1 ? bjs.slice(rearmIdx, rearmIdx + 1400) : "";
+ok(/\(ensure-floating-promoted\)/.test(rearmScope),
+   "the re-arm branch calls ensure-floating-promoted (self-heals a pulled popover)");
+// and the promotion actually asserts popover=manual + showPopover
+const promoteIdx = bjs.indexOf("ensure-floating-promoted (fn");
+const promoteScope = promoteIdx !== -1 ? bjs.slice(promoteIdx, promoteIdx + 600) : "";
+ok(/popover.*manual/.test(promoteScope) && /showPopover/.test(promoteScope),
+   "ensure-floating-promoted asserts popover=manual + showPopover (top-layer promotion)");
+
 console.log(`\nurlbar-ghost-arming invariants: ${pass} pass, ${fail} fail`);
 process.exit(fail ? 1 : 0);
