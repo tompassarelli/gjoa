@@ -11,6 +11,33 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE = ROOT / "tools/test-driver/dark-exit-gate.py"
+OWNER_URLS = {
+    "https://www.zdnet.com/home-and-office/networking/spacex-wants-to-launch-100000-more-starlink-satellites/",
+    "https://pvk.ca/Blog/2019/01/09/preemption-is-gc-for-memory-reordering/",
+    "https://css-tricks.com/",
+    "https://css-tricks.com/get-ready-for-the-powerful-css-border-shape-property/",
+    "https://www.youtube.com/watch?v=jfKfPfyJRdk",
+    "https://en.wikipedia.org/wiki/Arthur_Tedder,_1st_Baron_Tedder",
+}
+CANARY_URLS = {"https://redis.io/", "https://github.com/", "https://without.boats/"}
+RECURRING_URLS = {
+    "https://azure.microsoft.com/",
+    "https://www.bbc.com/",
+    "https://cloud.google.com/",
+    "https://www.cnn.com/",
+    "https://www.economist.com/",
+    "https://www.fifa.com/",
+    "https://www.imdb.com/",
+    "https://kubernetes.io/",
+    "https://www.linkedin.com/",
+    "https://news.microsoft.com/",
+    "https://nodejs.org/",
+    "https://redis.io/",
+    "https://stackoverflow.com/",
+    "https://stripe.com/",
+    "https://techcrunch.com/",
+    "https://www.theguardian.com/",
+}
 
 
 class DarkExitGateTest(unittest.TestCase):
@@ -37,6 +64,30 @@ class DarkExitGateTest(unittest.TestCase):
                 records.append({"id": ident, "position": position, "candidate": arm, "fallback": dict(arm), "same_content": True, "sentinels": {"candidate": True, "fallback": True}, "escape_hatch": False})
         return records
 
+    def test_corpus_has_exact_evidence_categories(self):
+        categories = {}
+        for _ident, category, _severity, url in self.entries:
+            categories.setdefault(category, set()).add(url)
+        self.assertEqual(categories, {
+            "owner": OWNER_URLS,
+            "canary": CANARY_URLS,
+            "recurring-loss": RECURRING_URLS,
+        })
+        self.assertEqual(len(self.entries), 25)
+        self.assertEqual(len(CANARY_URLS), 3)
+        self.assertIn("https://redis.io/", CANARY_URLS)
+        self.assertIn("https://redis.io/", RECURRING_URLS)
+
+    def test_committed_policy_hash_and_counts(self):
+        policy = json.loads((ROOT / "configs/dark-mode-exit-policy.json").read_text())
+        corpus = ROOT / "configs/dark-mode-exit-corpus.txt"
+        self.assertEqual(policy["corpus_sha256"], hashlib.sha256(corpus.read_bytes()).hexdigest())
+        self.assertEqual(policy["required_classes"], {
+            "owner": len(OWNER_URLS),
+            "canary": len(CANARY_URLS),
+            "recurring-loss": len(RECURRING_URLS),
+        })
+
     def run_gate(self, records):
         path = self.root / "records.jsonl"
         path.write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
@@ -45,7 +96,7 @@ class DarkExitGateTest(unittest.TestCase):
     def test_clean_corpus_passes(self):
         result = self.run_gate(self.clean_records())
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("46 exact candidate/fallback top+mid pairs", result.stdout)
+        self.assertIn("50 exact candidate/fallback top+mid pairs", result.stdout)
 
     def test_injected_failure_paths_fail_closed(self):
         mutations = {
