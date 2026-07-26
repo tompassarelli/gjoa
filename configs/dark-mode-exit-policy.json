@@ -1,0 +1,13 @@
+{
+  "schema": "gjoa.dark-exit-policy/v1",
+  "corpus": "configs/dark-mode-exit-corpus.txt",
+  "corpus_sha256": "f4d1fb0f54ad47de8d36c8035a3d8502efbfe407cdaa59c9bd87d3700c3387f1",
+  "severity": 1,
+  "allow_reset": false,
+  "required_classes": {
+    "owner": 6,
+    "canary": 1,
+    "recurring-loss": 16
+  },
+  "positions": ["top", "mid"]
+}

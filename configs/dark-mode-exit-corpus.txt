@@ -1,0 +1,26 @@
+# Dark-exit acceptance corpus. Rows are immutable: id|class|severity|URL.
+# Owner reports stay present; the canary proves the control is not selectively enabled;
+# recurring losses prevent a clean rerun from forgetting a previously observed failure.
+owner-01|owner|1|https://www.zdnet.com/home-and-office/networking/spacex-wants-to-launch-100000-more-starlink-satellites/
+owner-02|owner|1|https://pvk.ca/Blog/2019/01/09/preemption-is-gc-for-memory-reordering/
+owner-03|owner|1|https://css-tricks.com/
+owner-04|owner|1|https://css-tricks.com/get-ready-for-the-powerful-css-border-shape-property/
+owner-05|owner|1|https://www.youtube.com/watch?v=jfKfPfyJRdk
+owner-06|owner|1|https://en.wikipedia.org/wiki/Arthur_Tedder,_1st_Baron_Tedder
+canary-01|canary|1|https://example.com/
+recurring-01|recurring-loss|1|https://news.ycombinator.com/
+recurring-02|recurring-loss|1|https://www.reddit.com/
+recurring-03|recurring-loss|1|https://github.com/
+recurring-04|recurring-loss|1|https://stackoverflow.com/
+recurring-05|recurring-loss|1|https://developer.mozilla.org/en-US/
+recurring-06|recurring-loss|1|https://www.nytimes.com/
+recurring-07|recurring-loss|1|https://www.bbc.com/news
+recurring-08|recurring-loss|1|https://www.theguardian.com/us
+recurring-09|recurring-loss|1|https://arstechnica.com/
+recurring-10|recurring-loss|1|https://www.theverge.com/
+recurring-11|recurring-loss|1|https://techcrunch.com/
+recurring-12|recurring-loss|1|https://www.wikipedia.org/
+recurring-13|recurring-loss|1|https://www.youtube.com/
+recurring-14|recurring-loss|1|https://www.cnn.com/
+recurring-15|recurring-loss|1|https://www.washingtonpost.com/
+recurring-16|recurring-loss|1|https://www.reuters.com/
