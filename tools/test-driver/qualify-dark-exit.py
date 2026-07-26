@@ -48,12 +48,20 @@ def page(m, url, out, label, slug, require_dr):
 
 def gjoa_off_light(gjoa):
     gjoa.send("Marionette:SetContext",{"value":"chrome"})
-    script="""const w=Services.wm.getMostRecentWindow('navigator:browser'); const p='gjoa.darkmode.enabled';
-let old=Services.prefs.getBoolPref(p,true); Services.prefs.setBoolPref(p,false); let off=Services.prefs.getBoolPref(p,true);
-Services.prefs.setIntPref('layout.css.prefers-color-scheme.content-override',1); let light=Services.prefs.getIntPref('layout.css.prefers-color-scheme.content-override',0);
-Services.prefs.setBoolPref(p,old); return {off,light,rollback:Services.prefs.getBoolPref(p,!old)===old};"""
+    # Keep the whole mutation and restoration in one chrome script: a Marionette
+    # transport error cannot leave either pref changed between commands.
+    script="""const dark='gjoa.darkmode.enabled', scheme='layout.css.prefers-color-scheme.content-override';
+const snapshot=(name, kind) => ({name, kind, had:Services.prefs.prefHasUserValue(name), value:kind==='bool' ? Services.prefs.getBoolPref(name, true) : Services.prefs.getIntPref(name, 0)});
+const restore=(p) => { if (p.had) { if (p.kind==='bool') Services.prefs.setBoolPref(p.name,p.value); else Services.prefs.setIntPref(p.name,p.value); } else Services.prefs.clearUserPref(p.name); };
+const oldDark=snapshot(dark,'bool'), oldScheme=snapshot(scheme,'int');
+try {
+  Services.prefs.setBoolPref(dark,false); let off=Services.prefs.getBoolPref(dark,true);
+  Services.prefs.setIntPref(scheme,1); let light=Services.prefs.getIntPref(scheme,0);
+  if (off!==false || light!==1) throw new Error('pref mutation did not stick');
+  return {off,light};
+} finally { restore(oldScheme); restore(oldDark); }"""
     state=(gjoa.send("WebDriver:ExecuteScript",{"script":script,"args":[]}) or {}).get("value") or {}
-    if state != {"off":False,"light":1,"rollback":True}: raise RuntimeError(f"Gjoa off/light/rollback failed: {state}")
+    if state != {"off":False,"light":1}: raise RuntimeError(f"Gjoa off/light/rollback failed: {state}")
     print("gjoa off/light/rollback: PASS")
 
 def main():
