@@ -6,7 +6,7 @@
 
 ;; guard!/quiet! (gjoa.macros) leak literal ~@ into the gjoa-tabs bundle (a beagle bundler
 ;; macro-order quirk in that large bundle — breaks the whole bundle incl. vim), so their
-;; try/catch is inlined here directly. See lodestar @019f0beb-4bdc.
+;; try/catch is inlined here directly. See north @019f0beb-4bdc.
 (js/export (defn on [topic :- String handler :- Any] :- Any
   (let [observer {:observe (fn [subject _topic data]
                     (try (handler subject data)

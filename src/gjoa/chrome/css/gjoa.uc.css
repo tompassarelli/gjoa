@@ -943,26 +943,53 @@ Preserve these (security warnings):
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
 }
 
-/* #149 ATOMIC TEARDOWN: deactivate sets `gjoa-urlbar-teardown` on :root for ONE
- * frame BEFORE removing `gjoa-urlbar-floating`. While teardown is set the
- * floating bar (and its backdrop) is instantly opacity:0 / non-interactive with
- * NO transition or animation, so the geometry-restore reflow back to the resting
- * in-sidebar inline urlbar happens entirely behind a hidden box — the
- * intermediate "small inline search box flashing in the sidebar" frame is never
- * painted. Must out-specify the float-in animation + box-shadow rules above, so
- * it carries the same `:root[gjoa-urlbar-floating]` prefix plus the teardown
- * attr. */
+/* #149 ATOMIC TEARDOWN: deactivate sets `gjoa-urlbar-teardown` on :root, which
+ * FADES the floating bar (and its backdrop) out — PURE opacity 1->0 — and the JS
+ * restores the resting geometry only AFTER the fade completes (setTimeout matched
+ * to the duration). So the inline-restore reflow back to the in-sidebar urlbar
+ * happens entirely behind the now-invisible box: the intermediate "small inline
+ * search box flashing in the sidebar" frame is never painted, AND the dismiss
+ * reads as a smooth close.
+ *
+ * NO SCALE on teardown (regression fix 2026-07-18): scaling the floating #urlbar
+ * also scales its child .urlbarView-results — a tall panel of suggestion text.
+ * Sub-pixel scale re-rasterizes all that text every frame, so the whole result
+ * list went BLURRY mid-dismiss (the "artifact degradation" the owner saw). A
+ * text panel cross-fades cleanly on opacity alone; drop the scale entirely.
+ * Must out-specify the float-in animation + box-shadow rules above. */
 :root[gjoa-urlbar-floating][gjoa-urlbar-teardown] #urlbar {
   opacity: 0 !important;
   animation: none !important;
-  transition: none !important;
+  transition: opacity 130ms ease-in !important;
   pointer-events: none !important;
 }
 :root[gjoa-urlbar-teardown] #gjoa-urlbar-backdrop {
   opacity: 0 !important;
   animation: none !important;
-  transition: none !important;
+  transition: opacity 130ms ease-in !important;
   pointer-events: none !important;
+}
+/* Reduced motion: instant dismiss (matches the disabled float-in above). */
+@media (prefers-reduced-motion: reduce) {
+  :root[gjoa-urlbar-floating][gjoa-urlbar-teardown] #urlbar,
+  :root[gjoa-urlbar-teardown] #gjoa-urlbar-backdrop {
+    transition: none !important;
+  }
+}
+
+/* #150 GEOMETRY SNAP (2026-07-19): the ghost look-alike holds the resting slot the
+ * whole time the palette floats; on finish-teardown the REAL #urlbar must revert to
+ * that slot in ONE frame so the ghost→real swap is seamless. Without this, dropping
+ * `gjoa-urlbar-floating` lets #urlbar's width/position animate back through the
+ * breakout-extend WIDTH transition — a visible retraction of the bar through the tab
+ * row while opacity restores to 1 (the "deformity after Enter" caught by the
+ * cage-headless frame monitor: cap-enter/f-023→f-024). Kill every transition/animation
+ * on the urlbar for the single restore frame so the revert is instant + matches the
+ * ghost exactly. JS sets `gjoa-urlbar-snap`, then clears it on the next rAF. */
+:root[gjoa-urlbar-snap] #urlbar,
+:root[gjoa-urlbar-snap] #urlbar * {
+  transition: none !important;
+  animation: none !important;
 }
 
 /* Breathing room at the panel top so the input doesn't butt against (and look

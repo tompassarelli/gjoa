@@ -198,6 +198,32 @@
           (writeFileSync branding-pref-file (str existing @pref-blocks)))
         (.info log (str "compiled + appended " (.-length gjoa-pref-files) " gjoa pref files to branding/" (.-binaryName cfg) "/pref/firefox-branding.js"))))
 
+    ;; 1c. UA COMPAT: present as Firefox in the User-Agent so sites that sniff for a
+    ;;     known engine (bloomberg, etc.) don't flag gjoa as out-of-date. The UA
+    ;;     product token would otherwise read "Gjoa/<ver>": MOZ_APP_UA_NAME defaults
+    ;;     to "" so Gecko falls back to MOZ_APP_BASENAME (Gjoa; stock Firefox reads
+    ;;     "Firefox" only because ITS basename is "Firefox"). MOZ_APP_UA_NAME is the
+    ;;     "proper" knob but an imply_option-ONLY project_flag — configure REFUSES it
+    ;;     from confvars OR env ("accepted from: implied"), so wiring it needs a
+    ;;     moz.configure source patch. A default pref is deterministic, needs no
+    ;;     configure surgery, and lands in omni.ja for BOTH builds. Computed to
+    ;;     Firefox/<major.minor> from the pinned Firefox version. Branding stays Gjoa
+    ;;     everywhere else (about:, title, app name).
+    (let [ver (.-version (.-firefox cfg))
+          mm-match (.match ver (RegExp. "^(\\d+\\.\\d+)"))
+          mm (if mm-match (aget mm-match 1) ver)
+          ua (str "Mozilla/5.0 (X11; Linux x86_64; rv:" mm ") Gecko/20100101 Firefox/" mm)
+          ua-pref-file (join target "pref" "firefox-branding.js")]
+      (when (existsSync ua-pref-file)
+        (let [existing (readFileSync ua-pref-file "utf8")]
+          (when (not (.includes existing "general.useragent.override"))
+            (writeFileSync ua-pref-file
+              (str existing
+                   "\n// gjoa UA compat: present as Firefox so UA-sniffing sites recognise the\n"
+                   "// engine; branding stays Gjoa everywhere else (tools/prep/branding.bjs).\n"
+                   "pref(\"general.useragent.override\", \"" ua "\");\n"))
+            (.info log (str "appended general.useragent.override = " ua))))))
+
     ;; 2. Overlay our own logo PNGs from configs/branding/gjoa/. Mozilla's
     ;;    convention: defaultNN.png at the branding root for sizes the desktop
     ;;    integration needs (16/22/24/32/48/64/128/256/512). We expect logoNN.png

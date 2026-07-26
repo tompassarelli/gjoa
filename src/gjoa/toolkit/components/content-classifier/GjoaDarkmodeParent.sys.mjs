@@ -62,16 +62,27 @@ async function loadFixes() {
 function mirrorOverridesPref(fixes) {
   try {
     const overrides = {};
+    const colorSchemes = {};
     for (const host of Object.keys(fixes || {})) {
       const ov = fixes[host].override || "inactive";
-      if (ov === "auto") {
-        continue; // "auto" is decided at runtime by the measured refiner, not pre-paint
+      if (ov !== "auto") {
+        overrides[host] = ov; // "auto" is decided at runtime by the refiner, not pre-paint
       }
-      overrides[host] = ov;
+      // colorScheme:"light"/"dark" — force a native-dark site to serve that theme
+      // pre-paint (then the engine inverts). Mirrored like overrides so the content
+      // actor applies it SYNC at document-start via prefersColorSchemeOverride.
+      const cs = fixes[host].colorScheme;
+      if (cs) {
+        colorSchemes[host] = cs;
+      }
     }
     Services.prefs.setStringPref(
       "gjoa.darkmode.fix-overrides",
       JSON.stringify(overrides)
+    );
+    Services.prefs.setStringPref(
+      "gjoa.darkmode.fix-colorscheme",
+      JSON.stringify(colorSchemes)
     );
   } catch (e) {}
 }
@@ -150,6 +161,23 @@ const FG_HALATION_CEIL = 90; // A1 Lc90 halation ceiling: don't over-contrast th
 // engine-side root — see wave6 report §engine; this recovers the muted hue it left.)
 const FG_ACCENT_CHROMA = 0.03;
 const FG_ACCENT_FLOOR = 60; // chromatic accents read at >= Lc 60 (A5 / done-when), brighter than the 45 legibility floor
+// PURPLE-SHIFT / periwinkle cast (cluster D). invertBand brand-PRESERVES hue+chroma for any
+// run whose chroma sits in [0.03, 0.08] (its neutral-snap only zeroes c < 0.03). So a text a
+// site authored a FAINT slate / blue-violet (chroma just above the 0.03 snap, a cool hue)
+// keeps that faint cast through the L-remap and, at the light OUTPUT lightness, reads as a
+// visible LAVENDER / PERIWINKLE — the classic dark-mode purple-shift (cambridge headings +
+// body). The wave6 accent clause below then PRESERVES it (a chromatic run clearing the floor
+// is left exactly as painted), so the cast survives to screen. But a genuine brand accent is
+// VIVIDLY chromatic (the engine brand-preserves it at c > 0.08; even a muted link sits well
+// above this), so a NON-LINK run carrying only a faint cool cast is an inversion ARTIFACT, not
+// authored intent: snap it to a same-lightness neutral gray, exactly what Dark Reader renders.
+// Narrowly gated so it can never touch a real accent: NON-LINK only (a link keeps its
+// affordance re-solve / chroma-boost below), FAINT chroma only (vivid brand accents untouched),
+// and the COOL/VIOLET hue band only — a warm muted brand heading (gold / red / orange) is left
+// exactly as the engine painted it.
+const FG_CAST_CHROMA_CEIL = 0.07; // a faint cool cast; a real (even muted) accent sits at/above this
+const FG_CAST_HUE_LO = 255; // OKLCH blue-violet …
+const FG_CAST_HUE_HI = 330; // … through magenta: the purple-shift artifact band
 
 function _lin(c) { return Math.pow(c / 255, 2.4); }
 function _Ys(p) { return 0.2126729 * _lin(p[0]) + 0.7151522 * _lin(p[1]) + 0.0721750 * _lin(p[2]); }
@@ -246,6 +274,13 @@ function _oklchL(rgb) {
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
   return 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
 }
+// True when a corrective would DARKEN the run (lower its OKLCH lightness). The
+// never-darken-on-native-dark guard uses this: on a page the engine is not inverting,
+// the normalizer may only lighten, never darken (the site owns its text colors). Pure
+// mirror of the invariant tested in tools/darkmode-regress/normalize-guard.test.js.
+function _decideCorrectiveDarkens(corrective, fg) {
+  return _oklchL(corrective) < _oklchL(fg);
+}
 // ── OKLCH ⇄ sRGB (Ottosson) + the hue-preserving accent solve ──────────────────────
 // Ported from tools/darkmode-regress/colormath.js (the canonical operator, the SAME
 // math patch 0013 runs at paint) so a CHROMATIC accent/link the engine left illegible
@@ -324,6 +359,27 @@ function _solveAccent(fg, bg, T, ceiling) {
   }
   return best;
 }
+// wave-A LINK re-saturation. The engine band (invertBand) brand-PRESERVES chroma > 0.08
+// but remaps a LOW-chroma authored link (a slate/muted blue near the 0.03 neutral-snap)
+// to a washed mid-light that clears the legibility floor yet reads NEUTRAL — the blue
+// affordance is gone (marginalia/antonz/fnordig link-flatten). _solveAccent alone can't
+// fix it: it holds chroma FIXED, so a washed run stays washed. This RE-synthesises a
+// healthy link chroma at the run's SURVIVING hue (the band preserves hue direction, only
+// sheds magnitude), holding hue EXACTLY and clamping to the sRGB gamut. The boosted run
+// carries C ≈ 0.11 > 0.08, so the engine brand-preserves it on re-band (verified via the
+// colormath oracle: invertBand(boosted) == boosted) — the vivid link survives to paint.
+// Returns null when the painted run has no trustworthy hue (a genuine neutral link), so
+// the caller leaves it neutral rather than inventing a tint.
+const FG_LINK_VIVID_C = 0.1; // painted chroma below this = a washed link worth re-saturating
+const FG_LINK_TARGET_C = 0.11; // synthesised link chroma (> 0.08 so the band preserves it)
+function _boostLinkChroma(fg) {
+  const lab = _oklab(fg);
+  const L = lab[0], C = Math.hypot(lab[1], lab[2]), h = Math.atan2(lab[2], lab[1]);
+  if (C < 0.008) {
+    return null; // no hue to hold — a real neutral link
+  }
+  return _oklchToSrgb(L, Math.max(C, FG_LINK_TARGET_C), h);
+}
 
 export class GjoaDarkmodeParent extends JSWindowActorParent {
   // Decision-path trace (pref-gated, zero overhead off). Tab-delimited on
@@ -384,6 +440,21 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
     // with gjoa's engine inversion, so they DON'T ship css — they only signal "force"
     // to the measured #auto refiner.
     const fix = fixForHost(await loadFixes(), host);
+    // colorScheme:"light"/"dark" — a HARD pre-paint decision that takes precedence
+    // over the override field: force the site to serve that theme (child sets
+    // prefersColorSchemeOverride) and force-invert it ("active"), yielding a uniform
+    // dark that matches Dark Reader on native-dark sites whose own dark theme is
+    // off-brand/imperfect (theverge green→purple, django white search-pill→dark).
+    if (fix && fix.colorScheme) {
+      return {
+        colorScheme: fix.colorScheme,
+        override: "active",
+        css: fix.css || "",
+        inject: fix.inject || "",
+        ignoreImageAnalysis: fix.ignoreImageAnalysis ?? false,
+        ignoreInlineStyle: fix.ignoreInlineStyle ?? false,
+      };
+    }
     if (fix && (fix.override || "auto") !== "auto") {
       return {
         override: fix.override,
@@ -655,6 +726,43 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       // orange AND reads. Gated on `inverted` — a native-dark site keeps its accents.
       // A run already clearing the floor is left exactly as the engine painted it.
       const fgC = _oklchC(el.fg);
+      // Cluster D purple-shift: a NON-LINK run carrying only a faint COOL cast is an
+      // inversion artifact (a near-neutral the band preserved into visible lavender), not a
+      // brand accent — neutralize it to a same-lightness gray BEFORE the hue-preserving
+      // accent solve below would otherwise lock the periwinkle in. See FG_CAST_* above.
+      if (inverted && !el.link && fgC > FG_ACCENT_CHROMA && fgC < FG_CAST_CHROMA_CEIL) {
+        const lab = _oklab(el.fg);
+        const hue = ((Math.atan2(lab[2], lab[1]) * 180) / Math.PI + 360) % 360;
+        if (hue >= FG_CAST_HUE_LO && hue <= FG_CAST_HUE_HI) {
+          // Retone to a NEUTRAL max-contrast tone (via _correct — the same crisp-neutral
+          // operator the fallback uses). It kills the cast (chroma -> 0) and lands the run
+          // at the legible polarity for THIS backdrop; a mid-grey target can't be placed
+          // through the child's extreme-only pre-invert (invertLum round-trips cleanly only
+          // near white/black), so a neutral extreme is both correct and machinery-safe.
+          const r = _correct(el.fg, bg, T);
+          correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+          continue;
+        }
+      }
+      // LINK-ROLE re-saturation (wave-A A6 link-flatten). A hyperlink whose painted run
+      // is WASHED (chroma below a healthy link level) or still ILLEGIBLE gets its hue
+      // recovered + re-saturated to a vivid in-gamut accent (see _boostLinkChroma). This
+      // catches the low-chroma links the chroma-gated clause below misses or under-lifts
+      // (the band snapped their blue toward neutral so it reads white/gray — marginalia/
+      // antonz/fnordig). A run with no trustworthy hue (a genuine neutral link) returns
+      // null and falls through to the neutral clauses (no invented tint).
+      if (inverted && el.link) {
+        const washed = fgC < FG_LINK_VIVID_C;
+        const illegible = Math.abs(_apca(el.fg, bg)) < FG_ACCENT_FLOOR;
+        if (washed || illegible) {
+          const boosted = _boostLinkChroma(el.fg);
+          if (boosted) {
+            const r = _solveAccent(boosted, bg, FG_ACCENT_FLOOR, FG_HALATION_CEIL);
+            correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+            continue;
+          }
+        }
+      }
       if (inverted && fgC > FG_ACCENT_CHROMA) {
         if (Math.abs(_apca(el.fg, bg)) < FG_ACCENT_FLOOR) {
           const r = _solveAccent(el.fg, bg, FG_ACCENT_FLOOR, FG_HALATION_CEIL);
@@ -705,6 +813,72 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
         correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
         continue;
       }
+      // OVERLAY-LIGHT-ON-IMAGE (cluster C — dark-on-bright hero text). An authored-near-white
+      // run the band floored to dark, sitting on a BRIGHT backdrop that is NOT a solid light
+      // surface of its own — a hero PHOTO or brand GRADIENT the engine exempts / brand-preserves
+      // (nba "WATCH LIVE" over the hero image, bestbuy "Choose a country." over the blue
+      // gradient). The improve-only brandFloored clause above ABSTAINS here: on a bright island
+      // ceiling-white loses raw |Lc| to the floored-dark fg, so it keeps the darker (higher-
+      // contrast) run and defers darkening the island to a bg-side pass. But the SITE authored
+      // the text LIGHT and the reference dark theme (Dark Reader) keeps it light — overlay text
+      // on imagery is DESIGNED light, and max-contrast black on a bright photo is the WRONG
+      // polarity (the judged defect). Recover the authored LIGHT polarity (hue-preserved,
+      // halation-capped) so the overlay reads as intended. The discriminator vs W-D's "dark text
+      // on a light card / white pill stays dark" invariant is the run's OWN background: a solid
+      // light surface serializes an opaque LIGHT ownBg (ownBgLight) and is left to the pairing
+      // clause below; only a transparent / dark ownBg means the bright pixels come from an exempt
+      // image or gradient BEHIND the text, which is the overlay class. authoredL >= near-white
+      // keeps this to originally-light runs only — a dark-authored run (low authoredL) is never
+      // flipped. Darkening the bright island itself remains a bg-side job; this fixes only the fg
+      // polarity so the intended light overlay is legible-as-designed rather than inverted dark.
+      const ownBgLight = el.ownBg && _oklchL(el.ownBg) >= FG_LIGHT_MIN_L;
+      const overlayFloored =
+        brandBg &&
+        !ownBgLight &&
+        authoredL >= FG_AUTHORED_LIGHT_L &&
+        fgL < FG_LIGHT_MIN_L;
+      if (overlayFloored) {
+        const r = _capHalation(_raiseLight(el.fg), bg);
+        correctives.push({ cn: el.cn, color: `rgb(${r[0]},${r[1]},${r[2]})` });
+        continue;
+      }
+      // PRESERVED-BG PAIRING (wave-A white-pill). A run whose OWN element background is
+      // opaque and LIGHT (a preserved white pill / consent button) but whose fg fails the
+      // floor against THAT bg is a white-on-white pair — regardless of what the racing
+      // viewport snapshot sampled for its rect. The snapshot can read the dark page
+      // backdrop behind a late/fixed overlay and falsely judge the white label legible
+      // (the top-view/mid-view split: reddit/npr/fifa/docker consent buttons). Re-solve
+      // against the element's OWN bg so the pairing is pass-order-independent: a preserved
+      // light bg ⇒ fg MUST flip to its max-contrast (black) polarity. The child's
+      // per-element pre-invert then lands it whether or not the button subtree inverted.
+      if (
+        el.ownBg &&
+        _oklchL(el.ownBg) >= FG_LIGHT_MIN_L &&
+        // Corroborate the light ownBg against the REAL painted backdrop (snapshot)
+        // before darkening. On a native-dark site that declares color-scheme (reddit),
+        // an ancestor's COMPUTED background-color serializes LIGHT (the authored var)
+        // while the engine PAINTS it dark — so a legible light-on-dark comment run reads
+        // here as "light-on-light" and, without this guard, gets flipped to black-on-dark
+        // (the vanishing-comment-text bug; the +3.2s/scroll re-passes spread it). Only
+        // trust the light ownBg when the SNAPSHOT sees a light backdrop too. If the painted
+        // pixels are dark, the run is on dark → never darken it. A genuinely light pill not
+        // yet composited (snapshot reads the dark page behind it) is recovered on a later
+        // re-pass once it paints — we do NOT darken live legible text to catch it.
+        _oklchL(bg) > FG_DARK_BG_L &&
+        Math.abs(_apca(el.fg, el.ownBg)) < T
+      ) {
+        const c = _correct(el.fg, el.ownBg, T);
+        // Same never-darken-on-native-dark guard (see the final fallback below): a
+        // color-scheme-declaring native-dark site (reddit) can serialize an ancestor's
+        // authored-light var via getComputedStyle while the engine PAINTS it dark, so a
+        // legible light run reads as light-on-light here — never darken it on a page the
+        // engine isn't inverting.
+        if (!inverted && _decideCorrectiveDarkens(c, el.fg)) {
+          continue;
+        }
+        correctives.push({ cn: el.cn, color: `rgb(${c[0]},${c[1]},${c[2]})` });
+        continue;
+      }
       if (Math.abs(_apca(el.fg, bg)) >= T) {
         continue;
       }
@@ -713,6 +887,19 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
       // re-author invertLum so it renders the target). Page-level inversion flags are
       // wrong on mixed pages (a non-inverted light card inside an inverted dark page).
       const c = _correct(el.fg, bg, T);
+      // NEVER-DARKEN-ON-NATIVE-DARK guard (reddit vanishing-text). On a page the engine
+      // is NOT inverting, the SITE authored its text colors — the normalizer may only
+      // LIGHTEN genuinely-too-dark runs, never DARKEN. A light snapshot median for an
+      // already-light run here is a racing/scroll re-pass that sampled an adjacent
+      // bright element (image, thumbnail) while the text actually sits on dark; flipping
+      // that legible light text to black-on-dark is the vanishing-comment-text failure.
+      // (Extends the same principle the raise clauses already honor for native-dark —
+      // see the `inverted` comment above. Inverted pages keep the darken polarity for
+      // engine-inverted labels on preserved-light pills.) Tested in
+      // tools/darkmode-regress/normalize-guard.test.js.
+      if (!inverted && _decideCorrectiveDarkens(c, el.fg)) {
+        continue;
+      }
       correctives.push({ cn: el.cn, color: `rgb(${c[0]},${c[1]},${c[2]})` });
     }
     return { correctives };

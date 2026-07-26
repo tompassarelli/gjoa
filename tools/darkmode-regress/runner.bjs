@@ -169,7 +169,7 @@
           rects-js (.readFileSync fs "tools/darkmode-regress/rects.js" "utf8")
           ;; the canonical color math is prepended so snap.js's functions (apca,
           ;; correct, Ys, invertLum, OKLab) are in scope in the injected script.
-          colormath-js (.readFileSync fs "tools/darkmode-regress/colormath.js" "utf8")
+          colormath-js (.readFileSync fs "tools/darkmode-regress/colormath.cjs" "utf8")
           snap-js (str colormath-js "\n" (.readFileSync fs "tools/darkmode-regress/snap.js" "utf8"))
           apply-js (.readFileSync fs "tools/darkmode-regress/apply-correctives.js" "utf8")
           refresh-js (.readFileSync fs "tools/darkmode-regress/refresh.js" "utf8")

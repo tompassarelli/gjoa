@@ -8,9 +8,9 @@
     "0007-enable-sqlite-fts5.patch": "1407c9049294c558f2d7a96c447503868b90d642d03126319c5f04b6e3311c05",
     "0008-content-classifier-cosmetic-filtering.patch": "a227bb98f5c5aabe4bd1629538fce4098ab34d21eaa09240d2a701232d0b2d89",
     "0009-dark-mode-engine-color-inversion.patch": "0fe5f7283df8d0a55f31cec32f684600f9611ca7e2dff0143a1bbf08f141c418",
-    "0010-dark-mode-island-scrim.patch": "22a362b1883dc0c9916998d42d74815ed91e12646466423b0c97c9c3dc59a4b9",
-    "0012-dark-mode-role-resolver.patch": "a76f124386c1709ad66f1317335d5c1e2afc1047bbf45fb2bb1cc3c3d81c09ad",
-    "0013-dark-mode-text-solve.patch": "421dd6e4f3c3fa65859bb56a7e1ea94c8d566218c19c4c4fc05a55e2cd771a28",
-    "0014-dark-mode-tier0.patch": "8463bb02b29b487104b30a6afa51db5b6c94605f1a610c2aa948ed351325e041"
+    "0010-dark-mode-island-scrim.patch": "84b46d9a35424fe5459ae4b62acf757f4f6a3082872320defe2c6545843beb53",
+    "0012-dark-mode-role-resolver.patch": "b088e0e1d31f2c30cdcbfbd87846090abbbd2e0e1c8620dd7b06c55d3b6277cf",
+    "0013-dark-mode-text-solve.patch": "ef8c5d6d7447f740ba1fe7634b9c0ff91759178493328f24d428fbaba77097c8",
+    "0014-dark-mode-tier0.patch": "b224f8af040eff20e7cf9ebb534e8b31016646a1204567baf6e772ae7123acb4"
   }
 }

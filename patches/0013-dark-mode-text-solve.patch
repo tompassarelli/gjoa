@@ -19,7 +19,7 @@ diff --git a/layout/generic/GjoaDarkText.h b/layout/generic/GjoaDarkText.h
 new file mode 100644
 --- /dev/null
 +++ b/layout/generic/GjoaDarkText.h
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,50 @@
 +/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 +/* gjoa dark-mode v2 (M3): OKLab/APCA paint-time text re-solve.
 + *
@@ -47,8 +47,24 @@ new file mode 100644
 +  // holding hue exactly, never adding chroma. Preserves aFg's alpha. If the
 +  // extreme cannot clear the floor (mid-gray backdrop caps contrast) it returns
 +  // the best achievable. aBgFrozen MUST be opaque (caller gates on alpha == 255).
++  //
++  // aClampLargeCeiling (M4a halation ceiling): the floor-lift search only moves
++  // TOWARD the higher-contrast extreme, so a mark whose authored |Lc| already
++  // exceeds aCeiling (band-mapped black #e4e4e4, or authored white on the dark
++  // ramp) passes UNCHANGED — the pre-existing ceiling backstop is a no-op there
++  // because its interpolation basis is that same extreme. When true, an ADDITIVE
++  // pass pulls such a mark DOWN the OKLCh lightness axis toward the backdrop
++  // (hue-held, chroma-held) until |Lc| <= aCeiling. Size-gated: callers pass true
++  // ONLY for LARGE text (see IsLargeText). Body/small text passes false and the
++  // floor-lift path is byte-identical to the pre-M4a operator.
 +  static nscolor Correct(nscolor aFg, nscolor aBgFrozen, float aApcaFloor,
-+                         float aCeiling);
++                         float aCeiling, bool aClampLargeCeiling = false);
++
++  // APCA size×weight matrix (chief-engineer-verdict §3 A1): "large" text is the
++  // halation set that must obey the ceiling; body/small text is exempt.
++  static bool IsLargeText(float aCssPx, float aWeight) {
++    return aCssPx >= 36.0f || (aCssPx >= 24.0f && aWeight >= 700.0f);
++  }
 +};
 +
 +}  // namespace mozilla
@@ -58,7 +74,7 @@ diff --git a/layout/generic/GjoaDarkText.cpp b/layout/generic/GjoaDarkText.cpp
 new file mode 100644
 --- /dev/null
 +++ b/layout/generic/GjoaDarkText.cpp
-@@ -0,0 +1,152 @@
+@@ -0,0 +1,184 @@
 +/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 +/* gjoa dark-mode v2 (M3). Port of tools/darkmode-regress/colormath.js correct().
 + * Pure float math; no engine deps beyond nsColor. */
@@ -151,7 +167,7 @@ new file mode 100644
 +}  // namespace
 +
 +nscolor GjoaDarkText::Correct(nscolor aFg, nscolor aBgFrozen, float aApcaFloor,
-+                              float aCeiling) {
++                              float aCeiling, bool aClampLargeCeiling) {
 +  const float fg[3] = {(float)NS_GET_R(aFg), (float)NS_GET_G(aFg),
 +                       (float)NS_GET_B(aFg)};
 +  const float bg[3] = {(float)NS_GET_R(aBgFrozen), (float)NS_GET_G(aBgFrozen),
@@ -206,6 +222,38 @@ new file mode 100644
 +      best[0] = c[0]; best[1] = c[1]; best[2] = c[2];
 +    }
 +  }
++  // M4a size-gated halation ceiling (large text only). The floor-lift search
++  // above interpolates l0 -> lext (the higher-contrast extreme), so it can only
++  // ADD contrast; a mark whose |Lc| already exceeds the ceiling never moves (its
++  // l0 IS lext, e.g. white on dark -> the whole at() basis is degenerate) and the
++  // pre-existing backstop, built on that same at(), is a no-op for it. This
++  // additive pass pulls the mark DOWN toward the backdrop lightness (hue-held,
++  // chroma-held) until |Lc| <= aCeiling. Monotone: contrast decreases as the mark
++  // approaches the backdrop lightness, so a binary search finds the minimal
++  // darkening. Body/small text passes false and is never clamped.
++  if (aClampLargeCeiling && std::fabs(Apca(best, bg)) > aCeiling) {
++    const float mark[3] = {best[0], best[1], best[2]};
++    float lm, cm, hm;
++    SrgbToOklch(mark, lm, cm, hm);  // holds THIS mark's hue + chroma
++    float lbg, cbg, hbg;
++    SrgbToOklch(bg, lbg, cbg, hbg);  // backdrop L = the zero-contrast anchor
++    auto atCap = [&](float t, float* o) {
++      OklchToSrgb(lm + t * (lbg - lm), cm, hm, o);  // t: 0=mark, 1=backdrop L
++    };
++    float lo3 = 0.0f, hi3 = 1.0f, capped[3];
++    atCap(1.0f, capped);  // fallback = backdrop L (|Lc| ~ 0, always <= ceiling)
++    for (int i = 0; i < 24; i++) {
++      float t = (lo3 + hi3) / 2.0f, c[3];
++      atCap(t, c);
++      if (std::fabs(Apca(c, bg)) > aCeiling) {
++        lo3 = t;  // still too hot: darken further toward the backdrop
++      } else {
++        capped[0] = c[0]; capped[1] = c[1]; capped[2] = c[2];
++        hi3 = t;  // in band: minimize the shift back toward the mark
++      }
++    }
++    best[0] = capped[0]; best[1] = capped[1]; best[2] = capped[2];
++  }
 +  return NS_RGBA((uint8_t)best[0], (uint8_t)best[1], (uint8_t)best[2],
 +                 NS_GET_A(aFg));
 +}
@@ -222,7 +270,7 @@ diff --git a/layout/generic/nsTextPaintStyle.cpp b/layout/generic/nsTextPaintSty
  #include "nsLayoutUtils.h"
  #include "nsStyleConsts.h"
  #include "nsTextFrame.h"
-@@ -104,8 +105,17 @@
+@@ -104,8 +105,23 @@ nscolor nsTextPaintStyle::GetTextColor() {
      }
    }
  
@@ -235,7 +283,13 @@ diff --git a/layout/generic/nsTextPaintStyle.cpp b/layout/generic/nsTextPaintSty
 +  if (mResolveColors && mPresContext->ColorInversion()) {
 +    InitCommonColors();
 +    if (NS_GET_A(mFrameBackgroundColor) == 255) {
-+      color = GjoaDarkText::Correct(color, mFrameBackgroundColor, 45.0f, 90.0f);
++      // M4a: enforce the halation ceiling for LARGE text only (size-gated); body
++      // text keeps its floor lift and is never ceiling-clamped.
++      const nsStyleFont* font = mFrame->StyleFont();
++      const bool large = GjoaDarkText::IsLargeText(
++          font->mFont.size.ToCSSPixels(), font->mFont.weight.ToFloat());
++      color = GjoaDarkText::Correct(color, mFrameBackgroundColor, 57.0f, 90.0f,
++                                    large);
 +    }
 +  }
 +  return color;

@@ -59,6 +59,9 @@
           (try (make-omni-icon! {})
             (catch Any e (.error console "gjoa-drawer: omni-icon failed" e)))
 
+          ;; Teardown = the window-unload handler; on1! (macros.bjs) auto-registers it
+          ;; in the loader's hot-reload registry too, so a dev bundle change tears this
+          ;; down + re-runs init! cleanly (no stale bundle, no duplicate listeners/DOM).
           (on1! window "unload"
             (fn []
               (.destroy layout)

@@ -1,6 +1,6 @@
 #lang beagle/js
 (ns gjoa.drawer.urlbar
-  (:require [gjoa.macros :refer [q html-new attr! on! onc! offc! off! bool has? rmattr!]]
+  (:require [gjoa.macros :refer [q html-new attr! on! onc! offc! off! bool has? rmattr! css!]]
             [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
@@ -29,6 +29,40 @@
           ;; set activated=true + re-added the floating attrs, so tearing down now
           ;; would clobber the fresh activation. Leave it fully armed.
           (when (not (.-activated state))
+            ;; HIDE THE POPOVER FIRST, in EVERY mode (not just compact) — the
+            ;; floating palette ALWAYS showPopover()s the urlbar into the top layer,
+            ;; so a dismiss must take it back OUT or the resting urlbar stays a
+            ;; :popover-open top-layer element hovering over its now-empty sidebar
+            ;; slot: the "visual artifact on exit". (Previously gated on compact-on,
+            ;; so non-compact never released it — verified popoverOpen=true post-
+            ;; teardown.) Do it while the box is still invisible (teardown opacity:0)
+            ;; and BEFORE dropping the floating/teardown attrs, so the urlbar returns
+            ;; to normal in-flow (position:static) and paints its resting state in ONE
+            ;; settled frame. Skip only when a click-to-expand (breakout-extend) raced
+            ;; in — that owns the popover and must not be clobbered.
+            ;; RETURN FOCUS TO CONTENT first: a non-Escape dismiss (backdrop / focus-out)
+            ;; leaves the urlbar FOCUSED, and FF re-expands a focused resting urlbar into
+            ;; breakout-extend (empty bar at the slot with top-sites results showing) — the
+            ;; janky teardown residue the owner hit. Blurring to content collapses it. The
+            ;; backdrop intercepts every click while floating, so a genuine click-to-expand
+            ;; cannot race here; leftover focus is the ONLY source of breakout-extend at
+            ;; teardown, so close the view + hide the popover + clear breakout unconditionally.
+            (try
+              (let [a (.-activeElement document)]
+                (when (or (= a urlbar) (and a (.contains urlbar a)))
+                  (some-> window .-gBrowser .-selectedBrowser .focus)))
+              (some-> window .-gURLBar .-view .close)
+              (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
+                (.hidePopover urlbar))
+              (rmattr! urlbar "popover")
+              (rmattr! urlbar "breakout-extend")
+              (catch Any e
+                (log "finishTeardown:collapse-error" {:msg (String e)})))
+            ;; #150: suppress urlbar transitions for the restore frame so the resting
+            ;; geometry reverts INSTANTLY (matching the ghost look-alike) instead of
+            ;; retracting through the breakout-extend width transition while opacity
+            ;; restores to 1 — the "deformity after Enter" the cage frame-monitor caught.
+            (attr! root "gjoa-urlbar-snap" "")
             (rmattr! root "gjoa-urlbar-floating")
             (rmattr! root "gjoa-urlbar-intent")
             (rmattr! root "gjoa-urlbar-teardown")
@@ -38,27 +72,43 @@
             (when (.-ghost state)
               (.remove (.-ghost state))
               (set! (.-ghost state) nil))
-
-            (let [compact-vertical (bool (q document "#sidebar-main[data-gjoa-compact]"))
-                  compact-horizontal (has? root "data-gjoa-compact-horizontal")
-                  compact-on (or compact-vertical compact-horizontal)
-                  breakout (bool (has? urlbar "breakout-extend"))]
-              (when (and compact-on (not breakout))
-                (try
-                  (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
-                    (.hidePopover urlbar))
-                  (rmattr! urlbar "popover")
-                  (catch Any e
-                    (log "deactivateFloating:popover-sync-error" {:msg (String e)})))))))
+            ;; release the snap after the instant revert has painted (double-rAF: frame
+            ;; one applies the snapped resting layout, frame two re-enables transitions
+            ;; so later focus/expand animations still work).
+            (.requestAnimationFrame window
+              (fn [] (.requestAnimationFrame window
+                       (fn [] (rmattr! root "gjoa-urlbar-snap")))))))
 
         deactivate-floating (fn []
           (when (.-activated state)
             (set! (.-activated state) false)
             (log "deactivateFloating")
-            ;; Hide FIRST (this frame), restore geometry NEXT frame behind the
-            ;; hidden box — no intermediate inline-sidebar frame is ever painted.
+            ;; Fade the floating bar/backdrop out (CSS transition on the teardown
+            ;; attr, ~130ms), then restore resting geometry AFTER the fade so the
+            ;; inline-restore reflow paints behind the now-invisible box — smooth
+            ;; close, no inline-sidebar flash. Matched to the 130ms CSS transition
+            ;; (+ small buffer). A re-summon within the window clears teardown and
+            ;; finish-teardown bails (guards on activated).
             (attr! root "gjoa-urlbar-teardown" "")
-            (.requestAnimationFrame window finish-teardown)))
+            ;; #150: fire finish-teardown when the opacity fade ACTUALLY completes
+            ;; (transitionend on #urlbar's opacity), not on a guessed 150ms timer that
+            ;; raced the fade — firing early restored the resting geometry while the box
+            ;; was still visible (the retraction-through-the-tab-row deformity). One-shot
+            ;; guard + removeEventListener; a fallback timer covers reduced-motion
+            ;; (transition:none → no transitionend) and any dropped event.
+            (let [h {:done false :f nil}
+                  fire (fn [e]
+                         (when (and (not (.-done h))
+                                    (or (not e)
+                                        (and (= (.-target e) urlbar)
+                                             (= (.-propertyName e) "opacity"))))
+                           (set! (.-done h) true)
+                           (try (.removeEventListener urlbar "transitionend" (.-f h))
+                                (catch Any _ nil))
+                           (finish-teardown)))]
+              (set! (.-f h) fire)
+              (.addEventListener urlbar "transitionend" fire)
+              (.setTimeout window (fn [] (fire nil)) 260))))
 
         activate-floating (fn [new-intent]
           (set! (.-intent state) new-intent)
@@ -79,17 +129,49 @@
                   ;; collapse the slot / look like the bar "flew out" — the resting
                   ;; bar visually STAYS put. Capture the resting box FIRST, before
                   ;; the floating attr takes it position:fixed.
+                  ;; Leave a static look-alike (#gjoa-urlbar-ghost) in the resting slot
+                  ;; so the real urlbar lifting to the palette doesn't leave an empty
+                  ;; box — the slot reads as the still urlbar (owner: "should still show
+                  ;; identity icon + placeholder … frozen"). NOT a cloneNode of #urlbar:
+                  ;; the input lives in a shadow root, which cloneNode does NOT copy, so
+                  ;; a clone renders as a hollow box with the placeholder spilling out.
+                  ;; Instead build a plain styled div — shield glyph + placeholder text —
+                  ;; sized/bordered to match the resting bar. Captured BEFORE the floating
+                  ;; attr so the box metrics are the true resting ones.
                   (when (not (.-ghost state))
                     (let [parent (.-parentNode urlbar)]
                       (when parent
                         (let [rect (.getBoundingClientRect urlbar)
                               cs (.getComputedStyle window urlbar)
-                              g (html-new "div")]
+                              g (html-new "div")
+                              icon (html-new "div")
+                              txt (html-new "div")
+                              ph (or (some-> window .-gURLBar .-inputField .-placeholder)
+                                     "Search with Google or enter address")
+                              ;; Shield rendered via a CSS mask (data-URI SVG) — NOT
+                              ;; innerHTML: setting innerHTML with an inline <svg> throws
+                              ;; in the chrome XHTML document, which aborted ghost
+                              ;; creation entirely (empty slot + placeholder spilling).
+                              shield (str "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'"
+                                          " viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.3'"
+                                          " stroke-linejoin='round'%3E%3Cpath d='M8 1.6 13 3.6 V8 C13 11 8 14.4"
+                                          " 8 14.4 8 14.4 3 11 3 8 V3.6 Z'/%3E%3C/svg%3E")]
                           (set! (.-id g) "gjoa-urlbar-ghost")
-                          (set! (.-textContent g) (or (some-> window .-gURLBar .-value) ""))
-                          (set! (.-width (.-style g)) (str (.-width rect) "px"))
-                          (set! (.-height (.-style g)) (str (.-height rect) "px"))
-                          (set! (.-borderRadius (.-style g)) (.-borderRadius cs))
+                          (attr! g "aria-hidden" "true")
+                          (css! g (str "display:flex;align-items:center;gap:8px;box-sizing:border-box;"
+                                       "width:" (.-width rect) "px;height:" (.-height rect) "px;"
+                                       "padding-inline:12px;pointer-events:none;overflow:hidden;"
+                                       "white-space:nowrap;"
+                                       "border:" (.-border cs) ";border-radius:" (.-borderRadius cs) ";"
+                                       "background:" (.-backgroundColor cs) ";"
+                                       "font:" (.-font cs) ";color:" (.-color cs) ";"))
+                          (css! icon (str "flex:0 0 16px;width:16px;height:16px;opacity:.75;"
+                                          "background-color:currentColor;"
+                                          "mask:url(\"" shield "\") center/contain no-repeat;"
+                                          "-webkit-mask:url(\"" shield "\") center/contain no-repeat;"))
+                          (set! (.-textContent txt) ph)
+                          (css! txt (str "flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;opacity:.55;"))
+                          (.append g icon txt)
                           (.appendChild parent g)
                           (set! (.-ghost state) g)))))
                   (attr! root "gjoa-urlbar-floating" "")
@@ -141,15 +223,32 @@
           (when (and (not (bool (handle-accel e))) (.-activated state))
               (cond
                 (= (.-key e) "Escape")
-                  (setTimeout (fn []
+                  (do
+                    ;; We OWN the floating-palette dismiss. FF's UrlbarController
+                    ;; Escape is a window-level BUBBLE listener that calls
+                    ;; view.close() synchronously — with results showing that
+                    ;; snaps the tall suggestion list shut BEFORE our fade even
+                    ;; starts (the visible teardown jank). Our handler is
+                    ;; capture-phase on #urlbar, so it runs first; stop the event
+                    ;; here and FF never closes the view — the whole palette
+                    ;; (input + results) fades as ONE unit.
+                    (.preventDefault e)
+                    (.stopImmediatePropagation e)
                     (deactivate-floating)
-                    (try
-                      (let [a (.-activeElement document)]
-                        (when (or (= a urlbar) (and a (.contains urlbar a)))
-                          (some-> window .-gBrowser .-selectedBrowser .focus)))
-                      (catch Any err
-                        (log "escape:focus-content-error" {:msg (String err)}))))
-                    0)
+                    ;; Close the view + return focus to content AFTER the fade is
+                    ;; visually done (opacity 0 by ~130ms) but BEFORE finish-teardown
+                    ;; restores the resting geometry (150ms) — so the results
+                    ;; neither snap early nor flash at the in-sidebar position. All
+                    ;; of this happens behind opacity 0, invisibly.
+                    (setTimeout (fn []
+                      (try
+                        (some-> window .-gURLBar .-view .close)
+                        (let [a (.-activeElement document)]
+                          (when (or (= a urlbar) (and a (.contains urlbar a)))
+                            (some-> window .-gBrowser .-selectedBrowser .focus)))
+                        (catch Any err
+                          (log "escape:teardown-error" {:msg (String err)}))))
+                      135))
 
                 (= (.-key e) "Enter")
                   (do

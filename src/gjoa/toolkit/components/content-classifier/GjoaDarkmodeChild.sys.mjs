@@ -48,7 +48,32 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
 
   async handleEvent(event) {
     if (this.browsingContext !== this.browsingContext.top) {
-      return; // subframes inherit the top document's decision (bc->Top())
+      // Subframe branch. A subframe CANNOT set its own colorInversionOverride
+      // (that field is top-BC-only: CanSet=IsTop), and the engine derives a
+      // subframe's inversion from bc->Top()'s override (nsPresContext
+      // UpdateColorInversion). So on a NATIVE-DARK top — whose actor pins
+      // Top()=inactive to hold its own dark theme — that inactive value force-
+      // suppresses every subframe's own hybrid invert: a cross-origin white
+      // widget (OneTrust consent, Google One Tap, chat/ad iframes) then stays
+      // glaring white (measured). We can't give the subframe an engine invert,
+      // so darken it in CSS. GATED on the engine NOT already inverting this
+      // subframe, which is exactly the suppressed case — a themeless/force top
+      // already inverts subframes (Top()=none/active), so this no-ops there and
+      // cannot double-invert. DOMContentLoaded only; DOMWindowCreated in a
+      // subframe would just hit the top-only override writes below and throw.
+      if (event.type !== "DOMContentLoaded") {
+        return;
+      }
+      if (!Services.prefs.getBoolPref("gjoa.darkmode.enabled", true)) {
+        return;
+      }
+      const sw = this.contentWindow;
+      if (sw) {
+        sw.requestAnimationFrame(() =>
+          sw.requestAnimationFrame(() => this.#maybeDarkenSuppressedSubframe())
+        );
+      }
+      return;
     }
     // Master gate: when dark mode is fully disabled the actor does NOTHING — no
     // per-page colorInversionOverride write, no curated-override IPC, no refiner.
@@ -89,6 +114,29 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         } catch (e) {}
         this._explicitApplied = true;
         return;
+      }
+      // colorScheme:"light"/"dark" curated directive — force a native-dark site to
+      // serve that theme pre-paint (Firefox's built-in prefersColorSchemeOverride),
+      // then colorInversionOverride "active" makes the engine invert it to a uniform
+      // dark. Matches Dark Reader on native-dark sites whose OWN dark theme is
+      // off-brand/imperfect under gjoa: theverge green→purple, django white
+      // search-pill→dark. Handled here alongside force mode — set _explicitApplied so
+      // the post-paint refiner does NOT re-measure and retract the forced scheme
+      // (the bug that left theverge native-green when this ran in #syncExplicitOverride).
+      {
+        let csHost = "";
+        try { csHost = this.document.location.hostname || ""; } catch (e) {}
+        const cs = csHost ? this.#colorSchemeForHost(csHost) : null;
+        if (cs) {
+          try {
+            this.browsingContext.prefersColorSchemeOverride = cs;
+          } catch (e) {}
+          try {
+            this.browsingContext.colorInversionOverride = "active";
+          } catch (e) {}
+          this._explicitApplied = true;
+          return;
+        }
       }
       // Reset any override INHERITED from the previous same-tab page so this
       // fresh document starts from the engine's pre-paint default, then apply
@@ -167,6 +215,16 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     if (resp.css) {
       this.#injectSheet(win, resp.css);
     }
+    // colorScheme:"light"/"dark" — force the site to serve that theme (Firefox's
+    // built-in per-BC override); paired with override "active" below, the engine
+    // then inverts the now-light theme to a uniform dark. Reliable async path (the
+    // pre-paint sync path in handleEvent may miss if the mirror pref isn't warm on
+    // the first page); a post-paint scheme flip just triggers one re-style.
+    if (resp.colorScheme) {
+      try {
+        this.browsingContext.prefersColorSchemeOverride = resp.colorScheme;
+      } catch (e) {}
+    }
     if (resp.override && resp.override !== "none") {
       try {
         this.browsingContext.colorInversionOverride = resp.override;
@@ -206,6 +264,31 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this.browsingContext.colorInversionOverride = override;
       }
     } catch (e) {}
+  }
+
+  // Curated colorScheme mirror (host -> "light"/"dark"), kept in sync by the parent
+  // from fixes.json `colorScheme` fields — read SYNC pre-paint like the override mirror.
+  #colorSchemeForHost(host) {
+    try {
+      const raw = Services.prefs.getStringPref(
+        "gjoa.darkmode.fix-colorscheme",
+        ""
+      );
+      if (raw) {
+        const map = JSON.parse(raw);
+        let h = host;
+        let v = map[h];
+        let i;
+        while (v === undefined && (i = h.indexOf(".")) !== -1) {
+          h = h.slice(i + 1);
+          v = map[h];
+        }
+        if (v) {
+          return v;
+        }
+      }
+    } catch (e) {}
+    return null;
   }
 
   #explicitOverrideForHost(host) {
@@ -391,7 +474,18 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       win.requestAnimationFrame(() => {
         this.#dimLargeMedia(win, doc);
         this.#darkenLightPanels(win, doc);
+        this.#darkenStrayLightBands(win, doc);
         this.#liftDarkLogos(win, doc);
+        this.#darkScrollbars(win, doc);
+        this.#rescueBlendedPhotos(win, doc);
+        // COVERAGE (cluster B): the three background passes above are
+        // viewport-clipped and fire only on load-time timers (all at scrollY=0),
+        // so a light section revealed by SCROLLING keeps the engine's bright
+        // output (stripe cards, azure page-bg, cloud.google carousel). Install one
+        // debounced scroll-STOP listener that re-runs the same idempotent passes so
+        // now-visible rows get the darkening the fold got. Mirrors #normalizeContrast's
+        // wave6 W-H hook.
+        this.#hookBgScrollRescan(win, doc);
       }));
     // Pass-2 polish (pref-gated, default off): the refiner has settled the
     // inversion state, so the image pass can now read it the right way round.
@@ -584,10 +678,15 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       if (pct <= 0 || pct >= 100 || !doc || !doc.documentElement || !doc.body) {
         return;
       }
-      // Self-gate on real inversion: this now runs on ANY inverted doc (not just the
-      // force-inverted "active" ones), so a genuinely-light page must never have its media
-      // dimmed. A light page reads its swatches straight; only an inverted one flips both.
-      if (!this.#inversionActive(win, doc)) {
+      // Gate on the oklch-robust page-darkness probe, NOT #inversionActive: the
+      // latter's strict rgb-string equality is silently FALSE under the engine's
+      // oklch color serialization (it is "the wall #dimLargeMedia hits", see
+      // #rescueBlendedPhotos), so gating on it skipped media-dim on exactly the
+      // inverted docs that need it — e.g. gregoryszorc, whose whole #wrapper is a
+      // light bg-image (img02.jpg) the engine exempts and never dims → page reads
+      // light. #docIsDark fires on any dark-rendering page; a genuinely-light page
+      // (docIsDark false) is still skipped, so light pages keep reading straight.
+      if (!this.#docIsDark(win, doc)) {
         return;
       }
       const dim = pct / 100;
@@ -608,7 +707,10 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
               continue;
             }
             const r = el.getBoundingClientRect();
-            if (r.width * r.height < MIN_AREA || r.top > H || r.bottom < 0 || r.left > W) {
+            // ~2-viewport below-fold buffer (was r.top > H): a scroll-STOP re-scan
+            // (#hookBgScrollRescan) sees now-visible heroes at small r.top; the buffer
+            // pre-dims just-below-fold media to blunt the brightness flash on scroll.
+            if (r.width * r.height < MIN_AREA || r.top > H * 2 || r.bottom < 0 || r.left > W) {
               continue;
             }
             const tn = el.tagName;
@@ -663,6 +765,169 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     } catch (e) {}
   }
 
+  // NATIVE-DARK stray-band darkener. A native-dark site (its own dark theme, so the
+  // engine does A7 passthrough and #darkenLightPanels bails) sometimes ships an
+  // INCOMPLETE dark theme: a large full-width near-white band it left light —
+  // animatedmachines' white <header>, nasa's white <body>/section bands. It glares
+  // on the dark page and loses to Dark Reader, which darkens everything.
+  //
+  // A7 protects INTENTIONAL light accents on native-dark sites (the YouTube control
+  // pills the owner flagged), so this stays deliberately TIGHT: only LARGE, roughly
+  // FULL-WIDTH, OPAQUE, NEAR-WHITE (L>0.75) solid bands — never the small light
+  // pills/controls A7 guards, never a bg-image (that is #dimLargeMedia's job). The
+  // band's bg-color is overridden to the page's OWN dark surface (child-safe: an
+  // override on the band does not cascade to descendants' colors, which keep the
+  // site's dark-theme values). Runs only on a dark-rendering page the engine is NOT
+  // inverting; inverted pages belong to #darkenLightPanels.
+  #darkenStrayLightBands(win, doc) {
+    try {
+      if (!doc || !doc.body) {
+        return;
+      }
+      const parse = s => GjoaDarkmodeChild.parseComputedColor(s);
+      const lum = c => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+      // Dark-PAGE gate, but NOT #docIsDark: that checks <body> first and nasa ships
+      // an opaque-WHITE body over a BLACK <html> root, so #docIsDark reads it light
+      // and bails — the very stray-band case we exist to fix. Here a page is "dark"
+      // if EITHER the root OR the body renders dark; a genuinely light page (both
+      // light) is still skipped. The white body itself becomes a stray-band candidate.
+      const rootDark = (() => {
+        const c = parse(win.getComputedStyle(doc.documentElement).backgroundColor || "");
+        return c ? lum(c) <= 0.3 : false;
+      })();
+      const bodyC = parse(win.getComputedStyle(doc.body).backgroundColor || "");
+      const bodyDark = bodyC ? lum(bodyC) <= 0.3 : false;
+      if (!rootDark && !bodyDark) {
+        return;
+      }
+      // Only on NATIVE-DARK (engine NOT inverting). A black color probe renders LIGHT
+      // under inversion; inverted docs are #darkenLightPanels' domain.
+      const pr = doc.createElement("span");
+      pr.style.cssText = "color:#000;position:fixed;left:-9999px;top:0";
+      doc.body.appendChild(pr);
+      const cstr = win.getComputedStyle(pr).color;
+      const pc = (cstr.match(/[\d.]+/g) || []).map(Number);
+      pr.remove();
+      const inverting = /okl|lab|lch/i.test(cstr) ? pc[0] > 0.5 : pc[0] + pc[1] + pc[2] > 300;
+      if (inverting) {
+        return;
+      }
+      // Dark target = the page's own dark root/body surface (fallback near-black), so
+      // the darkened band blends with the site's real dark theme.
+      let darkTarget = "rgb(22, 22, 24)";
+      for (const rel of [doc.documentElement, doc.body]) {
+        if (!rel) {
+          continue;
+        }
+        const c = parse(win.getComputedStyle(rel).backgroundColor || "");
+        if (c && lum(c) <= 0.3) {
+          darkTarget = `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+          break;
+        }
+      }
+      // Alpha out of the computed bg-color (opaque-only; a translucent overlay
+      // composites over what is behind it and must not be repainted).
+      const bgAlpha = str => {
+        const mm = str.match(/\/\s*([\d.]+)\s*\)/);
+        if (mm) {
+          return parseFloat(mm[1]);
+        }
+        const rr = str.match(/rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)/i);
+        return rr ? parseFloat(rr[1]) : 1;
+      };
+      const W = win.innerWidth || 0, H = win.innerHeight || 0;
+      let n = this._strayN | 0, scanned = 0;
+      // <body> itself is a candidate: nasa's opaque-white body IS the stray sheet.
+      const candidates = [doc.body, ...doc.body.querySelectorAll("div,section,header,nav,main,article")];
+      for (const el of candidates) {
+        if (++scanned > 4000 || n - (this._strayN | 0) > 40) {
+          break;
+        }
+        if (el.hasAttribute("data-gjoa-stray")) {
+          continue;
+        }
+        const r = el.getBoundingClientRect();
+        // LARGE + roughly FULL-WIDTH + within a couple viewports (bands stream in).
+        if (r.width < 0.55 * W || r.width * r.height < 120000 || r.top > H * 2 || r.bottom < 0) {
+          continue;
+        }
+        let cs;
+        try {
+          cs = win.getComputedStyle(el);
+        } catch (e) {
+          continue;
+        }
+        if (/url\(/i.test(cs.backgroundImage || "")) {
+          continue; // bg-image band -> #dimLargeMedia, not here
+        }
+        const bg = cs.backgroundColor || "";
+        const c = parse(bg);
+        if (!c) {
+          continue;
+        }
+        // Regression-critical gate (unit-tested: stray-band-gate.functional.mjs).
+        // Deliberately TIGHT so proper native-dark themes' small light accents /
+        // dark surfaces are NEVER darkened — only a large, roughly full-width,
+        // opaque, near-white band qualifies.
+        if (!GjoaDarkmodeChild.isStrayLightBand(r.width / (W || 1), r.width * r.height, bgAlpha(bg), lum(c))) {
+          continue;
+        }
+        el.setAttribute("data-gjoa-stray", n++);
+        // The bg-override is child-safe (descendants keep their colors) — but the
+        // band's OWN text was authored DARK for the (now removed) light bg, so it is
+        // now dark-on-dark. Lift the band's dark LEAF text to light (nasa's "Featured
+        // News" heading). Leaf text only — never containers or media — so the safe
+        // no-cascade property holds; capped across the whole doc.
+        try {
+          this._strayTxt = this._strayTxt | 0;
+          if (this._strayTxt < 900) {
+            const TXT = "h1,h2,h3,h4,h5,h6,p,span,a,li,dt,dd,td,th,label,strong,em,small,figcaption,blockquote,cite,time,b,i";
+            for (const t of el.querySelectorAll(TXT)) {
+              if (this._strayTxt >= 900) {
+                break;
+              }
+              if (t.hasAttribute("data-gjoa-stray-txt") || t.hasAttribute("data-gjoa-stray")) {
+                continue;
+              }
+              let tc;
+              try {
+                tc = parse(win.getComputedStyle(t).color || "");
+              } catch (e) {
+                continue;
+              }
+              if (tc && lum(tc) < 0.4) {
+                t.setAttribute("data-gjoa-stray-txt", t.tagName === "A" ? "l" : "n");
+                this._strayTxt++;
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      if (n > (this._strayN | 0)) {
+        let s = doc.getElementById("gjoa-stray-bands");
+        if (!s) {
+          s = doc.createElement("style");
+          s.id = "gjoa-stray-bands";
+          (doc.head || doc.documentElement).appendChild(s);
+        }
+        s.textContent =
+          `[data-gjoa-stray]{background-color:${darkTarget}!important}` +
+          `[data-gjoa-stray-txt="n"]{color:#e6e6e6!important}` +
+          `[data-gjoa-stray-txt="l"]{color:#8ab4f8!important}`;
+        this._strayN = n;
+      }
+      // One delayed re-scan for late/lazy bands (nasa streams sections in).
+      if (!this._reStray) {
+        this._reStray = true;
+        win.setTimeout(() => {
+          try {
+            this.#darkenStrayLightBands(win, doc);
+          } catch (e) {}
+        }, 2500);
+      }
+    } catch (e) {}
+  }
+
   // C5: dark logos/wordmarks invisible on a darkened page. The engine exempts
   // replaced <img> from inversion (photo fidelity), but a mostly-DARK, mostly-
   // TRANSPARENT image — a wordmark/logo drawn for a light page — then sits
@@ -673,6 +938,188 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // qualify (opaque), light logos never qualify (light pixels), icons cost one
   // 24x24 rasterize each (capped). Cross-origin images without CORS taint the
   // canvas and are skipped (verdict null, cached).
+  // wave-A scrollbar-strip fix. Force dark scrollbars on any inverted doc. Firefox honors
+  // the standard `scrollbar-color: <thumb> <track>`; an unthemed overflow container
+  // otherwise paints a glaring light scrollbar/track on the dark canvas (odin-lang sidebar
+  // strip, drmaciver code-block track, cloudflare/hub-docker right-edge strips).
+  // `::-webkit-scrollbar` is ignored by Gecko, so `scrollbar-color` is the whole fix. One
+  // idempotent id'd <style>; gated on real inversion (a native-dark site keeps its own).
+  // True when the PAINTED page root is dark — a probe-INDEPENDENT "is this a dark page"
+  // signal. The engine darkens pages that #engineInvertingNow / #inversionActive misreport
+  // (the latter is documented-broken under the engine's oklch color serialization), so
+  // page-state gating beats the inversion probes for passes that must fire on any dark page.
+  #docIsDark(win, doc) {
+    try {
+      const parse = s => GjoaDarkmodeChild.parseComputedColor(s);
+      for (const rel of [doc.body, doc.documentElement]) {
+        if (!rel) {
+          continue;
+        }
+        let c = null;
+        try { c = parse(win.getComputedStyle(rel).backgroundColor || ""); } catch (e) {}
+        if (c) {
+          return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255 <= 0.35;
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  #darkScrollbars(win, doc) {
+    try {
+      if (!doc || !doc.documentElement || !this.#docIsDark(win, doc)) {
+        return;
+      }
+      if (doc.getElementById("gjoa-dark-scrollbars")) {
+        return;
+      }
+      const s = doc.createElement("style");
+      s.id = "gjoa-dark-scrollbars";
+      s.textContent = "*{scrollbar-color:#6b6b6b #1e1e1e !important}";
+      (doc.head || doc.documentElement).appendChild(s);
+    } catch (e) {}
+  }
+
+  // SUBFRAME-only darkener for the native-dark-top suppression class. The engine
+  // reads a subframe's inversion from bc->Top()'s colorInversionOverride
+  // (nsPresContext), and that field is TOP-only (CanSet=IsTop) — a subframe can
+  // never invert itself. So a cross-origin light widget under a native-dark top
+  // (Top()=inactive) is force-left light by the engine and gets NO engine invert
+  // to refine. Since we can't reach the servo inverter here, apply Dark Reader's
+  // filter-mode fallback: filter-invert the subframe root (white->near-black,
+  // text->light), counter-inverting replaced media so photos stay positive. Runs
+  // ONLY when the engine is NOT inverting this subframe (the suppressed case) AND
+  // it renders light/transparent — so a themeless/force top (already inverting its
+  // subframes) and a widget with its OWN dark theme are both left untouched.
+  // Idempotent (id'd sheet); a couple of staggered re-checks catch late-injected
+  // banners (OneTrust) that paint white after their own DOMContentLoaded.
+  #maybeDarkenSuppressedSubframe() {
+    try {
+      const win = this.contentWindow;
+      const doc = this.document;
+      if (!win || !doc || !doc.documentElement) {
+        return;
+      }
+      const url = doc.documentURI || "";
+      if (!/^https?:/.test(url)) {
+        return; // about:blank / data: / chrome — not a web widget
+      }
+      // Size/visibility gate: skip tracker pixels and hidden/zero-area frames.
+      const vw = win.innerWidth | 0, vh = win.innerHeight | 0;
+      if (vw < 60 || vh < 40) {
+        return;
+      }
+      const apply = () => {
+        try {
+          if (!doc.body || !doc.documentElement) {
+            return false;
+          }
+          // Engine inverting this subframe already (themeless/force top, or a
+          // same-origin subframe inheriting Top()=active)? Then leave it — this is
+          // the double-invert guard: we only ever act on a NON-inverted subframe.
+          if (this.#engineInvertingNow(win, doc)) {
+            return true; // settled: engine owns it, stop re-checking
+          }
+          // Does the subframe render dark on its OWN? A widget with an opaque dark
+          // root/body authored its own dark theme — leave it. Otherwise (opaque
+          // light, or transparent-root relying on the canvas) it reads light and is
+          // the suppressed-white class we exist to darken.
+          const parse = s => GjoaDarkmodeChild.parseComputedColor(s);
+          const lum = c => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+          const alphaOf = str => {
+            if (!str || str === "transparent") {
+              return 0;
+            }
+            const m = str.match(/^rgba?\(([^)]*)\)/i);
+            if (!m) {
+              return 1; // opaque named/oklch surface
+            }
+            const parts = m[1].split(/[,/\s]+/).filter(Boolean);
+            return parts.length >= 4 ? parseFloat(parts[3]) : 1;
+          };
+          let authoredDark = false;
+          for (const rel of [doc.documentElement, doc.body]) {
+            let cstr = "";
+            try { cstr = win.getComputedStyle(rel).backgroundColor || ""; } catch (e) {}
+            const c = parse(cstr);
+            if (c && alphaOf(cstr) >= 0.5 && lum(c) <= 0.3) {
+              authoredDark = true;
+              break;
+            }
+          }
+          if (authoredDark) {
+            return true; // widget's own dark theme — done, stop re-checking
+          }
+          if (!doc.getElementById("gjoa-subframe-darken")) {
+            const s = doc.createElement("style");
+            s.id = "gjoa-subframe-darken";
+            // Root filter-invert + opaque backdrop so transparent-root widgets get a
+            // dark fill after inversion; replaced media counter-inverted to stay
+            // positive. Nested iframes are left to their OWN subframe pass.
+            s.textContent =
+              "html{filter:invert(1) hue-rotate(180deg)!important;background:#fff!important}" +
+              "img,video,canvas,picture,svg image{filter:invert(1) hue-rotate(180deg)!important}";
+            (doc.head || doc.documentElement).appendChild(s);
+          }
+          return false; // applied; keep the short re-check window open for late paint
+        } catch (e) {
+          return true;
+        }
+      };
+      if (apply()) {
+        return;
+      }
+      // Late-injected consent banners paint white after their DCL — re-check a
+      // couple of times (verdicts are cheap; the sheet write is idempotent).
+      for (const delay of [900, 2200]) {
+        win.setTimeout(() => { try { apply(); } catch (e) {} }, delay);
+      }
+    } catch (e) {}
+  }
+
+  // wave-A photo-blend rescue (A4). A bg-image PHOTO composited with its background-color
+  // via a non-normal blend-mode (tonsky avatar: background-blend-mode:multiply over a
+  // yellow bg) is destroyed once the engine inverts that bg-color to dark olive —
+  // multiply(photo, olive) → uniform near-black, face gone. Neutralise the blend so the
+  // opaque photo paints over the (now dark) bg-color and survives. Gated on page-darkness,
+  // NOT #inversionActive (oklch-broken, the wall #dimLargeMedia hits). Rare pattern → tiny blast.
+  #rescueBlendedPhotos(win, doc) {
+    try {
+      if (!doc || !doc.body || !this.#docIsDark(win, doc)) {
+        return;
+      }
+      let tagged = 0, scanned = 0;
+      let list;
+      try { list = doc.querySelectorAll("div,span,a,figure,header,section,aside,li,td"); } catch (e) { return; }
+      for (const el of list) {
+        if (++scanned > 3000) {
+          break;
+        }
+        if (el.hasAttribute("data-gjoa-photo-bg")) {
+          continue;
+        }
+        let cs;
+        try { cs = win.getComputedStyle(el); } catch (e) { continue; }
+        const bm = cs.backgroundBlendMode || "normal";
+        if (bm === "normal" || bm === "" || !/url\(/i.test(cs.backgroundImage || "")) {
+          continue;
+        }
+        const r = el.getBoundingClientRect();
+        if (r.width * r.height < 1600) {
+          continue;
+        }
+        el.setAttribute("data-gjoa-photo-bg", "1");
+        tagged++;
+      }
+      if (tagged && !doc.getElementById("gjoa-photo-bg-rescue")) {
+        const s = doc.createElement("style");
+        s.id = "gjoa-photo-bg-rescue";
+        s.textContent = "[data-gjoa-photo-bg]{background-blend-mode:normal!important}";
+        (doc.head || doc.documentElement).appendChild(s);
+      }
+    } catch (e) {}
+  }
+
   #liftDarkLogos(win, doc) {
     try {
       // Gate on the oklch-robust probe: #inversionActive's strict rgb string
@@ -827,6 +1274,45 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // (target's salmon header, walmart's light-blue tiles). Force big opaque mid/light-bg
   // blocks down to the dark floor, KEEPING hue/chroma (brand: a salmon header -> dark red,
   // not neutral black). One delayed re-pass catches lazy/late panels.
+  // Scroll-coverage hook (cluster B) for the three below-the-fold background passes
+  // (#dimLargeMedia / #darkenLightPanels / #darkenStrayLightBands). Those scans are
+  // viewport-clipped and only re-run on fixed load-time timers, ALL evaluated at
+  // scrollY=0 — so a light panel/band/hero-image revealed only by scrolling keeps
+  // the engine's bright output and loses to Dark Reader. ONE passive listener,
+  // debounced on scroll-STOP (not per-event), that fans out to all three passes;
+  // each pass is idempotent (data-gjoa-panel / -dim / -stray tags skip already-done
+  // elements) so a re-scan only pays for newly-revealed rows and can never re-tag or
+  // oscillate. Threshold-gated (<200px delta = no new rows) + debounced so it never
+  // costs a scroll frame. Mirrors #normalizeContrast's wave6 W-H scroll hook.
+  #hookBgScrollRescan(win, doc) {
+    try {
+      if (this._bgScrollHooked) {
+        return;
+      }
+      this._bgScrollHooked = true;
+      this._bgScrollLastY = win.scrollY | 0;
+      const onScroll = () => {
+        try {
+          const y = win.scrollY | 0;
+          if (Math.abs(y - this._bgScrollLastY) < 200) {
+            return; // no new rows revealed — skip
+          }
+          if (this._bgScrollTimer) {
+            win.clearTimeout(this._bgScrollTimer);
+          }
+          this._bgScrollTimer = win.setTimeout(() => {
+            this._bgScrollTimer = null;
+            this._bgScrollLastY = win.scrollY | 0;
+            try { this.#dimLargeMedia(win, doc); } catch (e2) {}
+            try { this.#darkenLightPanels(win, doc); } catch (e2) {}
+            try { this.#darkenStrayLightBands(win, doc); } catch (e2) {}
+          }, 250);
+        } catch (e2) {}
+      };
+      win.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    } catch (e) {}
+  }
+
   #darkenLightPanels(win, doc) {
     try {
       if (!doc.body) {
@@ -940,7 +1426,11 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
             continue;
           }
           const r = el.getBoundingClientRect();
-          if (r.bottom < 0 || r.top > 3000) {
+          // Buffer ~2 viewports below the fold (min 3000px): on a scroll-STOP re-scan
+          // (#hookBgScrollRescan) getBoundingClientRect is viewport-relative so
+          // now-visible panels have a small r.top and pass, while the buffer catches
+          // just-below-fold rows proactively to blunt the darken flash on the next scroll.
+          if (r.bottom < 0 || r.top > Math.max(3000, (win.innerHeight | 0) * 2)) {
             continue;
           }
           const tn = el.tagName;
@@ -1213,6 +1703,17 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // made the APCA judge see "dark text" wherever the engine had inverted text
   // LIGHT: exactly the elements the normalizer exists to check (an exempt light
   // image backdrop under engine-lightened text was judged legible and skipped).
+  // Regression-critical gate for #darkenStrayLightBands: does a candidate element
+  // qualify as a stray light BAND worth darkening on a native-dark page? Kept pure
+  // + static so its truth table is unit-tested (stray-band-gate.functional.mjs).
+  // TIGHT by design — only a LARGE (>=120k px²), roughly FULL-WIDTH (>=55% viewport),
+  // OPAQUE (alpha>=0.9), NEAR-WHITE (relative-luminance>=0.75) band. Everything else
+  // (small light pills/controls, translucent glass, narrow accents, already-dark or
+  // mid-tone surfaces) is spared, so proper native-dark themes are never touched.
+  static isStrayLightBand(widthFrac, areaPx, alpha, lum) {
+    return widthFrac >= 0.55 && areaPx >= 120000 && alpha >= 0.9 && lum >= 0.75;
+  }
+
   static parseComputedColor(s) {
     if (!s) {
       return null;
@@ -1309,6 +1810,32 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         continue;
       }
       el.setAttribute("data-gjoa-cn", cnBase + cn);
+      // Link-role: a hyperlink whose authored hue the engine's involution may have
+      // washed below the parent's chroma gate — the parent re-saturates it by role
+      // even at low painted chroma, so the blue link affordance survives (wave-A A6).
+      const link = el.tagName === "A" && el.hasAttribute("href");
+      // Nearest opaque-ish ancestor background — a SNAPSHOT-INDEPENDENT bg signal. The
+      // parent's viewport drawSnapshot can sample the dark page backdrop behind a
+      // late/fixed overlay (a cookie-consent pill not yet composited) and miss the
+      // preserved-white button bg, leaving a white label on it in one pass but not the
+      // other (the white-pill top/mid race). This lets the parent re-solve the pairing
+      // deterministically from the element's OWN bg (wave-A white-pill).
+      let ownBg = null;
+      for (let a = el, hops = 0; a && hops < 6; a = a.parentElement, hops++) {
+        const raw = win.getComputedStyle(a).backgroundColor || "";
+        let alpha = 1;
+        if (raw.startsWith("rgba")) {
+          const parts = raw.slice(raw.indexOf("(") + 1, raw.indexOf(")")).split(",");
+          alpha = parts.length > 3 ? parseFloat(parts[3]) : 1;
+        }
+        if (alpha >= 0.5) {
+          const bc = parse(raw);
+          if (bc) {
+            ownBg = bc;
+            break;
+          }
+        }
+      }
       els.push({
         cn: cnBase + cn,
         x: Math.round(r.left),
@@ -1316,6 +1843,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         w: Math.round(r.width),
         h: Math.round(r.height),
         fg,
+        link,
+        ownBg,
       });
       cn++;
     }

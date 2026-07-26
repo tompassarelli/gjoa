@@ -250,6 +250,27 @@ if (authored && authored.els) for (const a of authored.els) if (!authMap[a.sig])
     else if (passthrough) skip("A5", "SKIPPED: native-dark passthrough (authored≡rendered)");
     else {
       const a5 = [];
+      // A5 GAMUT-EXEMPTION (spec §6.1), flag DARKCHECK_A5_GAMUT_EXEMPT via cfg.a5GamutExempt,
+      // DEFAULT OFF. Mirrors darkcheck-rules.cjs evalA5Exempt() — keep the two in lockstep.
+      // When off, a5Exempt() returns false before any work ⇒ this rule is BYTE-IDENTICAL to
+      // its pre-exemption behavior (the live mark-4 gate must not move). A mark is exempt iff
+      // hue is held (Δhue≤hueTol — a genuine hue drift is a real defect, never exempt) AND
+      // rendered chroma is at the sRGB gamut boundary (chroma collapse = gamut physics).
+      const a5GamutExempt = !!cfg.a5GamutExempt;
+      const _gamutMaxC = (L, h) => {
+        if (typeof gamutMaxC === "function") return gamutMaxC(L, h); // colormath oracle if prepended
+        if (L <= 0 || L >= 1) return 0;
+        let lo = 0, hi = 0.5;
+        const inG = (C) => inGamut(oklabToLinear(L, C * Math.cos(h), C * Math.sin(h)));
+        if (inG(hi)) return hi;
+        for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (inG(m)) lo = m; else hi = m; }
+        return lo;
+      };
+      const a5Exempt = (dh, renderedFg) => {
+        if (!a5GamutExempt || dh > F.hueTol) return false;
+        const oc = srgbToOklch(renderedFg);
+        return oc[1] >= 0.9 * _gamutMaxC(oc[0], oc[2]);
+      };
       for (const el of textEls) {
         if (el._skip) continue;
         // T4 (RULING 1.3): track chromatic rendered nodes vs matched authored records (no-silent-caps)
@@ -264,7 +285,10 @@ if (authored && authored.els) for (const a of authored.els) if (!authMap[a.sig])
         if (el._alc < floorFor(el)) continue; // legibility beats identity (failed A1 already reported)
         const dh = hueDeg(a.fg, el.fg);
         const Cr = oklchC(el.fg);
-        if (dh > F.hueTol || Cr < F.chromaKeep * Ca) a5.push({ selector: sel(el), tag: el.tag, authoredFg: a.fg, renderedFg: el.fg, hueDriftDeg: +dh.toFixed(1), authoredC: +Ca.toFixed(3), renderedC: +Cr.toFixed(3), hueTol: F.hueTol, reason: dh > F.hueTol ? "hue-drift" : "chroma-collapse", text: el.text });
+        if (dh > F.hueTol || Cr < F.chromaKeep * Ca) {
+          if (a5Exempt(dh, el.fg)) continue; // gamut-limited chroma collapse (hue held) — sRGB physics, not a defect
+          a5.push({ selector: sel(el), tag: el.tag, authoredFg: a.fg, renderedFg: el.fg, hueDriftDeg: +dh.toFixed(1), authoredC: +Ca.toFixed(3), renderedC: +Cr.toFixed(3), hueTol: F.hueTol, reason: dh > F.hueTol ? "hue-drift" : "chroma-collapse", text: el.text });
+        }
       }
       add("A5", a5, `authored chromatic colors: |Δhue|≤${F.hueTol}° AND C_rendered≥${F.chromaKeep}·C_authored (GJOA-chosen brand tolerance; calibrated Wave S)`,
         { a5MatchTotal: _a5TotalChromatic, a5MatchHit: _a5Matched });

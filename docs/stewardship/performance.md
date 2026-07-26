@@ -31,7 +31,7 @@ would own and pay every paint** — it fights the compositor, re-runs on every
 scroll/reflow, and is a patch surface that rots per Firefox version. gjoa
 instead does the solve **once, at style-resolution / paint time, inside the
 engine** (`patches/0013 GjoaDarkText.{h,cpp}`, the M3 paint-time text solve;
-luminance threshold `0.22` in `patches/0009`). Per `docs/darkmode-v2.md`: the
+luminance threshold `0.22` in `patches/0009`). Per `docs/dark-mode.md`: the
 retone is *surfaces-frozen-then-text*, computed against the real backdrop, cached
 at paint-time granularity — so the cost is amortized into the frame the engine
 was already going to paint, not added on top of it.
