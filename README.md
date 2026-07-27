@@ -14,7 +14,11 @@ Native blocking, site-aware dark mode, vertical tree tabs, workspaces, vim navig
 
 ## Why gjoa
 
-Most heavily customized Firefox setups depend on a stack of extensions, content scripts, and autoconfig workarounds. gjoa makes the core pieces browser features instead: fewer per-page injections, fewer separate lifecycles, and less to keep in sync after Firefox updates.
+Gjoa is a return to form for what the browser was meant to be.
+
+The browser should belong to its user: open, adaptable, deeply customizable, and capable of serious work.
+
+Modern workflows too often depend on fragile layers of extensions, scripts, hidden preferences, and configuration workarounds. Gjoa reclaims the browser as a personal computing environment by bringing vertical tabs, workspaces, keyboard-driven navigation, interface control, native dark mode, and privacy-oriented controls into the browser itself.
 
 ## Included
 
