@@ -612,13 +612,13 @@
 ;;   (b) ESM NAMED imports `import { X as $$bc$… } from '…/beagle/core.js'`
 ;;       — in the .sys.mjs (GjoaLoader). THIS form is what broke 2026-06-21:
 ;;       the pin's bin/beagle-build emitted `import { equivV … }` but the pin's
-;;       core.js exports only `equiv` — a named-import of a missing export is a
+;;       runtime lacked that export — a named-import of a missing export is a
 ;;       module-load SyntaxError that kills GjoaLoader.sys.mjs at import and the
 ;;       whole gjoa chrome never initializes. A gate that greps only `$$bc.X`
 ;;       would MISS this — so we parse BOTH forms.
 ;; Assertion: for every emitted gjoa chrome file, the set of beagle-runtime
 ;; symbols it references must be a SUBSET of the vendored core.js export surface.
-;; Any `file: symbol` not exported is a hard fail — the same skew the shim fixes.
+;; Any `file: symbol` not exported is a hard fail.
 (def VENDORED-CORE :- String
   (join ENGINE-DIR "browser" "components" "gjoa" "beagle" "core.js"))
 (def GJOA-LOADER-MJS :- String
@@ -639,8 +639,7 @@
 
 ;; export surface of the vendored core.js: `export function NAME`,
 ;; `export const NAME`, and re-exports `export { A as B }` (B is the exported
-;; name) / `export { A }` (A is exported). The compat shim's
-;; `export { equiv as equivV };` lands `equivV` here.
+;; name) / `export { A }` (A is exported).
 (defn core-export-surface [src :- String] :- Any
   (let [surface (Set.)]
     (doseq [m (Array/from (.matchAll src (RegExp. "export\\s+(?:function|const)\\s+([A-Za-z_$][A-Za-z0-9_$]*)" "g")))]

@@ -6,4 +6,7 @@
 # from it. CI checks out ../beagle at this ref + raco-links it, so CI matches local.
 # Preflight Gate M enforces the worktree is at this ref. Bump DELIBERATELY (review the
 # beagle changelog): re-point the worktree, then re-import + re-vendor.
-9d791ed57e84e8a1ebe48a5dda588f9842168e26
+# Canonical upstream: https://github.com/tompassarelli/beagle. This candidate is
+# the newest revision with both upstream tests (run 30034827041) and native
+# (run 30034828902) green; newer main was red when selected on 2026-07-27.
+3e942ba213f9ee5444e02046a4c1fbd8d3e0dd91

@@ -1,8 +1,8 @@
 {
   "claim": "This build makes 1 unattended network call: the Firefox version check.",
   "gjoaVersion": "0.4.1",
-  "auditedCommit": "8ff16aa",
-  "generated": "2026-07-19",
+  "auditedCommit": "5f65774",
+  "generated": "2026-07-27",
   "method": "static AST audit of all authored chrome (.sys.mjs + emitted .bjs + content .js), every source parsed",
   "ownCode": {
     "unattendedExternal": [
@@ -56,7 +56,7 @@
         "endpoint": "(dynamic)",
         "what": "resource load",
         "file": "src/gjoa/…/tabs/picker.js",
-        "line": 100,
+        "line": 102,
         "basis": "guard(item.icon)"
       }
     ],
@@ -72,7 +72,7 @@
         "endpoint": "(dynamic)",
         "what": "resource load",
         "file": "src/gjoa/toolkit/components/content-classifier/GjoaDarkmodeChild.sys.mjs",
-        "line": 2194,
+        "line": 2206,
         "basis": "unproven"
       }
     ]

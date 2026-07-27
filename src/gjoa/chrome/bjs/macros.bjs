@@ -89,8 +89,8 @@
   `(let [_e (.createXULElement document ,tag)]
      (set! (.-id _e) ,id) _e))
 (defmacro bool [x]
-  ;; (boolean x) coerces any value to Bool. The old `(not (not x))` re-trips
-  ;; beagle 77df8a9's tightened `not` (rejects Bool?/Nil args), so coerce directly.
+  ;; (boolean x) coerces any value to Bool. Beagle 3e942ba still types `not` as
+  ;; Bool → Bool, so the old `(not (not x))` rejects Bool?/Nil inputs.
   ;; CHORE(pin-bump): revert when configs/beagle.ref passes the beagle ref that
   ;; relaxes `not` on Bool?/Nil — restore the `(not (not x))` double-negation form.
   `(boolean ,x))

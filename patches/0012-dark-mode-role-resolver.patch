@@ -1,10 +1,11 @@
 # gjoa-patch:
-#   baseline-firefox: 152.0.1
+#   baseline-firefox: 152.0.6
 #   touches:
 #     - layout/base/nsLayoutUtils.h
 #     - layout/base/nsLayoutUtils.cpp
 #     - layout/generic/nsTextPaintStyle.cpp
 #     - layout/generic/nsTextFrame.cpp
+#     - layout/painting/nsCSSRendering.cpp
 #     - layout/painting/nsDisplayList.cpp
 #     - layout/svg/SVGGeometryFrame.cpp
 #   depends-on:
@@ -15,8 +16,8 @@
 #     - cpp-symbol mozilla::GjoaDarkText::Correct   (created by patch 0013; resolves
 #       at build time -- 0012 only adds the #include, applied before 0013 in order)
 #
-# M1 dark-mode v2: role-aware layout color resolver (precondition for per-role
-# retone in a later milestone; NO pixel change yet).
+# Dark-mode v2 role-aware layout color resolver and native structural-mark
+# correction.
 #
 # Patch 0009 inverts every resolved absolute color blind at Stylo
 # (Color::to_computed_color). That is role-blind: text fg, solid backgrounds,
@@ -26,16 +27,14 @@
 # know which role it is resolving and (b) be gated on the existing per-document
 # dark-mode flag mFrame->PresContext()->ColorInversion() (added by 0009).
 #
-# This patch threads a ColorRole tag through every layout-level color resolver and
-# routes each through one choke-point, nsLayoutUtils::ResolveDarkModeRole(frame,
-# color, role). M1 shipped that function as the IDENTITY (no pixel change); the
-# wave-2 M2 step now fills the ColorRole::Text branch: under active inversion a
-# foreground text mark is re-solved against the frozen effective backdrop with the
-# hue-preserving OKLCh/APCA operator (GjoaDarkText::Correct, patch 0013), at the
-# accent floor 57. This overrides 0009's role-blind brand-preserve for text fg so
-# chromatic links/accents get lifted PRE-PAINT (wave6 §5). Background/Border/SvgFill
-# branches stay identity for now. Centralising the gate meant M2 was a single-
-# function change instead of a re-hunt of every resolver.
+# This patch threads a ColorRole tag through layout-level color resolvers and
+# routes them through one choke-point, nsLayoutUtils::ResolveDarkModeRole(frame,
+# color, role, optionalBackdrop). Every policy remains behind 0009's
+# per-document ColorInversion master switch. Text retains its floor-57 solve.
+# Opaque borders and native selection backgrounds receive a bounded APCA
+# structural-mark solve [30,60], while native selection text is re-solved through
+# the Text role against that frozen selection background. Translucent structural
+# marks and authored ::selection colors remain unchanged.
 #
 # Roles wired:
 # - Text:  the GetTextColor<> template tail -- covers ALL 8 callers (text fill,
@@ -48,16 +47,12 @@
 #          stored). Wrapped at the call arg, NOT inside CreateBackgroundColor, so
 #          0010's already-composited dark scrim (which also calls
 #          CreateBackgroundColor) is not double-processed.
+# - Border: solid CSS border colors at ConstructBorderRenderer, shared by
+#          WebRender and gfx fallback.
+# - Selection: only the native LookAndFeel path after its existing scheme-aware
+#          lookup and EnsureSufficientContrast pass. Authored ::selection paths
+#          return before the resolver.
 # - SvgFill: SVGGeometryFrame WebRender fill, plus the two SVG-text-fill paths.
-#
-# DELIBERATELY NOT wired in M1 (enumerated for the record, deferred to M2 policy):
-# - Selection / IME / highlight fg+bg (nsTextPaintStyle InitSelectionColorsAndShadow,
-#   GetHighlightColors, GetSelectionColors): these come from LookAndFeel::Color(...)
-#   (already ColorScheme-aware) and ::selection authored styles, NOT through
-#   GetTextColor<>. Retoning them is a separate decision.
-# - Border (nsCSSRendering border draw) and gradient stops: their resolvers are
-#   not touched here; the Border role value exists in the enum so M2 can add them
-#   without re-versioning the surface contract.
 diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
 --- a/layout/base/nsLayoutUtils.cpp
 +++ b/layout/base/nsLayoutUtils.cpp
@@ -69,22 +64,27 @@ diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
  #include "ImageContainer.h"
  #include "ImageOps.h"
  #include "ImageRegion.h"
-@@ -5294,6 +5295,41 @@ nscolor nsLayoutUtils::DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor) {
+@@ -5294,6 +5295,52 @@ nscolor nsLayoutUtils::DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor) {
    return ShouldDarkenColors(aFrame) ? DarkenColor(aColor) : aColor;
  }
- 
-+// gjoa dark-mode v2 (M1): role-aware choke point for layout color resolvers.
-+// Gated on this document's per-document inversion flag (added by patch 0009).
-+// M1 is intentionally the identity -- it changes no pixels; its only job is to
-+// (a) prove every per-role resolver now flows through one gated function and
-+// (b) carry the role tag to the point where the retone will live. M2 replaces
-+// the body with the tone-space per-role retone (text fg band-solved in OKLCH,
-+// background frozen near paper, etc.) keyed on (aColor, aRole, sampled backdrop).
+
++// gjoa dark-mode v2: role-aware choke point for layout color resolvers.
++// Every correction remains behind this document's per-document inversion flag
++// (added by patch 0009). Opaque mark/backdrop pairs are corrected in OKLCH/APCA;
++// roles without a policy remain identity.
 +nscolor nsLayoutUtils::ResolveDarkModeRole(nsIFrame* aFrame, nscolor aColor,
-+                                           ColorRole aRole) {
++                                           ColorRole aRole,
++                                           nscolor aBackdrop) {
 +  if (!aFrame || !aFrame->PresContext()->ColorInversion()) {
 +    return aColor;
 +  }
++  if (NS_GET_A(aBackdrop) != 255) {
++    aBackdrop = nsCSSRendering::FindEffectiveBackgroundColor(aFrame).mColor;
++  }
++  if (NS_GET_A(aBackdrop) != 255) {
++    return aColor;
++  }
++
 +  // gjoa dark-mode v2 (M2): role-aware retone, foreground text.
 +  // Patch 0009's brand-preserve (c_in > 0.08 => UNCHANGED at Stylo) is ROLE-BLIND,
 +  // so a chromatic FOREGROUND (a link, a brand accent) is returned unlifted and
@@ -95,15 +95,21 @@ diff --git a/layout/base/nsLayoutUtils.cpp b/layout/base/nsLayoutUtils.cpp
 +  // backdrop can be solved (Correct requires a frozen ground); a non-opaque backdrop
 +  // falls through unchanged and the actor's accent clause backstops it (wave6 §5).
 +  if (aRole == ColorRole::Text) {
-+    auto bg = nsCSSRendering::FindEffectiveBackgroundColor(aFrame);
-+    if (NS_GET_A(bg.mColor) == 255) {
-+      // M4a: enforce the halation ceiling for LARGE text only (size-gated); body
-+      // text keeps its floor lift and is never ceiling-clamped.
-+      const nsStyleFont* font = aFrame->StyleFont();
-+      const bool large = GjoaDarkText::IsLargeText(
-+          font->mFont.size.ToCSSPixels(), font->mFont.weight.ToFloat());
-+      return GjoaDarkText::Correct(aColor, bg.mColor, 57.0f, 90.0f, large);
-+    }
++    // M4a: enforce the halation ceiling for LARGE text only (size-gated); body
++    // text keeps its floor lift and is never ceiling-clamped.
++    const nsStyleFont* font = aFrame->StyleFont();
++    const bool large = GjoaDarkText::IsLargeText(
++        font->mFont.size.ToCSSPixels(), font->mFont.weight.ToFloat());
++    return GjoaDarkText::Correct(aColor, aBackdrop, 57.0f, 90.0f, large);
++  }
++
++  // Borders and native selection backgrounds are structural marks, not body
++  // text. Keep them visible without turning every divider or selection wash
++  // into a high-contrast text edge. Translucent authored colors remain
++  // untouched because Correct requires a frozen, opaque pair.
++  if ((aRole == ColorRole::Border || aRole == ColorRole::Selection) &&
++      NS_GET_A(aColor) == 255) {
++    return GjoaDarkText::Correct(aColor, aBackdrop, 30.0f, 60.0f, true);
 +  }
 +  return aColor;
 +}
@@ -119,24 +125,24 @@ index b453efb..580d60f 100644
    // Get a suitable foreground color for painting aColor for aFrame.
    static nscolor DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor);
 
-+  // gjoa dark-mode v2 (M1): the surface role a resolved paint color plays, so the
-+  // engine inversion can retone each role differently in a later milestone. The
-+  // enum and the choke-point below are the frozen contract; M2 fills in the body.
++  // gjoa dark-mode v2: the surface role a resolved paint color plays, allowing
++  // each role to share one scheme-aware gate while keeping a distinct policy.
 +  enum class ColorRole : uint8_t {
 +    Text,
 +    Background,
 +    Border,
++    Selection,
 +    SvgFill,
 +  };
 +
-+  // gjoa dark-mode v2 (M1): single role-aware choke point for layout color
-+  // resolvers. Gated on this document's per-document inversion flag
-+  // (nsPresContext::ColorInversion, added by patch 0009). M1 is the identity
-+  // (no pixel change); M2 replaces the body with the tone-space per-role retone
-+  // keyed on (aColor, aRole, sampled backdrop). Out-of-line because it needs the
-+  // complete nsPresContext, which this header only forward-declares.
++  // Single role-aware choke point for layout color resolvers. Gated on this
++  // document's per-document inversion flag (nsPresContext::ColorInversion,
++  // added by patch 0009). Out-of-line because it needs the complete
++  // nsPresContext, which this header only forward-declares. aBackdrop may supply
++  // a caller's already-frozen opaque ground; otherwise the resolver samples it.
 +  static nscolor ResolveDarkModeRole(nsIFrame* aFrame, nscolor aColor,
-+                                     ColorRole aRole);
++                                     ColorRole aRole,
++                                     nscolor aBackdrop = NS_TRANSPARENT);
 +
    // Get a suitable text foreground color for painting aField for aFrame.
    // Type of aFrame is made a template parameter because nsIFrame is not
@@ -182,6 +188,35 @@ index 5d1bf44..381c93c 100644
        default:
          NS_ERROR("cannot resolve SVG paint to nscolor");
          return NS_RGBA(0, 0, 0, 255);
+@@ -514,6 +515,14 @@ bool nsTextPaintStyle::InitSelectionColorsAndShadow() {
+
+   if (mResolveColors) {
+     EnsureSufficientContrast(&mSelectionTextColor, &mSelectionBGColor);
++    // Authored ::selection colors return above unchanged. Native selection
++    // colors are already scheme-aware; the role resolver only adds bounded
++    // contrast while the document inversion master switch is active.
++    mSelectionBGColor = nsLayoutUtils::ResolveDarkModeRole(
++        mFrame, mSelectionBGColor, nsLayoutUtils::ColorRole::Selection);
++    mSelectionTextColor = nsLayoutUtils::ResolveDarkModeRole(
++        mFrame, mSelectionTextColor, nsLayoutUtils::ColorRole::Text,
++        mSelectionBGColor);
+   }
+   return true;
+ }
+diff --git a/layout/painting/nsCSSRendering.cpp b/layout/painting/nsCSSRendering.cpp
+--- a/layout/painting/nsCSSRendering.cpp
++++ b/layout/painting/nsCSSRendering.cpp
+@@ -785,7 +785,9 @@ static nsCSSBorderRenderer ConstructBorderRenderer(
+   // pull out styles, colors
+   for (const auto i : mozilla::AllPhysicalSides()) {
+     borderStyles[i] = aStyleBorder.GetBorderStyle(i);
+-    borderColors[i] = aStyleBorder.BorderColorFor(i).CalcColor(*aStyle);
++    borderColors[i] = nsLayoutUtils::ResolveDarkModeRole(
++        aForFrame, aStyleBorder.BorderColorFor(i).CalcColor(*aStyle),
++        nsLayoutUtils::ColorRole::Border);
+   }
+
+   PrintAsFormatString(
 diff --git a/layout/painting/nsDisplayList.cpp b/layout/painting/nsDisplayList.cpp
 index f8a4069..32aea4a 100644
 --- a/layout/painting/nsDisplayList.cpp

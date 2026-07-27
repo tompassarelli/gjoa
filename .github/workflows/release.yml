@@ -1,11 +1,11 @@
 name: Release
 
 # Tag-driven release pipeline. Push a version tag and this builds all three
-# platforms (on Blacksmith) and assembles a DRAFT GitHub release with the binaries
+# platforms (on free GitHub-hosted runners) and assembles a DRAFT GitHub release with the binaries
 # attached, named gjoa-<version>-<platform>.<ext>. The draft is deliberate: a human
-# writes the release notes and clicks Publish — CI never publishes on its own.
+# reviews the generated release notes and clicks Publish — CI never publishes on its own.
 #
-#   git tag v0.3.3 && git push origin v0.3.3
+#   git tag v0.4.1 && git push origin v0.4.1
 #
 # The three build-*.yml workflows are reused (workflow_call), so the build steps
 # stay defined in exactly one place.
@@ -16,14 +16,36 @@ on:
       - "v*"
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release tag matches gjoa.json
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::release tag must be v-prefixed semantic version, got $GITHUB_REF_NAME"
+            exit 1
+          fi
+          tag_version="${GITHUB_REF_NAME#v}"
+          config_version="$(jq -r '.displayVersion' gjoa.json)"
+          if [[ "$tag_version" != "$config_version" ]]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match gjoa.json displayVersion $config_version"
+            exit 1
+          fi
+          echo "validated $GITHUB_REF_NAME against gjoa.json"
+
   # Releases build on the free GitHub-hosted runners (slower, but no Blacksmith
   # credits consumed). Flip `fast: true` per job to opt a release back onto
   # Blacksmith if credits are available and the speed is worth it.
   linux:
+    needs: validate
     uses: ./.github/workflows/build-linux.yml
   macos:
+    needs: validate
     uses: ./.github/workflows/build-macos.yml
   windows:
+    needs: validate
     uses: ./.github/workflows/build-windows.yml
 
   release:
@@ -60,6 +82,6 @@ jobs:
           draft: true
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          body: "_Draft assembled by CI. Replace this with hand-written release notes, then publish._"
+          generate_release_notes: true
           files: release/*
           fail_on_unmatched_files: true

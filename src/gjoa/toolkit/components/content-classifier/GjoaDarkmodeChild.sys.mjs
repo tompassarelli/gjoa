@@ -26,8 +26,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     this._explicitApplied = false;
     this._explicitPromise = null;
     // Async pass-2 image-analysis state (gjoa.darkmode.image-analysis.enabled,
-    // default OFF). Per-src verdict cache so repeats are free, the injected
-    // <style> id, and a debounce handle for the optional one re-run.
+    // default OFF). Terminal per-src verdict cache, the injected <style> id,
+    // and a debounce handle for the optional one re-run.
     this._imgVerdictCache = new Map();
     // C5 dark-logo lift: per-src verdict cache (null = tainted/failed, skip).
     this._logoVerdictCache = new Map();
@@ -2018,11 +2018,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       const targets = this.#collectImageTargets(win, doc);
       const rules = [];
       for (const t of targets) {
-        let verdict = this._imgVerdictCache.get(t.src);
-        if (verdict === undefined) {
-          verdict = this.#analyzeImage(win, doc, t.src);
-          this._imgVerdictCache.set(t.src, verdict); // null = tainted/failed/skip
-        }
+        const verdict = this.#imageVerdict(win, doc, t.src);
         if (!verdict) {
           continue;
         }
@@ -2043,11 +2039,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
             const more = this.#collectImageTargets(win, doc);
             const extra = [];
             for (const t of more) {
-              let v = this._imgVerdictCache.get(t.src);
-              if (v === undefined) {
-                v = this.#analyzeImage(win, doc, t.src);
-                this._imgVerdictCache.set(t.src, v);
-              }
+              const v = this.#imageVerdict(win, doc, t.src);
               if (!v) {
                 continue;
               }
@@ -2063,6 +2055,26 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         }, 1500);
       }
     } catch (e) {}
+  }
+
+  // Only a not-yet-complete image is retryable. The sole delayed re-run can
+  // observe it after decode; CORS, canvas, and terminal image failures remain
+  // cached skips. This preserves the pass's bounded two-attempt shape.
+  #imageVerdict(win, doc, src) {
+    const cached = this._imgVerdictCache.get(src);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const verdict = this.#analyzeImage(win, doc, src);
+    if (!GjoaDarkmodeChild.shouldCacheImageVerdict(verdict)) {
+      return null;
+    }
+    this._imgVerdictCache.set(src, verdict);
+    return verdict;
+  }
+
+  static shouldCacheImageVerdict(verdict) {
+    return verdict?.retry !== true;
   }
 
   // Enumerate elements whose computed background-image resolves to a url() (skip
@@ -2179,8 +2191,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     }
   }
 
-  // Rasterize an image src to a 32x32 offscreen canvas and classify it with Dark
-  // Reader's exact thresholds. Returns a verdict object, or null on any failure
+  // Rasterize an image src to a 32x32 offscreen canvas and classify it. Returns a
+  // verdict object, { retry: true } before decode, or null on terminal failure
   // (cross-origin / tainted canvas / load error) so the caller skips that image.
   // Cross-origin images taint the canvas; getImageData then throws — caught here.
   #analyzeImage(win, doc, src) {
@@ -2192,10 +2204,14 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         img.crossOrigin = "anonymous";
       } catch (e) {}
       img.src = src;
-      // The image must already be decoded for a synchronous draw. Background
-      // images visible on screen are loaded by the time the idle pass runs; if
-      // not complete we skip (cached as null) rather than block on async decode.
-      if (!img.complete || !img.naturalWidth || !img.naturalHeight) {
+      // The synchronous draw needs decoded pixels. Do not turn an in-flight
+      // background into a terminal cached skip: the one existing delayed pass
+      // gets exactly one chance to see it complete. A complete zero-sized image
+      // is terminal and safely cached as a skip.
+      if (!img.complete) {
+        return { retry: true };
+      }
+      if (!img.naturalWidth || !img.naturalHeight) {
         return null;
       }
       const sw = img.naturalWidth;
@@ -2245,6 +2261,9 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       let sumG = 0;
       let sumB = 0;
       let sumA = 0;
+      let chromaticPixelsCount = 0;
+      let saturatedPixelsCount = 0;
+      const palette = new Set();
 
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -2274,6 +2293,19 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
             if (l > maxLightness) {
               maxLightness = l;
             }
+            // Quantization treats anti-aliasing noise as one palette entry;
+            // compact icons/emotes still read as limited-palette artwork.
+            palette.add((r >> 4) + ":" + (g >> 4) + ":" + (b >> 4));
+            const high = Math.max(r, g, b);
+            const low = Math.min(r, g, b);
+            const chroma = (high - low) / 255;
+            const saturation = high ? (high - low) / high : 0;
+            if (chroma >= 0.15) {
+              chromaticPixelsCount++;
+            }
+            if (saturation >= 0.4) {
+              saturatedPixelsCount++;
+            }
           }
         }
       }
@@ -2300,11 +2332,30 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
           TRANSPARENT_IMAGE_THRESHOLD,
         isLarge,
         width: sw,
+        // A compact, deliberately colored palette is semantic artwork, not a
+        // neutral dark glyph. Preserve its hues instead of applying hue-rotate.
+        isSemanticColor: GjoaDarkmodeChild.isLimitedPaletteChromatic(
+          palette.size,
+          chromaticPixelsCount / opaquePixelsCount,
+          saturatedPixelsCount / opaquePixelsCount
+        ),
         solidColor,
       };
     } catch (e) {
       return null;
     }
+  }
+
+  static isLimitedPaletteChromatic(paletteSize, chromaticFraction, saturatedFraction) {
+    return (
+      paletteSize <= 24 &&
+      chromaticFraction >= 0.12 &&
+      saturatedFraction >= 0.12
+    );
+  }
+
+  static shouldInvertDarkTransparentImage(isDark, isTransparent, width, isSemanticColor) {
+    return isDark && isTransparent && width > 2 && !isSemanticColor;
   }
 
   // Dark Reader's getBgImageValue tree (modify-css.ts), ORDER MATTERS. We're only
@@ -2325,7 +2376,14 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       };
     }
     // 2) dark + transparent + small (width > 2) → INVERT this element's bg image.
-    if (v.isDark && v.isTransparent && v.width > 2) {
+    if (
+      GjoaDarkmodeChild.shouldInvertDarkTransparentImage(
+        v.isDark,
+        v.isTransparent,
+        v.width,
+        v.isSemanticColor
+      )
+    ) {
       return {
         sel,
         decl: "filter: invert(1) hue-rotate(180deg) !important;",
