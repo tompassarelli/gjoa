@@ -1,5 +1,5 @@
 # gjoa-patch:
-#   baseline-firefox: 152.0.1
+#   baseline-firefox: 152.0.6
 #   touches:
 #     - layout/generic/GjoaDarkText.h
 #     - layout/generic/GjoaDarkText.cpp
@@ -17,6 +17,7 @@
 # holding hue -- which 0009's blind Y->1-lum cannot guarantee.
 diff --git a/layout/generic/GjoaDarkText.h b/layout/generic/GjoaDarkText.h
 new file mode 100644
+index 0000000000000000000000000000000000000000..8f30b481fbe9bf06bad1c2b8dbcbfc3470c7ccaf
 --- /dev/null
 +++ b/layout/generic/GjoaDarkText.h
 @@ -0,0 +1,50 @@
@@ -72,6 +73,7 @@ new file mode 100644
 +#endif  // mozilla_GjoaDarkText_h
 diff --git a/layout/generic/GjoaDarkText.cpp b/layout/generic/GjoaDarkText.cpp
 new file mode 100644
+index 0000000000000000000000000000000000000000..cafba416f9ee32eda17ca2aa8d3d31c33c4fc384
 --- /dev/null
 +++ b/layout/generic/GjoaDarkText.cpp
 @@ -0,0 +1,184 @@
@@ -260,6 +262,7 @@ new file mode 100644
 +
 +}  // namespace mozilla
 diff --git a/layout/generic/nsTextPaintStyle.cpp b/layout/generic/nsTextPaintStyle.cpp
+index 269d3bc02de88b870d4d5ee383f02ca1b04d8dfa..a6aefccefc9cce1755220f6fa7231b71da979cb7 100644
 --- a/layout/generic/nsTextPaintStyle.cpp
 +++ b/layout/generic/nsTextPaintStyle.cpp
 @@ -10,6 +10,7 @@
@@ -297,6 +300,7 @@ diff --git a/layout/generic/nsTextPaintStyle.cpp b/layout/generic/nsTextPaintSty
  
  bool nsTextPaintStyle::GetSelectionColors(nscolor* aForeColor,
 diff --git a/layout/generic/moz.build b/layout/generic/moz.build
+index a0b95f0470cc661ad5316768cb637dadc9c8e449..fdbd8b364fa18f7044c02f45c426b6f34d61082e 100644
 --- a/layout/generic/moz.build
 +++ b/layout/generic/moz.build
 @@ -173,6 +173,7 @@
