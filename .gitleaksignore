@@ -1,0 +1,14 @@
+# gitleaks allowlist — acknowledged, non-actionable historical findings.
+#
+# Format: <commit>:<file>:<rule>:<startline>  (a gitleaks Fingerprint)
+#
+# 710615fd — a Google-API-key-shaped string inside the VENDORED third-party
+# adblock scriptlet-resources.json (content-classifier). It is:
+#   * not our credential (upstream adblock resource data),
+#   * already REMOVED from the current file (only present in this old commit),
+#   * already public on origin/main (this commit is an ancestor of main),
+# so it is neither newly introduced nor newly exposed by any branch push here.
+# Allowlisted so safe-push's full-history scan (triggered on no-upstream branches)
+# does not re-flag it on every feature-branch push. If upstream ever ships a real
+# live key here, rotate it upstream — do not un-ignore to "fix" a vendored blob.
+710615fdc40c4bf7a92bb9b826b9ac9ea811203e:src/gjoa/toolkit/components/content-classifier/scriptlet-resources.json:gcp-api-key:1

@@ -66,6 +66,7 @@
             (rmattr! root "gjoa-urlbar-floating")
             (rmattr! root "gjoa-urlbar-intent")
             (rmattr! root "gjoa-urlbar-teardown")
+            (rmattr! root "gjoa-urlbar-arming")
             (when (.-backdrop state)
               (.remove (.-backdrop state))
               (set! (.-backdrop state) nil))
@@ -110,6 +111,23 @@
               (.addEventListener urlbar "transitionend" fire)
               (.setTimeout window (fn [] (fire nil)) 260))))
 
+        ;; SINGLE OWNER of the top-layer promotion. The palette escapes the sidebar's
+        ;; (transformed, in compact mode) stacking context ONLY by being a manual popover
+        ;; in the top layer. This asserts that idempotently — popover=manual + showPopover
+        ;; if not already open + focus — so it's safe to call on every summon (fresh OR
+        ;; re-arm) and self-heals a popover that another writer (compact.bjs / teardown)
+        ;; pulled out from under the `activated` flag.
+        ensure-floating-promoted (fn []
+          (try
+            (when (not= (.getAttribute urlbar "popover") "manual")
+              (attr! urlbar "popover" "manual"))
+            (when (and (not (bool (.matches urlbar ":popover-open"))) (.-showPopover urlbar))
+              (.showPopover urlbar))
+            (some-> window .-gURLBar .focus)
+            (some-> window .-gURLBar .select)
+            (catch Any e
+              (log "activateFloating:promote-error" {:msg (String e)}))))
+
         activate-floating (fn [new-intent]
           (set! (.-intent state) new-intent)
           ;; If a prior dismiss is still mid-teardown (teardown attr set, rAF
@@ -121,7 +139,17 @@
           (let [attr-val (intent-attr (.-intent state))]
             (if (.-activated state)
               (do (log "activateFloating:re-arm" {:intent (.-intent state)})
-                  (attr! root "gjoa-urlbar-intent" attr-val))
+                  (attr! root "gjoa-urlbar-intent" attr-val)
+                  ;; SELF-HEAL (2026-07-20): `activated` is a flag that can DESYNC from the
+                  ;; real DOM state — the `popover` attr (what puts the palette in the top
+                  ;; layer so it escapes the sidebar's transformed stacking context) is also
+                  ;; written by compact.bjs's observer and by teardown, so it can be pulled
+                  ;; out from under us while `activated` stays true. Without re-asserting it,
+                  ;; a re-summon leaves the palette OUT of the top layer, positioned by its
+                  ;; containing block (the compact sidebar) → clipped under the page content.
+                  ;; Owner correctly called this a state-management failure, not a compositor
+                  ;; bug. Re-assert the promotion here so every summon lands in the top layer.
+                  (ensure-floating-promoted))
               (do (set! (.-activated state) true)
                   (log "activateFloating" {:intent (.-intent state)})
                   ;; Leave a static look-alike (#gjoa-urlbar-ghost) in the resting
@@ -144,36 +172,131 @@
                         (let [rect (.getBoundingClientRect urlbar)
                               cs (.getComputedStyle window urlbar)
                               g (html-new "div")
-                              icon (html-new "div")
                               txt (html-new "div")
                               ph (or (some-> window .-gURLBar .-inputField .-placeholder)
                                      "Search with Google or enter address")
-                              ;; Shield rendered via a CSS mask (data-URI SVG) — NOT
-                              ;; innerHTML: setting innerHTML with an inline <svg> throws
-                              ;; in the chrome XHTML document, which aborted ghost
-                              ;; creation entirely (empty slot + placeholder spilling).
-                              shield (str "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'"
-                                          " viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.3'"
-                                          " stroke-linejoin='round'%3E%3Cpath d='M8 1.6 13 3.6 V8 C13 11 8 14.4"
-                                          " 8 14.4 8 14.4 3 11 3 8 V3.6 Z'/%3E%3C/svg%3E")]
+                              ;; #150c (2026-07-20): FREEZE the resting bar EXACTLY. The ghost
+                              ;; fills the slot the instant the real urlbar lifts to float, so
+                              ;; ANY difference reads as a swap. Two things the owner still saw
+                              ;; wrong: (1) it showed the PLACEHOLDER instead of the loaded
+                              ;; page's URL, and (2) it drew ONE plain shield where the resting
+                              ;; bar shows several icons (search-mode switcher + trust/identity).
+                              ;; Fix: text = the REAL resting value (gURLBar.value; placeholder
+                              ;; only when the bar is truly empty), and reproduce EVERY visible
+                              ;; leading icon at its real x by copying its rendered glyph —
+                              ;; piercing shadow roots + honouring <img src> (the moz-button
+                              ;; switcher renders its glyph in a shadow root, so light-DOM-only
+                              ;; copying missed it, and cloneNode drops custom elements + un-hides
+                              ;; state-hidden buttons; both verified in cage).
+                              container (or (.querySelector urlbar ".urlbar-input-container") urlbar)
+                              visible? (fn [el]
+                                         (let [r (.getBoundingClientRect el)
+                                               c (.getComputedStyle window el)]
+                                           (and (> (.-width r) 0) (> (.-height r) 0)
+                                                (not= (.-display c) "none")
+                                                (not= (.-visibility c) "hidden"))))
+                              ;; glyph of an element: an `iconsrc` attr (moz-button, e.g. the
+                              ;; search-mode switcher's engine icon — a system blob:), else the
+                              ;; first visible descendant (incl. open shadow root) that renders an
+                              ;; image — <img src>, list-style / background / mask.
+                              glyph-of (fn [el]
+                                (let [isrc (or (.getAttribute el "iconsrc")
+                                               (some-> (.querySelector el "[iconsrc]") (.getAttribute "iconsrc")))
+                                      sr (.-shadowRoot el)
+                                      cands (.concat (.from Array (.querySelectorAll el "*"))
+                                                     (if sr (.from Array (.querySelectorAll sr "*")) [])
+                                                     [el])
+                                      hit (.find cands
+                                            (fn [e]
+                                              (and (visible? e)
+                                                   (let [c (.getComputedStyle window e)]
+                                                     (or (and (= (.-tagName e) "IMG") (.-src e) (not= (.-src e) ""))
+                                                         (not= (.-listStyleImage c) "none")
+                                                         (not= (.-backgroundImage c) "none")
+                                                         (not= (.-maskImage c) "none"))))))]
+                                  (cond
+                                    (and isrc (not= isrc ""))
+                                      {:css (str "background:url(\"" isrc "\") center/contain no-repeat;")}
+                                    (not hit) nil
+                                    :else
+                                      (let [c (.getComputedStyle window hit)]
+                                        (cond
+                                          (and (= (.-tagName hit) "IMG") (.-src hit) (not= (.-src hit) ""))
+                                            {:css (str "background:url(\"" (.-src hit) "\") center/contain no-repeat;")}
+                                          (not= (.-listStyleImage c) "none")
+                                            {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
+                                                       "background:" (.-listStyleImage c) " center/contain no-repeat;")}
+                                          (not= (.-backgroundImage c) "none")
+                                            {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
+                                                       "background:" (.-backgroundImage c) " center/contain no-repeat;")}
+                                          :else
+                                            {:css (str "background-color:" (.-color c) ";"
+                                                       "mask:" (.-maskImage c) " center/contain no-repeat;"
+                                                       "-webkit-mask:" (.-maskImage c) " center/contain no-repeat;")})))))
+                              ;; input-box = the container's direct child holding the field (for
+                              ;; slicing the leading icons); text-el = the actual .urlbar-input the
+                              ;; text renders in (its left is where the URL text starts — the
+                              ;; moz-input-box wrapper has ~26px of leading padding, so measuring
+                              ;; the wrapper would shift the ghost text left of the real text).
+                              input-box (.querySelector container "moz-input-box, .urlbar-input-box")
+                              text-el (or (some-> window .-gURLBar .-inputField)
+                                          (.querySelector urlbar ".urlbar-input")
+                                          input-box)
+                              input-left (if text-el
+                                           (- (.-left (.getBoundingClientRect text-el)) (.-left rect))
+                                           36)
+                              kids (.from Array (.-children container))
+                              input-idx (.indexOf kids input-box)
+                              ;; EXCLUDE the search-mode switcher (2026-07-20): it's the
+                              ;; engine-picker affordance and its `iconsrc` is the current
+                              ;; engine's logo (Google), which showed up as a loud Google "G"
+                              ;; in the frozen slot — clutter, not part of the resting identity.
+                              ;; A frozen ghost is the security/identity icon(s) + the URL.
+                              switcher? (fn [ch]
+                                          (or (and (.-classList ch) (.contains (.-classList ch) "searchmode-switcher"))
+                                              (.getAttribute ch "iconsrc")))
+                              leading (.filter (if (>= input-idx 0) (.slice kids 0 input-idx) kids)
+                                        (fn [ch] (and (visible? ch) (not (switcher? ch)))))
+                              value (or (some-> window .-gURLBar .-value) "")
+                              has-value? (not= (.trim value) "")
+                              text-str (if has-value? value ph)]
                           (set! (.-id g) "gjoa-urlbar-ghost")
                           (attr! g "aria-hidden" "true")
-                          (css! g (str "display:flex;align-items:center;gap:8px;box-sizing:border-box;"
+                          (css! g (str "position:relative;display:block;box-sizing:border-box;padding:0;"
                                        "width:" (.-width rect) "px;height:" (.-height rect) "px;"
-                                       "padding-inline:12px;pointer-events:none;overflow:hidden;"
-                                       "white-space:nowrap;"
+                                       "pointer-events:none;overflow:hidden;white-space:nowrap;"
                                        "border:" (.-border cs) ";border-radius:" (.-borderRadius cs) ";"
                                        "background:" (.-backgroundColor cs) ";"
                                        "font:" (.-font cs) ";color:" (.-color cs) ";"))
-                          (css! icon (str "flex:0 0 16px;width:16px;height:16px;opacity:.75;"
-                                          "background-color:currentColor;"
-                                          "mask:url(\"" shield "\") center/contain no-repeat;"
-                                          "-webkit-mask:url(\"" shield "\") center/contain no-repeat;"))
-                          (set! (.-textContent txt) ph)
-                          (css! txt (str "flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;opacity:.55;"))
-                          (.append g icon txt)
+                          ;; one ghost icon per real visible leading icon, at its real x/width
+                          (doseq [ch leading]
+                            (let [r (.getBoundingClientRect ch)
+                                  left (- (.-left r) (.-left rect))
+                                  w (.-width r)
+                                  gl (glyph-of ch)
+                                  slot (html-new "div")]
+                              (when gl
+                                (css! slot (str "position:absolute;top:0;bottom:0;display:flex;"
+                                                "align-items:center;justify-content:center;"
+                                                "left:" left "px;width:" w "px;"))
+                                (let [ic (html-new "div")]
+                                  (css! ic (str "width:16px;height:16px;opacity:.9;" (.-css gl)))
+                                  (.appendChild slot ic)
+                                  (.appendChild g slot)))))
+                          (set! (.-textContent txt) text-str)
+                          (css! txt (str "position:absolute;top:0;bottom:0;display:flex;align-items:center;"
+                                         "left:" input-left "px;right:8px;overflow:hidden;"
+                                         "text-overflow:ellipsis;opacity:" (if has-value? ".95" ".55") ";"))
+                          (.appendChild g txt)
                           (.appendChild parent g)
                           (set! (.-ghost state) g)))))
+                  ;; #150b (2026-07-19): ARM opacity:0 (no transition) BEFORE the popover
+                  ;; promotes to the top layer, then reveal on the next frame — so the
+                  ;; float-in animation plays only from the settled centered geometry. The
+                  ;; owner saw the bar flash ~40-100px off on the FIRST Ctrl+L of a session
+                  ;; (cold popover-promotion paints one frame at the pre-promotion position);
+                  ;; hiding until promoted makes that transient invisible by construction.
+                  (attr! root "gjoa-urlbar-arming" "")
                   (attr! root "gjoa-urlbar-floating" "")
                   (attr! root "gjoa-urlbar-intent" attr-val)
 
@@ -184,15 +307,14 @@
                       (.appendChild root bd)
                       (set! (.-backdrop state) bd)))
 
-                  (try
-                    (when (not= (.getAttribute urlbar "popover") "manual")
-                      (attr! urlbar "popover" "manual"))
-                    (when (and (not (bool (.matches urlbar ":popover-open"))) (.-showPopover urlbar))
-                      (.showPopover urlbar))
-                    (some-> window .-gURLBar .focus)
-                    (some-> window .-gURLBar .select)
-                    (catch Any e
-                      (log "activateFloating:error" {:msg (String e)})))))))
+                  (ensure-floating-promoted)
+                  ;; reveal once the popover has promoted + positioned (double-rAF); a
+                  ;; setTimeout fallback covers a starved rAF (e.g. uncomposited window) so
+                  ;; the bar can never get stuck invisible.
+                  (let [reveal (fn [] (rmattr! root "gjoa-urlbar-arming"))]
+                    (.requestAnimationFrame window
+                      (fn [] (.requestAnimationFrame window reveal)))
+                    (.setTimeout window reveal 120))))))
 
         is-floating #(.-activated state)
 

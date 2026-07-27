@@ -58,3 +58,7 @@ tools/security/audit-ledger.bjs
 
 # Build ledger moved to private-docs/build-logs/ (can leak nix paths / internal detail)
 BUILD-LEDGER.md
+
+# Internal agent notes / status / scratch / handoffs — NOT user-facing docs.
+# Keep out of git. Put private notes under docs/private/.
+docs/private/

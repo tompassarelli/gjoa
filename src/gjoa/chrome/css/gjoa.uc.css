@@ -720,8 +720,18 @@
  * the abs-pos urlbar then sizes to the drawer's inner width and sits at its
  * inset static position (inside the wrapper's margin), so it stays contained
  * and centered. `left/right: auto` keeps it at that static position; the
- * breakout-extend width override below still wins when focused/expanded. */
-#sidebar-main #gjoa-urlbar-toolbar #urlbar:not([breakout-extend]) {
+ * breakout-extend width override below still wins when focused/expanded.
+ *
+ * MUST yield while the Ctrl+L palette floats (`:root:not([gjoa-urlbar-floating])`).
+ * This rule is (3,1,0)-specific — HIGHER than the floating centering rule
+ * `:root[gjoa-urlbar-floating] #urlbar` (1,2,0) — so without this guard its
+ * `left/right:auto` pinned the FLOATING popover to its static in-sidebar slot
+ * (~18px from the window edge) instead of centering it in the viewport. That
+ * only shows at WIDE windows (at a narrow one, left-anchored ≈ centered), which
+ * is why it hid until a wide window exposed it. The `:not([breakout-extend])`
+ * meant it bit specifically in the floating-but-not-yet-extended state. The
+ * comment below ("floating path wins when active") is only TRUE with this guard. */
+:root:not([gjoa-urlbar-floating]) #sidebar-main #gjoa-urlbar-toolbar #urlbar:not([breakout-extend]) {
   width: var(--urlbar-width) !important;
   min-width: 0 !important;
   left: auto !important;
@@ -892,6 +902,19 @@ Preserve these (security warnings):
 }
 @media (prefers-reduced-motion: reduce) {
   :root[gjoa-urlbar-floating] #urlbar { animation: none !important; }
+}
+
+/* #150b FIRST-PAINT ARMING (2026-07-19): activate() sets `gjoa-urlbar-arming` on
+ * :root BEFORE showPopover() promotes #urlbar to the top layer, then clears it on
+ * the next animation frame. While armed the bar is opacity:0 with NO animation, so
+ * the one cold frame where the popover paints at its pre-promotion position (the
+ * "flashes ~40-100px off on the first Ctrl+L of a session") is never visible; the
+ * float-in animation then runs only from the settled centered geometry. The extra
+ * [gjoa-urlbar-arming] attr out-specifies the float-in rule above. */
+:root[gjoa-urlbar-floating][gjoa-urlbar-arming] #urlbar {
+  opacity: 0 !important;
+  animation: none !important;
+  transition: none !important;
 }
 
 /* Pin width during breakout-extend (the in-sidebar selectors ALSO have
