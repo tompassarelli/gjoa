@@ -12,9 +12,9 @@
 
 **Feasible, with ONE upstream blocker on beagle.** beagle already ships a
 consumable `flake.nix` (`packages.default`) whose lock pins to exactly the SHA
-gjoa wants (`9d791ed…` = `configs/beagle.ref`). It installs `bin/beagle*`
+gjoa wants (`3e942ba…` = `configs/beagle.ref`). It installs `bin/beagle*`
 (wrapped with racket+babashka on PATH) and copies the racket collection +
-`lib/` runtime into `$out/lib/beagle/`. So a `beagle.url = "github:Autonymy/beagle?rev=<SHA>"`
+`lib/` runtime into `$out/lib/beagle/`. So a `beagle.url = "github:tompassarelli/beagle?rev=<SHA>"`
 flake input gives gjoa a hermetic, store-path beagle for **both** the nix build
 and local direnv — no global `raco link`, no `PLTCOLLECTS` symlink, no
 `node_modules/beagle` dance.
@@ -36,7 +36,7 @@ unilateral, no beagle change strictly required (see "what gjoa can do today").
 
 ## Current pinning mechanism — the 6 consumption points
 
-The pin (`configs/beagle.ref` = `9d791ed…`) is consumed in **six** distinct
+The pin (`configs/beagle.ref` = `3e942ba…`) is consumed in **six** distinct
 places. Any migration must address every one:
 
 | # | Consumer | What it needs | How it resolves today |
@@ -83,9 +83,9 @@ single `BEAGLE_CORE_JS` env var the devshell/CI both export).
 
 **(c) Pin is the single source of truth:** YES. beagle's `flake.lock` already
 locks `nixpkgs`-style inputs, and a gjoa `beagle` input pinned by `?rev=<SHA>`
-records the SHA in gjoa's `flake.lock`. The SHA `9d791ed…` is the live `main`
-HEAD on both `Autonymy/beagle` (canonical) and `tompassarelli/beagle` (CI's
-fork) — they're in sync. So the flake input resolves cleanly.
+records the SHA in gjoa's `flake.lock`. The SHA `3e942ba…` is the frozen
+known-green pin in the canonical `tompassarelli/beagle` repository. So the
+flake input resolves cleanly.
 
 ---
 
@@ -107,7 +107,7 @@ fork) — they're in sync. So the flake input resolves cleanly.
 ### Phase 1 — declare the flake input (gjoa, unilateral)
 1. Add to `flake.nix` `inputs`:
    ```nix
-   beagle.url = "github:Autonymy/beagle?rev=9d791ed57e84e8a1ebe48a5dda588f9842168e26";
+   beagle.url = "github:tompassarelli/beagle?rev=3e942ba213f9ee5444e02046a4c1fbd8d3e0dd91";
    beagle.inputs.nixpkgs.follows = "nixpkgs";
    ```
    `nix flake lock` records the SHA in `flake.lock`. (See draft.)
@@ -177,8 +177,8 @@ fork) — they're in sync. So the flake input resolves cleanly.
 12. **Gate Q** is unaffected in spirit — it compares emitted chrome `$$bc`
     references against the vendored `core.js` surface. Only the *path* to the
     "compiler-side" beagle changes (store path), not the assertion. The
-    `equivV`-compat shim in `overlay.bjs` stays until the pinned beagle's
-    `core.js` exports `equivV` natively.
+    pinned `3e942ba` runtime exports `equivV` natively, so no compatibility
+    shim is required.
 
 ### Phase 8 — keep raco-link as a transition fallback, then remove
 13. During transition, the resolver's worktree fallback (Phase 4) means a dev
@@ -199,7 +199,7 @@ fork) — they're in sync. So the flake input resolves cleanly.
 | **core.js path shape differs** (`lib/beagle/lib/beagle/core.js` vs `beagle-lib/lib/beagle/core.js`) | HIGH (confirmed) | `vendor-core-js!` throws "not found" | Phase 4 `BEAGLE_CORE_JS` env var / dual-path resolver. |
 | **bun runtime can't resolve `beagle/core.js` import** without `node_modules/beagle` | Medium | tooling runtime error | Keep a `node_modules/beagle` symlink to `${beagle}/lib/beagle/lib/beagle` in the devshell hook, OR set bun resolution via the import map. Lowest-friction: devshell `ln -sfn`. |
 | **mach path vs nix path divergence** — mach devshell (`nix develop .#mach`) and the `bun run import` outside nix must use the SAME beagle | Medium | emit/runtime skew (the exact class Gate Q guards) | Both devshells take the same `beaglePkg` input ⇒ identical store path ⇒ stronger guarantee than today's two-symlink setup. This is a *net improvement*. |
-| **CI fork URL mismatch** — CI clones `tompassarelli/beagle`, canonical is `Autonymy/beagle` | Low (in sync now) | drift if forks diverge | Flake input pins ONE URL (`Autonymy`) by SHA; CI stops cloning the other fork. Eliminates the discrepancy. |
+| **Beagle URL drift** — a flake example or workflow stops using canonical `tompassarelli/beagle` | Low | fetches the wrong upstream | Flake input and CI pin one canonical URL by SHA. |
 | **`flake.lock` and `configs/beagle.ref` drift** | Medium | confusing double-pin | Phase 6 "pins agree" CI gate. |
 | **`--impure` nix build + beagle input interaction** — gjoa's `nix build` already needs `--impure` (reads `engine/` outside flake src). Adding an input doesn't change that. | Low | none | beagle input is pure (store path); `--impure` is unrelated (it's for `engine/`). No new coupling. |
 | **Non-nix contributors** (no nix, build via raco) | Low | broken for them | Phase 4 fallbacks keep `~/code/beagle-pin` + `raco link` working; document both paths. |

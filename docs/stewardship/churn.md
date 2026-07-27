@@ -104,7 +104,7 @@ A textual `.patch` is anchored to line numbers and surrounding context; when Moz
 
 Upstream churn isn't only Mozilla's. The `beagle` compiler and `fram` engine are dependencies that move too, and a compiler emit/runtime skew silently broke chrome four serial times. So gjoa **freezes** them:
 
-- `configs/beagle.ref` pins beagle to SHA `9d791ed` — **compiler and runtime**. A dedicated worktree at `~/code/beagle-pin` (never the shared `../beagle`, which is concurrent-agent-shared) supplies the compiler via `PLTCOLLECTS`, and `core.js` is vendored from the same ref. **Gate M** (`preflight.bjs:410`) is a HARD FAIL on drift — a warn here is what let the four breaks ship.
+- `configs/beagle.ref` pins beagle to SHA `3e942ba213f9ee5444e02046a4c1fbd8d3e0dd91` — **compiler and runtime** — from canonical upstream `https://github.com/tompassarelli/beagle`. It is the newest revision whose upstream tests (run `30034827041`) and native build (run `30034828902`) were both green when selected on 2026-07-27; newer `main` was red and was not consumed. A dedicated worktree at `~/code/beagle-pin` (never the shared `../beagle`, which is concurrent-agent-shared) supplies the compiler via `PLTCOLLECTS`, and `core.js` is vendored from the same ref. **Gate M** (`preflight.bjs:410`) is a HARD FAIL on drift — a warn here is what let the four breaks ship.
 
 This means Firefox churn and beagle churn are **decoupled**: a Firefox bump can't move the compiler, and a beagle bump is a deliberate, reviewed event (re-point worktree → re-import → re-vendor), never an ambient surprise.
 

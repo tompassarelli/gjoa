@@ -77,7 +77,7 @@ nix build .#gjoa-quickbuild --impure  # quickbuild — fast, no LTO, CPU-portabl
 - **Personal native build → `.#gjoa`.** Compiled `-march=native` for the CPU it's built on — fastest, but it can crash (SIGILL) on hardware that lacks those instructions, so it's a *local* build, not for arbitrary machines.
 - **Portable / quickbuild → `.#gjoa-quickbuild`.** Fast, no LTO, CPU-portable; or `nix bundle .#gjoa-quickbuild --impure` for a single relocatable Linux executable that runs on any glibc distro with no Nix on the target.
 
-The build variants and their exact flags are defined in [`flake.nix`](flake.nix); CI clones the **pinned** [Beagle](https://github.com/Autonymy/beagle) compiler — the SHA in [`configs/beagle.ref`](configs/beagle.ref) — as a sibling checkout, so every build is deterministic against a frozen compiler instead of a moving `HEAD`.
+The build variants and their exact flags are defined in [`flake.nix`](flake.nix); CI clones the **pinned** [Beagle](https://github.com/tompassarelli/beagle) compiler — the SHA in [`configs/beagle.ref`](configs/beagle.ref) — as a sibling checkout, so every build is deterministic against a frozen compiler instead of a moving `HEAD`.
 
 ## Development
 
@@ -114,7 +114,7 @@ docs/               deep-dive documentation
 
 ## Why Beagle?
 
-gjoa is written in [Beagle](https://github.com/Autonymy/beagle) (a typed Clojure subset) compiled to chrome JS and a native loader baked into `omni.ja`. Authoring in Beagle is a deliberate edge, not an aesthetic one: compile-time macros, **one** typed language across chrome / loader / tooling / tests / prefs, machine-checked effect discipline (a `BEAGLE_PURITY=error` check a TypeScript type system can't express), engine patches anchored by *declared structural dependencies* (a preflight gate fails the build when an upstream refactor moves a symbol a patch relies on, instead of letting it silently rot), and gjoa's own source queryable as a **call graph** — `who-calls` / `blast-radius` / `leverage`, CI-checked against the compiler. The honest case, including what *isn't* a win, is in [`docs/why-beagle.md`](docs/why-beagle.md).
+gjoa is written in [Beagle](https://github.com/tompassarelli/beagle) (a typed Clojure subset) compiled to chrome JS and a native loader baked into `omni.ja`. Authoring in Beagle is a deliberate edge, not an aesthetic one: compile-time macros, **one** typed language across chrome / loader / tooling / tests / prefs, machine-checked effect discipline (a `BEAGLE_PURITY=error` check a TypeScript type system can't express), engine patches anchored by *declared structural dependencies* (a preflight gate fails the build when an upstream refactor moves a symbol a patch relies on, instead of letting it silently rot), and gjoa's own source queryable as a **call graph** — `who-calls` / `blast-radius` / `leverage`, CI-checked against the compiler. The honest case, including what *isn't* a win, is in [`docs/why-beagle.md`](docs/why-beagle.md).
 
 ## License
 
