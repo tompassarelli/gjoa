@@ -29,6 +29,8 @@ jobs:
     timeout-minutes: 300
     env:
       FF_VERSION: "152.0.6"
+      APPIMAGETOOL_VERSION: "1.9.1"
+      APPIMAGE_RUNTIME_VERSION: "20251108"
       # Pinned beagle worktree: the build tooling (.bjs + package.json) resolves
       # beagle-build / beagle from $BEAGLE_PIN_ROOT (default ~/code/beagle-pin).
       # CI clones the pin SHA into ../beagle and points the build at it, so the
@@ -68,7 +70,7 @@ jobs:
             libcups2-dev libdrm-dev \
             nasm yasm m4 unzip zip \
             python3 python3-pip \
-            mercurial pkg-config nodejs
+            mercurial pkg-config nodejs desktop-file-utils
 
       - name: Maximize build space
         if: ${{ inputs.arch == 'aarch64' || !inputs.fast }}
@@ -255,6 +257,85 @@ jobs:
         working-directory: engine
         run: ./mach package
 
+      # The Firefox package is already a portable, self-contained application
+      # tree. AppImage wraps that same tree without rewriting its libraries.
+      # Both appimagetool and the embedded runtime are immutable releases with
+      # pinned checksums; --runtime-file prevents appimagetool from fetching its
+      # default runtime from the moving "continuous" release.
+      - name: Build AppImage
+        run: |
+          case "${{ inputs.arch }}" in
+            x86_64)
+              expected_arch='x86-64'
+              tool_sha='ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0'
+              runtime_sha='2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d'
+              ;;
+            aarch64)
+              expected_arch='aarch64'
+              tool_sha='f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158'
+              runtime_sha='00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444'
+              ;;
+            *)
+              echo "::error::unsupported AppImage architecture: ${{ inputs.arch }}"
+              exit 1
+              ;;
+          esac
+
+          package="$(find "$PWD"/engine/obj-*/dist -maxdepth 1 -name 'gjoa-*.tar.xz' -type f -print -quit)"
+          test -n "$package"
+
+          appdir="$RUNNER_TEMP/Gjoa.AppDir"
+          tools_dir="$RUNNER_TEMP/appimage-tools"
+          output_dir="$PWD/dist-packages"
+          mkdir -p \
+            "$appdir/usr/bin" \
+            "$appdir/usr/lib/gjoa" \
+            "$appdir/usr/share/applications" \
+            "$appdir/usr/share/icons/hicolor/256x256/apps" \
+            "$appdir/usr/share/doc/gjoa" \
+            "$tools_dir" \
+            "$output_dir"
+
+          tar -xJf "$package" -C "$appdir/usr/lib/gjoa" --strip-components=1
+          test -x "$appdir/usr/lib/gjoa/gjoa"
+          file "$appdir/usr/lib/gjoa/gjoa" | grep -qi "$expected_arch"
+          install -Dm644 configs/branding/gjoa/logo256.png \
+            "$appdir/usr/share/icons/hicolor/256x256/apps/gjoa.png"
+          install -Dm644 configs/appimage/AppImage-runtime-NOTICE \
+            "$appdir/usr/share/doc/gjoa/AppImage-runtime-NOTICE"
+          install -Dm755 configs/appimage/AppRun "$appdir/AppRun"
+          install -Dm644 configs/appimage/gjoa.desktop \
+            "$appdir/usr/share/applications/gjoa.desktop"
+          desktop-file-validate "$appdir/usr/share/applications/gjoa.desktop"
+
+          ln -s ../lib/gjoa/gjoa "$appdir/usr/bin/gjoa"
+          ln -s usr/share/applications/gjoa.desktop "$appdir/gjoa.desktop"
+          ln -s usr/share/icons/hicolor/256x256/apps/gjoa.png "$appdir/gjoa.png"
+          ln -s gjoa.png "$appdir/.DirIcon"
+
+          tool="$tools_dir/appimagetool-${{ inputs.arch }}.AppImage"
+          runtime="$tools_dir/runtime-${{ inputs.arch }}"
+          curl --fail --location --retry 3 \
+            "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-${{ inputs.arch }}.AppImage" \
+            --output "$tool"
+          curl --fail --location --retry 3 \
+            "https://github.com/AppImage/type2-runtime/releases/download/${APPIMAGE_RUNTIME_VERSION}/runtime-${{ inputs.arch }}" \
+            --output "$runtime"
+          echo "$tool_sha  $tool" | sha256sum --check
+          echo "$runtime_sha  $runtime" | sha256sum --check
+          chmod +x "$tool"
+
+          version="$(jq -r '.displayVersion' gjoa.json)"
+          output="$output_dir/gjoa-${version}-${{ inputs.arch }}.AppImage"
+          ARCH="${{ inputs.arch }}" APPIMAGE_EXTRACT_AND_RUN=1 \
+            "$tool" --runtime-file "$runtime" "$appdir" "$output"
+          chmod +x "$output"
+
+          file "$output"
+          file "$output" | grep -qi "$expected_arch"
+          MOZ_HEADLESS=1 APPIMAGE_EXTRACT_AND_RUN=1 \
+            timeout 120 "$output" --version
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -262,5 +343,7 @@ jobs:
           # mach packages Linux as .tar.xz (not .bz2). Match any tarball, and
           # FAIL if none is found — a silent `warn` produced a green build with
           # no artifact, which is worse than a red build.
-          path: engine/obj-*/dist/gjoa-*.tar.*
+          path: |
+            engine/obj-*/dist/gjoa-*.tar.*
+            dist-packages/gjoa-*.AppImage
           if-no-files-found: error

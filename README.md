@@ -36,12 +36,12 @@ Modern workflows too often depend on fragile layers of extensions, scripts, hidd
 
 Tagged releases produce draft GitHub releases with portable artifacts for:
 
-- Linux x86_64 (`.tar.xz`)
-- Linux arm64 (`.tar.xz`)
+- Linux x86_64 (`.tar.xz` or `.AppImage`)
+- Linux arm64 (`.tar.xz` or `.AppImage`)
 - macOS Apple Silicon (`.dmg`)
 - Windows x86_64 (`.zip`)
 
-Download the artifact for your platform from [Releases](../../releases), extract or mount it, then launch `gjoa`. Release artifacts are portable builds; they do not use `-march=native`.
+Download the artifact for your platform from [Releases](../../releases). Extract archives before launching `gjoa`; AppImages run directly after `chmod +x`. Release artifacts are portable builds and do not use `-march=native`.
 
 ## Build from source
 

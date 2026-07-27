@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Gjoa
+Comment=A browser that belongs to its user
+Exec=gjoa %u
+Icon=gjoa
+Terminal=false
+Type=Application
+Categories=Network;WebBrowser;
+MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
+StartupWMClass=gjoa
