@@ -1,8 +1,8 @@
-_Anti-rot doc. The core fork-survival concern: minimizing the cost of tracking Firefox 152 upstream. Grounded in the real artifacts under `patches/`, `tools/prep/`, `tools/scripts/preflight.bjs`, and `gjoa.json`. If the code below diverges from these files, the code is right — fix the doc._
+_Anti-rot doc. The core fork-survival concern: minimizing the cost of tracking the configured Firefox upstream. Grounded in the real artifacts under `patches/`, `tools/prep/`, `tools/scripts/preflight.bjs`, and `gjoa.json`. If the code below diverges from these files, the code is right — fix the doc._
 
 ## The problem
 
-gjoa is a Firefox 152.0.1 fork (`gjoa.json` → `firefox.version`). Mozilla ships a new release ~monthly and refactors constantly: methods move modules, struct fields get removed, JS object properties get deleted, signatures change. Every edit gjoa owns against that moving tree is a liability that has to be re-rolled when upstream churns under it. The fork survives by **owning the smallest, cheapest-to-maintain surface possible**, and by **seeing churn coming before it costs a build** (a Lane 3 mach/nix compile is 30–60 min; a `.rej` discovered mid-compile burns the whole thing).
+gjoa tracks the Firefox release declared in `gjoa.json` (`firefox.version`). Mozilla ships a new release ~monthly and refactors constantly: methods move modules, struct fields get removed, JS object properties get deleted, signatures change. Every edit gjoa owns against that moving tree is a liability that has to be re-rolled when upstream churns under it. The fork survives by **owning the smallest, cheapest-to-maintain surface possible**, and by **seeing churn coming before it costs a build** (a Lane 3 mach/nix compile is 30–60 min; a `.rej` discovered mid-compile burns the whole thing).
 
 The surface we own today: **10 `patches/`** (against Mozilla source) + the `src/gjoa/` overlay (chrome JS + the `GjoaLoader.bjs` ESM loader) + pinned `beagle`/`fram` toolchain deps. The discipline below keeps that surface from rotting.
 
@@ -47,7 +47,7 @@ Before committing to a Firefox bump, `bun run forecast [from] [to]` intersects t
 2. `git diff --name-only <from-tag> <to-tag>` against the reference clone = the changed-file set.
 3. For each patch, intersect its `# touches:` files with the delta; report affected patches **ranked by seam tier** (review `native-src` first).
 
-Output is either `CLEAN — all patches apply unchanged` or the blast-radius list. Validated against the real `152.0 → 152.0.1` bump: fully disjoint → clean. This converts "will this bump hurt?" from a 45-min gamble into a sub-second read. (Precise per-symbol blast-radius ranking via the fram call graph is the deferred turtle; v1 ranks by tier, which needs no graph.)
+Output is either `CLEAN — all patches apply unchanged` or the blast-radius list. A real point-release bump with a fully disjoint patch surface validated the clean path. This converts "will this bump hurt?" from a 45-min gamble into a sub-second read. (Precise per-symbol blast-radius ranking via the fram call graph is the deferred turtle; v1 ranks by tier, which needs no graph.)
 
 ## Is the patch set coherently ordered? — `tools/prep/patch-order.bjs` (Gate U)
 
@@ -61,9 +61,9 @@ The patch *numbers* carry a latent theory: they ascend by **engine depth** — c
 
 ## Content-addressing the seam — `tools/prep/upstream-provenance.bjs` (Gate V)
 
-`baseline-firefox: 152.0.1` is a *version label*. The sharper question is: has the upstream file this patch cuts into changed **byte-for-byte** since we validated it? Git already content-addresses every file by blob OID, so we don't hash anything — we **record which content we validated against** and let git's object DB do the differential.
+The `baseline-firefox` value in `configs/upstream-provenance.json` is a *version label*. The sharper question is: has the upstream file this patch cuts into changed **byte-for-byte** since we validated it? Git already content-addresses every file by blob OID, so we don't hash anything — we **record which content we validated against** and let git's object DB do the differential.
 
-`provenance lock` writes `configs/upstream-provenance.json`: for each patch, the blob OID of every file it touches, at the baseline FF tag (`FIREFOX_152_0_1_RELEASE`). `provenance check [ref]` recomputes against any ref:
+`provenance lock` writes `configs/upstream-provenance.json`: for each patch, the blob OID of every file it touches at the configured baseline Firefox tag. `provenance check [ref]` recomputes against any ref:
 
 - **OID identical** → that patch's context *provably cannot* have rotted → skip it with certainty.
 - **OID differs** → surface it, ranked native-first (potential conflict).
@@ -77,9 +77,9 @@ This is strictly finer than the release-tag forecast: baseline-anchored, works a
 Once a patch's baseline is a content OID instead of a version string, each layer reuses git's existing machinery for a compounding win:
 
 1. **Provable skip-set** (shipped) — most patches are untouched on any given bump; prove it and shrink the audit to the truly-affected set.
-2. **Hunk-anchor precision** (shipped) — per touched file, each patch hunk's baseline old-side line span is hashed at the FF tag (`configs/upstream-provenance.json` → `{oid, hunks:[{header,range,hash}]}`); a file whose whole-file OID moved is still provably apply-safe when every hunk's context is byte-identical (an edit *elsewhere* than where we cut no longer false-flags). 39 files, 68 hunk anchors @ 152.0.1.
-3. **Blame-locator** (shipped, file-level) — `provenance check <ref> --blame` runs `git log <baseline>..<ref> -- <file>` on the FF clone for every changed file, so a conflict stops being "this file changed" and becomes "Mozilla commit abc123 (bug …) touched it — here's why." Validated against the real 152.0.1→153.0b1 bump: it flags `0008` (adblock) sitting in code Mozilla is actively refactoring (Bug 2041767 move-list-building-off-main-thread, Bug 2035584 generalize-ContentClassifierService) and `0009` (dark-mode) with mostly incidental refactors — a commit-level pre-rebase briefing, no build. (L2 sharpens it from file to anchor.)
-4. **3-way at the anchor** (shipped) — `provenance merge3 <ref>` replays our edits onto the bump with `git merge-file` (BASE = baseline-tag blob, OTHER = `<ref>` blob, OURS = `engine/<path>` the imported+patched source), tallying auto-mergeable vs needs-human and escalating to a human only on real conflict. Validated 152.0.1→153.0b1: 17 auto-mergeable, 7 need-human (the conflicts in `0008` adblock — the very patch L3's blame flags as actively-refactored upstream — plus dark-mode).
+2. **Hunk-anchor precision** (shipped) — per touched file, each patch hunk's baseline old-side line span is hashed at the FF tag (`configs/upstream-provenance.json` → `{oid, hunks:[{header,range,hash}]}`); a file whose whole-file OID moved is still provably apply-safe when every hunk's context is byte-identical (an edit *elsewhere* than where we cut no longer false-flags). The lock records the current file and hunk counts at the configured baseline.
+3. **Blame-locator** (shipped, file-level) — `provenance check <ref> --blame` runs `git log <baseline>..<ref> -- <file>` on the FF clone for every changed file, so a conflict stops being "this file changed" and becomes "Mozilla commit abc123 (bug …) touched it — here's why." Validation against a subsequent Firefox beta distinguished an actively refactored adblock carrier from mostly incidental dark-mode changes — a commit-level pre-rebase briefing, no build. (L2 sharpens it from file to anchor.)
+4. **3-way at the anchor** (shipped) — `provenance merge3 <ref>` replays our edits onto the bump with `git merge-file` (BASE = baseline-tag blob, OTHER = `<ref>` blob, OURS = `engine/<path>` the imported+patched source), tallying auto-mergeable vs needs-human and escalating to a human only on real conflict. Validation against that beta separated automatic merges from the adblock and dark-mode edits that needed human review.
 5. **Baked provenance identity + security cross-check** (shipped, local — the binary-bake is build-gated) — `aggregate-digest` is one sha256 over every locked blob OID + hunk hash → `configs/provenance-identity.json` (the supply-chain coordinate the build *would* stamp into the binary: built against *unmodified* Mozilla blobs). `check --security` cross-references each `# security:`-tagged patch's anchor → `configs/provenance-security-findings.json`; if upstream's blob at a mitigation's anchor changed, Mozilla may have fixed it themselves (drop the patch) or refactored around it (re-verify). Empty findings today = honest baseline (no `# security:` patches).
 
 We are not building a hashing system — we are harvesting the one Mozilla already maintains. "Is this patch still valid?" becomes a lookup; "what changed and why?" becomes a graph walk.
@@ -104,7 +104,7 @@ A textual `.patch` is anchored to line numbers and surrounding context; when Moz
 
 Upstream churn isn't only Mozilla's. The `beagle` compiler and `fram` engine are dependencies that move too, and a compiler emit/runtime skew silently broke chrome four serial times. So gjoa **freezes** them:
 
-- `configs/beagle.ref` pins beagle to SHA `3e942ba213f9ee5444e02046a4c1fbd8d3e0dd91` — **compiler and runtime** — from canonical upstream `https://github.com/tompassarelli/beagle`. It is the newest revision whose upstream tests (run `30034827041`) and native build (run `30034828902`) were both green when selected on 2026-07-27; newer `main` was red and was not consumed. A dedicated worktree at `~/code/beagle-pin` (never the shared `../beagle`, which is concurrent-agent-shared) supplies the compiler via `PLTCOLLECTS`, and `core.js` is vendored from the same ref. **Gate M** (`preflight.bjs:410`) is a HARD FAIL on drift — a warn here is what let the four breaks ship.
+- `configs/beagle.ref` pins beagle — **compiler and runtime** — from canonical upstream `https://github.com/tompassarelli/beagle`; the file records the selected revision and its validation provenance. A dedicated worktree at `~/code/beagle-pin` (never the shared `../beagle`, which is concurrent-agent-shared) supplies the compiler via `PLTCOLLECTS`, and `core.js` is vendored from the same ref. **Gate M** (`preflight.bjs:410`) is a HARD FAIL on drift — a warn here is what let the four breaks ship.
 
 This means Firefox churn and beagle churn are **decoupled**: a Firefox bump can't move the compiler, and a beagle bump is a deliberate, reviewed event (re-point worktree → re-import → re-vendor), never an ambient surprise.
 
