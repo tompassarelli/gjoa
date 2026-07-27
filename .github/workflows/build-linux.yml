@@ -143,6 +143,11 @@ jobs:
       - name: Apply overlays and patches
         run: bun run import
 
+      - name: Verify generated chrome smoke
+        run: |
+          node --check .beagle-tools/gjoa/tests/integration/smoke.js
+          bun -e 'import {tests} from "./.beagle-tools/gjoa/tests/integration/smoke.js"; const mn={setContext:async()=>{},executeScript:async()=>true}; await tests[0].run(mn,{}); console.log("generated chrome smoke: pass")'
+
       - name: Verify JS projector + claim-docs
         run: |
           bun run projector:test || {

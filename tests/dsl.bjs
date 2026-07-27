@@ -17,7 +17,7 @@
 ;; from the call site, so they are NOT gensym-renamed — that is what lets the
 ;; macros below reference `mn` for free.
 (defmacro deftest [name params & body]
-  `{:name ,name :run (fn ,params ,@body)})
+  `{:name ,name :run (fn ,params ~@body)})
 
 ;; (chrome-eval "return …;") → (js/await (.executeScript mn "return …;"))
 (defmacro chrome-eval [script]
@@ -30,7 +30,7 @@
 ;; won't flag the missing import at compile time — it surfaces as a runtime
 ;; `wait_for is not defined`.
 (defmacro await-true [script & timeout]
-  `(js/await (wait-for mn ,script ,@timeout)))
+  `(js/await (wait-for mn ,script ~@timeout)))
 
 ;; (expect cond "msg") → throw "msg" when cond is falsy.
 (defmacro expect [cond msg]
