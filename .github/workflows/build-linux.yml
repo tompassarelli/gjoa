@@ -207,6 +207,9 @@ jobs:
         run: |
           GJOA_BIN="$(find "$PWD/engine"/obj-*/dist/bin/gjoa -type f -print -quit)"
           test -n "$GJOA_BIN"
+          MOZ_OBJDIR="$(dirname "$(dirname "$(dirname "$GJOA_BIN")")")"
+          test -d "$MOZ_OBJDIR/dist/bin"
+          echo "MOZ_OBJDIR=$MOZ_OBJDIR" >> "$GITHUB_ENV"
           case "${{ inputs.arch }}" in
             x86_64) expected='x86-64' ;;
             aarch64) expected='aarch64' ;;
