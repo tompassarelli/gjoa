@@ -128,6 +128,7 @@ jobs:
           # (gjoa-tabs.uc.js byte size != local). Deterministic emit needs the
           # same compiler RUNTIME, not just the same compiler source.
           version: '9.2'
+          architecture: ${{ inputs.arch == 'aarch64' && 'arm64' || 'x64' }}
       - name: Checkout beagle (sibling compiler, pinned to configs/beagle.ref)
         run: |
           PIN="$(grep -vE '^\s*#' configs/beagle.ref | grep -vE '^\s*$' | head -1 | tr -d '[:space:]')"
