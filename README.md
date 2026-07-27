@@ -33,6 +33,7 @@ Most heavily customized Firefox setups depend on a stack of extensions, content 
 Tagged releases produce draft GitHub releases with portable artifacts for:
 
 - Linux x86_64 (`.tar.xz`)
+- Linux arm64 (`.tar.xz`)
 - macOS Apple Silicon (`.dmg`)
 - Windows x86_64 (`.zip`)
 
