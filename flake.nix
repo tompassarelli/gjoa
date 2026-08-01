@@ -37,9 +37,9 @@
         # The block is dead weight (but harmless) once nixpkgs has
         # permanently outpaced minNssVersion; safe to delete the
         # let-bindings + the if-branch then.
-        minNssVersion = "3.124";
-        nssUrl = "https://github.com/nss-dev/nss/archive/NSS_3_124_RTM.tar.gz";
-        nssHash = "sha256-bMUMyb/4qkiucbkvzSY5aNS3nfaJ4XWyqf2lKnVmXfU=";
+        minNssVersion = "3.125";
+        nssUrl = "https://ftp.mozilla.org/pub/security/nss/releases/NSS_3_125_RTM/src/nss-3.125.tar.gz";
+        nssHash = "sha256-hXO9FEej9syHb1lf4XnIR32MEBq95emctpPJgCsUma0=";
 
         basePkgs = import nixpkgs { inherit system; };
         nssOverlayNeeded =
@@ -52,7 +52,7 @@
               (_final: prev: {
                 nss_latest = prev.nss_latest.overrideAttrs (_old: {
                   version = minNssVersion;
-                  src = prev.fetchurl {
+                  src = prev.fetchzip {
                     url = nssUrl;
                     hash = nssHash;
                   };
