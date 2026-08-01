@@ -18,8 +18,7 @@
      ;; GjoaLoader runs the .uc.js bundles successfully. If GjoaLoader threw (bad
      ;; $$bc import) or a bundle threw ($$bc undefined), they never appear.
      (js/await (await-true
-                 (str "const w = Services.wm.getMostRecentWindow('navigator:browser');"
-                      " return !!(w && w.gjoaTest && w.Spaces);")
+                 "return !!(window.gjoaTest && window.Spaces);"
                  30000))
      (expect true "gjoa chrome init OK"))]))
 (js/export-default tests)
