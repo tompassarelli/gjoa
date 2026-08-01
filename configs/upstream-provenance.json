@@ -2,7 +2,7 @@
   "note": "Upstream provenance lock (churn anti-rot). Per patch, per touched file: the git blob OID (whole-file) PLUS per-hunk anchors {oid, hunks:[{header,range,hash}]} — each hunk's baseline old-side line span hashed at the Firefox tag. `check` diffs vs any ref: identical OID => provably unrotted (skip); OID changed but every hunk hash intact => still apply-safe (edit was OUTSIDE the hunks); a changed hunk => potential conflict; \"absent\" => a file gjoa creates (collision-checked). Legacy bare-string entries still read (degrade to whole-file precision). `digest` = one sha256 over the whole locked surface (baked-identity coordinate; self-verifying — `check` flags a hand-edit). Regenerate after any patch/baseline change: provenance lock.",
   "baseline": "153.0.1",
   "tag": "FIREFOX_153_0_1_RELEASE",
-  "digest": "bd925becbd52fdc7ecad2940b465c76a72a6f840891cb3423a516b717b1389d1",
+  "digest": "dfc42c10671c313e26430ed89c074cd07d43d893cf426bde8c965ae4ad1fa6a3",
   "patches": {
     "0001-browser-components-mozbuild-include-gjoa.patch": {
       "browser/components/moz.build": {
@@ -122,10 +122,50 @@
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -866,6 +1000,12 @@",
+            "header": "@@ -861,6 +995,7 @@",
             "range": [
-              866,
+              861,
               6
+            ],
+            "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "header": "@@ -871,9 +1006,12 @@",
+            "range": [
+              871,
+              9
+            ],
+            "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "header": "@@ -1040,9 +1178,11 @@",
+            "range": [
+              1040,
+              9
+            ],
+            "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "header": "@@ -1084,7 +1224,8 @@",
+            "range": [
+              1084,
+              7
+            ],
+            "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "header": "@@ -1113,7 +1254,9 @@",
+            "range": [
+              1113,
+              7
+            ],
+            "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "header": "@@ -1128,7 +1271,8 @@",
+            "range": [
+              1128,
+              7
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           }
@@ -190,9 +230,9 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -37,6 +37,28 @@",
+            "header": "@@ -40,6 +40,28 @@",
             "range": [
-              37,
+              40,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

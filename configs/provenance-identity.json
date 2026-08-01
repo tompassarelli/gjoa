@@ -4,8 +4,8 @@
   "generator": "tools/prep/upstream-provenance.bjs (lock)",
   "baseline": "153.0.1",
   "tag": "FIREFOX_153_0_1_RELEASE",
-  "digest": "bd925becbd52fdc7ecad2940b465c76a72a6f840891cb3423a516b717b1389d1",
+  "digest": "dfc42c10671c313e26430ed89c074cd07d43d893cf426bde8c965ae4ad1fa6a3",
   "patches": 10,
   "files": 40,
-  "hunks": 70
+  "hunks": 75
 }

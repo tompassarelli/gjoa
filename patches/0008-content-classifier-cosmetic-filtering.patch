@@ -78,9 +78,9 @@ element-hiding (the gjoa adblock M2 feature).
 +    return NS_ERROR_NOT_INITIALIZED;
 +  }
 +  mScriptletResources = aJson;
-+  // Applied to engines at build time (RebuildEnginesFromStoredData), so a
-+  // subsequent applyFilterLists() picks it up. Engines already built keep their
-+  // current resources until the next rebuild.
++  // UpdateFeatures snapshots this under mLock and applies it on mBuildThread.
++  // A subsequent onListsChanged rebuild picks it up; engines already built
++  // keep their resources until then.
 +  return NS_OK;
 +}
 +
@@ -119,7 +119,7 @@ element-hiding (the gjoa adblock M2 feature).
 +  nsTHashSet<nsCString> excSeen;
 +  nsCString injectedAccum;
 +
-+  for (const auto& engine : mBlockEngines) {
++  for (const auto& engine : mCancelEngines) {
 +    nsTArray<nsCString> hide;
 +    nsTArray<nsCString> proc;
 +    nsTArray<nsCString> exc;
@@ -177,7 +177,7 @@ element-hiding (the gjoa adblock M2 feature).
 +  }
 +
 +  nsTHashSet<nsCString> seen;
-+  for (const auto& engine : mBlockEngines) {
++  for (const auto& engine : mCancelEngines) {
 +    nsTArray<nsCString> selectors;
 +    nsresult rv =
 +        engine->GetHiddenClassIdSelectors(aClasses, aIds, aExceptions,
@@ -197,19 +197,71 @@ element-hiding (the gjoa adblock M2 feature).
  // Parses a byte buffer of adblock-format filter list text into rules.
  // Tolerates both LF and CRLF line endings; skips empty lines.
  static void ParseFilterListRules(const nsTArray<uint8_t>& aData,
-@@ -866,6 +1000,12 @@
+@@ -861,6 +995,7 @@ static RefPtr<ListBytesPromise> FetchListBytesFromRemoteSettings(
+ 
+ nsresult BuildEngineFromRules(const ContentClassifierFeature& aFeature,
+                               const nsTArray<nsCString>& aRules,
++                              const nsACString& aScriptletResources,
+                               RefPtr<ContentClassifierEngine>& aEngineOutput) {
+   if (aRules.IsEmpty()) {
      MOZ_LOG_FMT(gContentClassifierLog, LogLevel::Info,
-                 "BuildEngineFromRules - no rules for feature \"{}\"; ",
-                 aFeature.mName);
-+              // Load the scriptlet resource library so this engine can expand
-+              // `+js(...)` cosmetic rules into injectable scriptlets.
-+              if (!mScriptletResources.IsEmpty()) {
-+                engine->UseResources(mScriptletResources);
-+              }
-+
-     aEngineOutput = nullptr;
-     return NS_OK;
+@@ -871,9 +1006,12 @@ nsresult BuildEngineFromRules(const ContentClassifierFeature& aFeature,
    }
+   aEngineOutput = new ContentClassifierEngine(aFeature);
+   nsresult rv = aEngineOutput->InitFromRules(aRules);
++  if (NS_SUCCEEDED(rv) && !aScriptletResources.IsEmpty()) {
++    rv = aEngineOutput->UseResources(aScriptletResources);
++  }
+   if (NS_FAILED(rv)) {
+     MOZ_LOG_FMT(gContentClassifierLog, LogLevel::Warning,
+-                "BuildEngineFromRules - InitFromRules failed for feature "
++                "BuildEngineFromRules - initialization failed for feature "
+                 "\"{}\": {:#x}",
+                 aFeature.mName, static_cast<uint32_t>(rv));
+     aEngineOutput = nullptr;
+@@ -1040,9 +1178,11 @@ void ContentClassifierService::UpdateFeatures(
+   nsTArray<uint64_t> featureVersions;
+   featureVersions.SetCapacity(features.Length());
+   uint64_t generation;
++  nsCString scriptletResources;
+   {
+     MutexAutoLock lock(mLock);
+     generation = ++mUpdateGeneration;
++    scriptletResources = mScriptletResources;
+     for (const auto* feature : features) {
+       uint64_t& v = mFeatureVersions.LookupOrInsert(feature->mName);
+       featureVersions.AppendElement(++v);
+@@ -1084,7 +1224,8 @@ void ContentClassifierService::UpdateFeatures(
+           [self, features = std::move(features),
+            featureVersions = std::move(featureVersions),
+            snapshot = std::move(aPreferenceSnapshot),
+-           buildThread = std::move(buildThread), generation](
++           buildThread = std::move(buildThread),
++           scriptletResources = std::move(scriptletResources), generation](
+               EngineRulesPromise::AllSettledPromiseType::ResolveOrRejectValue&&
+                   aValue) mutable {
+             MOZ_ASSERT(NS_IsMainThread());
+@@ -1113,7 +1254,9 @@ void ContentClassifierService::UpdateFeatures(
+                 [self, features = std::move(features),
+                  featureVersions = std::move(featureVersions),
+                  perFeatureRules = std::move(perFeatureRules),
+-                 snapshot = std::move(snapshot), generation]() mutable {
++                 snapshot = std::move(snapshot),
++                 scriptletResources = std::move(scriptletResources),
++                 generation]() mutable {
+                   MOZ_ASSERT(!NS_IsMainThread());
+ 
+                   // Build engines outside the lock; InitFromRules can be
+@@ -1128,7 +1271,8 @@ void ContentClassifierService::UpdateFeatures(
+                     }
+                     RefPtr<ContentClassifierEngine> engine;
+                     if (NS_FAILED(BuildEngineFromRules(
+-                            *features[i], perFeatureRules[i], engine))) {
++                            *features[i], perFeatureRules[i],
++                            scriptletResources, engine))) {
+                       continue;
+                     }
+                     builtEngines[i] = std::move(engine);
 --- a/toolkit/components/content-classifier/ContentClassifierService.h
 +++ b/toolkit/components/content-classifier/ContentClassifierService.h
 @@ -186,6 +186,12 @@
@@ -277,10 +329,10 @@ element-hiding (the gjoa adblock M2 feature).
  thin-vec = { version = "0.2.1", features = ["gecko-ffi"] }
 --- a/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.cpp
 +++ b/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.cpp
-@@ -37,6 +37,28 @@
-       aRequest.mThirdParty, aPreviouslyMatched, &matched, &important,
-       &exception);
-   return ContentClassifierEngineResult(matched, !exception.IsEmpty(), important,
+@@ -40,6 +40,28 @@ ContentClassifierEngineResult ContentClassifierEngine::CheckNetworkRequest(
+                                        rv, mFeature);
+ }
+ 
 +nsresult ContentClassifierEngine::GetUrlCosmeticResources(
 +    const nsACString& aUrl, nsTArray<nsCString>& aHideSelectors,
 +    nsTArray<nsCString>& aProceduralActions, nsTArray<nsCString>& aExceptions,
@@ -303,9 +355,9 @@ element-hiding (the gjoa adblock M2 feature).
 +      mEngine, &aClasses, &aIds, &aExceptions, &aSelectors);
 +}
 +
-                                        rv, mFeature);
- }
- 
+ ContentClassifierRequest::ContentClassifierRequest(nsIChannel* aChannel)
+     : mThirdParty(true), mValid(false) {
+   nsCOMPtr<nsIURI> uri;
 --- a/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.h
 +++ b/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.h
 @@ -84,11 +84,32 @@
@@ -499,7 +551,7 @@ element-hiding (the gjoa adblock M2 feature).
 +     * Provide the scriptlet/redirect resource library (a JSON-serialized
 +     * array of adblock-rust resources, uBO-derived) used to expand `+js(...)`
 +     * cosmetic rules into injectable scriptlets. Stored and applied to every
-+     * block engine at build time; call before applyFilterLists().
++     * cancellation engine at build time; call before onListsChanged().
 +     */
 +    void setScriptletResources(in ACString aJson);
 +
