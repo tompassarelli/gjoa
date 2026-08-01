@@ -6,11 +6,11 @@
     "0002-browser-glue-import-gjoa-loader.patch": "2f6ae37659aff8b29bedd47336c8d800c6a9ce169d8f7bb1368fd1e604681db9",
     "0003-newtab-redirector-gjoa.patch": "556b014511a16c996f4a2eefd4650e9cf9487343e97c07ec20651a67b489f63e",
     "0007-enable-sqlite-fts5.patch": "1407c9049294c558f2d7a96c447503868b90d642d03126319c5f04b6e3311c05",
-    "0008-content-classifier-cosmetic-filtering.patch": "a227bb98f5c5aabe4bd1629538fce4098ab34d21eaa09240d2a701232d0b2d89",
-    "0009-dark-mode-engine-color-inversion.patch": "0fe5f7283df8d0a55f31cec32f684600f9611ca7e2dff0143a1bbf08f141c418",
-    "0010-dark-mode-island-scrim.patch": "84b46d9a35424fe5459ae4b62acf757f4f6a3082872320defe2c6545843beb53",
-    "0012-dark-mode-role-resolver.patch": "6e7702501d57fedb104bca282e4de921d014c17a891f9878f9bca9febe384f12",
-    "0013-dark-mode-text-solve.patch": "4b6776d3a8f2b47aa8d2f4e29edb8452d53d5387ad5fe099721062776f02291f",
+    "0008-content-classifier-cosmetic-filtering.patch": "3be06af1a9da059d38c39323dcab4fba7112216e4bc16fb4f6d33471f459fa7a",
+    "0009-dark-mode-engine-color-inversion.patch": "7aa7c7c3eab0f1339fe449ae41e376d7ae62665f27b91f8cd5076b6dd0c1498b",
+    "0010-dark-mode-island-scrim.patch": "278407bdb296ffb9eddc9936453794615772e94ffb4ff5e2c3825675b19b72f8",
+    "0012-dark-mode-role-resolver.patch": "54e483ec390c0ad6b09eb53284d877863ed541d7635592d46a1baa5f5d0442d0",
+    "0013-dark-mode-text-solve.patch": "17aa29560fc9b6412a655cdbbe2564b42ef309930e17ef906c1cd891f3ccb586",
     "0014-dark-mode-tier0.patch": "b224f8af040eff20e7cf9ebb534e8b31016646a1204567baf6e772ae7123acb4"
   }
 }

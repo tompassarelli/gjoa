@@ -1,5 +1,5 @@
 # gjoa-patch:
-#   baseline-firefox: 152.0.6
+#   baseline-firefox: 153.0.1
 #   touches:
 #     - layout/generic/GjoaDarkText.h
 #     - layout/generic/GjoaDarkText.cpp

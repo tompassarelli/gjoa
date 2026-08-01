@@ -1,5 +1,5 @@
 # gjoa-patch:
-#   baseline-firefox: 152.0.1
+#   baseline-firefox: 153.0.1
 #   touches:
 #     - Cargo.lock
 #     - toolkit/components/content-classifier/ContentClassifierService.cpp
@@ -23,11 +23,9 @@ element-hiding (the gjoa adblock M2 feature).
 - moz.build: register GjoaCosmetic{Parent,Child}.sys.mjs as EXTRA_JS_MODULES
   (those NEW actor files ship as src/gjoa overlays, not in this patch)
 
-diff --git a/Cargo.lock b/Cargo.lock
-index ae3d1519df..1378c52dc3 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
-@@ -1116,6 +1116,7 @@ dependencies = [
+@@ -1121,6 +1121,7 @@
   "cstr",
   "nserror",
   "nsstring",
@@ -35,19 +33,17 @@ index ae3d1519df..1378c52dc3 100644
   "thin-vec",
   "xpcom",
  ]
-diff --git a/toolkit/components/content-classifier/ContentClassifierService.cpp b/toolkit/components/content-classifier/ContentClassifierService.cpp
-index 8ea4179418..c69193e525 100644
 --- a/toolkit/components/content-classifier/ContentClassifierService.cpp
 +++ b/toolkit/components/content-classifier/ContentClassifierService.cpp
 @@ -25,6 +25,7 @@
- #include "nsNetUtil.h"
- #include "nsContentUtils.h"
- #include "nsIWebProgressListener.h"
+ #include "nsIAsyncShutdown.h"
+ #include "nsIChannel.h"
+ #include "nsIClassifiedChannel.h"
 +#include "nsTHashSet.h"
- 
- namespace mozilla {
- 
-@@ -347,6 +348,18 @@ ContentClassifierService::GetInstance() {
+ #include "nsIStreamLoader.h"
+ #include "nsIURI.h"
+ #include "nsNetUtil.h"
+@@ -496,6 +497,18 @@
    return do_AddRef(sInstance);
  }
  
@@ -66,10 +62,10 @@ index 8ea4179418..c69193e525 100644
  already_AddRefed<nsIAsyncShutdownClient>
  ContentClassifierService::GetAsyncShutdownBarrier() const {
    nsCOMPtr<nsIAsyncShutdownService> svc = components::AsyncShutdown::Service();
-@@ -520,6 +533,24 @@ NS_IMETHODIMP ContentClassifierService::SetFilterListData(
-   return NS_OK;
+@@ -669,6 +682,24 @@
+            aRequest.Url().get(), result.Hit(), result.Exception()));
+   return result;
  }
- 
 +NS_IMETHODIMP ContentClassifierService::SetScriptletResources(
 +    const nsACString& aJson) {
 +  MOZ_ASSERT(NS_IsMainThread());
@@ -88,10 +84,10 @@ index 8ea4179418..c69193e525 100644
 +  return NS_OK;
 +}
 +
- NS_IMETHODIMP ContentClassifierService::RemoveFilterList(
-     const nsACString& aName) {
-   MOZ_ASSERT(NS_IsMainThread());
-@@ -554,6 +585,109 @@ NS_IMETHODIMP ContentClassifierService::ApplyFilterLists() {
+ 
+ ContentClassifierResult ContentClassifierService::ClassifyForCancel(
+     const ContentClassifierRequest& aRequest) {
+@@ -794,6 +825,109 @@
    return NS_OK;
  }
  
@@ -201,24 +197,22 @@ index 8ea4179418..c69193e525 100644
  // Parses a byte buffer of adblock-format filter list text into rules.
  // Tolerates both LF and CRLF line endings; skips empty lines.
  static void ParseFilterListRules(const nsTArray<uint8_t>& aData,
-@@ -626,6 +748,12 @@ void ContentClassifierService::RebuildEnginesFromStoredData() {
-                 continue;
-               }
- 
+@@ -866,6 +1000,12 @@
+     MOZ_LOG_FMT(gContentClassifierLog, LogLevel::Info,
+                 "BuildEngineFromRules - no rules for feature \"{}\"; ",
+                 aFeature.mName);
 +              // Load the scriptlet resource library so this engine can expand
 +              // `+js(...)` cosmetic rules into injectable scriptlets.
 +              if (!mScriptletResources.IsEmpty()) {
 +                engine->UseResources(mScriptletResources);
 +              }
 +
-               MOZ_LOG_FMT(gContentClassifierLog, LogLevel::Info,
-                           "RebuildEnginesFromStoredData - loaded engine "
-                           "for \"{}\" with {} rules",
-diff --git a/toolkit/components/content-classifier/ContentClassifierService.h b/toolkit/components/content-classifier/ContentClassifierService.h
-index a1e5b9871a..52afe8d6ca 100644
+     aEngineOutput = nullptr;
+     return NS_OK;
+   }
 --- a/toolkit/components/content-classifier/ContentClassifierService.h
 +++ b/toolkit/components/content-classifier/ContentClassifierService.h
-@@ -40,6 +40,12 @@ class ContentClassifierService final : public nsIAsyncShutdownBlocker,
+@@ -186,6 +186,12 @@
  
    static already_AddRefed<ContentClassifierService> GetInstance();
  
@@ -231,20 +225,20 @@ index a1e5b9871a..52afe8d6ca 100644
    static bool IsEnabled();
    static bool IsInitialized();
  
-@@ -73,6 +79,11 @@ class ContentClassifierService final : public nsIAsyncShutdownBlocker,
- 
-   mozilla::Mutex mLock MOZ_UNANNOTATED;
-   InitPhase mInitPhase MOZ_GUARDED_BY(mLock);
+@@ -219,6 +225,11 @@
+   void ShutdownRSClient();
+   void RemoveBlocker();
+   already_AddRefed<nsIAsyncShutdownClient> GetAsyncShutdownBarrier() const;
 +  // The adblock engines are built with the crate's `single-thread` feature, so
 +  // ContentClassifierEngine is !Sync: EVERY access to these lists (including
 +  // read-only cosmetic queries on the main thread and network classification on
 +  // the classifier worker) must hold mLock. MOZ_GUARDED_BY enforces it; do not
 +  // add a code path that touches an engine without the lock.
-   nsTArray<UniquePtr<ContentClassifierEngine>> mBlockEngines
-       MOZ_GUARDED_BY(mLock);
-   nsTArray<UniquePtr<ContentClassifierEngine>> mAnnotateEngines
-@@ -82,6 +93,11 @@ class ContentClassifierService final : public nsIAsyncShutdownBlocker,
-   nsTHashMap<nsCStringHashKey, nsTArray<uint8_t>> mFilterListData
+ 
+   // aIndependentEngines makes every engine evaluate its own rules in
+   // isolation; matched_rule is not threaded across engines. Used by the
+@@ -326,6 +337,11 @@
+   nsTArray<RefPtr<ContentClassifierEngine>> mAnnotateEnginesPBM
        MOZ_GUARDED_BY(mLock);
  
 +  // JSON-serialized uBO-style scriptlet/redirect resource library, set by the
@@ -255,11 +249,9 @@ index a1e5b9871a..52afe8d6ca 100644
    // RemoteSettings client for fetching filter lists. All reads and
    // writes must happen on the main thread; each call site asserts.
    nsCOMPtr<nsIContentClassifierRemoteSettingsClient> mRSClient;
-diff --git a/toolkit/components/content-classifier/components.conf b/toolkit/components/content-classifier/components.conf
-index 522b94ffa0..b5bd5687a5 100644
 --- a/toolkit/components/content-classifier/components.conf
 +++ b/toolkit/components/content-classifier/components.conf
-@@ -13,4 +13,13 @@ Classes = [
+@@ -13,4 +13,13 @@
          'singleton': True,
          'processes': ProcessSelector.MAIN_PROCESS_ONLY,
      },
@@ -273,11 +265,9 @@ index 522b94ffa0..b5bd5687a5 100644
 +        'processes': ProcessSelector.MAIN_PROCESS_ONLY,
 +    },
  ]
-diff --git a/toolkit/components/content-classifier/content_classifier_engine/Cargo.toml b/toolkit/components/content-classifier/content_classifier_engine/Cargo.toml
-index 2a56e9f630..6ef06d5c18 100644
 --- a/toolkit/components/content-classifier/content_classifier_engine/Cargo.toml
 +++ b/toolkit/components/content-classifier/content_classifier_engine/Cargo.toml
-@@ -8,6 +8,7 @@ license = "MPL-2.0"
+@@ -8,6 +8,7 @@
  [dependencies]
  adblock = { version = "0.12.1", features = ["full-regex-handling", "single-thread"], default-features = false }
  cstr = "0.2"
@@ -285,14 +275,12 @@ index 2a56e9f630..6ef06d5c18 100644
  nsstring = { path = "../../../../xpcom/rust/nsstring" }
  nserror = { path = "../../../../xpcom/rust/nserror" }
  thin-vec = { version = "0.2.1", features = ["gecko-ffi"] }
-diff --git a/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.cpp b/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.cpp
-index ae6ba60e72..1f5f642bf3 100644
 --- a/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.cpp
 +++ b/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.cpp
-@@ -37,6 +37,28 @@ ContentClassifierResult ContentClassifierEngine::CheckNetworkRequest(
-   return ContentClassifierResult(matched, important, !exception.IsEmpty(), rv);
- }
- 
+@@ -37,6 +37,28 @@
+       aRequest.mThirdParty, aPreviouslyMatched, &matched, &important,
+       &exception);
+   return ContentClassifierEngineResult(matched, !exception.IsEmpty(), important,
 +nsresult ContentClassifierEngine::GetUrlCosmeticResources(
 +    const nsACString& aUrl, nsTArray<nsCString>& aHideSelectors,
 +    nsTArray<nsCString>& aProceduralActions, nsTArray<nsCString>& aExceptions,
@@ -315,14 +303,12 @@ index ae6ba60e72..1f5f642bf3 100644
 +      mEngine, &aClasses, &aIds, &aExceptions, &aSelectors);
 +}
 +
- void ContentClassifierResult::Accumulate(
-     const ContentClassifierResult& aOther) {
-   if (NS_FAILED(aOther.mEngineResult)) {
-diff --git a/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.h b/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.h
-index b9c414cce4..f9a5a1e71e 100644
+                                        rv, mFeature);
+ }
+ 
 --- a/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.h
 +++ b/toolkit/components/content-classifier/content_classifier_engine/ContentClassifierEngine.h
-@@ -86,9 +86,30 @@ class ContentClassifierEngine final {
+@@ -84,11 +84,32 @@
      return content_classifier_engine_from_rules(&aRules, &mEngine);
    }
  
@@ -335,8 +321,10 @@ index b9c414cce4..f9a5a1e71e 100644
 +    return content_classifier_engine_use_resources(mEngine, &aResourcesJson);
 +  }
 +
-   ContentClassifierResult CheckNetworkRequest(
-       const ContentClassifierRequest& aRequest);
+   const ContentClassifierFeature& Feature() const { return mFeature; }
+ 
+   ContentClassifierEngineResult CheckNetworkRequest(
+       const ContentClassifierRequest& aRequest, bool aPreviouslyMatched);
  
 +  nsresult GetUrlCosmeticResources(const nsACString& aUrl,
 +                                   nsTArray<nsCString>& aHideSelectors,
@@ -351,10 +339,8 @@ index b9c414cce4..f9a5a1e71e 100644
 +                                     nsTArray<nsCString>& aSelectors);
 +
   private:
-   static inline bool sInitializedETLDService = false;
- 
-diff --git a/toolkit/components/content-classifier/content_classifier_engine/src/lib.rs b/toolkit/components/content-classifier/content_classifier_engine/src/lib.rs
-index 295b3bfd8b..88ad661a1c 100644
+   ~ContentClassifierEngine() {
+     if (mEngine) {
 --- a/toolkit/components/content-classifier/content_classifier_engine/src/lib.rs
 +++ b/toolkit/components/content-classifier/content_classifier_engine/src/lib.rs
 @@ -2,6 +2,7 @@
@@ -365,7 +351,7 @@ index 295b3bfd8b..88ad661a1c 100644
  use std::sync::Mutex;
  
  use adblock::Engine;
-@@ -67,6 +68,28 @@ pub unsafe extern "C" fn content_classifier_engine_from_rules(
+@@ -67,6 +68,28 @@
      NS_OK
  }
  
@@ -394,7 +380,7 @@ index 295b3bfd8b..88ad661a1c 100644
  #[no_mangle]
  pub unsafe extern "C" fn content_classifier_engine_destroy(
      engine: *mut ContentClassifierFFIEngine,
-@@ -124,6 +147,76 @@ pub unsafe extern "C" fn content_classifier_engine_check_network_request_prepars
+@@ -125,6 +148,76 @@
      NS_OK
  }
  
@@ -471,11 +457,9 @@ index 295b3bfd8b..88ad661a1c 100644
  struct SchemelessSiteResolver {}
  
  impl adblock::url_parser::ResolvesDomain for SchemelessSiteResolver {
-diff --git a/toolkit/components/content-classifier/moz.build b/toolkit/components/content-classifier/moz.build
-index e65d3eebce..4b5b68ccda 100644
 --- a/toolkit/components/content-classifier/moz.build
 +++ b/toolkit/components/content-classifier/moz.build
-@@ -28,6 +28,21 @@ LOCAL_INCLUDES += [
+@@ -28,6 +28,21 @@
  
  EXTRA_JS_MODULES += [
      "ContentClassifierRemoteSettingsClient.sys.mjs",
@@ -497,24 +481,21 @@ index e65d3eebce..4b5b68ccda 100644
  ]
  
  XPCOM_MANIFESTS += [
-diff --git a/toolkit/components/content-classifier/nsIContentClassifierService.idl b/toolkit/components/content-classifier/nsIContentClassifierService.idl
-index 8f408b3f0d..a99d29969c 100644
 --- a/toolkit/components/content-classifier/nsIContentClassifierService.idl
 +++ b/toolkit/components/content-classifier/nsIContentClassifierService.idl
-@@ -8,7 +8,7 @@
-  * Interface for the content classifier service, allowing JS code to
-  * provide filter list data (e.g. from RemoteSettings).
+@@ -10,7 +10,7 @@
+  * additions, updates, and removals. The service pulls the actual
+  * bytes back from the client on demand via getListBytes().
   */
 -[scriptable, uuid(1AFC121B-6849-4BA4-A515-C7E91F20D0DC)]
 +[scriptable, uuid(8b4fad25-3c6e-4f9b-af2d-4e7c9e3b5d61)]
  interface nsIContentClassifierService : nsISupports {
      /**
-      * Store filter list data for a named list. The data is the raw
-@@ -17,6 +17,14 @@ interface nsIContentClassifierService : nsISupports {
-      */
-     void setFilterListData(in ACString aName, in Array<uint8_t> aData);
+      * Notify the service of a batch of list changes. `aUpdated` lists
+@@ -27,6 +27,14 @@
+                         in Array<ACString> aRemoved);
  
-+    /**
+     /**
 +     * Provide the scriptlet/redirect resource library (a JSON-serialized
 +     * array of adblock-rust resources, uBO-derived) used to expand `+js(...)`
 +     * cosmetic rules into injectable scriptlets. Stored and applied to every
@@ -522,13 +503,14 @@ index 8f408b3f0d..a99d29969c 100644
 +     */
 +    void setScriptletResources(in ACString aJson);
 +
-     /**
-      * Remove a previously stored filter list by name.
-      */
-@@ -28,6 +36,29 @@ interface nsIContentClassifierService : nsISupports {
-      * which lists to use for blocking and annotation.
-      */
-     void applyFilterLists();
++    /**
+      * Return the names of the content classifier features defined in
+      * the static feature table. Each name identifies a feature whose
+      * filter list IDs are grouped into a single classification engine.
+@@ -37,6 +45,29 @@
+ %{C++
+ // Fired after filter list engines have been rebuilt, when the testing
+ // pref (privacy.trackingprotection.content.testing) is set. Not fired
 +
 +    /**
 +     * Cosmetic filtering resources for a URL: element-hiding selectors,
@@ -552,6 +534,6 @@ index 8f408b3f0d..a99d29969c 100644
 +                                   in Array<ACString> aIds,
 +                                   in Array<ACString> aExceptions,
 +                                   out Array<ACString> aSelectors);
- };
- 
- %{C++
+ // in production.
+ #define NS_CONTENT_CLASSIFIER_FILTER_LISTS_LOADED_TOPIC \
+   "test-content-classifier-filter-lists-loaded"

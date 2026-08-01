@@ -1,8 +1,8 @@
 {
   "note": "Upstream provenance lock (churn anti-rot). Per patch, per touched file: the git blob OID (whole-file) PLUS per-hunk anchors {oid, hunks:[{header,range,hash}]} — each hunk's baseline old-side line span hashed at the Firefox tag. `check` diffs vs any ref: identical OID => provably unrotted (skip); OID changed but every hunk hash intact => still apply-safe (edit was OUTSIDE the hunks); a changed hunk => potential conflict; \"absent\" => a file gjoa creates (collision-checked). Legacy bare-string entries still read (degrade to whole-file precision). `digest` = one sha256 over the whole locked surface (baked-identity coordinate; self-verifying — `check` flags a hand-edit). Regenerate after any patch/baseline change: provenance lock.",
-  "baseline": "152.0.6",
-  "tag": "FIREFOX_152_0_6_RELEASE",
-  "digest": "cba8140d32026ce67733e6a86b0c48a08eb5b288c36b3687962b0986f49a929a",
+  "baseline": "153.0.1",
+  "tag": "FIREFOX_153_0_1_RELEASE",
+  "digest": "967f9490b2f6b8f6f810720eb9ed76863eaf3a7ac091f0b32d3b087c7aac97a8",
   "patches": {
     "0001-browser-components-mozbuild-include-gjoa.patch": {
       "browser/components/moz.build": {
@@ -77,9 +77,9 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -1116,6 +1116,7 @@",
+            "header": "@@ -1121,6 +1121,7 @@",
             "range": [
-              1116,
+              1121,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -98,33 +98,33 @@
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -347,6 +348,18 @@",
+            "header": "@@ -496,6 +497,18 @@",
             "range": [
-              347,
+              496,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -520,6 +533,24 @@",
+            "header": "@@ -669,6 +682,24 @@",
             "range": [
-              520,
+              669,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -554,6 +585,109 @@",
+            "header": "@@ -794,6 +825,109 @@",
             "range": [
-              554,
+              794,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -626,6 +748,12 @@",
+            "header": "@@ -866,6 +1000,12 @@",
             "range": [
-              626,
+              866,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -135,25 +135,25 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -40,6 +40,12 @@",
+            "header": "@@ -186,6 +186,12 @@",
             "range": [
-              40,
+              186,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -73,6 +79,11 @@",
+            "header": "@@ -219,6 +225,11 @@",
             "range": [
-              73,
+              219,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -82,6 +93,11 @@",
+            "header": "@@ -326,6 +337,11 @@",
             "range": [
-              82,
+              326,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -203,10 +203,10 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -86,9 +86,30 @@",
+            "header": "@@ -84,11 +84,32 @@",
             "range": [
-              86,
-              9
+              84,
+              11
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           }
@@ -232,9 +232,9 @@
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -124,6 +147,76 @@",
+            "header": "@@ -125,6 +148,76 @@",
             "range": [
-              124,
+              125,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -258,25 +258,25 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -8,7 +8,7 @@",
+            "header": "@@ -10,7 +10,7 @@",
             "range": [
-              8,
+              10,
               7
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -17,6 +17,14 @@",
+            "header": "@@ -27,6 +27,14 @@",
             "range": [
-              17,
+              27,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -28,6 +36,29 @@",
+            "header": "@@ -37,6 +45,29 @@",
             "range": [
-              28,
+              37,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -289,17 +289,17 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -124,6 +124,11 @@",
+            "header": "@@ -127,6 +127,11 @@",
             "range": [
-              124,
+              127,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -3491,6 +3496,15 @@",
+            "header": "@@ -3477,6 +3482,15 @@",
             "range": [
-              3491,
+              3477,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -326,17 +326,17 @@
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -1325,6 +1331,11 @@",
+            "header": "@@ -1338,6 +1344,11 @@",
             "range": [
-              1325,
+              1338,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -1350,6 +1361,9 @@",
+            "header": "@@ -1367,6 +1378,9 @@",
             "range": [
-              1350,
+              1367,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -368,9 +368,9 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -1703,6 +1703,12 @@",
+            "header": "@@ -1702,6 +1702,12 @@",
             "range": [
-              1703,
+              1702,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -413,7 +413,7 @@
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -532,6 +536,14 @@",
+            "header": "@@ -532,6 +538,14 @@",
             "range": [
               532,
               6
@@ -421,25 +421,25 @@
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -775,6 +784,103 @@",
+            "header": "@@ -772,6 +786,103 @@",
             "range": [
-              775,
+              772,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -927,6 +1012,7 @@",
+            "header": "@@ -936,6 +1047,7 @@",
             "range": [
-              927,
+              936,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -1638,9 +1724,24 @@",
+            "header": "@@ -1647,9 +1759,24 @@",
             "range": [
-              1638,
+              1647,
               9
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -492,25 +492,25 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -860,6 +860,60 @@",
+            "header": "@@ -868,6 +868,60 @@",
             "range": [
-              860,
+              868,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -885,7 +939,7 @@",
+            "header": "@@ -893,7 +947,7 @@",
             "range": [
-              885,
+              893,
               7
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -931,7 +985,46 @@",
+            "header": "@@ -936,7 +990,46 @@",
             "range": [
-              931,
+              936,
               7
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -523,17 +523,17 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -3137,6 +3137,63 @@",
+            "header": "@@ -3139,6 +3139,63 @@",
             "range": [
-              3137,
+              3139,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -3419,6 +3476,10 @@",
+            "header": "@@ -3421,6 +3478,10 @@",
             "range": [
-              3419,
+              3421,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -544,17 +544,17 @@
         "oid": "absent",
         "hunks": [
           {
-            "header": "@@ -123,6 +123,20 @@",
+            "header": "@@ -124,6 +124,20 @@",
             "range": [
-              123,
+              124,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -144,6 +158,8 @@",
+            "header": "@@ -157,6 +171,8 @@",
             "range": [
-              144,
+              157,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -588,7 +588,7 @@
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -5294,6 +5295,41 @@",
+            "header": "@@ -5294,6 +5295,52 @@",
             "range": [
               5294,
               6
@@ -633,11 +633,19 @@
               7
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "header": "@@ -514,6 +515,14 @@",
+            "range": [
+              514,
+              6
+            ],
+            "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           }
         ]
       },
       "layout/painting/nsCSSRendering.cpp": {
-        "oid": "a581b039a8681f7d8191edfad100d287af38592e",
+        "oid": "absent",
         "hunks": [
           {
             "header": "@@ -785,7 +785,9 @@",
@@ -645,7 +653,7 @@
               785,
               7
             ],
-            "hash": "00ff8bab9cbbc5bd926ccd1086e44202126176a6aa55a5e4dcc759a8611ec463"
+            "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           }
         ]
       },

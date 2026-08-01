@@ -1,5 +1,5 @@
 # gjoa-patch:
-#   baseline-firefox: 152.0.1
+#   baseline-firefox: 153.0.1
 #   touches:
 #     - servo/components/style/properties/computed_value_flags.rs
 #     - servo/components/style/style_adjuster.rs
@@ -36,11 +36,9 @@ accuracy:
   band's near-white ceiling. bg-only hook => text/marks untouched; the
   size-dependent large-text halation ceiling stays in the paint-time text solve.
 
-diff --git a/layout/painting/nsDisplayList.cpp b/layout/painting/nsDisplayList.cpp
-index 0243566..f8a4069 100644
 --- a/layout/painting/nsDisplayList.cpp
 +++ b/layout/painting/nsDisplayList.cpp
-@@ -3137,6 +3137,63 @@ static nsDisplayBackgroundColor* CreateBackgroundColor(
+@@ -3139,6 +3139,63 @@
                                                     aBgSC, aColor);
  }
  
@@ -104,7 +102,7 @@ index 0243566..f8a4069 100644
  static void DealWithWindowsAppearanceHacks(nsIFrame* aFrame,
                                             nsDisplayListBuilder* aBuilder) {
    if (!XRE_IsParentProcess()) {
-@@ -3419,6 +3476,10 @@ AppendedBackgroundType nsDisplayBackgroundImage::AppendBackgroundItemsToTop(
+@@ -3421,6 +3478,10 @@
              nsDisplayItem::ContainerASRType::Constant));
    }
  
@@ -115,15 +113,12 @@ index 0243566..f8a4069 100644
    if (!bgItemList.IsEmpty()) {
      aList->AppendToTop(&bgItemList);
      return AppendedBackgroundType::Background;
-diff --git a/servo/components/style/properties/computed_value_flags.rs b/servo/components/style/properties/computed_value_flags.rs
-index d13a344..443f449 100644
 --- a/servo/components/style/properties/computed_value_flags.rs
 +++ b/servo/components/style/properties/computed_value_flags.rs
-@@ -123,6 +123,20 @@ bitflags! {
- 
+@@ -124,6 +124,20 @@
          /// Whether grid-auto-flow is author-specified.
          const HAS_AUTHOR_SPECIFIED_GRID_AUTO_FLOW = 1 << 23;
-+
+ 
 +        /// gjoa dark mode: this element or an ancestor establishes a full-bleed
 +        /// raster image backdrop (a hero photo). The foreground-inversion hook
 +        /// reads this to preserve authored text over the image instead of
@@ -137,10 +132,11 @@ index d13a344..443f449 100644
 +        /// preserves authored-light inherited colors under it, so such regions
 +        /// keep their authored light-on-dark polarity.
 +        const SELF_OR_ANCESTOR_HAS_PRESERVED_DARK_BACKDROP = 1 << 25;
-     }
- }
- 
-@@ -144,6 +158,8 @@ impl ComputedValueFlags {
++
+         /// Whether this style has used font relative units. Note that this is different than the
+         /// FONT_METRICS bits, which don't include rem / em etc.
+         const USES_FONT_RELATIVE_UNITS = 1 << 24;
+@@ -157,6 +171,8 @@
              | Self::SELF_OR_ANCESTOR_HAS_CONTAIN_STYLE
              | Self::SELF_OR_ANCESTOR_HAS_SIZE_CONTAINER_TYPE
              | Self::IS_IN_APPEARANCE_BASE_SUBTREE
@@ -149,11 +145,9 @@ index d13a344..443f449 100644
      }
  
      /// Flags that may be propagated to descendants.
-diff --git a/servo/components/style/style_adjuster.rs b/servo/components/style/style_adjuster.rs
-index 1756b77..e666bf3 100644
 --- a/servo/components/style/style_adjuster.rs
 +++ b/servo/components/style/style_adjuster.rs
-@@ -311,6 +311,177 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
+@@ -311,6 +311,177 @@
              self.style
                  .add_flags(ComputedValueFlags::SELF_OR_ANCESTOR_HAS_SIZE_CONTAINER_TYPE);
          }
