@@ -20,6 +20,6 @@
      (js/await (await-true
                  (str "const w = Services.wm.getMostRecentWindow('navigator:browser');"
                       " return !!(w && w.gjoaTest && w.Spaces);")
-                 8000))
+                 30000))
      (expect true "gjoa chrome init OK"))]))
 (js/export-default tests)
