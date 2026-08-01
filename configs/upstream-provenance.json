@@ -2,7 +2,7 @@
   "note": "Upstream provenance lock (churn anti-rot). Per patch, per touched file: the git blob OID (whole-file) PLUS per-hunk anchors {oid, hunks:[{header,range,hash}]} — each hunk's baseline old-side line span hashed at the Firefox tag. `check` diffs vs any ref: identical OID => provably unrotted (skip); OID changed but every hunk hash intact => still apply-safe (edit was OUTSIDE the hunks); a changed hunk => potential conflict; \"absent\" => a file gjoa creates (collision-checked). Legacy bare-string entries still read (degrade to whole-file precision). `digest` = one sha256 over the whole locked surface (baked-identity coordinate; self-verifying — `check` flags a hand-edit). Regenerate after any patch/baseline change: provenance lock.",
   "baseline": "153.0.1",
   "tag": "FIREFOX_153_0_1_RELEASE",
-  "digest": "967f9490b2f6b8f6f810720eb9ed76863eaf3a7ac091f0b32d3b087c7aac97a8",
+  "digest": "bd925becbd52fdc7ecad2940b465c76a72a6f840891cb3423a516b717b1389d1",
   "patches": {
     "0001-browser-components-mozbuild-include-gjoa.patch": {
       "browser/components/moz.build": {
@@ -266,17 +266,9 @@
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           },
           {
-            "header": "@@ -27,6 +27,14 @@",
+            "header": "@@ -27,6 +27,37 @@",
             "range": [
               27,
-              6
-            ],
-            "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-          },
-          {
-            "header": "@@ -37,6 +45,29 @@",
-            "range": [
-              37,
               6
             ],
             "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
