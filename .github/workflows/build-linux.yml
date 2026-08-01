@@ -230,7 +230,7 @@ jobs:
           GJOA_BIN="$(find "$PWD/engine"/obj-*/dist/bin/gjoa -type f -print -quit)"
           test -n "$GJOA_BIN"
           GJOA_BIN="$GJOA_BIN" \
-            timeout 180 xvfb-run -a bun run _itest -- --grep "smoke: gjoa chrome"
+            timeout 180 xvfb-run -a bun run _itest -- --verbose --grep "smoke: gjoa chrome"
 
       # Dark-mode contrast verification — runs the WCAG-AA harness against the
       # freshly-built binary in a clean xvfb env (the agent shell can't launch the

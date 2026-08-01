@@ -261,6 +261,25 @@
         (doseq [js PROD-SCRIPTS]
           (load-script-url-into window (str "chrome://gjoa/content/scripts/" js) js))))))
 
+(defn load-browser-window! [window :- Any] :- Any
+  (when (and window
+             (= (some-> window .-location .-href) TARGET-BROWSER-URL)
+             (not= (some-> window .-document .-readyState) "loading")
+             (not (.-__gjoaLoaderLoaded window)))
+    (set! (.-__gjoaLoaderLoaded window) true)
+    (try
+      (load-into-chrome-window window)
+      (catch Any e
+        (set! (.-__gjoaLoaderLoaded window) false)
+        (console/error "gjoa-loader: browser-window load failed" e)))))
+
+(defn load-existing-browser-windows! [] :- Any
+  (let [windows (.getEnumerator (.-wm Services) "navigator:browser")]
+    (loop []
+      (when (.hasMoreElements windows)
+        (load-browser-window! (.getNext windows))
+        (recur)))))
+
 ;; --- Observer registration (called from BrowserGlue at app-startup) ----------
 
 (def observer :- Any
@@ -270,9 +289,7 @@
       ;; no QueryInterface dance — nsIDOMDocument was removed years ago.
       (let [doc subject
             window (some-> doc .-defaultView)]
-        (when window
-          (when (= (some-> window .-location .-href) TARGET-BROWSER-URL)
-            (load-into-chrome-window window))))))})
+        (load-browser-window! window))))})
 
 (defn set-defaults [] :- Any
   (try
@@ -538,6 +555,7 @@
       (register-darkmode-actor)
       (register-input-actor)
       (.addObserver (.-obs Services) observer "chrome-document-loaded")
+      (load-existing-browser-windows!)
       (let [dev (dev-mode-dir)]
         (if dev
           (console/log (str "gjoa-loader: dev mode active — sourcing chrome from " (.-path dev)))
