@@ -12,7 +12,7 @@
 (declare-extern [document console window] Any)
 
 (defn init! [] :- Any
-  (let [sidebar-main (by-id "sidebar-main")
+  (let [sidebar-main (by-id "sidebar-container")
         navigator-toolbox (by-id "navigator-toolbox")
         urlbar-container (by-id "urlbar-container")
         nav-bar (by-id "nav-bar")

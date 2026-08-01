@@ -52,7 +52,7 @@
   display: none !important;
 }
 
-/* `#sidebar-main > sidebar-main` styling lives in gjoa.css under
+/* `#sidebar-container > sidebar-main` styling lives in gjoa.css under
  * #region sidebar-main — kept there because it's chrome restructuring,
  * not tab-panel concern. */
 
@@ -68,7 +68,7 @@
   overflow-x: hidden !important;
   scrollbar-width: thin;
   /* Explicit opaque bg so a translucent ancestor / compositor blur can't
-   * paint through the panel even if #sidebar-main's bg got clobbered. */
+   * paint through the panel even if #sidebar-container's bg got clobbered. */
   background-color: var(--gjoa-bg);
 }
 #gjoa-tab-panel:focus { outline: none; }
@@ -76,7 +76,7 @@
 /* Icons-only mode (collapsed sidebar layout) */
 /* Icons-only sidebar (collapsed): force both the pinned and panel containers
  * to flex-column with explicit width so 24px children center reliably. The
- * min-width pushes the parent #sidebar-main wider than the bare 32px row, so
+ * min-width pushes the parent #sidebar-container wider than the bare 32px row, so
  * the strip has breathing room — this is what the old icon-grid CSS used to
  * give us via horizontal padding. :not([hidden]) so an empty pinned
  * container actually stays hidden when there are no pinned tabs. */
@@ -734,7 +734,7 @@
 /* #region horizontal sidebar strip (gjoa.layout.horizontalSidebarStrip)
  *
  * In horizontal tab mode Firefox still renders its vertical sidebar launcher
- * strip — #sidebar-main, the narrow left column of icons (AI/sparkle, sidebar,
+ * strip — #sidebar-container, the narrow left column of icons (AI/sparkle, sidebar,
  * history, bookmarks, settings). The tabs already live in the toolbar row here,
  * so that strip is redundant chrome stealing horizontal space. Default = hidden
  * (pref OFF); flip gjoa.layout.horizontalSidebarStrip on (leader-b, the
@@ -744,14 +744,14 @@
  * live, so the toggle just flips the bool and the strip appears/disappears.
  * Mirrors the gjoa.layout.horizontalSingleRow idiom directly above.
  *
- * `display: none` takes #sidebar-main fully out of the #browser flex row, so the
+ * `display: none` takes #sidebar-container fully out of the #browser flex row, so the
  * content (#tabbrowser-tabbox) reclaims the column with no leftover gap. The
  * adjacent #sidebar-launcher-splitter is hidden too, so no orphan divider. Only
  * matches in horizontal mode (:root[gjoa-horizontal-tabs]); vertical/sidebar tab
  * mode is untouched and always keeps the strip. */
 @media not -moz-pref("gjoa.layout.horizontalSidebarStrip") {
-  :root[gjoa-horizontal-tabs] #sidebar-main,
-  :root[gjoa-horizontal-tabs] #sidebar-main ~ #sidebar-launcher-splitter {
+  :root[gjoa-horizontal-tabs] #sidebar-container,
+  :root[gjoa-horizontal-tabs] #sidebar-container ~ #sidebar-launcher-splitter {
     display: none !important;
   }
 }

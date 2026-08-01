@@ -522,7 +522,7 @@
                 (catch Any e
                   (console/error "gjoa-tabs: toggleLastTab failed" e))))))
 
-        ;; Toggle Firefox's vertical sidebar launcher strip (#sidebar-main) in
+        ;; Toggle Firefox's vertical sidebar launcher strip (#sidebar-container) in
         ;; horizontal tab mode. Default OFF (hidden) — the tabs already live in
         ;; the toolbar row, so the strip is redundant chrome. The CSS reacts to
         ;; the pref live via @media -moz-pref; we just flip the bool. Reports the
@@ -793,7 +793,7 @@
               ;; it pins/unpins the overlay reveal; in STATIC mode it tucks the
               ;; sidebar back into compact. (Behavior unchanged by the rename —
               ;; the id now names the intent; the reveal logic is untouched.)
-              (let [sb (by-id "sidebar-main")]
+              (let [sb (by-id "sidebar-container")]
                 (if (pref-bool "gjoa.sidebar.compact" false)
                   (when sb
                     (if (or (.hasAttribute sb "gjoa-pinned") (.hasAttribute sb "gjoa-has-hover"))

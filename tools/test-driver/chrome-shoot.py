@@ -80,7 +80,7 @@ PROBE_JS = r"""
   try { out.url = window.location.href; } catch(e) { out.url = '?'+e; }
   try { out.hasGjoa = !!window.Gjoa; } catch(e) {}
   try { out.tabPanel = !!document.getElementById('gjoa-tab-panel'); } catch(e) {}
-  try { out.sidebarMain = !!document.querySelector('sidebar-main, #sidebar-main'); } catch(e) {}
+  try { out.sidebarMain = !!document.querySelector('sidebar-main, #sidebar-container'); } catch(e) {}
   try { const imgs = document.querySelectorAll('#gjoa-tab-panel image, #gjoa-tab-panel .gjoa-favicon');
         out.favicons = imgs.length; } catch(e) { out.favicons = '?'+e; }
   try { out.booting = document.documentElement.getAttribute('gjoa-booting'); } catch(e) {}

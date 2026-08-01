@@ -85,14 +85,14 @@ if (armRule) {
 }
 
 // --- CENTERING: the in-sidebar de-centering rule must YIELD while floating ---
-// The rule `#sidebar-main #gjoa-urlbar-toolbar #urlbar:not([breakout-extend])`
+// The rule `#sidebar-container #gjoa-urlbar-toolbar #urlbar:not([breakout-extend])`
 // sets left/right:auto and is (3,1,0)-specific — HIGHER than the floating
 // centering rule (1,2,0). Un-guarded, it pins the floating popover to its static
 // sidebar slot (left-anchored, only visible at wide windows). It MUST be scoped to
 // :root:not([gjoa-urlbar-floating]) so the centering wins while the palette floats.
 // Behavioural proof: urlbar-float-realpage-probe.py --cage (real page, 1280px window,
 // asserts the palette centers within 40px of viewport-center).
-const sidebarRule = /([^\n{}]*#sidebar-main[^\n{}]*#gjoa-urlbar-toolbar[^\n{}]*#urlbar:not\(\[breakout-extend\]\))\s*\{[^}]*left:\s*auto/m.exec(css);
+const sidebarRule = /([^\n{}]*#sidebar-container[^\n{}]*#gjoa-urlbar-toolbar[^\n{}]*#urlbar:not\(\[breakout-extend\]\))\s*\{[^}]*left:\s*auto/m.exec(css);
 ok(!!sidebarRule, "the in-sidebar left/right:auto rule exists (resting layout)");
 if (sidebarRule) {
   ok(/:root:not\(\[gjoa-urlbar-floating\]\)/.test(sidebarRule[1]),

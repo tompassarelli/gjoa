@@ -20,7 +20,7 @@
 
 (def PROBE-SCRIPT :- String "
   const navBar = document.getElementById(\"nav-bar\");
-  const sidebarMain = document.getElementById(\"sidebar-main\");
+  const sidebarMain = document.getElementById(\"sidebar-container\");
   const expanded = sidebarMain && sidebarMain.hasAttribute(\"sidebar-launcher-expanded\");
   if (!navBar) return { error: \"no #nav-bar\" };
   const navRect = navBar.getBoundingClientRect();
@@ -121,7 +121,7 @@
   (let [r (js/await (.executeScript mn "
     const ext = document.getElementById(\"unified-extensions-button\");
     const ct = document.getElementById(\"nav-bar-customization-target\");
-    const sb = document.getElementById(\"sidebar-main\");
+    const sb = document.getElementById(\"sidebar-container\");
     if (!ext) return { error: \"no ext\" };
     const cs = getComputedStyle(ext);
     const ctCs = ct ? getComputedStyle(ct) : null;
@@ -156,7 +156,7 @@
 
     ;; Toggle to compact: remove sidebar-launcher-expanded.
     (js/await (.executeScript mn "
-    const sb = document.getElementById(\"sidebar-main\");
+    const sb = document.getElementById(\"sidebar-container\");
     if (sb) sb.removeAttribute(\"sidebar-launcher-expanded\");
     // Also collapse using the native API if available.
     if (window.SidebarController && typeof window.SidebarController.toggleExpanded === \"function\") {

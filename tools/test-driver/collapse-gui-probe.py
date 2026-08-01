@@ -5,7 +5,7 @@
 #
 # Runs against a REAL-GUI gjoa (see collapse-gui-drive.sh — stealth niri render),
 # drives the launcher toggle exactly as the sidebar-button command does, and
-# measures #sidebar-main width + the icons-only state before/after. Exits nonzero
+# measures #sidebar-container width + the icons-only state before/after. Exits nonzero
 # if the collapsed sidebar is not a favicon rail. Companion fast test:
 # tools/test-driver/functional/collapse-flags.functional.mjs (pure truth table).
 import argparse, base64, json, sys, time, os
@@ -14,7 +14,7 @@ from importlib import import_module
 cs = import_module("chrome-shoot")
 
 MEASURE_JS = r"""
-  const sb = document.getElementById('sidebar-main');
+  const sb = document.getElementById('sidebar-container');
   const panel = document.getElementById('gjoa-tab-panel');
   let label = document.querySelector('#gjoa-tab-panel .gjoa-tab-label') || document.querySelector('.gjoa-tab-label');
   const lr = label ? label.getBoundingClientRect() : null;

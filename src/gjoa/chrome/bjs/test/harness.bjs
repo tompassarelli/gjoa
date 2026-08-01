@@ -5,7 +5,7 @@
 ;; Tier 2 test harness — happy-dom + chrome global mocks.
 ;;
 ;; Provides for tests:
-;;   - Fresh window / document (happy-dom) with #sidebar-main and
+;;   - Fresh window / document (happy-dom) with #sidebar-container and
 ;;     #navigator-toolbox already in the body
 ;;   - Services.prefs backed by a Map, with addObserver/removeObserver
 ;;   - ChromeUtils.importESModule returning { SessionStore: null }
@@ -115,7 +115,7 @@
 
       ;; Pre-populate elements compact mode binds to
       (let [sidebar-main (.createElement happy-doc "div")]
-        (set! (.-id sidebar-main) "sidebar-main")
+        (set! (.-id sidebar-main) "sidebar-container")
         (.appendChild (.-body happy-doc) sidebar-main))
 
       (let [navigator-toolbox (.createElement happy-doc "div")]

@@ -11,7 +11,7 @@
 
 (defn ensure-sidebar-expanded [mn :- Any] :- Any
   (chrome-eval "
-    const sm = document.getElementById(\"sidebar-main\");
+    const sm = document.getElementById(\"sidebar-container\");
     if (sm && !sm.hasAttribute(\"sidebar-launcher-expanded\")) {
       sm.setAttribute(\"sidebar-launcher-expanded\", \"true\");
     }

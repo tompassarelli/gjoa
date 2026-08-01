@@ -27,7 +27,7 @@
 (def pfx-log :- Any (create-logger! "tabs"))
 
 ;; sidebar-main is looked up once; the boot function exits if nil.
-(def sidebar-main :- Any (by-id "sidebar-main"))
+(def sidebar-main :- Any (by-id "sidebar-container"))
 
 ;; --- Selection helpers (small — vim + drag both consume) ---
 

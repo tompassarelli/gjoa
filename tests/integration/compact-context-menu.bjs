@@ -26,7 +26,7 @@
 ;; context menu becomes), and fire the mouseleave that — pre-fix — scheduled collapse.
 (def OPEN-MENU-AND-LEAVE :- String "
   const XUL='http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul';
-  const sb=document.getElementById('sidebar-main');
+  const sb=document.getElementById('sidebar-container');
   if(!sb) return {error:'no sidebar-main'};
   sb.setAttribute('gjoa-has-hover','true');
   let m=document.getElementById('gjoa-test-ctxmenu');
@@ -37,19 +37,19 @@
 ")
 
 (def CLOSE-MENU-AND-LEAVE :- String "
-  const sb=document.getElementById('sidebar-main');
+  const sb=document.getElementById('sidebar-container');
   const m=document.getElementById('gjoa-test-ctxmenu');
   if(m) m.setAttribute('state','closed');
   sb.dispatchEvent(new MouseEvent('mouseleave',{relatedTarget:document.body}));
   return true;
 ")
 
-(def HAS-HOVER :- String "return document.getElementById('sidebar-main').hasAttribute('gjoa-has-hover');")
+(def HAS-HOVER :- String "return document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');")
 
 (js/export (def tests :- Any
   [(deftest "compact — sidebar stays expanded while a context menu is open (#88)" [mn]
      (js/await (chrome-eval ENABLE-COMPACT))
-     (js/await (await-true "return !!document.querySelector('#sidebar-main[data-gjoa-compact]');" 4000))
+     (js/await (await-true "return !!document.querySelector('#sidebar-container[data-gjoa-compact]');" 4000))
      (let [r (js/await (chrome-eval OPEN-MENU-AND-LEAVE))]
        (expect (.-menuLive r) "precondition: a live menupopup[state=showing] should exist"))
      ;; KEEP: negative assertion — no observable flag to await. The leave-collapse
@@ -63,6 +63,6 @@
      ;; release: once the menu closes, a later mouseleave may collapse it again — guard
      ;; against an over-correction that pins the sidebar open forever.
      (js/await (chrome-eval CLOSE-MENU-AND-LEAVE))
-     (js/await (await-true "return !document.getElementById('sidebar-main').hasAttribute('gjoa-has-hover');" 3000)))]))
+     (js/await (await-true "return !document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');" 3000)))]))
 
 (js/export-default tests)

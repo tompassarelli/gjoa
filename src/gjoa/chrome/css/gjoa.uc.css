@@ -325,15 +325,15 @@
 
 /* #region sidebar-main — the drawer container */
 
-#sidebar-main {
+#sidebar-container {
   overflow: visible !important;
   flex-direction: column !important;
   background-color: var(--gjoa-bg) !important;
   background-image: none !important;
 }
 
-#sidebar-main > sidebar-main {
-  /* Footer pinned to the bottom of #sidebar-main's flex column.
+#sidebar-container > sidebar-main {
+  /* Footer pinned to the bottom of #sidebar-container's flex column.
    * Mode-conditional rules below — these are the shared bits. */
   margin-top: auto !important;
   box-sizing: border-box !important;
@@ -343,7 +343,7 @@
 /* EXPANDED mode (sidebar wide, inner buttons horizontal): fixed-60 slot
  * with `padding-top` symmetric trick driven by --gjoa-symmetric-footer.
  * `overflow: hidden` clips any layout flicker during the feedback loop. */
-#sidebar-main[sidebar-launcher-expanded] > sidebar-main {
+#sidebar-container[sidebar-launcher-expanded] > sidebar-main {
   flex: 0 0 60px !important;
   min-height: 0 !important;
   overflow: hidden !important;
@@ -355,7 +355,7 @@
  * wrapper grow to fit content. Locking it at 60px + overflow:hidden was
  * clipping all-but-one button (2026-05-27 regression). No symmetric
  * trick needed here — vertical stack already extends near the bottom. */
-#sidebar-main:not([sidebar-launcher-expanded]) > sidebar-main {
+#sidebar-container:not([sidebar-launcher-expanded]) > sidebar-main {
   flex: 0 0 auto !important;
   min-height: 60px !important;
   padding: 0 !important;
@@ -421,18 +421,18 @@
  * card-gap. Normal = drawer on left → inset inline-start; flipped (FF stamps
  * sidebar-positionend) = drawer on right → inset inline-end. */
 @media -moz-pref("sidebar.verticalTabs") {
-  #browser:has(> #sidebar-main[data-gjoa-compact]) > #sidebar-box:not([sidebar-positionend]),
+  #browser:has(> #sidebar-container[data-gjoa-compact]) > #sidebar-box:not([sidebar-positionend]),
   #sidebar-box:not([sidebar-positionend]) {
     margin-inline-start: var(--gjoa-card-gap) !important;
   }
-  #browser:has(> #sidebar-main[data-gjoa-compact]) > #sidebar-box[sidebar-positionend],
+  #browser:has(> #sidebar-container[data-gjoa-compact]) > #sidebar-box[sidebar-positionend],
   #sidebar-box[sidebar-positionend] {
     margin-inline-end: var(--gjoa-card-gap) !important;
   }
   /* …but inside the STATIC floating-card layout, the #browser gap owns it —
    * cancel the inline inset so the gap stays exactly one card-gap. */
   @media -moz-pref("gjoa.layout.floatingCards") {
-    #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-box {
+    #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-box {
       margin-inline: 0 !important;
     }
   }
@@ -491,15 +491,15 @@
  * bottom icons sit 4px FURTHER from the sidebar's bottom edge than
  * top icons sit from the top. DO NOT crank translateY above 8px:
  * user-confirmed pushes top icons into the URL bar below. */
-#sidebar-main #nav-bar {
+#sidebar-container #nav-bar {
   transform: translateY(6px) !important;
 }
 
-#sidebar-main #nav-bar-customization-target > toolbarspring {
+#sidebar-container #nav-bar-customization-target > toolbarspring {
   flex: 0 0 0 !important;
 }
 
-#sidebar-main #nav-bar-customization-target > :is(toolbarbutton, toolbaritem) {
+#sidebar-container #nav-bar-customization-target > :is(toolbarbutton, toolbaritem) {
   --toolbarbutton-outer-padding: 0 !important;
   padding-inline: 1px !important;
   margin-inline: 0 !important;
@@ -515,7 +515,7 @@
  *   EXPANDED  [☰ hamburger][□ sidebar-toggle] ←GAP→ [← → ↻ 🧩]
  *   COMPACT   [← → ↻] [URL flex-fill] [🧩][□ sidebar-toggle][☰ hamburger]
  *
- * Expanded-mode rules are scoped to `#sidebar-main #nav-bar > ...`
+ * Expanded-mode rules are scoped to `#sidebar-container #nav-bar > ...`
  * (3 IDs of specificity). Compact-mode rules are unscoped (2 IDs).
  * In expanded mode both match — the higher-specificity sidebar-main
  * rules win. In compact mode only the unscoped rules apply.
@@ -597,14 +597,14 @@
   flex: 0 0 auto !important;
 }
 
-/* --- EXPANDED-mode nav-bar (inside #sidebar-main) ----------------------
+/* --- EXPANDED-mode nav-bar (inside #sidebar-container) ----------------------
  * Target (owner spec v2 2026-07-11): [☰ settings][🧩 ext] ──gap── [← → ↻][□ sidebar]
  * i.e. hamburger, extensions, gap, back, forward, refresh, sidebar-toggle.
  * (Superseded the v1 [☰][□][🧩]─[← → ↻]: owner wants sidebar-toggle on the
  * FAR RIGHT after refresh, and extensions glued to the hamburger.)
  *
  * Higher specificity (3 IDs) overrides compact-mode rules above. */
-#sidebar-main #nav-bar > #PanelUI-button {
+#sidebar-container #nav-bar > #PanelUI-button {
   order: -10 !important;
 }
 /* Descendant (not `>`): the button is DOM-inserted INSIDE
@@ -614,25 +614,25 @@
  * giving the trailing [□] in [☰][🧩] ─gap─ [← → ↻][□]. Matches the rare
  * direct-child fallback too (compact `#nav-bar > #gjoa-sidebar-button` is
  * also order 1). */
-#sidebar-main #nav-bar #gjoa-sidebar-button {
+#sidebar-container #nav-bar #gjoa-sidebar-button {
   order: 1 !important;
 }
-#sidebar-main #nav-bar > #taskbar-tabs-favicon {
+#sidebar-container #nav-bar > #taskbar-tabs-favicon {
   order: -8 !important;
 }
 /* Customization-target as a CSS flexbox (overrides XUL hbox layout). */
-#sidebar-main #nav-bar > #nav-bar-customization-target {
+#sidebar-container #nav-bar > #nav-bar-customization-target {
   display: flex !important;
   flex: 1 1 auto !important;
   align-items: center !important;
 }
 /* Force every direct child to natural size with no margins. */
-#sidebar-main #nav-bar > #nav-bar-customization-target > * {
+#sidebar-container #nav-bar > #nav-bar-customization-target > * {
   flex: 0 0 auto !important;
   margin-inline: 0 !important;
 }
 /* Extensions: order -2 (leftmost). */
-#sidebar-main #nav-bar > #nav-bar-customization-target > #unified-extensions-button {
+#sidebar-container #nav-bar > #nav-bar-customization-target > #unified-extensions-button {
   order: -2 !important;
 }
 /* CSS-generated flex spring between extensions and back/forward/refresh.
@@ -643,7 +643,7 @@
  * This works regardless of how many other elements customization-target
  * has — we don't rely on `margin-inline-start: auto` being the sole
  * auto-margin in the flex line. Robust against profile customizations. */
-#sidebar-main #nav-bar > #nav-bar-customization-target::before {
+#sidebar-container #nav-bar > #nav-bar-customization-target::before {
   content: "" !important;
   flex: 1 1 0 !important;
   order: -1 !important;
@@ -654,7 +654,7 @@
 
 /* --- FLIPPED nav-bar (#146): mirror the whole row -----------------------
  * When the sidebar is moved to the RIGHT, FF stamps `sidebar-positionend`
- * on #sidebar-main. The toolbar must mirror horizontally so the
+ * on #sidebar-container. The toolbar must mirror horizontally so the
  * sidebar-toggle sits on the OUTER (sidebar) edge and hamburger/ext on the
  * INNER (page) edge:
  *   normal  [☰][sb][ext]──[back fwd refresh]
@@ -663,10 +663,10 @@
  * above intact (lower order is still "first", but "first" is now the right
  * edge). Reversed on BOTH the nav-bar (top-level groups) and the inner
  * customization-target (ext / spring / back-fwd-refresh) for a true mirror. */
-#sidebar-main[sidebar-positionend] #nav-bar {
+#sidebar-container[sidebar-positionend] #nav-bar {
   flex-direction: row-reverse !important;
 }
-#sidebar-main[sidebar-positionend] #nav-bar > #nav-bar-customization-target {
+#sidebar-container[sidebar-positionend] #nav-bar > #nav-bar-customization-target {
   flex-direction: row-reverse !important;
 }
 
@@ -731,7 +731,7 @@
  * is why it hid until a wide window exposed it. The `:not([breakout-extend])`
  * meant it bit specifically in the floating-but-not-yet-extended state. The
  * comment below ("floating path wins when active") is only TRUE with this guard. */
-:root:not([gjoa-urlbar-floating]) #sidebar-main #gjoa-urlbar-toolbar #urlbar:not([breakout-extend]) {
+:root:not([gjoa-urlbar-floating]) #sidebar-container #gjoa-urlbar-toolbar #urlbar:not([breakout-extend]) {
   width: var(--urlbar-width) !important;
   min-width: 0 !important;
   left: auto !important;
@@ -769,7 +769,7 @@
  * grows toward the page/center. `--gjoa-urlbar-resting-w` is the untouched
  * resting width stashed by drawer/layout.bjs (sidebar inner width); the
  * `--urlbar-width` here is already clobbered to expand-w so it can't be used. */
-#sidebar-main[sidebar-positionend] #gjoa-urlbar-toolbar #urlbar:is([focused][breakout-extend]) {
+#sidebar-container[sidebar-positionend] #gjoa-urlbar-toolbar #urlbar:is([focused][breakout-extend]) {
   transform: translateX(calc(-1 * (var(--gjoa-urlbar-expand-w) - var(--gjoa-urlbar-resting-w, var(--urlbar-width, 0px))))) !important;
 }
 
@@ -1117,7 +1117,7 @@ Preserve these (security warnings):
 /* #region compact mode — autohide sidebar
  * Set gjoa.sidebar.compact to true in about:config to enable.
  * JS (gjoa-drawer.uc.js) manages data-gjoa-compact and
- * data-gjoa-compact-hidden attributes on #sidebar-main. */
+ * data-gjoa-compact-hidden attributes on #sidebar-container. */
 
 /* Default state: hidden off-screen.
  * --gjoa-toolbox-height is set by JS when the toolbox is above the sidebar
@@ -1128,7 +1128,7 @@ Preserve these (security warnings):
  * z-index above the page), so it never pushes or resizes the page. Only the
  * reveal LOCATION changed (was flush at the screen edge); the hover trigger and
  * reveal mechanics are unchanged. */
-#sidebar-main[data-gjoa-compact] {
+#sidebar-container[data-gjoa-compact] {
   position: fixed !important;
   top: calc(var(--gjoa-toolbox-height, 0px) + var(--gjoa-card-gap)) !important;
   height: calc(100vh - var(--gjoa-toolbox-height, 0px) - 2 * var(--gjoa-card-gap)) !important;
@@ -1143,13 +1143,13 @@ Preserve these (security warnings):
 /* Resting inset + slide direction depend on which side the sidebar is anchored to.
  * Hidden state slides FULLY off-screen (clears the inset + the card shadow). */
 @media -moz-pref("sidebar.position_start") {
-  #sidebar-main[data-gjoa-compact] {
+  #sidebar-container[data-gjoa-compact] {
     left: var(--gjoa-card-gap) !important;
     transform: translateX(calc(-100% - var(--gjoa-card-gap) - 16px)) !important;
   }
 }
 @media not -moz-pref("sidebar.position_start") {
-  #sidebar-main[data-gjoa-compact] {
+  #sidebar-container[data-gjoa-compact] {
     right: var(--gjoa-card-gap) !important;
     transform: translateX(calc(100% + var(--gjoa-card-gap) + 16px)) !important;
   }
@@ -1157,16 +1157,16 @@ Preserve these (security warnings):
 
 /* Visible when hovered (gjoa-has-hover set by JS) OR PINNED open (gjoa-pinned, set by
  * the `e` key in compact mode, #127) — lands at the inset resting spot either way. */
-#sidebar-main[data-gjoa-compact][gjoa-has-hover],
-#sidebar-main[data-gjoa-compact][gjoa-pinned] {
+#sidebar-container[data-gjoa-compact][gjoa-has-hover],
+#sidebar-container[data-gjoa-compact][gjoa-pinned] {
   transform: translateX(0) !important;
   pointer-events: auto !important;
 }
 
 /* Round the card cleanly: the moved-in toolbox / nav-bar paint transparent so the
  * card's own rounded --gjoa-bg shows at the corners (mirrors the static card). */
-#sidebar-main[data-gjoa-compact] #navigator-toolbox,
-#sidebar-main[data-gjoa-compact] #nav-bar {
+#sidebar-container[data-gjoa-compact] #navigator-toolbox,
+#sidebar-container[data-gjoa-compact] #nav-bar {
   background-color: transparent !important;
 }
 
@@ -1175,7 +1175,7 @@ Preserve these (security warnings):
  * urlbar transform needed — it's a normal DOM child now. */
 
 
-#sidebar-main[data-gjoa-compact] ~ #sidebar-launcher-splitter {
+#sidebar-container[data-gjoa-compact] ~ #sidebar-launcher-splitter {
   display: none !important;
 }
 
@@ -1197,7 +1197,7 @@ Preserve these (security warnings):
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #sidebar-main[data-gjoa-compact] {
+  #sidebar-container[data-gjoa-compact] {
     transition: none !important;
   }
 }
@@ -1276,7 +1276,7 @@ Preserve these (security warnings):
  * which is position:fixed → out of flow) or a hidden one (zen / horizontal /
  * DOM-fullscreen) lets the content fill the whole window.
  *
- * #browser is `hbox > #sidebar-main … #tabbrowser-tabbox`; the splitters and
+ * #browser is `hbox > #sidebar-container … #tabbrowser-tabbox`; the splitters and
  * #sidebar-box between them are display:none when hidden, so when only the
  * launcher + content are visible they are adjacent flex items and a single
  * `gap` spaces exactly the two cards. Symmetric padding+gap is position-
@@ -1297,7 +1297,7 @@ Preserve these (security warnings):
    * card↔card are both exactly --gjoa-card-gap. FF's own content-area.css
    * `padding-block-start: 0` (nova) does NOT apply — nova is forced off and
    * gjoa owns this region — so the TOP inset is preserved like the others. */
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) {
     gap: var(--gjoa-card-gap) !important;
     padding: var(--gjoa-card-gap) !important;
     background-color: transparent !important;
@@ -1306,8 +1306,8 @@ Preserve these (security warnings):
 
   /* Round BOTH cards on all four corners (radius = --gjoa-card-radius). The
    * card's own --gjoa-bg background paints the rounded corners. */
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-main,
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-container,
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox {
     border-radius: var(--gjoa-card-radius) !important;
     box-shadow: var(--gjoa-card-shadow) !important;
   }
@@ -1318,18 +1318,18 @@ Preserve these (security warnings):
    * the drawer card's own rounded --gjoa-bg background shows at the corners
    * instead of a square opaque toolbar rect. (Same colour, so it only changes
    * the corner; the toolbar still reads as gjoa-bg.) */
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-main {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-container {
     background-color: var(--gjoa-bg) !important;
   }
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-main #navigator-toolbox,
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-main #nav-bar {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-container #navigator-toolbox,
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-container #nav-bar {
     background-color: transparent !important;
   }
   /* Content card: paint the gjoa surface behind the (briefly blank) page and
    * clip the remote browser to the card radius. The content card has no
    * breakout child, so clipping is safe and is what actually rounds the page's
    * corners. */
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox {
     background-color: var(--gjoa-bg) !important;
     overflow: clip !important;
   }
@@ -1341,10 +1341,10 @@ Preserve these (security warnings):
    * gap (drag-resize isn't this layout's model), so drop BOTH from flow and let the
    * content card fill: every gap — window↔sidebar, sidebar↔content, content↔edge, and
    * top/bottom — is then exactly one --gjoa-card-gap. */
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-launcher-splitter,
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #sidebar-splitter,
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #ai-window-splitter[collapsed],
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #ai-window-box[collapsed] {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-launcher-splitter,
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-splitter,
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #ai-window-splitter[collapsed],
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #ai-window-box[collapsed] {
     /* #sidebar-splitter joins the list (#145): when the Customize / history /
      * bookmarks panel (#sidebar-box) is open, this splitter sits between it and
      * the content card and would otherwise eat gap+splitter+gap there too. */
@@ -1357,15 +1357,15 @@ Preserve these (security warnings):
    * .browserContainer, which both squares the card's top corners and leaves
    * left/right slack inside the card. Neutralize all of it and let every nested
    * content container fill 100% — OUR #tabbrowser-tabbox owns the rounding now. */
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox,
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox #tabbrowser-tabpanels {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox,
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox #tabbrowser-tabpanels {
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
   }
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox #tabbrowser-tabpanels > :not(.split-view-panel) .browserContainer,
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserStack,
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserSidebarContainer {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox #tabbrowser-tabpanels > :not(.split-view-panel) .browserContainer,
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserStack,
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserSidebarContainer {
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
@@ -1385,11 +1385,11 @@ Preserve these (security warnings):
    * stack and force the browser back to 100%. (RFP's API-level innerWidth/Height
    * rounding still applies; only the visual letterbox margin is reclaimed here.)
    * Higher specificity + !important to beat letterboxing.css's own !important. */
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserStack {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserStack {
     place-content: stretch !important;
   }
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserContainer > .browserStack > browser,
-  #browser:has(> #sidebar-main:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserStack > browser {
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserContainer > .browserStack > browser,
+  #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox .browserStack > browser {
     width: 100% !important;
     height: 100% !important;
   }

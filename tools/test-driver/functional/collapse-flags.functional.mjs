@@ -6,7 +6,7 @@
 //
 // ROOT CAUSE: tabs/layout.js positionPanel decided the collapsed favicon-rail
 // (`gjoa-icons-only`) from whether #navigator-toolbox was still parented inside
-// #sidebar-main. But the toolbox is reparented in/out by a SEPARATE module
+// #sidebar-container. But the toolbox is reparented in/out by a SEPARATE module
 // (drawer/layout collapse/expand) reacting to the SAME `sidebar-launcher-expanded`
 // attribute — and FF's launcher animation makes that reparent LAG. So positionPanel
 // routinely read toolbox-still-in and skipped icons-only, leaving labels + width.
