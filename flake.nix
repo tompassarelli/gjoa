@@ -62,6 +62,23 @@
           }
         else basePkgs;
 
+        # Firefox 153 requires cbindgen 0.29.4, ahead of the nixpkgs pin's
+        # 0.29.2. Keep one derivation for buildMozillaMach and the Mach shell;
+        # a package-set overlay would also rebuild unrelated consumers.
+        cbindgen = pkgs.rust-cbindgen.overrideAttrs (finalAttrs: _old: {
+          version = "0.29.4";
+          src = pkgs.fetchFromGitHub {
+            owner = "mozilla";
+            repo = "cbindgen";
+            rev = "v${finalAttrs.version}";
+            hash = "sha256-leeHOwpzXuzg2cTjXehBnCsS+dvU4eIIFtWKeCee20U=";
+          };
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            inherit (finalAttrs) src;
+            hash = "sha256-f6YoDoiVoh0BVPYHFO1FsdI4OCsF+LY72QaD57StdIQ=";
+          };
+        });
+
         # Single source of truth for the Firefox pin: gjoa.json. Bumping
         # `bun run security:bump` writes here; flake.nix re-reads on next
         # `nix build`. No more "I bumped gjoa.json but the build said 150."
@@ -175,6 +192,7 @@
             };
           }).override ({
             inherit pgoSupport ltoSupport crashreporterSupport;
+            rust-cbindgen = cbindgen;
           } // pkgs.lib.optionalAttrs perfFlags {
             # Drop debug symbols the consistent way: this flips the nixpkgs
             # wrapper's strip + separateDebugInfo together, unlike a bare
@@ -375,7 +393,7 @@
             llvmPackages_19.lld
             rustc
             cargo
-            rust-cbindgen
+            cbindgen
             nasm
             yasm
             autoconf
