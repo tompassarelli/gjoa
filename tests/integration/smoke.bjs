@@ -14,11 +14,12 @@
 (js/export (def tests :- Any
   [(deftest "smoke: gjoa chrome initialized (GjoaLoader + bundles loaded, no $$bc death)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     ;; window.gjoaTest + window.Spaces are set by the chrome layer ONLY after
-     ;; GjoaLoader runs the .uc.js bundles successfully. If GjoaLoader threw (bad
-     ;; $$bc import) or a bundle threw ($$bc undefined), they never appear.
+     ;; gjoaTest + Spaces are set on the navigator:browser window ONLY after
+     ;; GjoaLoader runs the .uc.js bundles successfully. Resolve that window
+     ;; explicitly because Marionette's chrome sandbox does not guarantee that
+     ;; its script-global `window` is the browser window.
      (js/await (await-true
-                 "return !!(window.gjoaTest && window.Spaces);"
+                 "const win = Services.wm.getMostRecentWindow('navigator:browser'); return !!(win && win.gjoaTest && win.Spaces);"
                  30000))
      (expect true "gjoa chrome init OK"))]))
 (js/export-default tests)
