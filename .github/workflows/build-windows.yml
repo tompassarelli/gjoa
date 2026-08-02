@@ -248,6 +248,16 @@ jobs:
           export MOZBUILD_STATE_PATH="$HOME/.mozbuild"
           ./mach package
 
+      - name: Package Windows ZIP
+        working-directory: engine
+        run: |
+          TAR="$(realpath "$(find obj-* -path '*/dist/*.win64.tar' -print -quit)")"
+          test -s "$TAR" || { echo "::error::Windows package tar not found"; exit 1; }
+          STAGE="$(mktemp -d)"
+          tar -xf "$TAR" -C "$STAGE"
+          (cd "$STAGE" && zip -q -r "${TAR%.tar}.zip" gjoa)
+          test -s "${TAR%.tar}.zip"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
