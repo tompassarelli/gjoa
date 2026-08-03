@@ -28,7 +28,7 @@ jobs:
     runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-24.04-arm' || (inputs.fast && 'blacksmith-16vcpu-ubuntu-2404' || 'ubuntu-24.04') }}
     timeout-minutes: 300
     env:
-      FF_VERSION: "152.0.6"
+      FF_VERSION: "153.0.1"
       APPIMAGETOOL_VERSION: "1.9.1"
       APPIMAGE_RUNTIME_VERSION: "20251108"
       # Pinned beagle worktree: the build tooling (.bjs + package.json) resolves
@@ -230,7 +230,7 @@ jobs:
           GJOA_BIN="$(find "$PWD/engine"/obj-*/dist/bin/gjoa -type f -print -quit)"
           test -n "$GJOA_BIN"
           GJOA_BIN="$GJOA_BIN" \
-            timeout 180 xvfb-run -a bun run _itest -- --grep "smoke: gjoa chrome"
+            timeout 180 xvfb-run -a bun run _itest -- --verbose --grep "smoke: gjoa chrome"
 
       # Dark-mode contrast verification — runs the WCAG-AA harness against the
       # freshly-built binary in a clean xvfb env (the agent shell can't launch the

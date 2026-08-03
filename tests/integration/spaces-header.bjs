@@ -115,7 +115,7 @@
                "
         const header = document.getElementById(\"gjoa-space-header\");
         const label = document.getElementById(\"gjoa-space-header-label\");
-        const sidebar = document.getElementById(\"sidebar-main\");
+        const sidebar = document.getElementById(\"sidebar-container\");
         const navIcons = sidebar?.querySelectorAll(\"#nav-bar .toolbarbutton-icon, #nav-bar image\");
         let firstNavIconLeft = null;
         if (navIcons) {

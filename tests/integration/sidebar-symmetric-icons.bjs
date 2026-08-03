@@ -2,8 +2,8 @@
 ;; Verify the gjoa sidebar's top/bottom icon Y-deltas are symmetric.
 ;;
 ;; Goal (2026-05-27 user spec): the ICONS of the bottom sidebar buttons
-;; must sit the same visual distance from #sidebar-main's BOTTOM edge as
-;; the TOP nav-bar button icons sit from #sidebar-main's TOP edge.
+;; must sit the same visual distance from #sidebar-container's BOTTOM edge as
+;; the TOP nav-bar button icons sit from #sidebar-container's TOP edge.
 ;;
 ;; "Icons" means the actual rendered glyph (img/svg/.toolbarbutton-icon),
 ;; NOT the toolbarbutton/moz-button container — containers have their
@@ -11,7 +11,7 @@
 ;;
 ;; The runtime adjuster lives in src/drawer/layout.ts::syncSymmetricFooter.
 ;; It writes --gjoa-symmetric-footer; CSS consumes that as padding-bottom
-;; on `#sidebar-main > sidebar-main`.
+;; on `#sidebar-container > sidebar-main`.
 (ns gjoa.tests.integration.sidebar-symmetric-icons
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect]]))
 (define-mode strict)
@@ -51,8 +51,8 @@
       walk(child, hits);
     }
   }
-  const sidebarMain = document.getElementById(\"sidebar-main\");
-  if (!sidebarMain) return { error: \"no #sidebar-main\" };
+  const sidebarMain = document.getElementById(\"sidebar-container\");
+  if (!sidebarMain) return { error: \"no #sidebar-container\" };
   const sidebarRect = sidebarMain.getBoundingClientRect();
   const navBar = sidebarMain.querySelector(\"#nav-bar\");
   const footerWebComponent = sidebarMain.querySelector(\":scope > sidebar-main\");
@@ -109,11 +109,11 @@
            (expect (.-sidebar r)
              "probe returned no sidebar rect")
            (expect (.-topIcon r)
-             (str "No top icon found in #sidebar-main #nav-bar (searched "
+             (str "No top icon found in #sidebar-container #nav-bar (searched "
                   (.-topCount r) " candidates). "
                   "Result: " (JSON/stringify r nil 2)))
            (expect (.-bottomIcon r)
-             (str "No bottom icon found in #sidebar-main > sidebar-main (searched "
+             (str "No bottom icon found in #sidebar-container > sidebar-main (searched "
                   (.-bottomCount r) " candidates). "
                   "Result: " (JSON/stringify r nil 2)))
            (let [topGap (- (.-top (.-topIcon r)) (.-top (.-sidebar r)))

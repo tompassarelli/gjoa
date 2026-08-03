@@ -15,7 +15,7 @@
 ;;      and spanned the whole window. The fix restores `width: var(--urlbar-width)`
 ;;      (JS-pinned by drawer/layout.bjs sync-urlbar-width to sidebar inner width).
 ;;      ASSERT: at rest, #urlbar rect width is well under #navigator-toolbox width
-;;      and ~= #sidebar-main inner width (minus 2·inset).
+;;      and ~= #sidebar-container inner width (minus 2·inset).
 ;;
 ;;   #2 EXPANDED dropdown panel must be OPAQUE (non-collapsed). On focus the
 ;;      urlbar gets [breakout-extend]; the bad nova-only calc made
@@ -36,14 +36,14 @@
 (declare-extern [Number] Any)
 
 ;; Put the window into the EXPANDED vertical-tab layout that hosts the in-drawer
-;; urlbar (#gjoa-urlbar-toolbar inside #sidebar-main), then settle. The runner's
+;; urlbar (#gjoa-urlbar-toolbar inside #sidebar-container), then settle. The runner's
 ;; per-test RESET already sets sidebar.verticalTabs=true and blurs the urlbar;
-;; this additionally expands the launcher so #sidebar-main has its full width
+;; this additionally expands the launcher so #sidebar-container has its full width
 ;; (sync-urlbar-width needs a non-collapsed drawer to pin --urlbar-width).
 (def ENSURE-EXPANDED-DRAWER :- String "
   Services.prefs.setBoolPref('sidebar.verticalTabs', true);
   Services.prefs.setBoolPref('sidebar.revamp', true);
-  const sm = document.getElementById('sidebar-main');
+  const sm = document.getElementById('sidebar-container');
   if (sm && !sm.hasAttribute('sidebar-launcher-expanded')) {
     sm.setAttribute('sidebar-launcher-expanded', '');
   }
@@ -56,12 +56,12 @@
 ")
 
 ;; Measure the RESTING urlbar (not focused, no breakout-extend). Reports the
-;; #urlbar rect, the #navigator-toolbox rect, the #sidebar-main rect, and the
+;; #urlbar rect, the #navigator-toolbox rect, the #sidebar-container rect, and the
 ;; --gjoa-sidebar-inset so the assertion can compute the expected inner width.
 (def MEASURE-RESTING :- String "
   const urlbar = document.getElementById('urlbar');
   const toolbox = document.getElementById('navigator-toolbox');
-  const sm = document.getElementById('sidebar-main');
+  const sm = document.getElementById('sidebar-container');
   if (!urlbar || !toolbox || !sm) return { error: 'missing element',
     urlbar: !!urlbar, toolbox: !!toolbox, sm: !!sm };
   const cs = getComputedStyle(document.documentElement);

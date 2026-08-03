@@ -37,9 +37,9 @@
         # The block is dead weight (but harmless) once nixpkgs has
         # permanently outpaced minNssVersion; safe to delete the
         # let-bindings + the if-branch then.
-        minNssVersion = "3.124";
-        nssUrl = "https://github.com/nss-dev/nss/archive/NSS_3_124_RTM.tar.gz";
-        nssHash = "sha256-bMUMyb/4qkiucbkvzSY5aNS3nfaJ4XWyqf2lKnVmXfU=";
+        minNssVersion = "3.125";
+        nssUrl = "https://ftp.mozilla.org/pub/security/nss/releases/NSS_3_125_RTM/src/nss-3.125.tar.gz";
+        nssHash = "sha256-hXO9FEej9syHb1lf4XnIR32MEBq95emctpPJgCsUma0=";
 
         basePkgs = import nixpkgs { inherit system; };
         nssOverlayNeeded =
@@ -52,7 +52,7 @@
               (_final: prev: {
                 nss_latest = prev.nss_latest.overrideAttrs (_old: {
                   version = minNssVersion;
-                  src = prev.fetchurl {
+                  src = prev.fetchzip {
                     url = nssUrl;
                     hash = nssHash;
                   };
@@ -61,6 +61,23 @@
             ];
           }
         else basePkgs;
+
+        # Firefox 153 requires cbindgen 0.29.4, ahead of the nixpkgs pin's
+        # 0.29.2. Keep one derivation for buildMozillaMach and the Mach shell;
+        # a package-set overlay would also rebuild unrelated consumers.
+        cbindgen = pkgs.rust-cbindgen.overrideAttrs (finalAttrs: _old: {
+          version = "0.29.4";
+          src = pkgs.fetchFromGitHub {
+            owner = "mozilla";
+            repo = "cbindgen";
+            rev = "v${finalAttrs.version}";
+            hash = "sha256-leeHOwpzXuzg2cTjXehBnCsS+dvU4eIIFtWKeCee20U=";
+          };
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            inherit (finalAttrs) src;
+            hash = "sha256-f6YoDoiVoh0BVPYHFO1FsdI4OCsF+LY72QaD57StdIQ=";
+          };
+        });
 
         # Single source of truth for the Firefox pin: gjoa.json. Bumping
         # `bun run security:bump` writes here; flake.nix re-reads on next
@@ -175,6 +192,7 @@
             };
           }).override ({
             inherit pgoSupport ltoSupport crashreporterSupport;
+            rust-cbindgen = cbindgen;
           } // pkgs.lib.optionalAttrs perfFlags {
             # Drop debug symbols the consistent way: this flips the nixpkgs
             # wrapper's strip + separateDebugInfo together, unlike a bare
@@ -375,7 +393,7 @@
             llvmPackages_19.lld
             rustc
             cargo
-            rust-cbindgen
+            cbindgen
             nasm
             yasm
             autoconf

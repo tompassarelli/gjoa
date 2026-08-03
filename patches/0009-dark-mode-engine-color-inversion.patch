@@ -1,5 +1,5 @@
 # gjoa-patch:
-#   baseline-firefox: 152.0.1
+#   baseline-firefox: 153.0.1
 #   touches:
 #     - servo/components/style/values/specified/color.rs
 #     - servo/components/style/device/gecko.rs
@@ -56,26 +56,26 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
   suppressed paints, and no black frame either.
 - PresShell.cpp: the one call site (ApplyHybridDefaultInvertIfThemeless), placed
   after the root frame is built and before painting is unsuppressed.
-diff --git a/docshell/base/BrowsingContext.cpp b/docshell/base/BrowsingContext.cpp
-index e8b50c6548..b5c5194ead 100644
 --- a/docshell/base/BrowsingContext.cpp
 +++ b/docshell/base/BrowsingContext.cpp
-@@ -124,6 +124,11 @@ struct ParamTraits<mozilla::dom::ForcedColorsOverride>
-     : public mozilla::dom::WebIDLEnumSerializer<
+@@ -127,6 +127,11 @@
            mozilla::dom::ForcedColorsOverride> {};
  
-+template <>
+ template <>
 +struct ParamTraits<mozilla::dom::ColorInversionOverride>
 +    : public mozilla::dom::WebIDLEnumSerializer<
 +          mozilla::dom::ColorInversionOverride> {};
 +
- template <>
++template <>
  struct ParamTraits<mozilla::dom::PrefersReducedMotionOverride>
      : public mozilla::dom::WebIDLEnumSerializer<
-@@ -3491,6 +3496,15 @@ void BrowsingContext::DidSet(FieldIndex<IDX_ForcedColorsOverride>,
+           mozilla::dom::PrefersReducedMotionOverride> {};
+@@ -3477,6 +3482,15 @@
+     return;
+   }
    PresContextAffectingFieldChanged();
- }
- 
++}
++
 +void BrowsingContext::DidSet(FieldIndex<IDX_ColorInversionOverride>,
 +                             dom::ColorInversionOverride aOldValue) {
 +  MOZ_ASSERT(IsTop());
@@ -83,16 +83,12 @@ index e8b50c6548..b5c5194ead 100644
 +    return;
 +  }
 +  PresContextAffectingFieldChanged();
-+}
-+
+ }
+ 
  void BrowsingContext::DidSet(FieldIndex<IDX_PrefersReducedMotionOverride>,
-                              dom::PrefersReducedMotionOverride aOldValue) {
-   MOZ_ASSERT(IsTop());
-diff --git a/docshell/base/BrowsingContext.h b/docshell/base/BrowsingContext.h
-index 02abb6ab95..d68f109d10 100644
 --- a/docshell/base/BrowsingContext.h
 +++ b/docshell/base/BrowsingContext.h
-@@ -254,6 +254,8 @@ struct EmbedderColorSchemes {
+@@ -254,6 +254,8 @@
    FIELD(PrefersReducedMotionOverride, dom::PrefersReducedMotionOverride)      \
    /* DevTools override for forced-colors */                                   \
    FIELD(ForcedColorsOverride, dom::ForcedColorsOverride)                      \
@@ -101,7 +97,7 @@ index 02abb6ab95..d68f109d10 100644
    /* DevTools multiplier for animations playback rate */                      \
    FIELD(AnimationsPlayBackRateMultiplier, double)                             \
    /* prefers-color-scheme override based on the color-scheme style of our     \
-@@ -1110,6 +1112,10 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
+@@ -1110,6 +1112,10 @@
      return GetForcedColorsOverride();
    }
  
@@ -112,7 +108,7 @@ index 02abb6ab95..d68f109d10 100644
    dom::PrefersReducedMotionOverride PrefersReducedMotionOverride() const {
      return GetPrefersReducedMotionOverride();
    }
-@@ -1325,6 +1331,11 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
+@@ -1338,6 +1344,11 @@
      return IsTop();
    }
  
@@ -124,7 +120,7 @@ index 02abb6ab95..d68f109d10 100644
    bool CanSet(FieldIndex<IDX_PrefersReducedMotionOverride>,
                dom::PrefersReducedMotionOverride, ContentParent*) {
      return IsTop();
-@@ -1350,6 +1361,9 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
+@@ -1367,6 +1378,9 @@
    void DidSet(FieldIndex<IDX_ForcedColorsOverride>,
                dom::ForcedColorsOverride aOldValue);
  
@@ -134,11 +130,9 @@ index 02abb6ab95..d68f109d10 100644
    void DidSet(FieldIndex<IDX_PrefersReducedMotionOverride>,
                dom::PrefersReducedMotionOverride aOldValue);
  
-diff --git a/dom/chrome-webidl/BrowsingContext.webidl b/dom/chrome-webidl/BrowsingContext.webidl
-index d0508a8c29..da80d54f18 100644
 --- a/dom/chrome-webidl/BrowsingContext.webidl
 +++ b/dom/chrome-webidl/BrowsingContext.webidl
-@@ -63,6 +63,13 @@ enum ForcedColorsOverride {
+@@ -63,6 +63,13 @@
    "active",
  };
  
@@ -152,7 +146,7 @@ index d0508a8c29..da80d54f18 100644
  /**
   * CSS prefers-reduced-motion values override.
   */
-@@ -255,6 +262,10 @@ interface BrowsingContext {
+@@ -255,6 +262,10 @@
    // Forced-colors simulation, for DevTools
    [SetterThrows] attribute ForcedColorsOverride forcedColorsOverride;
  
@@ -163,11 +157,9 @@ index d0508a8c29..da80d54f18 100644
    // Animation playbackRate multiplier, for Devtools
    [SetterThrows] attribute double animationsPlayBackRateMultiplier;
  
-diff --git a/layout/base/PresShell.cpp b/layout/base/PresShell.cpp
-index 9d651a17a9..fd2dfbc81a 100644
 --- a/layout/base/PresShell.cpp
 +++ b/layout/base/PresShell.cpp
-@@ -1703,6 +1703,12 @@ nsresult PresShell::Initialize() {
+@@ -1702,6 +1702,12 @@
      NS_ENSURE_STATE(!mHaveShutDown);
    }
  
@@ -180,8 +172,6 @@ index 9d651a17a9..fd2dfbc81a 100644
    mDocument->MaybeScheduleRendering();
  
    NS_ASSERTION(rootFrame, "How did that happen?");
-diff --git a/layout/base/nsPresContext.cpp b/layout/base/nsPresContext.cpp
-index b2394c6106..d4cdbe4398 100644
 --- a/layout/base/nsPresContext.cpp
 +++ b/layout/base/nsPresContext.cpp
 @@ -33,6 +33,7 @@
@@ -200,7 +190,7 @@ index b2394c6106..d4cdbe4398 100644
  #include "nsContentUtils.h"
  #include "nsDeviceContext.h"
  #include "nsDocShell.h"
-@@ -327,6 +329,7 @@ nsPresContext::nsPresContext(dom::Document* aDocument, nsPresContextType aType)
+@@ -327,6 +329,7 @@
  
    UpdateFontVisibility();
    UpdateForcedColors(/* aNotify = */ false);
@@ -208,7 +198,7 @@ index b2394c6106..d4cdbe4398 100644
  }
  
  static const char* gExactCallbackPrefs[] = {
-@@ -340,6 +343,9 @@ static const char* gExactCallbackPrefs[] = {
+@@ -340,6 +343,9 @@
      "layout.css.text-autospace.enabled",
      "layout.css.text-transform.uppercase-eszett.enabled",
      "privacy.trackingprotection.enabled",
@@ -218,7 +208,7 @@ index b2394c6106..d4cdbe4398 100644
      nullptr,
  };
  
-@@ -532,6 +536,14 @@ void nsPresContext::PreferenceChanged(const char* aPrefName) {
+@@ -532,6 +538,14 @@
    }
  
    nsDependentCString prefName(aPrefName);
@@ -233,7 +223,7 @@ index b2394c6106..d4cdbe4398 100644
    if (prefName.EqualsLiteral("layout.css.dpi") ||
        prefName.EqualsLiteral("layout.css.devPixelsPerPx")) {
      int32_t oldAppUnitsPerDevPixel = mDeviceContext->AppUnitsPerDevPixel();
-@@ -775,6 +784,103 @@ void nsPresContext::UpdateForcedColors(bool aNotify) {
+@@ -772,6 +786,103 @@
    }
  }
  
@@ -337,7 +327,7 @@ index b2394c6106..d4cdbe4398 100644
  bool nsPresContext::ForcingColors() const {
    return mForcedColors == StyleForcedColors::Active;
  }
-@@ -927,6 +1012,7 @@ void nsPresContext::RecomputeBrowsingContextDependentData() {
+@@ -936,6 +1047,7 @@
    }());
  
    UpdateForcedColors();
@@ -345,7 +335,7 @@ index b2394c6106..d4cdbe4398 100644
  
    SetInRDMPane(top->GetInRDMPane());
  
-@@ -1638,9 +1724,24 @@ nscolor nsPresContext::DefaultBackgroundColor() const {
+@@ -1647,9 +1759,24 @@
    if (!GetBackgroundColorDraw()) {
      return NS_RGB(255, 255, 255);
    }
@@ -373,11 +363,9 @@ index b2394c6106..d4cdbe4398 100644
  }
  
  nsDocShell* nsPresContext::GetDocShell() const {
-diff --git a/layout/base/nsPresContext.h b/layout/base/nsPresContext.h
-index 13aa7141c8..b6ffd4b24d 100644
 --- a/layout/base/nsPresContext.h
 +++ b/layout/base/nsPresContext.h
-@@ -362,6 +362,10 @@ class nsPresContext : public nsISupports,
+@@ -362,6 +362,10 @@
    }
  
    mozilla::StyleForcedColors ForcedColors() const { return mForcedColors; }
@@ -388,7 +376,7 @@ index 13aa7141c8..b6ffd4b24d 100644
    bool ForcingColors() const;
  
    mozilla::ColorScheme DefaultBackgroundColorScheme() const;
-@@ -565,8 +569,14 @@ class nsPresContext : public nsISupports,
+@@ -565,8 +569,14 @@
    void SetInRDMPane(bool aInRDMPane);
    void UpdateInnerSizeSpoofedForRFP();
    void UpdateForcedColors(bool aNotify = true);
@@ -403,10 +391,10 @@ index 13aa7141c8..b6ffd4b24d 100644
    float GetFullZoom() { return mFullZoom; }
    /**
     * Device full zoom differs from full zoom because it gets the zoom from
-@@ -1440,6 +1450,18 @@ class nsPresContext : public nsISupports,
-   FontVisibility mFontVisibility = FontVisibility::Unknown;
-   mozilla::dom::PrefersColorSchemeOverride mOverriddenOrEmbedderColorScheme;
-   mozilla::StyleForcedColors mForcedColors;
+@@ -1440,6 +1450,18 @@
+   void LastRelease();
+ 
+   void EnsureTheme();
 +  // gjoa engine-level dark mode flag (content-only). See UpdateColorInversion.
 +  bool mColorInversion = false;
 +  // gjoa hybrid: a themeless document classified pre-paint by
@@ -420,13 +408,11 @@ index 13aa7141c8..b6ffd4b24d 100644
 +  float mColorInversionFloorL = 0.20f;
 +  float mColorInversionCeilL = 0.92f;
  
-  protected:
-   virtual ~nsPresContext();
-diff --git a/servo/components/style/device/gecko.rs b/servo/components/style/device/gecko.rs
-index 7ed8c2c7a1..54ffa6f483 100644
+ #ifdef DEBUG
+  private:
 --- a/servo/components/style/device/gecko.rs
 +++ b/servo/components/style/device/gecko.rs
-@@ -389,6 +389,30 @@ impl Device {
+@@ -389,6 +389,30 @@
              .map_or(ForcedColors::None, |pc| pc.mForcedColors)
      }
  
@@ -457,11 +443,9 @@ index 7ed8c2c7a1..54ffa6f483 100644
      /// Computes a system color and returns it as an nscolor.
      pub(crate) fn system_nscolor(
          &self,
-diff --git a/servo/components/style/values/specified/color.rs b/servo/components/style/values/specified/color.rs
-index 9c55023eb0..48d9244a64 100644
 --- a/servo/components/style/values/specified/color.rs
 +++ b/servo/components/style/values/specified/color.rs
-@@ -860,6 +860,60 @@ impl Color {
+@@ -868,6 +868,60 @@
      }
  }
  
@@ -522,7 +506,7 @@ index 9c55023eb0..48d9244a64 100644
  impl Color {
      /// Converts this Color into a ComputedColor.
      ///
-@@ -885,7 +939,7 @@ impl Color {
+@@ -893,7 +947,7 @@
              }};
          }
  
@@ -531,7 +515,7 @@ index 9c55023eb0..48d9244a64 100644
              Color::CurrentColor => ComputedColor::CurrentColor,
              Color::Absolute(ref absolute) => {
                  let mut color = absolute.color;
-@@ -931,7 +985,46 @@ impl Color {
+@@ -936,7 +990,46 @@
              Color::InheritFromBodyQuirk => {
                  ComputedColor::Absolute(context.ok_or(())?.device().body_text_color())
              },

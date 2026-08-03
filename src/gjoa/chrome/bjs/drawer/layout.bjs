@@ -132,7 +132,7 @@
 
         ;; --- sync-symmetric-footer-once ---
         sync-symmetric-footer-once (fn []
-          (let [sidebar-main-el (by-id "sidebar-main")]
+          (let [sidebar-main-el (by-id "sidebar-container")]
             (if (not sidebar-main-el)
               true
               (let [nav-bar-el (q sidebar-main-el "#nav-bar")
@@ -255,7 +255,7 @@
     (sync-symmetric-footer)
     (on! window "resize" sync-symmetric-footer)
 
-    (let [sidebar-main-el (by-id "sidebar-main")
+    (let [sidebar-main-el (by-id "sidebar-container")
           sym-resize-obs (ResizeObserver. sync-symmetric-footer)]
       (when sidebar-main-el (.observe sym-resize-obs sidebar-main-el))
 
@@ -276,7 +276,7 @@
         ;; FF clears that attribute on a vertical→horizontal flip ONLY when sidebar.visibility
         ;; is "hide-sidebar". gjoa runs the default "always-show", so the attribute stays set
         ;; and collapse() NEVER fired on a runtime flip — #navigator-toolbox stayed reparented
-        ;; inside #sidebar-main, and FF's nav-bar buildArea then DROPPED the removable
+        ;; inside #sidebar-container, and FF's nav-bar buildArea then DROPPED the removable
         ;; #stop-reload-button + #sidebar-button (keeping non-removable back/forward/urlbar).
         ;; Fix: trigger collapse/expand off verticalTabs, and after the flip re-ensure the
         ;; widgets FF may have dropped (deferred a tick so it runs AFTER FF's buildArea).

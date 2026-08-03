@@ -3,7 +3,7 @@
 ;;
 ;; THE BUG: collapsing the sidebar used to shrink it toward favicon width but it
 ;; STAYED WIDE — drawer/layout.bjs `expand` pins an inline `width:NNNpx` on
-;; #sidebar-main (the persisted `gjoa.sidebar.width`), and that inline style
+;; #sidebar-container (the persisted `gjoa.sidebar.width`), and that inline style
 ;; OVERRODE the native icon-strip width once collapsed, so the strip never
 ;; narrowed and tab labels kept showing. THE FIX: `collapse` now
 ;; `removeProperty('width')` so the strip reverts to its favicon width, and
@@ -11,12 +11,12 @@
 ;;
 ;; This is runtime DOM/layout behavior (computed width across a collapse/expand
 ;; cycle + presence of an inline width style), not a statically-checkable string,
-;; so it must boot a browser. #sidebar-main is CHROME, so a Marionette
+;; so it must boot a browser. #sidebar-container is CHROME, so a Marionette
 ;; chrome-context executeScript reads its rects directly — no content discard, no
 ;; network, DEFAULT lane.
 ;;
 ;; Collapse/expand are driven exactly as FF drives them at runtime: toggling the
-;; `sidebar-launcher-expanded` attribute on #sidebar-main, which layout.bjs's
+;; `sidebar-launcher-expanded` attribute on #sidebar-container, which layout.bjs's
 ;; MutationObserver (attributeFilter ["sidebar-launcher-expanded"]) watches to
 ;; call expand()/collapse(). We await the real post-mutation DOM state — never a
 ;; fixed sleep.
@@ -34,7 +34,7 @@
   Services.prefs.setBoolPref('sidebar.verticalTabs', true);
   Services.prefs.setBoolPref('sidebar.revamp', true);
   Services.prefs.setIntPref('gjoa.sidebar.width', 320);
-  const sm = document.getElementById('sidebar-main');
+  const sm = document.getElementById('sidebar-container');
   if (sm && !sm.hasAttribute('sidebar-launcher-expanded')) {
     sm.setAttribute('sidebar-launcher-expanded', '');
   }
@@ -46,7 +46,7 @@
 ;; Force a collapse the way FF does at runtime: drop the attribute the drawer's
 ;; MutationObserver keys off, which calls collapse().
 (def DRIVE-COLLAPSE :- String "
-  const sm = document.getElementById('sidebar-main');
+  const sm = document.getElementById('sidebar-container');
   if (!sm) return false;
   sm.removeAttribute('sidebar-launcher-expanded');
   return true;
@@ -54,18 +54,18 @@
 
 ;; Force a re-expand the same way: re-add the attribute → expand().
 (def DRIVE-EXPAND :- String "
-  const sm = document.getElementById('sidebar-main');
+  const sm = document.getElementById('sidebar-container');
   if (!sm) return false;
   sm.setAttribute('sidebar-launcher-expanded', '');
   return true;
 ")
 
-;; Snapshot #sidebar-main's measured width AND its inline width style. The inline
+;; Snapshot #sidebar-container's measured width AND its inline width style. The inline
 ;; style is the actual bug surface — a non-empty `style.width` is what pinned the
 ;; strip wide when collapsed.
 (def MEASURE-SIDEBAR :- String "
-  const sm = document.getElementById('sidebar-main');
-  if (!sm) return { error: 'no #sidebar-main' };
+  const sm = document.getElementById('sidebar-container');
+  if (!sm) return { error: 'no #sidebar-container' };
   const r = sm.getBoundingClientRect();
   return {
     width: r.width,
@@ -83,7 +83,7 @@
        ;; drawer's expand/collapse never wires up — the attribute toggle would
        ;; then be a no-op and a "narrow" assertion could pass on native FF
        ;; defaults rather than on our fix. Fail loudly + specifically.
-       (expect (.-hasSidebarMain pre) "no #sidebar-main — not a gjoa chrome window")
+       (expect (.-hasSidebarMain pre) "no #sidebar-container — not a gjoa chrome window")
        (expect (and (.-hasToolbar pre) (.-hasGjoaTest pre))
          (str "gjoa drawer chrome did not initialize (#gjoa-urlbar-toolbar / "
               "window.gjoaTest missing) — e.g. GjoaLoader $$bc-runtime mismatch in a "
@@ -93,7 +93,7 @@
      ;; Settle the EXPANDED state: expand() must have pinned the persisted inline
      ;; width and the drawer must be wide (well past favicon).
      (js/await (await-true
-                 (str "const sm = document.getElementById('sidebar-main');"
+                 (str "const sm = document.getElementById('sidebar-container');"
                       "if (!sm) return false;"
                       "return sm.hasAttribute('sidebar-launcher-expanded') &&"
                       "       sm.getBoundingClientRect().width > 200;")
@@ -105,7 +105,7 @@
               "px (expected > 200; expand() should pin the 320px persisted width). "
               (JSON/stringify exp)))
        (expect (.-hasInlineWidth exp)
-         (str "expand() did not pin an inline width on #sidebar-main — the "
+         (str "expand() did not pin an inline width on #sidebar-container — the "
               "expand-restore half of the fix is gone (collapse would have nothing "
               "to clear). " (JSON/stringify exp))))
 
@@ -115,7 +115,7 @@
      ;; width AND no inline width style remains. The OLD bug failed both — the
      ;; inline width:320px pinned the measured width wide. < 80px = favicon strip.
      (js/await (await-true
-                 (str "const sm = document.getElementById('sidebar-main');"
+                 (str "const sm = document.getElementById('sidebar-container');"
                       "if (!sm || sm.hasAttribute('sidebar-launcher-expanded')) return false;"
                       "const w = sm.getBoundingClientRect().width;"
                       "return w > 0 && w < 80 && sm.style.width === '';")
@@ -127,7 +127,7 @@
               "the wrong state. " (JSON/stringify col)))
        ;; THE FIX, part 1: no inline width style survives the collapse.
        (expect (not (.-hasInlineWidth col))
-         (str "collapsed #sidebar-main STILL has an inline width style ('"
+         (str "collapsed #sidebar-container STILL has an inline width style ('"
               (.-inlineWidth col) "') — collapse() did not removeProperty('width'); "
               "this inline width pins the strip wide (the regression). "
               (JSON/stringify col)))
@@ -140,7 +140,7 @@
      ;; --- EXPAND: must restore the persisted width ---
      (js/await (.executeScript mn DRIVE-EXPAND))
      (js/await (await-true
-                 (str "const sm = document.getElementById('sidebar-main');"
+                 (str "const sm = document.getElementById('sidebar-container');"
                       "if (!sm || !sm.hasAttribute('sidebar-launcher-expanded')) return false;"
                       "return sm.style.width !== '' && sm.getBoundingClientRect().width > 200;")
                  5000))

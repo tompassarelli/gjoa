@@ -27,7 +27,7 @@ jobs:
     runs-on: ${{ inputs.fast && 'blacksmith-16vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 360
     env:
-      FF_VERSION: "152.0.6"
+      FF_VERSION: "153.0.1"
       # Pinned beagle worktree: the build tooling (.bjs + package.json) resolves
       # beagle-build / beagle from $BEAGLE_PIN_ROOT (default ~/code/beagle-pin).
       # CI clones the pin SHA into ../beagle and points the build at it, so the
@@ -247,6 +247,16 @@ jobs:
         run: |
           export MOZBUILD_STATE_PATH="$HOME/.mozbuild"
           ./mach package
+
+      - name: Package Windows ZIP
+        working-directory: engine
+        run: |
+          TAR="$(realpath "$(find obj-* -path '*/dist/*.win64.tar' -print -quit)")"
+          test -s "$TAR" || { echo "::error::Windows package tar not found"; exit 1; }
+          STAGE="$(mktemp -d)"
+          tar -xf "$TAR" -C "$STAGE"
+          (cd "$STAGE" && zip -q -r "${TAR%.tar}.zip" gjoa)
+          test -s "${TAR%.tar}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

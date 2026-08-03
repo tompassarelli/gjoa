@@ -14,7 +14,7 @@
                                            SRC-DIR]]
             [gjoa.tools.prep.log :refer [log]]))
 (define-mode strict)
-(declare-extern [Bun] Any)
+(declare-extern [Bun process] Any)
 
 ;; beagle-build compiles the pref .bjs sources to pref() JS at import time (same
 ;; resolution as tools/build-tools.bjs). The pref files are the one source-tree
@@ -22,8 +22,11 @@
 ;; It's a bash script (no Windows shebang support) — launched via `bash` at the
 ;; :cmd site; forward-slash the path for bash on Windows. (.fromCharCode String 92)
 ;; is a backslash; no-op on *nix.
+(def BEAGLE-PIN-ROOT :- String
+  (or (.-BEAGLE_PIN_ROOT (.-env process))
+      (resolve (.-HOME (.-env process)) "code" "beagle-pin")))
 (def BEAGLE-BUILD :- String
-  (.replaceAll (resolve REPO-ROOT ".." "beagle" "bin" "beagle-build") (String/fromCharCode 92) "/"))
+  (.replaceAll (resolve BEAGLE-PIN-ROOT "bin" "beagle-build") (String/fromCharCode 92) "/"))
 
 ;; Files we string-substitute. Anything else (binary icons, archive formats,
 ;; platform-specific blobs) is copied as-is from the unofficial template.

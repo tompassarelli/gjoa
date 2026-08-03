@@ -6,7 +6,7 @@
 (declare-extern [gBrowserInit Services ChromeUtils] Any)
 
 (js/export (def ids :- Any
-  {:sidebar-main        (fn [] (by-id "sidebar-main"))
+  {:sidebar-main        (fn [] (by-id "sidebar-container"))
    :navigator-toolbox   (fn [] (by-id "navigator-toolbox"))
    :urlbar              (fn [] (by-id "urlbar"))
    :urlbar-container    (fn [] (by-id "urlbar-container"))
