@@ -120,7 +120,7 @@ One language, one type system, one set of macros, spanning:
 | Nix config | `.bnix` (peer repo) | ❌ |
 
 TS owns the first row. Beagle owns all six — with the same inline types, the same
-`expect`/`mi`/`pref` macros, the same compiler and repair loop everywhere. That is
+`expect`/`mi`/`pref` macros, the same compiler and authoring loop everywhere. That is
 not a line-count argument; it's a "one mental model for the entire system" argument,
 and it is not available in TS at any price.
 
@@ -249,7 +249,7 @@ CI-gated**; cross-module and higher-order edges are the next layers.
 | **stack uniformity** | **decisive** — one typed, macro-enabled language for the whole stack |
 | **effect discipline** | **decisive** — `!`-purity is enforced (the one bug class `tsc` cannot catch) |
 | **code as claims** | **shipped + CI-gated**: identity-anchored churn-proof patches **and** a bare-call graph over gjoa's own source (who-calls / blast-radius / leverage), collision-free across modules and verified ⊇ the compiler's own caller analysis |
-| **correctness tooling** | macros + a repair loop with pointed, structured compile errors |
+| **correctness tooling** | macros + an authoring loop with pointed, structured compile errors |
 
 The case for Beagle is **macros + uniformity + effect discipline + code-as-claims**,
 demonstrated, not **"fewer lines"** or **"faster,"** asserted. Lead with what's true
