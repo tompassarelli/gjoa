@@ -1,12 +1,13 @@
 #lang beagle/js
 (ns gjoa.drawer.layout
-  (:require [gjoa.macros :refer [by-id q xul-new xul-id pref-int set-pref-int! pref-bool on! off! has?]]
+  (:require [gjoa.macros :refer [by-id q xul-new xul-id pref-int set-pref-int! pref-bool set-pref-bool! on! off! has?]]
             [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
 (declare-extern [window Services CustomizableUI] Any)
 
 (def WIDTH-PREF :- String "gjoa.sidebar.width")
+(def REPAIR-PREF :- String "gjoa.navbar.repaired")
 
 (js/export (defn make-layout! [deps] :- Any
   (let [{:keys [sidebarMain navigatorToolbox urlbarContainer navBar urlbar]} deps
@@ -243,12 +244,69 @@
         ;; --- context-menu fix ---
         on-context-menu (fn [e]
           (when (= (.-parentNode navigator-toolbox) sidebar-main)
-            (.stopPropagation e)))]
+            (.stopPropagation e)))
+
+        ;; --- nav-bar widget repair (#122) ---
+        ;; #gjoa-sidebar-button is a swap of the native #sidebar-button node, so a
+        ;; lost sidebar-button placement removes BOTH visible buttons.
+        placement-of (fn [id]
+          (try (.getPlacementOfWidget CustomizableUI id) (catch Any _e nil)))
+
+        build-in-window! (fn [id]
+          (try
+            (when (and (placement-of id) (nil? (by-id id)))
+              (.ensureWidgetPlacedInWindow CustomizableUI id window))
+            (catch Any _e nil)))
+
+        ;; addWidgetToArea APPENDS when position is nil, permanently reordering the
+        ;; user's persisted nav-bar, so always hand it the slot the widget came from.
+        re-add! (fn [id position]
+          (try
+            (when (nil? (placement-of id))
+              (.addWidgetToArea CustomizableUI id "nav-bar" position))
+            (catch Any _e nil)))
+
+        ;; Persisted slot only — visual order is pinned by nav-bar CSS `order`,
+        ;; since this index and the DOM disagree (FF's vertical-tabs migration).
+        nav-bar-slot-after (fn [anchor-id]
+          (try
+            (let [p (placement-of anchor-id)]
+              (if (and p (= (.-area p) "nav-bar")) (+ (.-position p) 1) nil))
+            (catch Any _e nil)))
+
+        ;; Called pre-buildArea: a placement live here and gone a tick later was
+        ;; dropped BY the flip. A user-removed one already reads null, because
+        ;; SidebarManager forces verticalTabs=false a microtask AFTER the removal.
+        snapshot-placements (fn []
+          (.map ["stop-reload-button" "sidebar-button"]
+            (fn [id]
+              (let [p (placement-of id)]
+                {:id id :live (not (nil? p)) :position (if p (.-position p) nil)}))))
+
+        repair-dropped! (fn [snap]
+          (.forEach snap
+            (fn [entry]
+              (when (.-live entry) (re-add! (.-id entry) (.-position entry)))
+              (build-in-window! (.-id entry)))))
+
+        ;; Heals a profile #122 already persisted as broken. Must stay ONE-shot:
+        ;; re-adding per window init makes both widgets unremovable, since removing
+        ;; sidebar-button forces horizontal tabs, which re-enters the repair below.
+        heal-once! (fn []
+          (when (not (pref-bool REPAIR-PREF false))
+            (re-add! "stop-reload-button" (nav-bar-slot-after "forward-button"))
+            ;; no slot: gjoa's nav-bar CSS `order` owns where this one renders.
+            (re-add! "sidebar-button" nil)
+            (set-pref-bool! REPAIR-PREF true))
+          (build-in-window! "stop-reload-button")
+          (build-in-window! "sidebar-button"))]
 
     ;; --- wire up ---
     (on! navigator-toolbox "contextmenu" on-context-menu)
 
     (inject-sidebar-shadow-overrides)
+    ;; Must precede make-sidebar-button! (index.bjs) — the swap needs the native node.
+    (heal-once!)
     (when (has? sidebar-main "sidebar-launcher-expanded") (expand))
 
     ;; --- symmetric footer ---
@@ -278,29 +336,18 @@
         ;; and collapse() NEVER fired on a runtime flip — #navigator-toolbox stayed reparented
         ;; inside #sidebar-container, and FF's nav-bar buildArea then DROPPED the removable
         ;; #stop-reload-button + #sidebar-button (keeping non-removable back/forward/urlbar).
-        ;; Fix: trigger collapse/expand off verticalTabs, and after the flip re-ensure the
-        ;; widgets FF may have dropped (deferred a tick so it runs AFTER FF's buildArea).
-        (let [reensure (fn []
-                         ;; FF dropped the widgets' PLACEMENTS entirely on the flip
-                         ;; (getPlacementOfWidget -> null), so there's nothing to rebuild —
-                         ;; re-ADD them to the nav-bar (verified: restores both). Only when
-                         ;; the placement is actually gone, so a healthy flip is a no-op.
-                         ;; Visual position is owned by gjoa's nav-bar CSS `order`.
-                         (try
-                           (when (nil? (.getPlacementOfWidget CustomizableUI "stop-reload-button"))
-                             (.addWidgetToArea CustomizableUI "stop-reload-button" "nav-bar"))
-                           (when (nil? (.getPlacementOfWidget CustomizableUI "sidebar-button"))
-                             (.addWidgetToArea CustomizableUI "sidebar-button" "nav-bar"))
-                           (catch Any _e nil)))
-              vt-observer {:observe
+        ;; Fix: trigger collapse/expand off verticalTabs, and restore whatever buildArea
+        ;; then dropped — snapshot synchronously, repair a tick later (post-buildArea).
+        (let [vt-observer {:observe
                            (fn [_s _t _d]
                              (let [vertical (pref-bool "sidebar.verticalTabs" true)]
                                (if vertical
                                  (when (and (has? sidebar-main "sidebar-launcher-expanded")
                                             (not (.-urlbar-toolbar state)))
                                    (expand))
-                                 (do (when (.-urlbar-toolbar state) (collapse))
-                                     (.setTimeout window reensure 0)))
+                                 (let [snap (snapshot-placements)]
+                                   (when (.-urlbar-toolbar state) (collapse))
+                                   (.setTimeout window (fn [] (repair-dropped! snap)) 0)))
                                (sync-symmetric-footer)))}]
           (.addObserver (.-prefs Services) "sidebar.verticalTabs" vt-observer))
 

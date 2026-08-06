@@ -1,15 +1,16 @@
 #lang beagle/js
-;; Verify the gjoa nav-bar layout per 2026-05-27 user spec:
-;;   [☰ hamburger][□ taskbar-tabs-favicon]  ←GAP→  [← → ↻ 🧩]
+;; Verify the gjoa nav-bar layout per the 2026-07-11 owner spec v2:
+;;   [☰ hamburger][🧩 extensions]  ←GAP→  [← → ↻][□ sidebar-toggle]
 ;;
-;; Hamburger + sidebar-toggle (taskbar-tabs-favicon in 151 vertical+revamp)
-;; pin LEFT via CSS `order`. nav-bar-customization-target (back / forward
-;; / refresh / extensions) pins RIGHT via `margin-inline-start: auto`.
+;; Hamburger pins LEFT via CSS `order`; extensions is glued to it. The
+;; sidebar-toggle is DOM-inserted INSIDE nav-bar-customization-target right
+;; after stop-reload (chrome/bjs/drawer/sidebar-button.bjs) and lands rightmost
+;; via `order: 1` — i.e. immediately right of refresh in both modes.
 ;;
 ;; Asserts visual left-to-right ordering AND that there's a visible gap
 ;; between the left group and the right group.
 (ns gjoa.tests.integration.nav-bar-layout
-  (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect expect-eq]]))
+  (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect]]))
 (define-mode strict)
 
 ;; `IntegrationTest` from ../../tools/test-driver/runner is a type-only
@@ -27,6 +28,7 @@
     \"back-button\",
     \"forward-button\",
     \"stop-reload-button\",
+    \"gjoa-sidebar-button\",
     \"unified-extensions-button\",
   ];
   const result = {};
@@ -68,19 +70,23 @@
 ")
 
 (def tests :- Any
-  [(deftest "nav-bar — gjoa-sidebar-button (if present) is direct child of nav-bar, adjacent to PanelUI-button" [mn]
+  [(deftest "nav-bar — gjoa-sidebar-button (if present) lives in nav-bar, immediately right of refresh" [mn]
      (let [r (chrome-eval "
         const navBar = document.getElementById(\"nav-bar\");
         const pui = document.getElementById(\"PanelUI-button\");
         if (!pui) throw new Error(\"no PanelUI-button\");
         const gj = document.getElementById(\"gjoa-sidebar-button\");
+        const refresh = document.getElementById(\"stop-reload-button\");
         const puiR = pui.getBoundingClientRect();
         const gjR = gj ? gj.getBoundingClientRect() : null;
+        const rfR = refresh ? refresh.getBoundingClientRect() : null;
         return {
           gjoaBtn: gj ? {
             parentId: gj.parentElement ? (gj.parentElement.id || gj.parentElement.tagName) : \"\",
+            inNavBar: navBar ? navBar.contains(gj) : false,
             left: gjR.left, right: gjR.right, top: gjR.top,
           } : null,
+          refresh: rfR ? { left: rfR.left, right: rfR.right } : null,
           panelUI: { left: puiR.left, right: puiR.right, top: puiR.top },
         };
       ")]
@@ -88,16 +94,25 @@
        ;; #sidebar-button to swap), this assertion is moot — skip (the body
        ;; only runs when gjoaBtn is present; otherwise the test passes).
        (when (.-gjoaBtn r)
-         (expect-eq (.-parentId (.-gjoaBtn r)) "nav-bar"
-           (str "#gjoa-sidebar-button must be a direct child of #nav-bar. "
-                "(layout-reparent in src/drawer/sidebar-button.ts didn't run)"))
-         ;; Adjacent to hamburger: gjoa-btn.left should be within ~50px of
-         ;; PanelUI's right edge (allowing for normal toolbar gap).
-         (let [gap (- (.-left (.-gjoaBtn r)) (.-right (.-panelUI r)))]
-           (expect (not (or (< gap 0) (> gap 50)))
-             (str "#gjoa-sidebar-button not adjacent to hamburger: "
-                  "PanelUI.right=" (.-right (.-panelUI r)) " gjoaBtn.left=" (.-left (.-gjoaBtn r)) " gap=" gap "px "
-                  "(expected 0-50px)."))))))
+         (expect (.-inNavBar (.-gjoaBtn r))
+           (str "#gjoa-sidebar-button must live inside the #nav-bar subtree, found under \""
+                (.-parentId (.-gjoaBtn r)) "\". "
+                "(install! in src/gjoa/chrome/bjs/drawer/sidebar-button.bjs didn't run)"))
+         ;; install! inserts after #stop-reload-button (a customization-target
+         ;; grandchild); the direct #nav-bar child slot is the no-refresh fallback.
+         (expect (or (= (.-parentId (.-gjoaBtn r)) "nav-bar-customization-target")
+                     (= (.-parentId (.-gjoaBtn r)) "nav-bar"))
+           (str "#gjoa-sidebar-button parent must be #nav-bar-customization-target "
+                "(or #nav-bar in the no-refresh fallback), got \"" (.-parentId (.-gjoaBtn r)) "\"."))
+         ;; Rightmost via `order: 1` — so it sits just right of refresh when refresh
+         ;; is on the row, and falls back to hugging the hamburger when it isn't.
+         (let [anchor (if (.-refresh r) (.-refresh r) (.-panelUI r))
+               anchor-name (if (.-refresh r) "stop-reload-button" "PanelUI-button")
+               gap (- (.-left (.-gjoaBtn r)) (.-right anchor))]
+           (expect (not (or (< gap -2) (> gap 50)))
+             (str "#gjoa-sidebar-button not adjacent to #" anchor-name ": "
+                  anchor-name ".right=" (.-right anchor) " gjoaBtn.left=" (.-left (.-gjoaBtn r)) " gap=" gap "px "
+                  "(expected -2 to 50px)."))))))
 
    (deftest "nav-bar — all visible top-row icons share the same vertical CENTER (±2px)" [mn]
      (let [r (chrome-eval allIconYCheck)]
@@ -121,7 +136,7 @@
                       "(diff=" (.toFixed (- c refC) 1) "px, tolerance ±" TOL ").\n"
                       "All hits: " (JSON/stringify (.-hits r) nil 2)))))))))
 
-   (deftest "nav-bar — [hamburger][sidebar][ext] left-anchored, [back forward refresh] right-anchored" [mn]
+   (deftest "nav-bar — [hamburger][ext] left-anchored, [back forward refresh][sidebar] right-anchored" [mn]
      (let [rects (chrome-eval layoutCheck)
            hamburger (get rects "PanelUI-button")
            navBar (get rects "__nav-bar__")
@@ -152,13 +167,13 @@
               "ext.right=" (.-right ext) " back.left=" (.-left back) ".\n"
               (JSON/stringify rects nil 2)))
 
-       ;; The right group (back/forward/refresh) must be ACTUALLY anchored
-       ;; to the right of nav-bar. Use the right-most of the three (refresh
-       ;; if present, else forward, else back) and assert its right edge is
-       ;; within 60px of nav-bar's right edge.
-       (let [refresh (get rects "stop-reload-button")
+       ;; The right group must be ACTUALLY anchored to the right of nav-bar.
+       ;; Rightmost per spec v2 is the sidebar-toggle (`order: 1`), then refresh /
+       ;; forward / back; assert its right edge is within 60px of nav-bar's.
+       (let [sidebar (get rects "gjoa-sidebar-button")
+             refresh (get rects "stop-reload-button")
              forward (get rects "forward-button")
-             rightmost (or refresh forward back)
+             rightmost (or sidebar refresh forward back)
              distFromRight (- (.-right navBar) (.-right rightmost))]
          (expect (not (> distFromRight 60))
            (str "Right group not anchored to right edge: rightmost-button.right=" (.-right rightmost) " "

@@ -12,21 +12,34 @@
 
 ;; Returns {horizontal, missing:[...]} — `missing` names any expected toolbar icon
 ;; that is absent OR not visible (display:none / zero-width). Empty == healthy.
+;; The sidebar slot accepts EITHER id: install! swaps the native #sidebar-button
+;; for #gjoa-sidebar-button and display:none's the original, so asserting the
+;; native node is visible would fail on every profile where the swap ran.
 (def buttonsCheck :- String "
   const want = {
     'back-button': 'back', 'forward-button': 'forward', 'stop-reload-button': 'refresh',
-    'urlbar-container': 'urlbar', 'sidebar-button': 'sidebar',
+    'urlbar-container': 'urlbar', 'gjoa-sidebar-button|sidebar-button': 'sidebar',
     'unified-extensions-button': 'extensions', 'PanelUI-button': 'hamburger'
   };
   const win = window;
   const missing = [];
-  for (const id of Object.keys(want)) {
-    const e = document.getElementById(id);
-    if (!e) { missing.push(want[id] + ' (#' + id + ' ABSENT)'); continue; }
+  const visible = (e) => {
+    if (!e) return false;
     const cs = win.getComputedStyle(e);
-    const r = e.getBoundingClientRect();
-    if (cs.display === 'none' || cs.visibility === 'hidden' || r.width < 1)
-      missing.push(want[id] + ' (#' + id + ' hidden display=' + cs.display + ' w=' + Math.round(r.width) + ')');
+    return cs.display !== 'none' && cs.visibility !== 'hidden' &&
+           e.getBoundingClientRect().width >= 1;
+  };
+  for (const key of Object.keys(want)) {
+    const ids = key.split('|');
+    if (ids.some(id => visible(document.getElementById(id)))) continue;
+    const why = ids.map(id => {
+      const e = document.getElementById(id);
+      if (!e) return '#' + id + ' ABSENT';
+      const cs = win.getComputedStyle(e);
+      return '#' + id + ' hidden display=' + cs.display +
+             ' w=' + Math.round(e.getBoundingClientRect().width);
+    }).join(' / ');
+    missing.push(want[key] + ' (' + why + ')');
   }
   return { horizontal: document.documentElement.hasAttribute('gjoa-horizontal-tabs'), missing: missing };
 ")

@@ -578,6 +578,19 @@
 #nav-bar > #nav-bar-customization-target {
   flex: 1 1 auto !important;
 }
+/* back → forward → refresh, pinned by `order` because neither DOM order nor the
+ * nav-bar placements array is authoritative here (FF's vertical-tabs migration
+ * reorders the array without moving the non-removable back/forward nodes).
+ * Negative keeps the cluster ahead of the default-order urlbar/springs/ext. */
+#nav-bar > #nav-bar-customization-target > #back-button {
+  order: -3 !important;
+}
+#nav-bar > #nav-bar-customization-target > #forward-button {
+  order: -2 !important;
+}
+#nav-bar > #nav-bar-customization-target > #stop-reload-button {
+  order: -1 !important;
+}
 /* Since 2026-07-11 gjoa-sidebar-button is DOM-inserted INSIDE
  * nav-bar-customization-target, right after stop-reload (see
  * chrome/bjs/drawer/sidebar-button.bjs) — so in horizontal/compact mode it
@@ -609,13 +622,22 @@
 }
 /* Descendant (not `>`): the button is DOM-inserted INSIDE
  * nav-bar-customization-target (after stop-reload), so it's a target grandchild
- * here, not a direct #nav-bar child. order 1 lands it RIGHTMOST — after back/
- * forward/stop-reload (order 0), past the spring (-1) and extensions (-2) —
- * giving the trailing [□] in [☰][🧩] ─gap─ [← → ↻][□]. Matches the rare
- * direct-child fallback too (compact `#nav-bar > #gjoa-sidebar-button` is
- * also order 1). */
+ * here, not a direct #nav-bar child. order 4 lands it RIGHTMOST — after
+ * back/forward/refresh (1/2/3), past the spring (-1) and extensions (-2) —
+ * giving the trailing [□] in [☰][🧩] ─gap─ [← → ↻][□]. */
 #sidebar-container #nav-bar #gjoa-sidebar-button {
+  order: 4 !important;
+}
+/* Same pin as the compact block, positive here so the cluster trails the
+ * extensions button (-2) and the free-space spring (-1). 4 IDs outranks it. */
+#sidebar-container #nav-bar > #nav-bar-customization-target > #back-button {
   order: 1 !important;
+}
+#sidebar-container #nav-bar > #nav-bar-customization-target > #forward-button {
+  order: 2 !important;
+}
+#sidebar-container #nav-bar > #nav-bar-customization-target > #stop-reload-button {
+  order: 3 !important;
 }
 #sidebar-container #nav-bar > #taskbar-tabs-favicon {
   order: -8 !important;

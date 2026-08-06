@@ -22,6 +22,12 @@
         #(when (has? sidebar-button %)
            (attr! button % (or (.getAttribute sidebar-button %) ""))))
 
+      ;; Must follow the copy loop — it copies `removable` off the native widget.
+      ;; CustomizableUI's buildArea sweeps unregistered removable toolbarbuttons out
+      ;; of #nav-bar into the palette; skipintoolbarset is the escape hatch.
+      (attr! button "removable" "false")
+      (attr! button "skipintoolbarset" "true")
+
       (when og-icon-style
         (set! (.-listStyleImage (.-style button)) og-icon-style))
 
@@ -152,8 +158,10 @@
   (let [{:keys [sidebarMain compact]} deps
         log (create-logger! "drawer/sidebar-button")
         sidebar-main sidebarMain
+        ;; drawer/layout's heal-once! ran first (index.bjs calls make-layout! before
+        ;; this, unguarded), so the native node is already restored where possible.
         native (by-id "sidebar-button")]
     (if native
       (install! native sidebar-main compact)
-      (do (log "init:no native #sidebar-button (vertical-tabs+revamp mode) — skipping custom-button swap")
+      (do (log "init:no native #sidebar-button after nav-bar repair — skipping custom-button swap")
           {:destroy #(do nil)})))))
