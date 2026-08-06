@@ -1,14 +1,8 @@
 #lang beagle/js
-;; Verify the gjoa nav-bar layout per the 2026-07-11 owner spec v2:
-;;   [☰ hamburger][🧩 extensions]  ←GAP→  [← → ↻][□ sidebar-toggle]
-;;
-;; Hamburger pins LEFT via CSS `order`; extensions is glued to it. The
-;; sidebar-toggle is DOM-inserted INSIDE nav-bar-customization-target right
-;; after stop-reload (chrome/bjs/drawer/sidebar-button.bjs) and lands rightmost
-;; via `order: 1` — i.e. immediately right of refresh in both modes.
-;;
-;; Asserts visual left-to-right ordering AND that there's a visible gap
-;; between the left group and the right group.
+;; Verify the gjoa nav-bar layout per OWNER ROW-ORDER SPEC v3 (supersedes v2):
+;;   VERTICAL/expanded:  [☰ hamburger][🧩 extensions][□ sidebar-toggle]  ←GAP→  [← → ↻]
+;;   HORIZONTAL/compact: [← → ↻] <urlbar> [□ sidebar-toggle][🧩 extensions][☰ hamburger]
+;; Asserts visual left-to-right ordering AND a visible gap between groups.
 (ns gjoa.tests.integration.nav-bar-layout
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect await-true wait-for]]))
 (define-mode strict)
@@ -49,17 +43,17 @@
   }
 ")
 
-;; EXPANDED/vertical order per gjoa.uc.css `#sidebar-container #nav-bar` (owner spec v2, 2026-07-11).
+;; EXPANDED/vertical order per gjoa.uc.css `#sidebar-container #nav-bar` (owner spec v3).
 (def verticalOrderIds :- String
   (str orderCheckFn
     "return checkOrder(['PanelUI-button', 'unified-extensions-button', "
-    "'back-button', 'forward-button', 'stop-reload-button', 'gjoa-sidebar-button|sidebar-button']);"))
+    "'gjoa-sidebar-button|sidebar-button', 'back-button', 'forward-button', 'stop-reload-button']);"))
 
-;; COMPACT/horizontal order per gjoa.uc.css unscoped block (measured DOM order, not the aspirational one in horizontal-toolbar.bjs's message string).
+;; COMPACT/horizontal order per gjoa.uc.css unscoped block (owner spec v3).
 (def horizontalOrderIds :- String
   (str orderCheckFn
     "return checkOrder(['back-button', 'forward-button', 'stop-reload-button', 'urlbar-container', "
-    "'unified-extensions-button', 'gjoa-sidebar-button|sidebar-button', 'PanelUI-button']);"))
+    "'gjoa-sidebar-button|sidebar-button', 'unified-extensions-button', 'PanelUI-button']);"))
 
 (def allIconYCheck :- String "
   // Collect every visible icon in nav-bar (any depth — including inside
@@ -85,23 +79,23 @@
 ")
 
 (def tests :- Any
-  [(deftest "nav-bar — gjoa-sidebar-button (if present) lives in nav-bar, immediately right of refresh" [mn]
+  [(deftest "nav-bar — gjoa-sidebar-button (if present) lives in nav-bar, immediately right of extensions" [mn]
      (let [r (chrome-eval "
         const navBar = document.getElementById(\"nav-bar\");
         const pui = document.getElementById(\"PanelUI-button\");
         if (!pui) throw new Error(\"no PanelUI-button\");
         const gj = document.getElementById(\"gjoa-sidebar-button\");
-        const refresh = document.getElementById(\"stop-reload-button\");
+        const ext = document.getElementById(\"unified-extensions-button\");
         const puiR = pui.getBoundingClientRect();
         const gjR = gj ? gj.getBoundingClientRect() : null;
-        const rfR = refresh ? refresh.getBoundingClientRect() : null;
+        const extR = ext ? ext.getBoundingClientRect() : null;
         return {
           gjoaBtn: gj ? {
             parentId: gj.parentElement ? (gj.parentElement.id || gj.parentElement.tagName) : \"\",
             inNavBar: navBar ? navBar.contains(gj) : false,
             left: gjR.left, right: gjR.right, top: gjR.top,
           } : null,
-          refresh: rfR ? { left: rfR.left, right: rfR.right } : null,
+          ext: extR ? { left: extR.left, right: extR.right } : null,
           panelUI: { left: puiR.left, right: puiR.right, top: puiR.top },
         };
       ")]
@@ -119,10 +113,11 @@
                      (= (.-parentId (.-gjoaBtn r)) "nav-bar"))
            (str "#gjoa-sidebar-button parent must be #nav-bar-customization-target "
                 "(or #nav-bar in the no-refresh fallback), got \"" (.-parentId (.-gjoaBtn r)) "\"."))
-         ;; Rightmost via `order: 1` — so it sits just right of refresh when refresh
-         ;; is on the row, and falls back to hugging the hamburger when it isn't.
-         (let [anchor (if (.-refresh r) (.-refresh r) (.-panelUI r))
-               anchor-name (if (.-refresh r) "stop-reload-button" "PanelUI-button")
+         ;; v3: sidebar-toggle joins the LEFT cluster right after extensions
+         ;; (order -2, extensions -3), falling back to hugging the hamburger
+         ;; when extensions is absent.
+         (let [anchor (if (.-ext r) (.-ext r) (.-panelUI r))
+               anchor-name (if (.-ext r) "unified-extensions-button" "PanelUI-button")
                gap (- (.-left (.-gjoaBtn r)) (.-right anchor))]
            (expect (not (or (< gap -2) (> gap 50)))
              (str "#gjoa-sidebar-button not adjacent to #" anchor-name ": "
@@ -151,14 +146,14 @@
                       "(diff=" (.toFixed (- c refC) 1) "px, tolerance ±" TOL ").\n"
                       "All hits: " (JSON/stringify (.-hits r) nil 2)))))))))
 
-   (deftest "nav-bar — full owner-spec icon order, fresh vertical init: hamburger,ext,gap,back,forward,refresh,sidebar" [mn]
+   (deftest "nav-bar — full owner-spec icon order, fresh vertical init: hamburger,ext,sidebar,gap,back,forward,refresh" [mn]
      ;; RESET-JS sets sidebar.verticalTabs=true + clears dynamicOrientation before every test — this IS the fresh-vertical state; pin it explicitly for readability.
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
      (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r (chrome-eval verticalOrderIds)]
        (expect (.-ok r) (.-msg r))))
 
-   (deftest "nav-bar — full icon order, fresh horizontal init: back,forward,refresh,urlbar,ext,sidebar,hamburger" [mn]
+   (deftest "nav-bar — full icon order, fresh horizontal init: back,forward,refresh,urlbar,sidebar,ext,hamburger" [mn]
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
      (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r (chrome-eval horizontalOrderIds)]

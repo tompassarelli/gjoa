@@ -1,7 +1,8 @@
 #lang beagle/js
-;; Horizontal tab mode must keep its FULL nav-bar toolbar — the icons gjoa users
-;; expect on the row: back, forward, refresh, urlbar, sidebar toggle, extensions,
-;; hamburger. A regression collapsed it to just [urlbar][hamburger] in horizontal
+;; Horizontal tab mode must keep its FULL nav-bar toolbar — per OWNER ROW-ORDER
+;; SPEC v3, the icons gjoa users expect on the row: back, forward, refresh,
+;; urlbar, sidebar toggle, extensions, hamburger. A regression collapsed it to
+;; just [urlbar][hamburger] in horizontal
 ;; mode (reported 2026-06-22, real gjoa-dev window). This guards the whole set so
 ;; it can't silently vanish again — asserted both freshly-horizontal AND after a
 ;; vertical→horizontal flip (the live niri-resize path where the drawer reparents
