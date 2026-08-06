@@ -14,8 +14,10 @@
 ;;      containing block, so the bad `width: 100%` resolved against the toolbox
 ;;      and spanned the whole window. The fix restores `width: var(--urlbar-width)`
 ;;      (JS-pinned by drawer/layout.bjs sync-urlbar-width to sidebar inner width).
-;;      ASSERT: at rest, #urlbar rect width is well under #navigator-toolbox width
-;;      and ~= #sidebar-container inner width (minus 2·inset).
+;;      ASSERT: at rest, #urlbar rect width is well under the WINDOW width and
+;;      ~= #sidebar-container inner width (minus 2·inset). NOT against
+;;      #navigator-toolbox — `expand` reparents the toolbox inside
+;;      #sidebar-container, so that width just is the drawer width.
 ;;
 ;;   #2 EXPANDED dropdown panel must be OPAQUE (non-collapsed). On focus the
 ;;      urlbar gets [breakout-extend]; the bad nova-only calc made
@@ -74,6 +76,7 @@
     urlbarWidth: u.width, urlbarLeft: u.left, urlbarRight: u.right,
     toolboxWidth: t.width, toolboxLeft: t.left, toolboxRight: t.right,
     sidebarWidth: s.width, sidebarLeft: s.left, sidebarRight: s.right,
+    windowWidth: window.innerWidth,
     inset,
     breakoutExtend: urlbar.hasAttribute('breakout-extend'),
     inputContainerTop: ic ? ic.getBoundingClientRect().top : null,
@@ -161,23 +164,22 @@
               "did not initialize (e.g. GjoaLoader $$bc-runtime mismatch in a stale "
               "binary). Rebuild the bundle/binary; this test needs live gjoa chrome.")))
      ;; Wait for sync-urlbar-width to pin --urlbar-width to the drawer inner
-     ;; width: the resting #urlbar must be meaningfully narrower than the toolbox.
+     ;; width: the resting #urlbar must be a drawer-sized box, not a window-sized one.
      (js/await (await-true
                  (str "const u = document.getElementById('urlbar');"
-                      "const t = document.getElementById('navigator-toolbox');"
-                      "if (!u || !t) return false;"
-                      "const ur = u.getBoundingClientRect(), tr = t.getBoundingClientRect();"
-                      "return ur.width > 0 && tr.width > 0 && ur.width < tr.width * 0.85;")
+                      "if (!u) return false;"
+                      "const ur = u.getBoundingClientRect();"
+                      "return ur.width > 0 && ur.width < window.innerWidth * 0.6;")
                  5000))
      (let [r (chrome-eval MEASURE-RESTING)]
        (expect (not (.-error r)) (str "MEASURE-RESTING error: " (JSON/stringify r)))
        (expect (not (.-breakoutExtend r))
          "resting urlbar unexpectedly has [breakout-extend] — measure ran in the wrong state")
-       ;; The bug spanned the urlbar to the full toolbox/window width. Containment:
-       ;; the urlbar must be well under the toolbox width.
-       (expect (< (.-urlbarWidth r) (* (.-toolboxWidth r) 0.85))
+       ;; The bug spanned the urlbar to the full window width. Containment:
+       ;; the urlbar must stay a drawer-sized box.
+       (expect (< (.-urlbarWidth r) (* (.-windowWidth r) 0.6))
          (str "resting urlbar not contained — width " (.toFixed (.-urlbarWidth r) 1)
-              "px is ~the toolbox width " (.toFixed (.-toolboxWidth r) 1) "px "
+              "px is ~the window width " (.toFixed (.-windowWidth r) 1) "px "
               "(the width:100%-vs-#navigator-toolbox regression). " (JSON/stringify r)))
        ;; And it must be ~ the drawer inner width (sidebar width − 2·inset), the
        ;; value sync-urlbar-width pins. Allow generous slack for sub-pixel / icon
