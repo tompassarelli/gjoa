@@ -174,7 +174,8 @@
     "nav-bar-layout": {
       "category": "nav-bar-layout",
       "tier": "fast",
-      "budgetMs": 400
+      "budgetMs": 900,
+      "note": "bumped 400->900: added full owner-spec order tests (fresh vertical/horizontal + live flip, 3 pref-toggle awaits)"
     },
     "new-tab-honors-active-space": {
       "category": "new-tab-honors-active-space",

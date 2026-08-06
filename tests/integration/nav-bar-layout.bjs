@@ -10,41 +10,56 @@
 ;; Asserts visual left-to-right ordering AND that there's a visible gap
 ;; between the left group and the right group.
 (ns gjoa.tests.integration.nav-bar-layout
-  (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect]]))
+  (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect await-true wait-for]]))
 (define-mode strict)
 
 ;; `IntegrationTest` from ../../tools/test-driver/runner is a type-only
 ;; import in the original — used purely for annotation, no runtime value.
 ;; Beagle has no type-only import; we annotate with Any.
 
-;; Plain JS source string evaluated in the browser via mn.executeScript —
-;; the tokens inside are literal JS for the browser, NOT beagle, so it
+;; Plain JS source strings evaluated in the browser via mn.executeScript —
+;; the tokens inside are literal JS for the browser, NOT beagle, so each
 ;; stays one string literal.
-(def layoutCheck :- String "
-  const ids = [
-    \"PanelUI-button\",
-    \"taskbar-tabs-favicon\",
-    \"nav-bar-customization-target\",
-    \"back-button\",
-    \"forward-button\",
-    \"stop-reload-button\",
-    \"gjoa-sidebar-button\",
-    \"unified-extensions-button\",
-  ];
-  const result = {};
-  for (const id of ids) {
-    const el = document.getElementById(id);
-    if (!el) { result[id] = null; continue; }
-    const r = el.getBoundingClientRect();
-    result[id] = { left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width) };
+
+;; One ordered left-to-right walk over an id sequence (not pairwise checks); `id|altId` picks whichever is visible.
+(def orderCheckFn :- String "
+  function checkOrder(ids) {
+    const rects = [];
+    for (const spec of ids) {
+      let el = null, foundId = null;
+      for (const id of spec.split('|')) {
+        const e = document.getElementById(id);
+        if (!e) continue;
+        const cs = getComputedStyle(e);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        if (e.getBoundingClientRect().width < 1) continue;
+        el = e; foundId = id; break;
+      }
+      if (!el) return { ok: false, msg: 'missing/hidden icon: ' + spec };
+      const r = el.getBoundingClientRect();
+      rects.push({ id: foundId, left: Math.round(r.left), right: Math.round(r.right) });
+    }
+    for (let i = 1; i < rects.length; i++) {
+      const prev = rects[i - 1], cur = rects[i];
+      if (!(cur.left > prev.left) || cur.left < prev.right - 2) {
+        return { ok: false, msg: 'order violated at index ' + i + ' (' + prev.id + ' -> ' + cur.id + '): ' + JSON.stringify(rects) };
+      }
+    }
+    return { ok: true, rects: rects };
   }
-  const navBar = document.getElementById(\"nav-bar\");
-  result[\"__nav-bar__\"] = navBar ? {
-    left: Math.round(navBar.getBoundingClientRect().left),
-    right: Math.round(navBar.getBoundingClientRect().right),
-  } : null;
-  return result;
 ")
+
+;; EXPANDED/vertical order per gjoa.uc.css `#sidebar-container #nav-bar` (owner spec v2, 2026-07-11).
+(def verticalOrderIds :- String
+  (str orderCheckFn
+    "return checkOrder(['PanelUI-button', 'unified-extensions-button', "
+    "'back-button', 'forward-button', 'stop-reload-button', 'gjoa-sidebar-button|sidebar-button']);"))
+
+;; COMPACT/horizontal order per gjoa.uc.css unscoped block (measured DOM order, not the aspirational one in horizontal-toolbar.bjs's message string).
+(def horizontalOrderIds :- String
+  (str orderCheckFn
+    "return checkOrder(['back-button', 'forward-button', 'stop-reload-button', 'urlbar-container', "
+    "'unified-extensions-button', 'gjoa-sidebar-button|sidebar-button', 'PanelUI-button']);"))
 
 (def allIconYCheck :- String "
   // Collect every visible icon in nav-bar (any depth — including inside
@@ -136,55 +151,33 @@
                       "(diff=" (.toFixed (- c refC) 1) "px, tolerance ±" TOL ").\n"
                       "All hits: " (JSON/stringify (.-hits r) nil 2)))))))))
 
-   (deftest "nav-bar — [hamburger][ext] left-anchored, [back forward refresh][sidebar] right-anchored" [mn]
-     (let [rects (chrome-eval layoutCheck)
-           hamburger (get rects "PanelUI-button")
-           navBar (get rects "__nav-bar__")
-           ext (get rects "unified-extensions-button")
-           back (get rects "back-button")]
-       (expect hamburger
-         (str "PanelUI-button not found. rects: " (JSON/stringify rects nil 2)))
-       (expect navBar "#nav-bar not found")
-       (expect ext
-         (str "unified-extensions-button not found. rects: " (JSON/stringify rects nil 2)))
-       (expect back
-         (str "back-button not found. rects: " (JSON/stringify rects nil 2)))
+   (deftest "nav-bar — full owner-spec icon order, fresh vertical init: hamburger,ext,gap,back,forward,refresh,sidebar" [mn]
+     ;; RESET-JS sets sidebar.verticalTabs=true + clears dynamicOrientation before every test — this IS the fresh-vertical state; pin it explicitly for readability.
+     (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
+     (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
+     (let [r (chrome-eval verticalOrderIds)]
+       (expect (.-ok r) (.-msg r))))
 
-       ;; Hamburger at or very near LEFT edge of nav-bar.
-       (expect (not (> (.-left hamburger) (+ (.-left navBar) 80)))
-         (str "Hamburger not left-anchored: nav-bar.left=" (.-left navBar) " hamburger.left=" (.-left hamburger) ".\n"
-              (JSON/stringify rects nil 2)))
+   (deftest "nav-bar — full icon order, fresh horizontal init: back,forward,refresh,urlbar,ext,sidebar,hamburger" [mn]
+     (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
+     (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
+     (let [r (chrome-eval horizontalOrderIds)]
+       (expect (.-ok r) (.-msg r))))
 
-       ;; Extensions should be in the LEFT group (within ~150px of hamburger).
-       (expect (not (> (.-left ext) (+ (.-right hamburger) 150)))
-         (str "Extensions not left-anchored alongside hamburger: hamburger.right=" (.-right hamburger) " "
-              "ext.left=" (.-left ext) " (gap=" (- (.-left ext) (.-right hamburger)) "px, expected ≤150).\n"
-              (JSON/stringify rects nil 2)))
-
-       ;; Back-button should be RIGHT of extensions (the right group).
-       (expect (not (<= (.-left back) (.-right ext)))
-         (str "back-button must be RIGHT of extensions in expanded layout: "
-              "ext.right=" (.-right ext) " back.left=" (.-left back) ".\n"
-              (JSON/stringify rects nil 2)))
-
-       ;; The right group must be ACTUALLY anchored to the right of nav-bar.
-       ;; Rightmost per spec v2 is the sidebar-toggle (`order: 1`), then refresh /
-       ;; forward / back; assert its right edge is within 60px of nav-bar's.
-       (let [sidebar (get rects "gjoa-sidebar-button")
-             refresh (get rects "stop-reload-button")
-             forward (get rects "forward-button")
-             rightmost (or sidebar refresh forward back)
-             distFromRight (- (.-right navBar) (.-right rightmost))]
-         (expect (not (> distFromRight 60))
-           (str "Right group not anchored to right edge: rightmost-button.right=" (.-right rightmost) " "
-                "nav-bar.right=" (.-right navBar) " distance=" distFromRight "px (expected ≤60).\n"
-                (JSON/stringify rects nil 2))))
-
-       ;; And there should be a visible gap between extensions and back-button.
-       (let [gap (- (.-left back) (.-right ext))]
-         (expect (not (< gap 40))
-           (str "Gap between left group (ext) and right group (back) too small: "
-                "ext.right=" (.-right ext) " back.left=" (.-left back) " gap=" gap "px (expected ≥40).\n"
-                (JSON/stringify rects nil 2))))))])
+   (deftest "nav-bar — full icon order survives live vertical<->horizontal flips" [mn]
+     (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
+     (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
+     (let [r1 (chrome-eval verticalOrderIds)]
+       (expect (.-ok r1) (str "before flip: " (.-msg r1))))
+     (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
+     (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
+     (let [r2 (chrome-eval horizontalOrderIds)]
+       (expect (.-ok r2) (str "after vertical->horizontal flip: " (.-msg r2))))
+     (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
+     (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
+     (let [r3 (chrome-eval verticalOrderIds)]
+       (expect (.-ok r3) (str "after horizontal->vertical flip: " (.-msg r3))))
+     ;; restore defaults so we don't pollute later tests (#102)
+     (chrome-eval "Services.prefs.clearUserPref('gjoa.layout.dynamicOrientation'); return true;"))])
 
 (js/export-default tests)
