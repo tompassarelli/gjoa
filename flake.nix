@@ -13,9 +13,9 @@
         #
         # Firefox bumps its NSS floor faster than nixpkgs ships it (e.g. 151
         # needs 3.123.1 while nixpkgs may still be on 3.123.0). When nixpkgs
-        # is behind, we substitute Mozilla's upstream RTM tarball; when it
-        # catches up, the overlay short-circuits and we use nixpkgs's
-        # nss_latest unchanged.
+        # is behind, we substitute the upstream RTM tag; when it catches up,
+        # the overlay short-circuits and we use nixpkgs's nss_latest
+        # unchanged.
         #
         # The auto-off uses a two-pass nixpkgs evaluation:
         #   1. Import a bare nixpkgs (no overlays) → basePkgs
@@ -25,21 +25,25 @@
         # This avoids the recursion you hit if you probe `prev.nss_latest`
         # from inside the overlay closure (final↔prev fixed-point).
         #
+        # Src must be the nss-dev/nss GitHub tag, like nixpkgs' own nss: its
+        # patches assume a root of coreconf/+lib/+cmd/, which the
+        # ftp.mozilla.org release tarball nests one level deeper under nss/.
+        #
         # To raise minNssVersion when Firefox needs a newer NSS than the
         # hardcoded floor:
         #   1. Bump minNssVersion to the new requirement
-        #   2. Update nssUrl (RTM tarball from
-        #      https://ftp.mozilla.org/pub/security/nss/releases/) and
-        #      compute nssHash via:
-        #        nix-prefetch-url --unpack <url> \
+        #   2. Point nssRev at the matching NSS_x_y_RTM tag and compute
+        #      nssHash via:
+        #        nix-prefetch-url --unpack \
+        #          https://github.com/nss-dev/nss/archive/<tag>.tar.gz \
         #          | xargs nix hash convert --hash-algo sha256 --to sri
         #
         # The block is dead weight (but harmless) once nixpkgs has
         # permanently outpaced minNssVersion; safe to delete the
         # let-bindings + the if-branch then.
         minNssVersion = "3.125";
-        nssUrl = "https://ftp.mozilla.org/pub/security/nss/releases/NSS_3_125_RTM/src/nss-3.125.tar.gz";
-        nssHash = "sha256-hXO9FEej9syHb1lf4XnIR32MEBq95emctpPJgCsUma0=";
+        nssRev = "NSS_3_125_RTM";
+        nssHash = "sha256-pIRoFJYsQZzI+hJcNzTX+WT91tfXDygWE0RrirfyBPc=";
 
         basePkgs = import nixpkgs { inherit system; };
         nssOverlayNeeded =
@@ -52,8 +56,10 @@
               (_final: prev: {
                 nss_latest = prev.nss_latest.overrideAttrs (_old: {
                   version = minNssVersion;
-                  src = prev.fetchzip {
-                    url = nssUrl;
+                  src = prev.fetchFromGitHub {
+                    owner = "nss-dev";
+                    repo = "nss";
+                    rev = nssRev;
                     hash = nssHash;
                   };
                 });
