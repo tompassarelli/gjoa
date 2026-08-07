@@ -359,9 +359,11 @@
   flex: 0 0 auto !important;
   min-height: 60px !important;
   padding: 0 !important;
-  /* Raises the footer button cluster above Firefox's 36px default; scoped
-   * to collapsed mode so it can't leak to other --tab-min-height consumers. */
+  /* Collapsed-only (leaking either var resizes every other moz-button consumer).
+   * --tab-min-height feeds the SQUARE --button-size-icon, so it also sets the
+   * rail width; --button-min-height stretches the block axis alone. */
   --tab-min-height: 44px !important;
+  --button-min-height: 60px !important;
 }
 
 

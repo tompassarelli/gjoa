@@ -86,8 +86,10 @@
   align-items: center !important;
   width: 100% !important;
   min-width: 50px !important;
-  /* Matches .gjoa-tab-row's `margin: 2px 0` so first-row top offset equals inter-row gap. */
-  padding-top: 2px !important;
+  /* +2px row margin puts the first glyph 16px below the panel edge — the
+   * icon-to-icon gap the eye reads (pitch 28 − 16px favicon), plus the extra
+   * notch a hard container edge needs to stop looking jammed. */
+  padding-top: 10px !important;
 }
 
 #gjoa-tab-panel[gjoa-icons-only] .gjoa-tab-label,
@@ -98,8 +100,8 @@
   display: none !important;
 }
 #gjoa-tab-panel[gjoa-icons-only] .gjoa-tab-row {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   padding: 2px !important;
   padding-inline-start: 2px !important;
   justify-content: center;
@@ -169,8 +171,8 @@
   display: none !important;
 }
 #gjoa-pinned-container[gjoa-icons-only] .gjoa-tab-row {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   padding: 2px !important;
   padding-inline-start: 2px !important;
   justify-content: center;

@@ -75,8 +75,18 @@
   };
 ")
 
+;; Tallest visible footer moz-button — `.tools-overflow` exists only in the
+;; expanded row, so the collapsed rail has no stable per-button selector.
+(def FOOTER-BTN-JS :- String "
+  const sideMain = document.querySelector('#sidebar-container sidebar-main');
+  const root = sideMain ? (sideMain.shadowRoot || sideMain) : null;
+  const hs = (root ? Array.from(root.querySelectorAll('moz-button')) : [])
+    .map(b => b.getBoundingClientRect().height).filter(h => h > 0);
+  const footerBtnHeight = hs.length ? Math.max(...hs) : null;
+")
+
 ;; Collapsed-rail geometry (#B6): first-tab offset, row height, footer button height.
-(def MEASURE-RAIL-RHYTHM :- String "
+(def MEASURE-RAIL-RHYTHM :- String (str "
   const panel = document.getElementById('gjoa-tab-panel');
   if (!panel || !panel.hasAttribute('gjoa-icons-only')) return { error: 'not icons-only' };
   const panelTop = panel.getBoundingClientRect().top;
@@ -84,27 +94,19 @@
   if (rows.length < 2) return { error: 'need >=2 tabs to measure spacing' };
   const r0 = rows[0].getBoundingClientRect();
   const r1 = rows[1].getBoundingClientRect();
-  const sideMain = document.querySelector('#sidebar-container sidebar-main');
-  const root = sideMain ? (sideMain.shadowRoot || sideMain) : null;
-  const footerBtn = root ? root.querySelector('moz-button.tools-overflow') : null;
-  const fRect = footerBtn ? footerBtn.getBoundingClientRect() : null;
+" FOOTER-BTN-JS "
   return {
     firstTabOffset: r0.top - panelTop,
     interTabGap: r1.top - r0.bottom,
     tabRowHeight: r0.height,
-    footerBtnHeight: fRect ? fRect.height : null,
+    rowPitch: r1.top - r0.top,
+    footerBtnHeight,
   };
-")
+"))
 
 ;; Same footer-button measurement alone, usable in the expanded state to prove
-;; the collapsed-only --tab-min-height override doesn't leak.
-(def MEASURE-FOOTER-BTN :- String "
-  const sideMain = document.querySelector('#sidebar-container sidebar-main');
-  const root = sideMain ? (sideMain.shadowRoot || sideMain) : null;
-  const footerBtn = root ? root.querySelector('moz-button.tools-overflow') : null;
-  const fRect = footerBtn ? footerBtn.getBoundingClientRect() : null;
-  return { footerBtnHeight: fRect ? fRect.height : null };
-")
+;; the collapsed-only --button-min-height override doesn't leak.
+(def MEASURE-FOOTER-BTN :- String (str FOOTER-BTN-JS " return { footerBtnHeight };"))
 
 (js/export (def tests :- Any
   [(deftest "sidebar — collapse narrows to favicon strip (no inline width pins it wide); expand restores (#833c5b9)" [mn]
@@ -179,12 +181,19 @@
      (await-true "return document.querySelectorAll('#gjoa-tab-panel .gjoa-tab-row').length >= 2;" 3000)
      (let [rhythm (chrome-eval MEASURE-RAIL-RHYTHM)]
        (expect (not (.-error rhythm)) (str "MEASURE-RAIL-RHYTHM error: " (JSON/stringify rhythm)))
-       (expect (< (Math/abs (- (Number (.-firstTabOffset rhythm)) (Number (.-interTabGap rhythm)))) 0.5)
-         (str "first-tab top offset must equal the inter-tab gap — " (JSON/stringify rhythm)))
-       (expect (< (Number (.-tabRowHeight rhythm)) 32)
-         (str "collapsed tab row must be shorter than the 32px pre-fix baseline — " (JSON/stringify rhythm)))
-       (expect (> (Number (.-footerBtnHeight rhythm)) 36)
-         (str "collapsed footer button cluster must be taller than the un-overridden 36px default — "
+       ;; Calibrated against rendered screenshots, not arithmetic (/tmp/gjoa-gallery):
+       ;; offset 12px · row 24px · pitch 28px · footer button 63.5px.
+       (expect (and (>= (Number (.-firstTabOffset rhythm)) 10) (<= (Number (.-firstTabOffset rhythm)) 14))
+         (str "first-tab top offset must sit in the 10–14px band (10px container padding "
+              "+ 2px row margin) — below it the first favicon reads as jammed against the "
+              "panel edge. " (JSON/stringify rhythm)))
+       (expect (<= (Number (.-tabRowHeight rhythm)) 24)
+         (str "collapsed tab row must be <= 24px (20px box + 2px padding) — " (JSON/stringify rhythm)))
+       (expect (<= (Number (.-rowPitch rhythm)) 28)
+         (str "collapsed row pitch must be <= 28px (24px row + 2x2px margin) — " (JSON/stringify rhythm)))
+       (expect (>= (Number (.-footerBtnHeight rhythm)) 60)
+         (str "collapsed footer button cluster must be >= 60px tall (--button-min-height: 60px); "
+              "36px is the un-overridden default and 47.5px the too-subtle first attempt. "
               (JSON/stringify rhythm)))
        (chrome-eval "
           const t = [...gBrowser.tabs].find(x => x.getAttribute('gjoa-test-marker') === 'rail-rhythm');
