@@ -1,6 +1,6 @@
 #lang beagle/js
 (ns gjoa.drawer.urlbar
-  (:require [gjoa.macros :refer [q html-new htm attr! on! onc! offc! off! bool has? rmattr! css!]]
+  (:require [gjoa.macros :refer [q by-id html-new htm attr! on! onc! offc! off! bool has? rmattr! css!]]
             [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
@@ -18,7 +18,9 @@
   (let [urlbar (.-urlbar deps)
         root (.-documentElement document)
         log (create-logger! "urlbar")
-        state {:activated false :intent "current" :backdrop nil :ghost nil :hints nil}
+        state {:activated false :intent "current" :backdrop nil :ghost nil :hints nil
+               :healObs nil :healFn nil :breakout0 false :containerBreakout0 false
+               :urlbarH0 "" :containerH0 ""}
 
         intent-attr #(if (= % "newTab") "new-tab" "current")
 
@@ -57,6 +59,14 @@
           ;; set activated=true + re-added the floating attrs, so tearing down now
           ;; would clobber the fresh activation. Leave it fully armed.
           (when (not (.-activated state))
+            ;; Detach the top-layer watchdog FIRST — teardown deliberately hides the
+            ;; popover and drops the floating attrs, and a live heal would fight it.
+            (when (.-healObs state)
+              (.disconnect (.-healObs state))
+              (set! (.-healObs state) nil))
+            (when (.-healFn state)
+              (off! urlbar "toggle" (.-healFn state))
+              (set! (.-healFn state) nil))
             ;; HIDE THE POPOVER FIRST, in EVERY mode (not just compact) — the
             ;; floating palette ALWAYS showPopover()s the urlbar into the top layer,
             ;; so a dismiss must take it back OUT or the resting urlbar stays a
@@ -84,6 +94,21 @@
                 (.hidePopover urlbar))
               (rmattr! urlbar "popover")
               (rmattr! urlbar "breakout-extend")
+              ;; Restore the PRE-SUMMON breakout state + the height vars Firefox may
+              ;; have re-measured off the FLOATING box while we held it.
+              (when (not (.-breakout0 state))
+                (rmattr! urlbar "breakout"))
+              (when (and (.-parentNode urlbar) (not (.-containerBreakout0 state)))
+                (rmattr! (.-parentNode urlbar) "breakout"))
+              (if (= (.-urlbarH0 state) "")
+                (.removeProperty (.-style urlbar) "--urlbar-height")
+                (.setProperty (.-style urlbar) "--urlbar-height" (.-urlbarH0 state)))
+              (when (.-parentNode urlbar)
+                (if (= (.-containerH0 state) "")
+                  (.removeProperty (.-style (.-parentNode urlbar))
+                                   "--urlbar-container-height")
+                  (.setProperty (.-style (.-parentNode urlbar))
+                                "--urlbar-container-height" (.-containerH0 state))))
               (catch Any e
                 (log "finishTeardown:collapse-error" {:msg (String e)})))
             ;; #150: suppress urlbar transitions for the restore frame so the resting
@@ -150,6 +175,14 @@
         ;; pulled out from under the `activated` flag.
         ensure-floating-promoted (fn []
           (try
+            ;; #stopBreakout() drops [breakout] from BOTH #urlbar and #urlbar-container
+            ;; in the same call that hides the popover, and that pair is what makes
+            ;; .urlbar-background / .urlbarView render — restore both or the re-promoted
+            ;; palette is correctly positioned and paints nothing.
+            (when (not (has? urlbar "breakout"))
+              (attr! urlbar "breakout" "true"))
+            (when (and (.-parentNode urlbar) (not (has? (.-parentNode urlbar) "breakout")))
+              (attr! (.-parentNode urlbar) "breakout" "true"))
             (when (not= (.getAttribute urlbar "popover") "manual")
               (attr! urlbar "popover" "manual"))
             (when (and (not (bool (.matches urlbar ":popover-open"))) (.-showPopover urlbar))
@@ -158,6 +191,37 @@
             (some-> window .-gURLBar .select)
             (catch Any e
               (log "activateFloating:promote-error" {:msg (String e)}))))
+
+        ;; TOP-LAYER WATCHDOG: gjoa does not own `popover` on #urlbar — UrlbarInput's
+        ;; #stopBreakout() evicts it (modal blocker, layout-breakout re-measure, urlbar
+        ;; reparenting), so a one-shot promotion cannot hold. Re-assert on every popover
+        ;; `toggle` and on any [popover]/[breakout] write.
+        heal (fn []
+          (when (and (.-activated state)
+                     (has? root "gjoa-urlbar-floating")
+                     (not (has? root "gjoa-urlbar-teardown")))
+            ;; A modal dialog raises the blocker deliberately; dismiss rather than heal.
+            ;; [window-modal-open] lands AFTER the increment, so gate on `.open` too.
+            (if (or (bool (some-> (by-id "window-modal-dialog") .-open))
+                    (has? root "window-modal-open"))
+              (do (log "heal:modal-dismiss")
+                  (deactivate-floating))
+              (when (not (and (bool (.matches urlbar ":popover-open"))
+                              (has? urlbar "breakout")))
+                (log "heal:re-promote"
+                     {:popoverOpen (bool (.matches urlbar ":popover-open"))
+                      :breakout (has? urlbar "breakout")})
+                (ensure-floating-promoted)))))
+
+        install-heal (fn []
+          (when (not (.-healFn state))
+            (set! (.-healFn state) heal)
+            (on! urlbar "toggle" heal))
+          (when (not (.-healObs state))
+            (let [obs (MutationObserver. heal)]
+              (.observe obs urlbar
+                {:attributes true :attributeFilter ["popover" "breakout"]})
+              (set! (.-healObs state) obs))))
 
         activate-floating (fn [new-intent]
           (set! (.-intent state) new-intent)
@@ -184,6 +248,21 @@
                   (ensure-floating-promoted))
               (do (set! (.-activated state) true)
                   (log "activateFloating" {:intent (.-intent state)})
+                  ;; Snapshot everything Firefox's breakout machinery owns on #urlbar /
+                  ;; #urlbar-container: a re-measure that lands while the palette floats
+                  ;; pins the PALETTE's box into --urlbar-height, and [breakout] drives
+                  ;; the resting layout — both must come back at teardown.
+                  (set! (.-breakout0 state) (has? urlbar "breakout"))
+                  (set! (.-containerBreakout0 state)
+                        (bool (and (.-parentNode urlbar)
+                                   (has? (.-parentNode urlbar) "breakout"))))
+                  (set! (.-urlbarH0 state)
+                        (.getPropertyValue (.-style urlbar) "--urlbar-height"))
+                  (set! (.-containerH0 state)
+                        (if (.-parentNode urlbar)
+                          (.getPropertyValue (.-style (.-parentNode urlbar))
+                                             "--urlbar-container-height")
+                          ""))
                   ;; Leave a static look-alike (#gjoa-urlbar-ghost) in the resting
                   ;; slot so the real urlbar lifting to the centered palette doesn't
                   ;; collapse the slot / look like the bar "flew out" — the resting
@@ -341,6 +420,7 @@
 
                   (ensure-hints)
                   (ensure-floating-promoted)
+                  (install-heal)
                   ;; reveal once the popover has promoted + positioned (double-rAF); a
                   ;; setTimeout fallback covers a starved rAF (e.g. uncomposited window) so
                   ;; the bar can never get stuck invisible.
@@ -439,4 +519,12 @@
        (offc! urlbar "keydown" on-keydown)
        (off! document "gjoa-urlbar-activate" on-activate-request)
        (off! document "gjoa-urlbar-deactivate" on-deactivate-request)
+       ;; deactivate-floating's teardown is async (fade → transitionend), so detach the
+       ;; watchdog here too or a hot-reload stacks observers on the next bundle.
+       (when (.-healObs state)
+         (.disconnect (.-healObs state))
+         (set! (.-healObs state) nil))
+       (when (.-healFn state)
+         (off! urlbar "toggle" (.-healFn state))
+         (set! (.-healFn state) nil))
        (deactivate-floating))})))

@@ -934,9 +934,9 @@ Preserve these (security warnings):
   :root[gjoa-urlbar-floating] #urlbar { animation: none !important; }
 }
 
-/* The resting slot's `overflow: hidden` is the one drawer-width clipper in the
- * urlbar's ancestor chain; open it while floating so a failed popover promotion
- * degrades to "centered but painted", never to "cut off at the drawer edge". */
+/* Open the resting slot's `overflow: hidden` while floating. NOT a degradation path
+ * for a failed popover promotion — an evicted palette is stacked over by the content
+ * deck, not clipped; drawer/urlbar.bjs's watchdog is what holds the promotion. */
 :root[gjoa-urlbar-floating] #gjoa-urlbar-toolbar,
 :root[gjoa-urlbar-floating] #gjoa-urlbar-toolbar #urlbar-container {
   overflow: visible !important;

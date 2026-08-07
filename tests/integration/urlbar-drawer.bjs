@@ -92,6 +92,9 @@
     windowWidth: window.innerWidth,
     inset,
     breakoutExtend: urlbar.hasAttribute('breakout-extend'),
+    breakout: urlbar.hasAttribute('breakout'),
+    popoverOpen: urlbar.matches(':popover-open'),
+    urlbarHeightVar: getComputedStyle(urlbar).getPropertyValue('--urlbar-height'),
     inputContainerTop: ic ? ic.getBoundingClientRect().top : null,
     hints: !!document.getElementById('gjoa-urlbar-hints'),
   };
@@ -239,6 +242,53 @@
   } catch (e) {}
   return true;
 ")
+
+;; Drive Firefox's OWN top-layer eviction: incrementBreakoutBlockerCount() calls
+;; UrlbarInput.#stopBreakout(), which hidePopover()s #urlbar and drops [breakout]
+;; from #urlbar + #urlbar-container. Without the watchdog the palette drops out of
+;; the top layer and lands at the drawer's left edge (measured left=8 at 1424).
+;; `__gjoaEvictSettled` is a real settle condition (two frames elapsed), not a
+;; fixed sleep — the watchdog re-promotes off the popover `toggle` task.
+(def EVICT-BREAKOUT :- String "
+  window.__gjoaEvictSettled = false;
+  window.gURLBar.incrementBreakoutBlockerCount();
+  requestAnimationFrame(() => requestAnimationFrame(() => { window.__gjoaEvictSettled = true; }));
+  return true;
+")
+(def RESTORE-BREAKOUT :- String "
+  window.__gjoaEvictSettled = false;
+  window.gURLBar.decrementBreakoutBlockerCount();
+  requestAnimationFrame(() => requestAnimationFrame(() => { window.__gjoaEvictSettled = true; }));
+  return true;
+")
+(def EVICT-SETTLED :- String "return window.__gjoaEvictSettled === true;")
+(def MEASURE-PROMOTION :- String "
+  const urlbar = document.getElementById('urlbar');
+  const container = document.getElementById('urlbar-container');
+  const u = urlbar.getBoundingClientRect();
+  return {
+    popoverOpen: urlbar.matches(':popover-open'),
+    breakout: urlbar.hasAttribute('breakout'),
+    containerBreakout: !!(container && container.hasAttribute('breakout')),
+    left: u.left, width: u.width, windowWidth: window.innerWidth,
+  };
+")
+(defn assert-promoted! [p :- Any phase :- String] :- Any
+  (let [tag (str "top-layer watchdog (" phase "): ")
+        centre-off (Math/abs (- (.-left p)
+                                (/ (- (.-windowWidth p) (.-width p)) 2)))]
+    (expect (.-popoverOpen p)
+      (str tag "#urlbar evicted from the top layer (:popover-open false) — the "
+           "floating palette is laid out inside the drawer. " (JSON/stringify p)))
+    (expect (.-breakout p)
+      (str tag "#urlbar lost [breakout] — .urlbar-background/.urlbarView stop "
+           "rendering, so the palette paints nothing. " (JSON/stringify p)))
+    (expect (.-containerBreakout p)
+      (str tag "#urlbar-container lost [breakout]. " (JSON/stringify p)))
+    (expect (<= centre-off 4)
+      (str tag "palette off-centre by " (.toFixed centre-off 1)
+           "px — it is positioned by the sidebar subtree, not the ICB. "
+           (JSON/stringify p)))))
 
 ;; GUARD against a vacuous pass on a dead-chrome binary: if GjoaLoader threw
 ;; (the $$bc-runtime mismatch class), NO gjoa stylesheet is registered and the
@@ -388,6 +438,17 @@
                       "return !!u && u.hasAttribute('breakout-extend');")
                  2000))
      (assert-floating-overlay! (chrome-eval MEASURE-FLOATING) "in breakout-extend")
+     ;; The palette must SURVIVE Firefox's own top-layer eviction: gjoa asserts the
+     ;; promotion once at summon time, but UrlbarInput writes [popover]/[breakout] too.
+     ;; Position is asserted as CENTRED, not as equal to the pre-eviction left: the
+     ;; blocker release re-runs Firefox's breakout measurement and the box resettles
+     ;; a few px. Eviction is ~340px off at a 1400px window, so centring catches it.
+     (js/await (.executeScript mn EVICT-BREAKOUT))
+     (js/await (await-true EVICT-SETTLED 2000))
+     (assert-promoted! (chrome-eval MEASURE-PROMOTION) "after breakout blocker")
+     (js/await (.executeScript mn RESTORE-BREAKOUT))
+     (js/await (await-true EVICT-SETTLED 2000))
+     (assert-promoted! (chrome-eval MEASURE-PROMOTION) "after blocker release")
      (js/await (.executeScript mn DISMISS-FLOATING))
 
      (js/await (await-true FLOATING-TORN-DOWN 2000))
