@@ -292,8 +292,8 @@
     "urlbar-drawer": {
       "category": "urlbar",
       "tier": "fast",
-      "budgetMs": 2400,
-      "note": "[justified] Still zero fixed sleeps. #1 now drives the real Ctrl+L floating palette, so it pays a 1400x900 resize round-trip plus the async dismiss fade (~260ms transitionend fallback) that the overlay invariant needs; measured 1.77-1.86s for the file. +200ms 2026-08-07: #1 also drives Firefox's own breakout-blocker eviction (2 chrome calls + 2 two-frame await-trues) in the already-booted window.",
+      "budgetMs": 3200,
+      "note": "[justified] Still zero fixed sleeps. #1 now drives the real Ctrl+L floating palette, so it pays a 1400x900 resize round-trip plus the async dismiss fade (~260ms transitionend fallback) that the overlay invariant needs; measured 1.77-1.86s for the file. +200ms 2026-08-07: #1 also drives Firefox's own breakout-blocker eviction (2 chrome calls + 2 two-frame await-trues) in the already-booted window. +800ms 2026-08-07: #4 (ghost keeps the engine chip) summons+dismisses the palette TWICE — once per urlbar state, default and searchmode — and each dismiss waits the same async teardown; measured 711ms for the case.",
       "estSavingsMs": 0
     },
     "vim-content-focus": {

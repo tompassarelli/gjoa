@@ -306,44 +306,108 @@
                                            (and (> (.-width r) 0) (> (.-height r) 0)
                                                 (not= (.-display c) "none")
                                                 (not= (.-visibility c) "hidden"))))
-                              ;; glyph of an element: an `iconsrc` attr (moz-button, e.g. the
-                              ;; search-mode switcher's engine icon — a system blob:), else the
-                              ;; first visible descendant (incl. open shadow root) that renders an
-                              ;; image — <img src>, list-style / background / mask.
+                              ;; every node that can paint inside a leading child: its own light
+                              ;; DOM plus its OPEN shadow root (moz-button renders the engine icon
+                              ;; and the pill background in there).
+                              inner-nodes (fn [el]
+                                (let [sr (.-shadowRoot el)]
+                                  (.filter (.concat (.from Array (.querySelectorAll el "*"))
+                                                    (if sr (.from Array (.querySelectorAll sr "*")) []))
+                                           visible?)))
+                              ;; `contains` does not cross the shadow boundary, so ask the root too.
+                              inside? (fn [host n]
+                                (or (bool (.contains host n))
+                                    (bool (some-> (.-shadowRoot host) (.contains n)))))
+                              ;; url("…") out of a computed `content` — the chip's chevron paints
+                              ;; that way, with no background/list-style/mask to copy.
+                              content-url (fn [c]
+                                (let [m (.exec (RegExp. "url\\(\"?([^\")]+)\"?\\)") (or (.-content c) ""))]
+                                  (if m (aget m 1) nil)))
+                              ;; CSS that repaints ONE element's glyph: an `iconsrc` attr
+                              ;; (moz-button, e.g. the search-mode switcher's engine icon — a
+                              ;; system blob:), an <img src>, or a computed content /
+                              ;; list-style / background / mask image. nil = paints nothing.
                               glyph-of (fn [el]
-                                (let [isrc (or (.getAttribute el "iconsrc")
-                                               (some-> (.querySelector el "[iconsrc]") (.getAttribute "iconsrc")))
-                                      sr (.-shadowRoot el)
-                                      cands (.concat (.from Array (.querySelectorAll el "*"))
-                                                     (if sr (.from Array (.querySelectorAll sr "*")) [])
-                                                     [el])
-                                      hit (.find cands
-                                            (fn [e]
-                                              (and (visible? e)
-                                                   (let [c (.getComputedStyle window e)]
-                                                     (or (and (= (.-tagName e) "IMG") (.-src e) (not= (.-src e) ""))
-                                                         (not= (.-listStyleImage c) "none")
-                                                         (not= (.-backgroundImage c) "none")
-                                                         (not= (.-maskImage c) "none"))))))]
+                                (let [c (.getComputedStyle window el)
+                                      isrc (.getAttribute el "iconsrc")
+                                      curl (content-url c)
+                                      ;; the chrome document is XHTML — `tagName` keeps the
+                                      ;; authored lowercase, so an "IMG" compare never matches.
+                                      src (if (= (.-localName el) "img") (.-src el) nil)]
                                   (cond
                                     (and isrc (not= isrc ""))
                                       {:css (str "background:url(\"" isrc "\") center/contain no-repeat;")}
-                                    (not hit) nil
-                                    :else
-                                      (let [c (.getComputedStyle window hit)]
-                                        (cond
-                                          (and (= (.-tagName hit) "IMG") (.-src hit) (not= (.-src hit) ""))
-                                            {:css (str "background:url(\"" (.-src hit) "\") center/contain no-repeat;")}
-                                          (not= (.-listStyleImage c) "none")
-                                            {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
-                                                       "background:" (.-listStyleImage c) " center/contain no-repeat;")}
-                                          (not= (.-backgroundImage c) "none")
-                                            {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
-                                                       "background:" (.-backgroundImage c) " center/contain no-repeat;")}
-                                          :else
-                                            {:css (str "background-color:" (.-color c) ";"
-                                                       "mask:" (.-maskImage c) " center/contain no-repeat;"
-                                                       "-webkit-mask:" (.-maskImage c) " center/contain no-repeat;")})))))
+                                    (and src (not= src ""))
+                                      {:css (str "background:url(\"" src "\") center/contain no-repeat;")}
+                                    curl
+                                      {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
+                                                 "background:url(\"" curl "\") center/contain no-repeat;")}
+                                    (not= (.-listStyleImage c) "none")
+                                      {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
+                                                 "background:" (.-listStyleImage c) " center/contain no-repeat;")}
+                                    (not= (.-backgroundImage c) "none")
+                                      {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
+                                                 "background:" (.-backgroundImage c) " center/contain no-repeat;")}
+                                    (not= (.-maskImage c) "none")
+                                      {:css (str "background-color:" (.-color c) ";"
+                                                 "mask:" (.-maskImage c) " center/contain no-repeat;"
+                                                 "-webkit-mask:" (.-maskImage c) " center/contain no-repeat;")}
+                                    :else nil)))
+                              ;; text this element renders ITSELF (direct text nodes only, so a
+                              ;; wrapper doesn't restate its children's label).
+                              own-text (fn [el]
+                                (.trim (.join (.map (.filter (.from Array (.-childNodes el))
+                                                             (fn [n] (= (.-nodeType n) 3)))
+                                                    (fn [n] (.-textContent n)))
+                                              "")))
+                              ;; The rendered parts of a leading child, each at its own rect — the
+                              ;; search-mode chip is compound (icon + chevron + name + exit), so one
+                              ;; centred glyph cannot stand in for it. Innermost painter wins, or a
+                              ;; host forwarding `iconsrc` to a shadow <img> paints twice.
+                              parts-of (fn [el]
+                                (let [nodes (inner-nodes el)
+                                      painter? (fn [n] (bool (glyph-of n)))
+                                      leaf-glyph? (fn [n]
+                                        (and (painter? n)
+                                             (not (bool (.some nodes
+                                                          (fn [m] (and (not= m n)
+                                                                       (inside? n m)
+                                                                       (painter? m))))))))
+                                      out []]
+                                  (.forEach nodes (fn [n]
+                                    (let [t (own-text n)]
+                                      (cond
+                                        (leaf-glyph? n)
+                                          (.push out {:el n :css (.-css (glyph-of n))})
+                                        (not= t "")
+                                          (let [c (.getComputedStyle window n)]
+                                            (.push out {:el n :text t
+                                                        :css (str "font:" (.-font c) ";color:" (.-color c) ";"
+                                                                  "white-space:nowrap;overflow:hidden;")}))
+                                        :else nil))))
+                                  ;; nothing inside painted → the child paints its own glyph
+                                  (when (= (.-length out) 0)
+                                    (let [g (glyph-of el)]
+                                      (when g (.push out {:el el :css (.-css g)}))))
+                                  out))
+                              ;; A chip's PILL: moz-button paints its background on a shadow
+                              ;; <span class="button-background">, not on the host, so take the
+                              ;; box chrome from whichever element actually fills the child's box.
+                              opaque? (fn [col] (and col (not= col "transparent")
+                                                     (not (.includes col ", 0)"))))
+                              box-chrome (fn [ch r]
+                                (let [hit (.find (.concat [ch] (inner-nodes ch))
+                                            (fn [n]
+                                              (let [nr (.getBoundingClientRect n)
+                                                    c (.getComputedStyle window n)]
+                                                (and (< (Math/abs (- (.-width nr) (.-width r))) 2)
+                                                     (< (Math/abs (- (.-height nr) (.-height r))) 2)
+                                                     (bool (opaque? (.-backgroundColor c)))))))]
+                                  (if hit
+                                    (let [c (.getComputedStyle window hit)]
+                                      (str "background:" (.-backgroundColor c) ";"
+                                           "border-radius:" (.-borderRadius c) ";"))
+                                    "")))
                               ;; input-box = the container's direct child holding the field (for
                               ;; slicing the leading icons); text-el = the actual .urlbar-input the
                               ;; text renders in (its left is where the URL text starts — the
@@ -358,16 +422,11 @@
                                            36)
                               kids (.from Array (.-children container))
                               input-idx (.indexOf kids input-box)
-                              ;; EXCLUDE the search-mode switcher (2026-07-20): it's the
-                              ;; engine-picker affordance and its `iconsrc` is the current
-                              ;; engine's logo (Google), which showed up as a loud Google "G"
-                              ;; in the frozen slot — clutter, not part of the resting identity.
-                              ;; A frozen ghost is the security/identity icon(s) + the URL.
-                              switcher? (fn [ch]
-                                          (or (and (.-classList ch) (.contains (.-classList ch) "searchmode-switcher"))
-                                              (.getAttribute ch "iconsrc")))
+                              ;; EVERY visible leading child, search-mode switcher included — the
+                              ;; resting bar shows that chip, so a ghost without it reads as the
+                              ;; engine icon vanishing the instant the palette floats.
                               leading (.filter (if (>= input-idx 0) (.slice kids 0 input-idx) kids)
-                                        (fn [ch] (and (visible? ch) (not (switcher? ch)))))
+                                        visible?)
                               value (or (some-> window .-gURLBar .-value) "")
                               has-value? (not= (.trim value) "")
                               text-str (if has-value? value ph)]
@@ -379,21 +438,30 @@
                                        "border:" (.-border cs) ";border-radius:" (.-borderRadius cs) ";"
                                        "background:" (.-backgroundColor cs) ";"
                                        "font:" (.-font cs) ";color:" (.-color cs) ";"))
-                          ;; one ghost icon per real visible leading icon, at its real x/width
+                          ;; one ghost slot per visible leading child, at its real box, holding a
+                          ;; still copy of every part that child actually paints (at ITS real box,
+                          ;; not centred — a compound chip's icon is not at the chip's centre).
                           (doseq [ch leading]
                             (let [r (.getBoundingClientRect ch)
-                                  left (- (.-left r) (.-left rect))
-                                  w (.-width r)
-                                  gl (glyph-of ch)
+                                  parts (parts-of ch)
                                   slot (html-new "div")]
-                              (when gl
-                                (css! slot (str "position:absolute;top:0;bottom:0;display:flex;"
-                                                "align-items:center;justify-content:center;"
-                                                "left:" left "px;width:" w "px;"))
-                                (let [ic (html-new "div")]
-                                  (css! ic (str "width:16px;height:16px;opacity:.9;" (.-css gl)))
-                                  (.appendChild slot ic)
-                                  (.appendChild g slot)))))
+                              (when (> (.-length parts) 0)
+                                (css! slot (str "position:absolute;box-sizing:border-box;"
+                                                "left:" (- (.-left r) (.-left rect)) "px;"
+                                                "top:" (- (.-top r) (.-top rect)) "px;"
+                                                "width:" (.-width r) "px;height:" (.-height r) "px;"
+                                                (box-chrome ch r)))
+                                (doseq [p parts]
+                                  (let [pr (.getBoundingClientRect (.-el p))
+                                        ic (html-new "div")]
+                                    (css! ic (str "position:absolute;box-sizing:border-box;"
+                                                  "left:" (- (.-left pr) (.-left r)) "px;"
+                                                  "top:" (- (.-top pr) (.-top r)) "px;"
+                                                  "width:" (.-width pr) "px;height:" (.-height pr) "px;"
+                                                  "opacity:.9;" (.-css p)))
+                                    (when (.-text p) (set! (.-textContent ic) (.-text p)))
+                                    (.appendChild slot ic)))
+                                (.appendChild g slot))))
                           (set! (.-textContent txt) text-str)
                           (css! txt (str "position:absolute;top:0;bottom:0;display:flex;align-items:center;"
                                          "left:" input-left "px;right:8px;overflow:hidden;"

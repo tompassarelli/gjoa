@@ -44,6 +44,13 @@
 ;;   #3 (29451f9 property) NO vertical jump: .urlbar-input-container's top (the
 ;;      security icon + URL text row) is the same (within ~1px) at rest vs
 ;;      [breakout-extend] — focusing the urlbar must not shift the text down.
+;;
+;;   #4 The resting-slot GHOST keeps the ENGINE CHIP. #gjoa-urlbar-ghost stands in
+;;      for the resting bar while the palette floats, so anything the resting bar
+;;      shows and the ghost doesn't reads as that element vanishing on Ctrl+L.
+;;      ASSERT in BOTH urlbar states (default + searchmode-with-text): the ghost
+;;      carries a box at the .searchmode-switcher's rect and a PAINTED replica at
+;;      the engine icon's rect, both within 2px of the pre-summon geometry.
 (ns gjoa.tests.integration.urlbar-drawer
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect expect-eq]]))
 (define-mode strict)
@@ -290,6 +297,62 @@
            "px — it is positioned by the sidebar subtree, not the ICB. "
            (JSON/stringify p)))))
 
+;; The pre-summon engine chip: the .searchmode-switcher box and the engine icon
+;; inside it (a moz-button renders that <img> in its open shadow root), both
+;; relative to #urlbar so they can be compared against the ghost's own box.
+(def MEASURE-CHIP :- String "
+  const urlbar = document.getElementById('urlbar');
+  const chip = urlbar.querySelector('.searchmode-switcher');
+  if (!chip) return { error: 'no .searchmode-switcher in #urlbar' };
+  const vis = el => { const r = el.getBoundingClientRect(); const c = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && c.display !== 'none' && c.visibility !== 'hidden'; };
+  const ur = urlbar.getBoundingClientRect();
+  const cr = chip.getBoundingClientRect();
+  const sr = chip.shadowRoot;
+  const icon = (sr && sr.querySelector('img[src]')) || chip.querySelector('img[src]');
+  const ir = icon ? icon.getBoundingClientRect() : null;
+  return {
+    searchmode: urlbar.hasAttribute('searchmode'),
+    chipVisible: vis(chip),
+    chip: { l: cr.left - ur.left, t: cr.top - ur.top, w: cr.width, h: cr.height },
+    iconSrc: icon ? icon.src : null,
+    iconVisible: !!(icon && vis(icon)),
+    icon: ir ? { l: ir.left - ur.left, t: ir.top - ur.top, w: ir.width, h: ir.height } : null,
+    urlbarWidth: ur.width,
+  };
+")
+
+;; Every box the ghost draws, relative to the ghost, plus whether it actually
+;; PAINTS an image — a replica at the right rect that paints nothing is invisible.
+(def MEASURE-GHOST-BOXES :- String "
+  const g = document.getElementById('gjoa-urlbar-ghost');
+  if (!g) return { error: 'no #gjoa-urlbar-ghost while the palette floats' };
+  const gr = g.getBoundingClientRect();
+  const boxes = Array.from(g.querySelectorAll('*')).map(el => {
+    const r = el.getBoundingClientRect(); const c = getComputedStyle(el);
+    return { l: r.left - gr.left, t: r.top - gr.top, w: r.width, h: r.height,
+             paints: c.backgroundImage !== 'none' || (!!c.maskImage && c.maskImage !== 'none') };
+  });
+  return { width: gr.width, count: boxes.length, boxes };
+")
+
+;; Type into a search mode. The headless test profile has no search service, so an
+;; engine mode is not drivable here; a LOCAL mode renders the same compound chip
+;; (engine icon + title + exit button) the owner's Google mode does.
+(def ENTER-SEARCHMODE :- String "
+  const urlbar = document.getElementById('urlbar');
+  try {
+    gURLBar.focus();
+    gURLBar.value = 'amaz';
+    gURLBar.searchMode = { source: 1 };
+  } catch (e) { return { error: String(e) }; }
+  return { searchmode: urlbar.hasAttribute('searchmode'), value: gURLBar.value };
+")
+(def EXIT-SEARCHMODE :- String "
+  try { gURLBar.searchMode = null; gURLBar.value = ''; gURLBar.blur(); } catch (e) {}
+  return !document.getElementById('urlbar').hasAttribute('searchmode');
+")
+
 ;; GUARD against a vacuous pass on a dead-chrome binary: if GjoaLoader threw
 ;; (the $$bc-runtime mismatch class), NO gjoa stylesheet is registered and the
 ;; urlbar shows native FF behavior — under which the panel-height / no-jump
@@ -358,6 +421,35 @@
            (.-id (.-hitLeft f)) ", right→" (.-id (.-hitRight f))
            "), so the painted box is narrower than its layout rect. "
            (JSON/stringify f)))))
+
+;; The ghost is a look-alike, not a clone, so it is compared by GEOMETRY: for each
+;; real box, some ghost box at the same offset within the same-width container.
+(defn assert-ghost-chip! [c :- Any gh :- Any phase :- String] :- Any
+  (let [tag (str "ghost engine chip (" phase "): ")
+        near? (fn [a :- Any b :- Any] (<= (Math/abs (- (Number a) (Number b))) 2))
+        at-rect (fn [want :- Any painted? :- Any]
+                (.find (.-boxes gh)
+                  (fn [b] (and (near? (.-l b) (.-l want)) (near? (.-t b) (.-t want))
+                               (near? (.-w b) (.-w want)) (near? (.-h b) (.-h want))
+                               (or (not painted?) (.-paints b))))))]
+    (expect (not (.-error c)) (str tag "MEASURE-CHIP error: " (JSON/stringify c)))
+    (expect (.-chipVisible c)
+      (str tag "the resting bar shows no engine chip — precondition gone, the "
+           "assertion below would pass vacuously. " (JSON/stringify c)))
+    (expect (and (.-icon c) (.-iconVisible c))
+      (str tag "no engine icon inside the resting chip. " (JSON/stringify c)))
+    (expect (not (.-error gh)) (str tag "MEASURE-GHOST-BOXES error: " (JSON/stringify gh)))
+    (expect (near? (.-width gh) (.-urlbarWidth c))
+      (str tag "ghost width " (.toFixed (.-width gh) 1) "px != pre-summon urlbar width "
+           (.toFixed (.-urlbarWidth c) 1) "px, so the offsets below are not comparable."))
+    (expect (at-rect (.-chip c) false)
+      (str tag "no ghost box at the chip's rect " (JSON/stringify (.-chip c))
+           " — the chip is missing from the resting slot while the palette floats. "
+           "ghost=" (JSON/stringify gh)))
+    (expect (at-rect (.-icon c) true)
+      (str tag "no PAINTED ghost box at the engine icon's rect " (JSON/stringify (.-icon c))
+           " (src=" (.-iconSrc c) ") — the engine icon vanishes from the drawer on "
+           "Ctrl+L. ghost=" (JSON/stringify gh)))))
 
 (js/export (def tests :- Any
   [(deftest "urlbar — Ctrl+L palette OVERLAYS the content at spec width; resting bar stays in the drawer (#1)" [mn]
@@ -508,6 +600,48 @@
                   "(rest top=" (.toFixed (Number (.-inputContainerTop rest)) 2)
                   ", extend top=" (.toFixed (Number (.-inputContainerTop ext)) 2)
                   ") — breathing-room padding leaked onto the input again. "
-                  "rest=" (JSON/stringify rest) " ext=" (JSON/stringify ext)))))))]))
+                  "rest=" (JSON/stringify rest) " ext=" (JSON/stringify ext)))))))
+
+   (deftest "urlbar — the resting ghost keeps the engine chip while the palette floats (#4)" [mn]
+     (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))
+     (js/await (require-gjoa-css! mn))
+     ;; finish-teardown takes #urlbar back out of the top layer; restore the
+     ;; resting promotion afterwards so this test leaves the window as it found it.
+     (let [pop0 (js/await (.executeScript mn CAPTURE-POPOVER))
+           ;; (a) DEFAULT state — the chip shows the default engine icon.
+           c0 (chrome-eval MEASURE-CHIP)]
+       (js/await (.executeScript mn SUMMON-FLOATING))
+       (js/await (await-true
+                   (str "const d = document.documentElement;"
+                        "return d.hasAttribute('gjoa-urlbar-floating')"
+                        " && !d.hasAttribute('gjoa-urlbar-arming');")
+                   3000))
+       (let [g0 (chrome-eval MEASURE-GHOST-BOXES)]
+         (js/await (.executeScript mn DISMISS-FLOATING))
+         (js/await (await-true FLOATING-TORN-DOWN 2000))
+         (assert-ghost-chip! c0 g0 "default state"))
+       ;; (b) SEARCHMODE with typed text — the owner's state: the chip is the
+       ;; leading element and carries icon + engine name + exit button.
+       (let [sm (chrome-eval ENTER-SEARCHMODE)]
+         (expect (not (.-error sm)) (str "could not enter search mode: " (JSON/stringify sm)))
+         (expect (.-searchmode sm) (str "#urlbar has no [searchmode]: " (JSON/stringify sm))))
+       (let [c1 (chrome-eval MEASURE-CHIP)]
+         (js/await (.executeScript mn SUMMON-FLOATING))
+         (js/await (await-true
+                     (str "const d = document.documentElement;"
+                          "return d.hasAttribute('gjoa-urlbar-floating')"
+                          " && !d.hasAttribute('gjoa-urlbar-arming');")
+                     3000))
+         (let [g1 (chrome-eval MEASURE-GHOST-BOXES)]
+           (js/await (.executeScript mn DISMISS-FLOATING))
+           (js/await (await-true FLOATING-TORN-DOWN 2000))
+           ;; restore BEFORE asserting so a thrown assertion can't leave the next
+           ;; test in search mode (see #2/#3 for the same ordering).
+           (js/await (.executeScript mn EXIT-SEARCHMODE))
+           (js/await (.executeScript mn RESET-URLBAR))
+           (js/await (.executeScript mn RESTORE-POPOVER [(.-manual pop0) (.-open pop0)]))
+           (expect (.-searchmode c1)
+             (str "search mode did not reach #urlbar: " (JSON/stringify c1)))
+           (assert-ghost-chip! c1 g1 "searchmode with text")))))]))
 
 (js/export-default tests)
