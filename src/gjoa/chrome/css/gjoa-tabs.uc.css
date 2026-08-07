@@ -442,6 +442,9 @@
  * the row keeps the outline indefinitely and looks selected. By having
  * no [gjoa-dragging] CSS, the attribute can stick harmlessly. */
 #gjoa-drop-indicator {
+  /* Hit-testable, the indicator IS the dead band: it sits under the pointer at
+   * exactly the drop line and refuses dragover, so the drop never fires. */
+  pointer-events: none;
   height: 2px;
   background: color-mix(in srgb, currentColor 50%, transparent);
   margin: 0 var(--gjoa-sidebar-inset);

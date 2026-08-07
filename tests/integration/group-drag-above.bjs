@@ -130,10 +130,11 @@
     row.dispatchEvent(mk(\"dragstart\", x0, y0));
     const tr = target.getBoundingClientRect();          // AFTER dragstart: the strip reflows
     const x1 = tr.left + tr.width/2, y1 = tr.top + tr.height/2;
-    let cur = null, accepted = false;
+    let cur = null, accepted = false, indicatorHits = 0;
     const tick = (x, y) => {
       const hit = doc.elementFromPoint(x, y);
       if (!hit) { cur = null; accepted = false; return; }
+      if (hit.id === \"gjoa-drop-indicator\") indicatorHits++;
       if (hit !== cur) { hit.dispatchEvent(mk(\"dragenter\", x, y, cur));
                          if (cur) cur.dispatchEvent(mk(\"dragleave\", x, y, hit));
                          cur = hit; }
@@ -142,10 +143,22 @@
     const n = Math.max(1, Math.ceil(Math.hypot(x1-x0, y1-y0) / 4));
     for (let i = 1; i <= n; i++) tick(x0 + (x1-x0)*i/n, y0 + (y1-y0)*i/n);
     for (let i = 0; i < 4; i++) tick(x1, y1);           // pointer at rest
+    // The indicator paints ON the drop line, so if it hit-tests it steals the
+    // pointer from the row underneath and the drop dies in a 2px dead band.
+    const ind = doc.getElementById(\"gjoa-drop-indicator\");
+    let indProbe = { present: false };
+    if (ind) {
+      const ir = ind.getBoundingClientRect();
+      const px = ir.left + Math.max(ir.width, 1) / 2, py = ir.top + Math.max(ir.height, 1) / 2;
+      const h = doc.elementFromPoint(px, py);
+      indProbe = { present: true, isIndicator: h === ind, at: [px, py],
+                   hit: h ? (h.id ? \"#\"+h.id : \".\"+String(h.className).split(\" \")[0]) : \"null\",
+                   acceptsDragover: h ? !h.dispatchEvent(mk(\"dragover\", px, py)) : null };
+    }
     let dropped = false;
     if (accepted && cur) { cur.dispatchEvent(mk(\"drop\", x1, y1)); dropped = true; }
     row.dispatchEvent(mk(\"dragend\", x1, y1));
-    return { ok: true, dropped, accepted,
+    return { ok: true, dropped, accepted, indicatorHits, indProbe,
              targetTabPinned: !!(target._tab && target._tab.pinned),
              hit: cur ? (cur.id ? \"#\"+cur.id : \".\"+String(cur.className).split(\" \")[0]) : \"null\" };"))
 
@@ -287,6 +300,13 @@
          (str "the pointer at rest on a pinned tab must be a valid drop target — the "
               "last dragover was refused on " (.-hit r) ", so a real browser fires no "
               "drop at all. " (JSON/stringify r)))
+       (expect (= (Number (.-indicatorHits r)) 0)
+         (str "#gjoa-drop-indicator hit-tested " (.-indicatorHits r) " times along the drag "
+              "path — it must carry pointer-events:none or it eats the drop under it. "
+              (JSON/stringify r)))
+       (expect (not (and (.-present (.-indProbe r)) (.-isIndicator (.-indProbe r))))
+         (str "elementFromPoint at the indicator's own line returned the indicator itself "
+              "— that line is a dead band where drops vanish. " (JSON/stringify (.-indProbe r))))
        (js/await (await-true (marked-pinned-js "pindrag") 3000)))
 
      (let [liars (chrome-eval PINNED-SECTION-HONEST)]
