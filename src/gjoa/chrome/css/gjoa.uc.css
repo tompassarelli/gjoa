@@ -360,10 +360,11 @@
   min-height: 60px !important;
   padding: 0 !important;
   /* Collapsed-only (leaking either var resizes every other moz-button consumer).
-   * --tab-min-height feeds the SQUARE --button-size-icon, so it also sets the
-   * rail width; --button-min-height stretches the block axis alone. */
-  --tab-min-height: 44px !important;
-  --button-min-height: 60px !important;
+   * Both must equal the 24px tab-row box or the tool cluster re-inflates:
+   * --tab-min-height sets the square (and the rail width), --button-min-height
+   * floors the same box's block axis. */
+  --tab-min-height: 24px !important;
+  --button-min-height: 24px !important;
 }
 
 

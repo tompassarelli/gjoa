@@ -85,22 +85,48 @@
   const footerBtnHeight = hs.length ? Math.max(...hs) : null;
 ")
 
-;; Collapsed-rail geometry (#B6): first-tab offset, row height, footer button height.
+;; Collapsed-rail geometry (#B6). The rhythm the eye reads is GLYPH-to-GLYPH, not
+;; box-to-box: both clusters centre a 16px icon in a larger box, so equal box gaps
+;; with unequal boxes still look uneven. Gaps are measured between adjacent icon
+;; rects — tab favicons in the panel, moz-button <img>s in sidebar-main's shadow.
 (def MEASURE-RAIL-RHYTHM :- String (str "
   const panel = document.getElementById('gjoa-tab-panel');
   if (!panel || !panel.hasAttribute('gjoa-icons-only')) return { error: 'not icons-only' };
   const panelTop = panel.getBoundingClientRect().top;
-  const rows = Array.from(panel.querySelectorAll('.gjoa-tab-row'));
+  const rows = Array.from(panel.querySelectorAll('.gjoa-tab-row:not([hidden])'));
   if (rows.length < 2) return { error: 'need >=2 tabs to measure spacing' };
   const r0 = rows[0].getBoundingClientRect();
   const r1 = rows[1].getBoundingClientRect();
+  const glyphOf = (el) => {
+    for (const c of el.querySelectorAll('img, image, .gjoa-favicon, .button-icon')) {
+      const r = c.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) return r;
+    }
+    return null;
+  };
 " FOOTER-BTN-JS "
+  const byTop = (a, b) => a.top - b.top;
+  const tabGlyphs = rows.map(glyphOf).filter(Boolean).sort(byTop);
+  const toolGlyphs = (root ? Array.from(root.querySelectorAll('moz-button')) : [])
+    .filter(b => b.getBoundingClientRect().height > 0)
+    .map(b => b.shadowRoot && b.shadowRoot.querySelector('img'))
+    .filter(Boolean).map(i => i.getBoundingClientRect())
+    .filter(r => r.height > 0).sort(byTop);
+  const gapsOf = (rs) => rs.slice(1).map((r, i) => Math.round((r.top - rs[i].bottom) * 10) / 10);
+  const tabGaps = gapsOf(tabGlyphs);
+  const toolGaps = gapsOf(toolGlyphs);
+  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
   return {
     firstTabOffset: r0.top - panelTop,
     interTabGap: r1.top - r0.bottom,
     tabRowHeight: r0.height,
     rowPitch: r1.top - r0.top,
     footerBtnHeight,
+    tabGaps, toolGaps,
+    tabGapSpread: tabGaps.length ? Math.max(...tabGaps) - Math.min(...tabGaps) : null,
+    toolGapSpread: toolGaps.length ? Math.max(...toolGaps) - Math.min(...toolGaps) : null,
+    clusterGapDelta: (tabGaps.length && toolGaps.length)
+      ? Math.abs(mean(tabGaps) - mean(toolGaps)) : null,
   };
 "))
 
@@ -181,20 +207,34 @@
      (await-true "return document.querySelectorAll('#gjoa-tab-panel .gjoa-tab-row').length >= 2;" 3000)
      (let [rhythm (chrome-eval MEASURE-RAIL-RHYTHM)]
        (expect (not (.-error rhythm)) (str "MEASURE-RAIL-RHYTHM error: " (JSON/stringify rhythm)))
-       ;; Calibrated against rendered screenshots, not arithmetic (/tmp/gjoa-gallery):
-       ;; offset 12px · row 24px · pitch 28px · footer button 63.5px.
+       ;; The rail is ONE rhythm, not two calibrated ones: every adjacent icon pair —
+       ;; tab to tab, tool to tool, and the two clusters against each other — sits the
+       ;; same distance apart, within 3px (sub-pixel layout + the 1.75px cluster-edge
+       ;; padding are the only slack). Owner spec: "all the icons (settings, tabs)
+       ;; should have same space between distances".
        (expect (and (>= (Number (.-firstTabOffset rhythm)) 10) (<= (Number (.-firstTabOffset rhythm)) 14))
          (str "first-tab top offset must sit in the 10–14px band (10px container padding "
               "+ 2px row margin) — below it the first favicon reads as jammed against the "
               "panel edge. " (JSON/stringify rhythm)))
-       (expect (<= (Number (.-tabRowHeight rhythm)) 24)
-         (str "collapsed tab row must be <= 24px (20px box + 2px padding) — " (JSON/stringify rhythm)))
+       ;; One absolute anchor, so a uniformly INFLATED rail can't pass on symmetry alone.
        (expect (<= (Number (.-rowPitch rhythm)) 28)
          (str "collapsed row pitch must be <= 28px (24px row + 2x2px margin) — " (JSON/stringify rhythm)))
-       (expect (>= (Number (.-footerBtnHeight rhythm)) 60)
-         (str "collapsed footer button cluster must be >= 60px tall (--button-min-height: 60px); "
-              "36px is the un-overridden default and 47.5px the too-subtle first attempt. "
+       (expect (and (> (.-length (.-tabGaps rhythm)) 0) (> (.-length (.-toolGaps rhythm)) 0))
+         (str "rhythm probe found no adjacent icon pair to measure in one of the clusters "
+              "— the uniformity assertion below would pass vacuously. "
               (JSON/stringify rhythm)))
+       (expect (<= (Number (.-tabGapSpread rhythm)) 3)
+         (str "tab-cluster icon gaps are not uniform (spread " (.-tabGapSpread rhythm)
+              "px > 3px): " (JSON/stringify (.-tabGaps rhythm))))
+       (expect (<= (Number (.-toolGapSpread rhythm)) 3)
+         (str "tool-cluster icon gaps are not uniform (spread " (.-toolGapSpread rhythm)
+              "px > 3px): " (JSON/stringify (.-toolGaps rhythm))))
+       (expect (<= (Number (.-clusterGapDelta rhythm)) 3)
+         (str "the two clusters run different rhythms (delta " (.-clusterGapDelta rhythm)
+              "px > 3px) — tabs " (JSON/stringify (.-tabGaps rhythm)) " vs tools "
+              (JSON/stringify (.-toolGaps rhythm)) ". The collapsed rail must read as one "
+              "beat top to bottom; --tab-min-height and --button-min-height both size the "
+              "tool box, so they must equal the tab-row box. " (JSON/stringify rhythm)))
        (chrome-eval "
           const t = [...gBrowser.tabs].find(x => x.getAttribute('gjoa-test-marker') === 'rail-rhythm');
           if (t) { try { gBrowser.removeTab(t); } catch {} }
