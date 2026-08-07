@@ -108,6 +108,55 @@
              lastBottom, belowLastRow: lastBottom !== null && y > lastBottom,
              targetTag: target.className || target.localName, dropPrevented };"))
 
+;; --- drop DIRECTLY ONTO a tab shown in the pinned section ------------------
+;; Real-DND fidelity the single-shot dispatches above lack: the pointer is
+;; hit-tested per step, comes to REST on the target, and `drop` is dispatched
+;; only when the last dragover was canceled — a browser fires none otherwise.
+(defn drop-onto-pinned-js [marker :- String] :- String
+  (str "
+    const M = \"" marker "\";
+    const doc = document;
+    const pc = doc.getElementById(\"gjoa-pinned-container\");
+    const tab = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === M);
+    const row = tab && window.gjoaTest.rowOf.get(tab);
+    const shown = [...pc.querySelectorAll(\".gjoa-tab-row:not([hidden])\")];
+    const target = shown[shown.length - 1];
+    if (!tab || !row || !target) return { error: \"setup: tab/row/pinned-row missing\" };
+    const dt = new DataTransfer();
+    const mk = (type,x,y,rel) => new DragEvent(type,{bubbles:true,cancelable:true,view:window,
+        clientX:x,clientY:y,screenX:x+1000,screenY:y+1000,dataTransfer:dt,relatedTarget:rel||null});
+    const sr = row.getBoundingClientRect();
+    const x0 = sr.left + sr.width/2, y0 = sr.top + sr.height/2;
+    row.dispatchEvent(mk(\"dragstart\", x0, y0));
+    const tr = target.getBoundingClientRect();          // AFTER dragstart: the strip reflows
+    const x1 = tr.left + tr.width/2, y1 = tr.top + tr.height/2;
+    let cur = null, accepted = false;
+    const tick = (x, y) => {
+      const hit = doc.elementFromPoint(x, y);
+      if (!hit) { cur = null; accepted = false; return; }
+      if (hit !== cur) { hit.dispatchEvent(mk(\"dragenter\", x, y, cur));
+                         if (cur) cur.dispatchEvent(mk(\"dragleave\", x, y, hit));
+                         cur = hit; }
+      accepted = !hit.dispatchEvent(mk(\"dragover\", x, y));
+    };
+    const n = Math.max(1, Math.ceil(Math.hypot(x1-x0, y1-y0) / 4));
+    for (let i = 1; i <= n; i++) tick(x0 + (x1-x0)*i/n, y0 + (y1-y0)*i/n);
+    for (let i = 0; i < 4; i++) tick(x1, y1);           // pointer at rest
+    let dropped = false;
+    if (accepted && cur) { cur.dispatchEvent(mk(\"drop\", x1, y1)); dropped = true; }
+    row.dispatchEvent(mk(\"dragend\", x1, y1));
+    return { ok: true, dropped, accepted,
+             targetTabPinned: !!(target._tab && target._tab.pinned),
+             hit: cur ? (cur.id ? \"#\"+cur.id : \".\"+String(cur.className).split(\" \")[0]) : \"null\" };"))
+
+;; Every row the pinned section SHOWS must belong to a pinned tab — otherwise the
+;; section lies, and a drop onto one of those rows is not a cross-container move.
+(def PINNED-SECTION-HONEST :- String "
+  const pc = document.getElementById(\"gjoa-pinned-container\");
+  const rows = [...pc.querySelectorAll(\".gjoa-tab-row:not([hidden])\")];
+  return rows.filter(r => !(r._tab && r._tab.pinned))
+             .map(r => r._tab ? (r._tab.getAttribute(\"gjoa-test-marker\") || r._tab.label) : \"?\");")
+
 ;; RESET-JS keeps pinned tabs, so this test MUST leave none behind.
 (def CLEANUP-PINNED :- String "
   for (const t of [...gBrowser.tabs]) {
@@ -204,6 +253,46 @@
      (let [rc (chrome-eval (pin-drag-js "pinguard-c" "label"))]
        (expect (not (.-error rc)) (str "(c) " (.-error rc)))
        (js/await (await-true (marked-pinned-js "pinguard-c") 3000)))
+
+     (chrome-eval CLEANUP-PINNED))
+
+   ;; The owner's gesture: drop an unpinned tab onto a tab the pinned section is
+   ;; SHOWING. Precondition is the one a live session reaches — a tab pinned then
+   ;; unpinned — because unpin used to leave the row behind in the pinned
+   ;; container, and a drop onto that stranded row is not a cross-container move,
+   ;; so it silently reordered instead of pinning.
+   (deftest "drag: dropping an unpinned tab onto a pinned tab pins it" [mn]
+     (js/await (ensure-sidebar-expanded mn))
+     (chrome-eval CLEANUP-PINNED)
+     (js/await (await-true
+       "return document.querySelectorAll('#gjoa-pinned-container .gjoa-tab-row').length === 0;" 3000))
+
+     (chrome-eval (add-marked-tab-js "pintgt"))
+     (js/await (await-true (marked-row-ready-js "pintgt") 3000))
+     (chrome-eval (add-marked-tab-js "pinbounce"))
+     (js/await (await-true (marked-row-ready-js "pinbounce") 3000))
+     (chrome-eval "
+        const pick = m => [...gBrowser.tabs].find(t => t.getAttribute('gjoa-test-marker') === m);
+        gBrowser.pinTab(pick('pintgt'));
+        gBrowser.pinTab(pick('pinbounce'));
+        gBrowser.unpinTab(pick('pinbounce'));
+        return true;")
+     (js/await (await-true (marked-pinned-js "pintgt") 3000))
+
+     (chrome-eval (add-marked-tab-js "pindrag"))
+     (js/await (await-true (marked-row-ready-js "pindrag") 3000))
+     (let [r (chrome-eval (drop-onto-pinned-js "pindrag"))]
+       (expect (not (.-error r)) (str "gesture: " (.-error r)))
+       (expect (.-accepted r)
+         (str "the pointer at rest on a pinned tab must be a valid drop target — the "
+              "last dragover was refused on " (.-hit r) ", so a real browser fires no "
+              "drop at all. " (JSON/stringify r)))
+       (js/await (await-true (marked-pinned-js "pindrag") 3000)))
+
+     (let [liars (chrome-eval PINNED-SECTION-HONEST)]
+       (expect (= (.-length liars) 0)
+         (str "the pinned section is showing rows whose tabs are NOT pinned: "
+              (JSON/stringify liars))))
 
      (chrome-eval CLEANUP-PINNED))]))
 (js/export-default tests)
