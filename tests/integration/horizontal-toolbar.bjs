@@ -8,7 +8,7 @@
 ;; vertical→horizontal flip (the live niri-resize path where the drawer reparents
 ;; the urlbar; see task #122 transition instability).
 (ns gjoa.tests.integration.horizontal-toolbar
-  (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect await-true wait-for]]))
+  (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect expect-eq await-true wait-for]]))
 (define-mode strict)
 
 ;; Returns {horizontal, missing:[...]} — `missing` names any expected toolbar icon
@@ -58,6 +58,33 @@
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
      (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (assert-full-toolbar (chrome-eval buttonsCheck) "fresh-horizontal"))
+
+   (deftest "sidebar-button menu shows Hide/Show Strip only in horizontal mode" [mn]
+     (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
+     (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
+     (let [r1 (chrome-eval "const m = document.getElementById('gjoa-sidebar-button-menu'); m.dispatchEvent(new Event('popupshowing')); const s = document.getElementById('gjoa-toggle-strip'); return { hidden: s.hidden };")]
+       (expect (.-hidden r1) "strip menu item should be hidden in vertical mode"))
+     (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', false); Services.prefs.setBoolPref('gjoa.layout.horizontalSidebarStrip', false); return true;")
+     (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
+     (let [r2 (chrome-eval "const m = document.getElementById('gjoa-sidebar-button-menu'); m.dispatchEvent(new Event('popupshowing')); const s = document.getElementById('gjoa-toggle-strip'); return { hidden: s.hidden, label: s.getAttribute('label') };")]
+       (expect (not (.-hidden r2)) "strip menu item should be visible in horizontal mode")
+       (expect-eq (.-label r2) "Show Strip" "label should read Show Strip when the strip pref is off"))
+     (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.horizontalSidebarStrip', true); return true;")
+     (let [r3 (chrome-eval "const m = document.getElementById('gjoa-sidebar-button-menu'); m.dispatchEvent(new Event('popupshowing')); const s = document.getElementById('gjoa-toggle-strip'); return { label: s.getAttribute('label') };")]
+       (expect-eq (.-label r3) "Hide Strip" "label should read Hide Strip when the strip pref is on"))
+     (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', true); Services.prefs.clearUserPref('gjoa.layout.horizontalSidebarStrip'); Services.prefs.clearUserPref('gjoa.layout.dynamicOrientation'); return true;"))
+
+   (deftest "strip-hide button is horizontal-only and hides the strip on click" [mn]
+     (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
+     (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
+     (let [r (chrome-eval "const b = document.getElementById('gjoa-strip-hide-button'); return { display: getComputedStyle(b).display };")]
+       (expect-eq (.-display r) "none" "strip-hide button should be display:none in vertical mode"))
+     (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', false); Services.prefs.setBoolPref('gjoa.layout.horizontalSidebarStrip', true); return true;")
+     (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
+     (await-true "return getComputedStyle(document.getElementById('gjoa-strip-hide-button')).display !== 'none';" 4000)
+     (chrome-eval "document.getElementById('gjoa-strip-hide-button').dispatchEvent(new MouseEvent('click', {bubbles: true})); return true;")
+     (await-true "return Services.prefs.getBoolPref('gjoa.layout.horizontalSidebarStrip') === false;" 4000)
+     (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', true); Services.prefs.clearUserPref('gjoa.layout.horizontalSidebarStrip'); Services.prefs.clearUserPref('gjoa.layout.dynamicOrientation'); return true;"))
 
    (deftest "horizontal toolbar survives a vertical→horizontal flip" [mn]
      ;; vertical first, then flip to horizontal — the live-resize path that reparents

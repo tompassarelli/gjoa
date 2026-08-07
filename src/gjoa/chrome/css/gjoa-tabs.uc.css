@@ -767,4 +767,14 @@
   }
 }
 
+/* order:-1 renders it first in #sidebar-container's flex column (gjoa.uc.css). */
+#gjoa-strip-hide-button {
+  display: none;
+}
+
+:root[gjoa-horizontal-tabs] #gjoa-strip-hide-button {
+  display: flex;
+  order: -1;
+}
+
 /* #endregion horizontal sidebar strip */
