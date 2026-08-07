@@ -124,12 +124,12 @@
 
         log (create-logger! "compact")
 
-        vstate :- Any {:strip nil :flash-timer nil :urlbar-obs nil
-                       :collapse-until 0 :retry-timer nil :watchdog nil}
-        hstate :- Any {:strip nil :flash-timer nil :urlbar-obs nil
-                       :collapse-until 0 :retry-timer nil :watchdog nil}
+        vstate {:strip nil :flash-timer nil :urlbar-obs nil
+                :collapse-until 0 :retry-timer nil :watchdog nil}
+        hstate {:strip nil :flash-timer nil :urlbar-obs nil
+                :collapse-until 0 :retry-timer nil :watchdog nil}
 
-        shared :- Any {:ignore-next-hover false :open-popups 0}
+        shared {:ignore-next-hover false :open-popups 0}
 
         ensure-popover (fn []
           (when (not (.matches urlbar ":popover-open")) (.showPopover urlbar)))

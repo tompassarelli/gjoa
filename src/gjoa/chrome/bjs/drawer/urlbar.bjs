@@ -18,7 +18,7 @@
   (let [urlbar (.-urlbar deps)
         root (.-documentElement document)
         log (create-logger! "urlbar")
-        state :- Any {:activated false :intent "current" :backdrop nil :ghost nil :hints nil}
+        state {:activated false :intent "current" :backdrop nil :ghost nil :hints nil}
 
         intent-attr #(if (= % "newTab") "new-tab" "current")
 

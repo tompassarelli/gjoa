@@ -128,7 +128,15 @@
    {:name "bindreset"  :description "Reset all keybindings to defaults"                  :takesArgs false}
    {:name "help"       :description "Show the keymap cheatsheet"                         :takesArgs false}])
 (js/export (defn make-vim! [deps :- Any] :- Any
-  (let [{:keys [rows layout scheduleSave clearSelection selectRange sidebarMain history contentFocus spaces]} deps
+  (let [rows (:rows deps)
+        layout (:layout deps)
+        scheduleSave (:scheduleSave deps)
+        clearSelection (:clearSelection deps)
+        selectRange (:selectRange deps)
+        sidebarMain (:sidebarMain deps)
+        history (:history deps)
+        contentFocus (:contentFocus deps)
+        spaces (:spaces deps)
 
         log (create-logger! "tabs/vim")
 
@@ -138,7 +146,7 @@
                   :modelineMsg  #(modeline-msg %1 %2)})
 
         ;; Consolidated mutable state
-        vs :- Any
+        vs
           {:chord nil
            :chord-timer 0
            :pending-ctrl-w false

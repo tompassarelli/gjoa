@@ -344,7 +344,7 @@
                      :liveTabPfxIds (.map tabs #(or (and (.-getAttribute %) (.getAttribute % "gjoa-id")) 0))})
 
                   (let [applied (Set.)
-                        apply-fn (fn [tab s i :- Int]
+                        apply-fn (fn [tab s i]
                                    (let [id (or (.-id s) (let [nid (.-nextTabId state)]
                                                            (set! (.-nextTabId state) (+ nid 1))
                                                            nid))]
@@ -368,7 +368,7 @@
                     ;; Leftover nodes
                     (set! (.-length saved-tab-queue) 0)
                     (.forEach tab-nodes
-                      (fn [s i :- Int]
+                      (fn [s i]
                         (when (not (.has applied i))
                           (set! (.-_origIdx s) i)
                           (.push saved-tab-queue s))))
@@ -395,7 +395,7 @@
       (let [rows-api (.-v rows-ref)
             group-nodes (.filter loaded-nodes #(= (.-type %) "group"))
             leading-groups []
-            gafter :- Any {:entries []}]
+            gafter {:entries []}]
 
         ;; Bucket groups by anchor
         (.forEach group-nodes
@@ -661,7 +661,7 @@
 
                         (set! (.-measure pfx-ns)
                           (fn [& els]
-                            (.map els (fn [el i :- Int]
+                            (.map els (fn [el i]
                               (let [r (some-> el .getBoundingClientRect)]
                                 (if (= r nil)
                                   {:i i :tag (describe el) :error "no rect"}
@@ -676,7 +676,7 @@
 
                         (set! (.-gaps pfx-ns)
                           (fn [& els]
-                            (.map (.slice els 1) (fn [el i :- Int]
+                            (.map (.slice els 1) (fn [el i]
                               (let [a (some-> (aget els i) .getBoundingClientRect)
                                     b (some-> el .getBoundingClientRect)]
                                 (if (or (= a nil) (= b nil))
@@ -714,7 +714,7 @@
                          focus-it! (fn []
                                      (when (and (blank?) (= (or (.-value u) "") ""))
                                        (try (.focus u) (.select u) (catch Any _e nil))))
-                         holder :- Any {:fn nil}
+                         holder {:fn nil}
                          stop! (fn []
                                  (when (.-fn holder)
                                    (.removeEventListener window "focusin" (.-fn holder) true)

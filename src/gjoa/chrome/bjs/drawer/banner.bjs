@@ -13,7 +13,7 @@
     (if (not identity-box)
       (do (log "init:no-identity-box")
           {:destroy (fn [] nil)})
-      (let [state :- Any {:timer nil :banner nil}
+      (let [state {:timer nil :banner nil}
 
             show (fn []
               (when (not (.-banner state))
@@ -62,7 +62,7 @@
                     (hide)))))
 
             class-observer (MutationObserver. check!)
-            opts :- Any {:attributes true}]
+            opts {:attributes true}]
 
         (set! (.-attributeFilter opts) ["class"])
         (.observe class-observer identity-box opts)

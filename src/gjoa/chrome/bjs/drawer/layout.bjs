@@ -10,12 +10,12 @@
 (def REPAIR-PREF :- String "gjoa.navbar.repaired")
 
 (js/export (defn make-layout! [deps] :- Any
-  (let [{:keys [sidebarMain navigatorToolbox urlbarContainer navBar urlbar]} deps
-        log (create-logger! "drawer/layout")
-        sidebar-main sidebarMain
-        navigator-toolbox navigatorToolbox
-        urlbar-container urlbarContainer
-        nav-bar navBar
+  (let [log (create-logger! "drawer/layout")
+        sidebar-main (:sidebarMain deps)
+        navigator-toolbox (:navigatorToolbox deps)
+        urlbar-container (:urlbarContainer deps)
+        nav-bar (:navBar deps)
+        urlbar (:urlbar deps)
         sidebar-main-element (q sidebar-main "sidebar-main")
 
         toolbox-parent (.-parentNode navigator-toolbox)
@@ -23,10 +23,10 @@
         urlbar-parent (.-parentNode urlbar-container)
         urlbar-next (.-nextSibling urlbar-container)
 
-        state :- Any {:urlbar-toolbar nil
-                      :resize-obs nil
-                      :mutation-obs nil
-                      :updating false}
+        state {:urlbar-toolbar nil
+               :resize-obs nil
+               :mutation-obs nil
+               :updating false}
 
         ;; --- inject-sidebar-shadow-overrides ---
         inject-sidebar-shadow-overrides (fn []

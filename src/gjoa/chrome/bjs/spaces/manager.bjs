@@ -17,7 +17,7 @@
         tab-by-id (.-tabById deps)
         spaces (Map.)
         tab-space (WeakMap.)
-        state :- Any {:active-id nil :applying false}
+        state {:active-id nil :applying false}
         default-space {:id (uuid) :name DEFAULT-NAME :createdAt (Date/now)}]
 
     (.set spaces (.-id default-space) default-space)

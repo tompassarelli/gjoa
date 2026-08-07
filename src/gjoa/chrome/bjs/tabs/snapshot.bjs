@@ -21,7 +21,7 @@
                          :spaceId sp}))
 
         groupEntries []
-        lastSeen :- Any {:id nil}]
+        lastSeen {:id nil}]
 
     ;; Walk rows — track last tab id, push group entries
     (.forEach (Array/from (.rows snapshot))
@@ -70,7 +70,7 @@
 (js/export (defn make-saver! [getSnapshot :- Any history :- Any onError :- Any] :- Any
   (let [fallback #(console/error "gjoa-tabs: save chain" %)
         onErr (or onError fallback)
-        flags :- Any {:inFlight false :pending false}]
+        flags {:inFlight false :pending false}]
     #(do-save! flags getSnapshot history onErr))))
 (js/export (defn pop-saved-by-url [queue :- Any url :- Any] :- Any
   (when url

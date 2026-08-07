@@ -12,7 +12,7 @@
 ;; Walk siblings from `start` using `dir` (e.g. .-nextElementSibling),
 ;; return the first node satisfying `pred`, or nil.
 (defn find-sib! [start :- Any pred :- Any dir :- Any] :- Any
-  (let [box :- Any {:v nil}
+  (let [box {:v nil}
         walk (fn [n]
                (when n
                  (if (pred n)
@@ -86,7 +86,7 @@
   (let [rows (when container
                (.querySelectorAll container
                  ".gjoa-tab-row:not([hidden]), .gjoa-group-row:not([hidden])"))
-        found :- Any {:v nil}]
+        found {:v nil}]
     (when rows
       (.forEach rows
         (fn [r]
@@ -111,10 +111,10 @@
         log (create-logger! "tabs/drag")
 
         ;; Closure-private drag/drop cycle state
-        ds :- Any {:dragSource nil
-                   :dropIndicator nil
-                   :dropTarget nil
-                   :dropPosition nil}
+        ds {:dragSource nil
+            :dropIndicator nil
+            :dropTarget nil
+            :dropPosition nil}
 
         ;; --- clearDropIndicator ---
         clear-drop-indicator (fn []
@@ -316,7 +316,7 @@
 
                         ;; Update parentId for top-level moved tabs
                         (let [moved-set (Set. moved-rows)
-                              mutation-count :- Any {:v 0}]
+                              mutation-count {:v 0}]
                           (.forEach moved-rows
                             (fn [r]
                               (cond
@@ -365,8 +365,8 @@
                                  :else nil)))
 
                           (let [tabs-arr (tabs!)
-                                idx-result :- Any {:targetIdx 0
-                                                   :idxBranch ""}]
+                                idx-result {:targetIdx 0
+                                            :idxBranch ""}]
 
                             ;; Compute target index in Firefox's tab list
                             (cond
@@ -514,7 +514,7 @@
                                           (aget anchor-rows
                                             (- (.-length anchor-rows) 1))
                                           tgt-row)
-                                        last-ins :- Any {:v anchor}]
+                                        last-ins {:v anchor}]
                                     (.forEach group-rows
                                       #(do (.after (.-v last-ins) %)
                                            (set! (.-v last-ins) %)))))
@@ -541,7 +541,7 @@
                                       (aget anchor-rows
                                         (- (.-length anchor-rows) 1))
                                       tgt-row)
-                                    last-ins :- Any {:v anchor}]
+                                    last-ins {:v anchor}]
                                 (.forEach moved-rows
                                   #(do (.after (.-v last-ins) %)
                                        (set! (.-v last-ins) %)))
@@ -643,7 +643,7 @@
                         rect (.getBoundingClientRect target)
                         x (- (.-clientX e) (.-left rect))
                         y (- (.-clientY e) (.-top rect))
-                        pos-info :- Any {:branch ""}]
+                        pos-info {:branch ""}]
                     (if horizontal
                       (cond
                         ;; child only in the bottom QUARTER (was the lower third —
@@ -811,7 +811,7 @@
                          (or (= (.-target e) p)
                              (= (.-target e) (.-spacer state))))
                 (let [src-pinned (row-pinned? (.-dragSource ds))
-                      anchor :- Any {:v nil}]
+                      anchor {:v nil}]
                   (if src-pinned
                       (set! (.-v anchor)
                             (q p

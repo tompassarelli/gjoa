@@ -11,10 +11,10 @@
   (let [log (create-logger! "scheduler")
         reconcilers (Map.)
         pending (Map.)
-        state :- Any {:pendingFlush nil
-                      :pendingResolve nil
-                      :lastReconcileMs nil
-                      :destroyed false}]
+        state {:pendingFlush nil
+               :pendingResolve nil
+               :lastReconcileMs nil
+               :destroyed false}]
 
     (let [get-dirty (fn [domain]
                       (or (.get pending domain)

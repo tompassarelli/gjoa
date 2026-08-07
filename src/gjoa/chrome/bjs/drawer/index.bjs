@@ -33,7 +33,7 @@
                                     :navigatorToolbox navigator-toolbox
                                     :urlbar urlbar})
 
-            state :- Any {:urlbar-api nil :urlbar-key nil}]
+            state {:urlbar-api nil :urlbar-key nil}]
 
         (when urlbar
           (set! (.-urlbar-api state) (make-urlbar! {:urlbar urlbar}))

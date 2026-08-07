@@ -58,20 +58,20 @@
 ;; --- factory ---
 
 (js/export (defn make-picker! [deps :- Any] :- Any
-  (let [st :- Any {:pickerEl nil
-                    :pickerInput nil
-                    :pickerList nil
-                    :active false
-                    :items []
-                    :filtered []
-                    :selectedIdx 0
-                    :onSelect nil
-                    :actions []
-                    :preserveTree false
-                    :filterItem nil}
+  (let [st {:pickerEl nil
+            :pickerInput nil
+            :pickerList nil
+            :active false
+            :items []
+            :filtered []
+            :selectedIdx 0
+            :onSelect nil
+            :actions []
+            :preserveTree false
+            :filterItem nil}
 
         ;; single forward ref for the show/open-action-menu cycle
-        show-ref :- Any {:fn nil}
+        show-ref {:fn nil}
 
         reset-st! (fn []
           (set! (.-active st) false)
