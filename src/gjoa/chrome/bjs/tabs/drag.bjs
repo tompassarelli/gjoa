@@ -4,7 +4,7 @@
             [gjoa.tabs.log :refer [create-logger!]]
             [gjoa.tabs.state :refer [state row-of selection moving-tabs]]
             [gjoa.tabs.constants :refer [INDENT]]
-            [gjoa.tabs.helpers :refer [all-rows data-of! is-horizontal level-of level-of-row subtree-rows tab-by-id tree-data!]]))
+            [gjoa.tabs.helpers :refer [all-rows data-of! is-horizontal level-of level-of-row same-node? subtree-rows tab-by-id tree-data!]]))
 (define-mode strict)
 
 (declare-extern [document gBrowser Array requestAnimationFrame] Any)
@@ -36,11 +36,11 @@
 (defn row-pinned? [row :- Any] :- Any
   (bool (and (.-_tab row) (.-pinned (.-_tab row)))))
 
-;; beagle `=` is STRUCTURAL: DOM nodes with no own enumerable keys (label, icon,
-;; pinned container, panel, spacer all have none) compare EQUAL. Every drop-routing
-;; guard that asks "is this event aimed at THAT node" must use identity.
-(defn same-node? [a :- Any b :- Any] :- Any
-  (bool (Object/is a b)))
+;; Cross-container routing follows the row's CONTAINER, not its tab's flag: a row
+;; the pinned section shows is a pin target even if the two disagree, so a drop
+;; onto it can never degrade into a same-container reorder.
+(defn in-pinned-section? [row :- Any] :- Any
+  (bool (and row (same-node? (.-parentNode row) (.-pinnedContainer state)))))
 
 ;; Pretty-printer for a row -- used in log lines so we can correlate source
 ;; vs target across event boundaries without dumping the whole element.
@@ -237,13 +237,9 @@
               (log "executeDrop:abort"
                    {:reason "no-tgt-data" :target (row-desc tgt-row)})
               (let [src-pinned (or (row-pinned? src-row)
-                                   (and (bool (.-_group src-row))
-                                        (same-node? (.-parentNode src-row)
-                                                    (.-pinnedContainer state))))
+                                   (in-pinned-section? src-row))
                     tgt-pinned (or (row-pinned? tgt-row)
-                                   (and (bool (.-_group tgt-row))
-                                        (same-node? (.-parentNode tgt-row)
-                                                    (.-pinnedContainer state))))
+                                   (in-pinned-section? tgt-row))
                     is-cross-container (not= src-pinned tgt-pinned)]
 
                 (log "executeDrop:enter"

@@ -3,7 +3,7 @@
   (:require [gjoa.macros :refer [q on! bool rmattr! undef-or toggle! tabs! last-of]]
             [gjoa.tabs.log :refer [create-logger!]]
             [gjoa.tabs.constants :refer [CLOSED-MEMORY SPACE-ATTR]]
-            [gjoa.tabs.helpers :refer [all-rows group-by-id is-horizontal level-of parent-of-tab pin-tab-id read-pinned-id subtree-rows tab-by-id tab-url tree-data!]]
+            [gjoa.tabs.helpers :refer [all-rows group-by-id is-horizontal level-of parent-of-tab pin-tab-id read-pinned-id same-node? subtree-rows tab-by-id tab-url tree-data!]]
             [gjoa.tabs.snapshot :refer [pop-saved-by-url pop-saved-for-tab]]
             [gjoa.tabs.state :refer [closed-tabs moving-tabs row-of saved-tab-queue state tree-of]]))
 (define-mode strict)
@@ -425,7 +425,7 @@
             #(rmattr! % "style")
             ;; move-row
             (fn [tab row]
-              (when (not= (.-parentNode row) (.-pinnedContainer state))
+              (when (not (same-node? (.-parentNode row) (.-pinnedContainer state)))
                 (.appendChild (.-pinnedContainer state) row)
                 (place-row-in-firefox-order tab row)))
             ;; post-move
@@ -450,7 +450,7 @@
             #(set! (.-draggable %) true)
             ;; move-row
             (fn [tab row]
-              (when (not= (.-parentNode row) (.-panel state))
+              (when (not (same-node? (.-parentNode row) (.-panel state)))
                 (.insertBefore (.-panel state) row (.-spacer state))
                 (place-row-in-firefox-order tab row)))
             ;; post-move

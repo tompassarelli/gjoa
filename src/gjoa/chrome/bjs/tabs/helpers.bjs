@@ -10,6 +10,12 @@
 
 (def log :- Any (create-logger! "tabs"))
 
+;; beagle `=` is STRUCTURAL: the panel, the pinned container, the spacer and the
+;; row children all have ZERO own enumerable keys, so they compare EQUAL. Any
+;; guard asking "is this node THAT node" must use identity or it is dead code.
+(js/export (defn same-node? [a :- Any b :- Any] :- Any
+  (bool (Object/is a b))))
+
 ;; SessionStore resolution — may not exist at import time
 (js/export (def SS :- Any
   (let [try-global (try

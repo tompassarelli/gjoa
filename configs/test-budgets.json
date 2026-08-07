@@ -130,7 +130,7 @@
       "category": "group-drag-above",
       "tier": "fast",
       "budgetMs": 1600,
-      "note": "[trimmable] The single 250ms setTimeout after the drop waits for the tree-resync/row reposition to settle. Replace with await-true o. +400 2026-08-07: added the drop-to-pin guard (3 drags + 3 tab creations, all await-true); measured 281ms for that test, 535ms for the original.",
+      "note": "[trimmable] The single 250ms setTimeout after the drop waits for the tree-resync/row reposition to settle. Replace with await-true o. +400 2026-08-07: added the drop-to-pin guard (3 drags + 3 tab creations, all await-true); measured 281ms for that test, 535ms for the original. 2026-08-07: added the drop-ONTO-a-pinned-tab guard (hit-tested walk + rest, 3 tab creations, all await-true); measured 344ms, file total ~1140ms \u2014 still inside 1600, no bump.",
       "estSavingsMs": 200
     },
     "groups": {
