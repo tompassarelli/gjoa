@@ -1,6 +1,6 @@
 #lang beagle/js
 (ns gjoa.drawer.urlbar
-  (:require [gjoa.macros :refer [q by-id html-new htm attr! on! onc! offc! off! bool has? rmattr! css!]]
+  (:require [gjoa.macros :refer [q by-id html-new htm xul-id attr! on! onc! offc! off! bool has? rmattr! css!]]
             [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
@@ -20,9 +20,13 @@
         log (create-logger! "urlbar")
         state {:activated false :intent "current" :backdrop nil :ghost nil :hints nil
                :healObs nil :healFn nil :breakout0 false :containerBreakout0 false
-               :urlbarH0 "" :containerH0 ""}
+               :urlbarH0 "" :containerH0 "" :stage nil :home nil}
 
         intent-attr #(if (= % "newTab") "new-tab" "current")
+
+        ;; #urlbar-container — NOT `parentNode`, which is the stage while floating.
+        container (fn []
+          (or (some-> (.-home state) .-parent) (.-parentNode urlbar)))
 
         ;; Append the hint footer as #urlbar's LAST child so it lands below
         ;; .urlbarView (the results list). Idempotent — the re-arm path calls it
@@ -43,6 +47,43 @@
                   (.appendChild el pair))))
               (.appendChild urlbar el)
               (set! (.-hints state) el))))
+
+        ;; WINDOW-GLOBAL STAGE: documentElement is the only ancestor whose fixed
+        ;; containing block is the viewport AND whose stacking context is above the
+        ;; content deck — so the palette is centred and painted over the page by DOM
+        ;; POSITION, not by the top-layer promotion (which Firefox evicts at will).
+        ;; A <toolbar>, not a <div>: reparenting re-runs UrlbarInput's
+        ;; connectedCallback, which sets `#allowBreakout = !!this.closest("toolbar")`
+        ;; — under a plain div that goes false and #stopBreakout() permanently kills
+        ;; [breakout]/[breakout-extend], so the palette never expands for its results.
+        ensure-stage! (fn []
+          (when (not (bool (some-> (.-stage state) .-isConnected)))
+            (let [el (xul-id "toolbar" "gjoa-urlbar-stage")]
+              (attr! el "customizable" "false")
+              (.appendChild root el)
+              (set! (.-stage state) el)))
+          (.-stage state))
+
+        ;; Idempotent: records the home slot only on the move that actually leaves it,
+        ;; so a re-summon or a heal can call this without clobbering the restore target.
+        ;; `identical?` / `.contains`, never `=`: beagle's `=` is STRUCTURAL, and two
+        ;; DOM nodes both have zero own enumerable keys, so `=` is true for any pair.
+        ensure-staged! (fn []
+          (let [st (ensure-stage!)]
+            (when (not (bool (.contains st urlbar)))
+              (set! (.-home state) {:parent (.-parentNode urlbar)
+                                    :next (.-nextSibling urlbar)})
+              (.appendChild st urlbar))))
+
+        restore-home! (fn []
+          (let [h (.-home state)]
+            (when h
+              (set! (.-home state) nil)
+              (let [p (.-parent h) n (.-next h)]
+                (when p
+                  (if (and n (identical? (.-parentNode n) p))
+                    (.insertBefore p urlbar n)
+                    (.appendChild p urlbar)))))))
 
         ;; #149 ATOMIC TEARDOWN. The naive teardown removed `gjoa-urlbar-floating`
         ;; synchronously, which instantly reverted the urlbar from the centered
@@ -89,6 +130,11 @@
               (let [a (.-activeElement document)]
                 (when (or (= a urlbar) (and a (.contains urlbar a)))
                   (some-> window .-gBrowser .-selectedBrowser .focus)))
+              ;; Un-stage FIRST: everything below writes through `parentNode`/`container`
+              ;; and must see the real #urlbar-container. Still behind the teardown
+              ;; opacity:0 + the floating attrs, so the in-flow restore never paints
+              ;; (the #149/#150 ordering).
+              (restore-home!)
               (some-> window .-gURLBar .-view .close)
               (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
                 (.hidePopover urlbar))
@@ -129,6 +175,9 @@
             (when (.-hints state)
               (.remove (.-hints state))
               (set! (.-hints state) nil))
+            (when (.-stage state)
+              (.remove (.-stage state))
+              (set! (.-stage state) nil))
             ;; release the snap after the instant revert has painted (double-rAF: frame
             ;; one applies the snapped resting layout, frame two re-enables transitions
             ;; so later focus/expand animations still work).
@@ -167,30 +216,29 @@
               (.addEventListener urlbar "transitionend" fire)
               (.setTimeout window (fn [] (fire nil)) 260))))
 
-        ;; SINGLE OWNER of the top-layer promotion. The palette escapes the sidebar's
-        ;; (transformed, in compact mode) stacking context ONLY by being a manual popover
-        ;; in the top layer. This asserts that idempotently — popover=manual + showPopover
-        ;; if not already open + focus — so it's safe to call on every summon (fresh OR
-        ;; re-arm) and self-heals a popover that another writer (compact.bjs / teardown)
-        ;; pulled out from under the `activated` flag.
+        ;; SINGLE OWNER of the top-layer promotion. Belt-and-braces since the stage
+        ;; above owns centring + paint order; this only restores the [breakout] pair
+        ;; (what makes .urlbar-background / .urlbarView render at all) and re-promotes.
         ensure-floating-promoted (fn []
           (try
-            ;; #stopBreakout() drops [breakout] from BOTH #urlbar and #urlbar-container
-            ;; in the same call that hides the popover, and that pair is what makes
-            ;; .urlbar-background / .urlbarView render — restore both or the re-promoted
-            ;; palette is correctly positioned and paints nothing.
             (when (not (has? urlbar "breakout"))
               (attr! urlbar "breakout" "true"))
-            (when (and (.-parentNode urlbar) (not (has? (.-parentNode urlbar) "breakout")))
-              (attr! (.-parentNode urlbar) "breakout" "true"))
+            (let [c (container)]
+              (when (and c (not (has? c "breakout")))
+                (attr! c "breakout" "true")))
             (when (not= (.getAttribute urlbar "popover") "manual")
               (attr! urlbar "popover" "manual"))
             (when (and (not (bool (.matches urlbar ":popover-open"))) (.-showPopover urlbar))
               (.showPopover urlbar))
+            (catch Any e
+              (log "activateFloating:promote-error" {:msg (String e)})))
+          ;; SEPARATE catch: sharing one with the promotion meant a showPopover throw
+          ;; also skipped the focus, leaving a visible palette that swallowed typing.
+          (try
             (some-> window .-gURLBar .focus)
             (some-> window .-gURLBar .select)
             (catch Any e
-              (log "activateFloating:promote-error" {:msg (String e)}))))
+              (log "activateFloating:focus-error" {:msg (String e)}))))
 
         ;; TOP-LAYER WATCHDOG: gjoa does not own `popover` on #urlbar — UrlbarInput's
         ;; #stopBreakout() evicts it (modal blocker, layout-breakout re-measure, urlbar
@@ -211,6 +259,7 @@
                 (log "heal:re-promote"
                      {:popoverOpen (bool (.matches urlbar ":popover-open"))
                       :breakout (has? urlbar "breakout")})
+                (ensure-staged!)
                 (ensure-floating-promoted)))))
 
         install-heal (fn []
@@ -245,6 +294,7 @@
                   ;; Owner correctly called this a state-management failure, not a compositor
                   ;; bug. Re-assert the promotion here so every summon lands in the top layer.
                   (ensure-hints)
+                  (ensure-staged!)
                   (ensure-floating-promoted))
               (do (set! (.-activated state) true)
                   (log "activateFloating" {:intent (.-intent state)})
@@ -486,7 +536,11 @@
                       (.appendChild root bd)
                       (set! (.-backdrop state) bd)))
 
+                  ;; After the ghost capture (which needs the TRUE resting rect) and
+                  ;; behind [gjoa-urlbar-arming]'s opacity:0, so the move never paints.
+                  (ensure-staged!)
                   (ensure-hints)
+                  ;; focus/select inside re-runs here: reparenting blurs the field.
                   (ensure-floating-promoted)
                   (install-heal)
                   ;; reveal once the popover has promoted + positioned (double-rAF); a

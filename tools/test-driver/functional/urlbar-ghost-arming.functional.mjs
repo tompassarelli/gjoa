@@ -11,6 +11,11 @@
 //         #urlbar to the top layer, then reveal on the next frame — so the float-in
 //         only ever plays from the settled centered geometry.
 //
+//   BUG 3 "the palette is cut off at the content edge" (2026-08-07, hit five times):
+//         the palette must be centered + painted over the content by DOM POSITION
+//         (#urlbar parked in #gjoa-urlbar-stage under documentElement), not by the
+//         top-layer promotion, which Firefox evicts through several paths.
+//
 //   bun tools/test-driver/functional/urlbar-ghost-arming.functional.mjs
 //
 // Behavioural proof: tools/test-driver/urlbar-ghost-match-probe.py (cage: ghost
@@ -99,13 +104,55 @@ if (sidebarRule) {
      "in-sidebar de-centering rule is scoped :root:not([gjoa-urlbar-floating]) so floating centers");
 }
 
-// --- TOP-LAYER SELF-HEAL: single owner, re-asserted on every summon ---
-// The palette escapes the sidebar's (compact = transformed) stacking context only by
-// being a top-layer popover. `popover` has multiple writers (compact.bjs, activate,
-// teardown), so it can desync from the `activated` flag. activate-floating must
-// re-assert the promotion on BOTH the fresh AND the re-arm path via one owner, so a
-// re-summon can never leave the palette stranded out of the top layer (clipped under
-// content). Behavioural proof: urlbar-promote-selfheal.py.
+// --- WINDOW-GLOBAL STAGE: the palette is centered + over the content BY DOM POSITION ---
+// The palette used to be centered and painted above the content ONLY while #urlbar was
+// a top-layer popover; every eviction (breakout blocker, raw hidePopover, uidensity
+// change) dropped it into the drawer's containing block AND under the content deck —
+// the content-edge cut-off the owner hit five times. #urlbar is now parked in
+// #gjoa-urlbar-stage, a direct child of documentElement, for the palette's lifetime.
+// Behavioural proof: tests/integration/urlbar-drawer.bjs DEMOTE-AND-MEASURE (#5).
+ok(/ensure-stage!/.test(bjs) && /"gjoa-urlbar-stage"/.test(bjs),
+   "there is a stage owner (ensure-stage!) creating #gjoa-urlbar-stage");
+ok(/\(\.appendChild root el\)/.test(bjs),
+   "the stage is appended to `root` (documentElement) — the backdrop's proven anchor");
+// It must be a <toolbar>: UrlbarInput's connectedCallback (which the reparent fires)
+// sets #allowBreakout = !!this.closest("toolbar"); under a plain div that goes false
+// and #stopBreakout() permanently kills [breakout]/[breakout-extend].
+ok(/xul-id "toolbar" "gjoa-urlbar-stage"/.test(bjs),
+   "the stage is a XUL <toolbar> so #urlbar.closest('toolbar') still resolves");
+// and the palette must pin the breakout vars, which FF derives from parentNode (= the
+// viewport-sized stage) and would otherwise stretch the input row to the whole window.
+ok(/--urlbar-container-height:\s*var\(--urlbar-min-height\)\s*!important/.test(css),
+   "the floating palette pins --urlbar-container-height (parentNode is the stage)");
+ok(/ensure-staged!/.test(bjs) && /\.appendChild st urlbar/.test(bjs),
+   "#urlbar is reparented INTO the stage while floating");
+// the home slot must be recorded, and restored before teardown drops the floating attrs
+ok(/:parent \(\.-parentNode urlbar\)/.test(bjs) && /:next \(\.-nextSibling urlbar\)/.test(bjs),
+   "the resting home slot (parent + nextSibling) is recorded before the move");
+ok(/restore-home!/.test(bjs) && /insertBefore p urlbar n/.test(bjs),
+   "teardown restores #urlbar to its exact home slot (insertBefore, not just append)");
+const restoreIdx = bjs.indexOf("(restore-home!)");
+const dropFloatIdx = bjs.indexOf('rmattr! root "gjoa-urlbar-floating"');
+ok(restoreIdx !== -1 && dropFloatIdx !== -1 && restoreIdx < dropFloatIdx,
+   "the un-stage happens BEFORE gjoa-urlbar-floating is dropped (no-flash ordering)");
+// the stage must be laid out window-global and must not eat the backdrop's clicks
+const stageRule = /#gjoa-urlbar-stage\s*\{[^}]*\}/.exec(css);
+ok(!!stageRule, "CSS has a #gjoa-urlbar-stage rule");
+if (stageRule) {
+  const body = stageRule[0];
+  ok(/position:\s*fixed\s*!important/.test(body), "stage is position: fixed (viewport-sized)");
+  ok(/inset:\s*0\s*!important/.test(body), "stage spans the whole viewport (inset: 0)");
+  ok(/z-index:\s*10001\s*!important/.test(body), "stage sits above the backdrop (z-index 10001)");
+  ok(/pointer-events:\s*none\s*!important/.test(body),
+     "stage is pointer-events:none so it cannot swallow the backdrop's dismiss clicks");
+}
+ok(/:root\[gjoa-urlbar-floating\]\s+#urlbar\s*\{\s*pointer-events:\s*auto\s*!important/.test(css),
+   "the floating palette takes its own pointer events back");
+
+// --- TOP-LAYER PROMOTION: kept as belt-and-braces, and it must not swallow the focus ---
+// It is no longer the correctness mechanism, but it still restores the [breakout] pair
+// that makes .urlbar-background / .urlbarView render at all, so it must still be a single
+// owner re-asserted on every summon. Behavioural proof: urlbar-promote-selfheal.py.
 ok(/ensure-floating-promoted/.test(bjs),
    "there is a single top-layer-promotion owner (ensure-floating-promoted)");
 // it must be invoked from the re-arm branch (activated already true) — the desync path
@@ -113,11 +160,31 @@ const rearmIdx = bjs.indexOf("activateFloating:re-arm");
 const rearmScope = rearmIdx !== -1 ? bjs.slice(rearmIdx, rearmIdx + 1400) : "";
 ok(/\(ensure-floating-promoted\)/.test(rearmScope),
    "the re-arm branch calls ensure-floating-promoted (self-heals a pulled popover)");
-// and the promotion actually asserts popover=manual + showPopover
+// and the promotion actually asserts popover=manual + showPopover. Scope = the whole
+// binding form (up to the next top-level binding), NOT a fixed slice: the previous
+// 600-char window silently fell short of the assertions the moment a comment was added
+// inside the form, which is why this check stood red without meaning anything.
 const promoteIdx = bjs.indexOf("ensure-floating-promoted (fn");
-const promoteScope = promoteIdx !== -1 ? bjs.slice(promoteIdx, promoteIdx + 600) : "";
+const promoteEnd = promoteIdx !== -1 ? bjs.indexOf("\n        heal (fn", promoteIdx) : -1;
+const promoteScope = promoteIdx !== -1 && promoteEnd !== -1
+  ? bjs.slice(promoteIdx, promoteEnd) : "";
+ok(promoteScope !== "", "could not delimit the ensure-floating-promoted binding form");
 ok(/popover.*manual/.test(promoteScope) && /showPopover/.test(promoteScope),
    "ensure-floating-promoted asserts popover=manual + showPopover (top-layer promotion)");
+// SPLIT CATCH: a showPopover throw must not skip the focus/select that follow it —
+// one shared try/catch made a failed promotion also swallow the focus.
+const catches = (promoteScope.match(/\(catch Any/g) || []).length;
+ok(catches >= 2,
+   "promotion and focus/select have SEPARATE catches (a showPopover throw cannot skip focus)");
+const focusIdx = promoteScope.indexOf("gURLBar .focus");
+const lastCatchBeforeFocus = promoteScope.lastIndexOf("(catch Any", focusIdx);
+ok(focusIdx !== -1 && lastCatchBeforeFocus !== -1 &&
+   promoteScope.slice(lastCatchBeforeFocus, focusIdx).includes("(try"),
+   "gURLBar.focus/select sit in their own try, after the promotion's catch");
+// and the promotion must write [breakout] to the real #urlbar-container, which is NOT
+// parentNode while the palette is staged.
+ok(/container \(fn/.test(bjs) && /\(container\)/.test(promoteScope),
+   "the [breakout] pair is written via `container`, not `parentNode` (stale while staged)");
 
 console.log(`\nurlbar-ghost-arming invariants: ${pass} pass, ${fail} fail`);
 process.exit(fail ? 1 : 0);

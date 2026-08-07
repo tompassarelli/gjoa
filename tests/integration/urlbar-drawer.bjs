@@ -45,6 +45,10 @@
 ;;      security icon + URL text row) is the same (within ~1px) at rest vs
 ;;      [breakout-extend] — focusing the urlbar must not shift the text down.
 ;;
+;;   #5 The palette is PROMOTION-INDEPENDENT: centred, zen-wide and hit-testable
+;;      with #urlbar forcibly out of the top layer, through every eviction path
+;;      (breakout blocker / raw hidePopover / uidensity change). See DEMOTE-AND-MEASURE.
+;;
 ;;   #4 The resting-slot GHOST keeps the ENGINE CHIP. #gjoa-urlbar-ghost stands in
 ;;      for the resting bar while the palette floats, so anything the resting bar
 ;;      shows and the ghost doesn't reads as that element vanishing on Ctrl+L.
@@ -297,6 +301,78 @@
            "px — it is positioned by the sidebar subtree, not the ICB. "
            (JSON/stringify p)))))
 
+;; PROMOTION-INDEPENDENCE (2026-08-07). The palette used to be centred + painted
+;; over the content ONLY while #urlbar was a top-layer popover; every eviction path
+;; below dropped it back to the drawer's containing block and under the content deck
+;; (the "content-edge cut-off" the owner hit five times). The fix parks #urlbar in
+;; #gjoa-urlbar-stage, a direct child of documentElement, so neither property depends
+;; on the promotion any more. Each path evicts and measures IN THE SAME TASK: the
+;; watchdog's MutationObserver / `toggle` callbacks run at the microtask checkpoint
+;; AFTER this script, so what comes back is the palette with NO healing applied.
+(def DEMOTE-AND-MEASURE :- String "
+  const [path] = arguments;
+  const u = document.getElementById('urlbar');
+  try {
+    if (path === 'breakout blocker') gURLBar.incrementBreakoutBlockerCount();
+    else if (path === 'uidensity change') gUIDensity.update(gUIDensity.MODE_COMPACT);
+    if (u.matches(':popover-open') && u.hidePopover) u.hidePopover();
+    u.removeAttribute('popover');
+  } catch (e) { return { error: 'demote via ' + path + ' threw: ' + String(e), path }; }
+  const stage = document.getElementById('gjoa-urlbar-stage');
+  const ur = u.getBoundingClientRect();
+  const cy = Math.round(ur.top + ur.height / 2);
+  const hit = x => { const e = document.elementFromPoint(Math.round(x), cy);
+    return e ? { id: e.id || e.localName, inUrlbar: (e === u || u.contains(e)) }
+             : { id: null, inUrlbar: false }; };
+  const rects = u.getClientRects();
+  return {
+    path,
+    staged: !!(stage && u.parentNode === stage),
+    stageOnRoot: !!(stage && stage.parentNode === document.documentElement),
+    popoverOpen: u.matches(':popover-open'),
+    left: ur.left, right: ur.right, width: ur.width, windowWidth: window.innerWidth,
+    clientRects: rects.length,
+    clientRectWidth: rects.length ? rects[0].width : null,
+    hitLeft: hit(ur.left + 3), hitRight: hit(ur.right - 3),
+  };
+")
+(def UNDEMOTE :- String "
+  const [path] = arguments;
+  try {
+    if (path === 'breakout blocker') gURLBar.decrementBreakoutBlockerCount();
+    else if (path === 'uidensity change') gUIDensity.update(gUIDensity.MODE_NORMAL);
+  } catch (e) {}
+  window.__gjoaEvictSettled = false;
+  requestAnimationFrame(() => requestAnimationFrame(() => { window.__gjoaEvictSettled = true; }));
+  return true;
+")
+(defn assert-promotion-independent! [d :- Any] :- Any
+  (let [tag (str "staged palette (demoted via " (.-path d) "): ")
+        centre-off (Math/abs (- (/ (+ (.-left d) (.-right d)) 2)
+                                (/ (.-windowWidth d) 2)))]
+    (expect (not (.-error d)) (str tag (.-error d)))
+    ;; NON-VACUOUS: if the eviction didn't take, the case proves nothing.
+    (expect (not (.-popoverOpen d))
+      (str tag "still :popover-open — the forced demotion did not take. "
+           (JSON/stringify d)))
+    (expect (and (.-staged d) (.-stageOnRoot d))
+      (str tag "#urlbar is not parked in #gjoa-urlbar-stage under documentElement, so "
+           "it is back inside the drawer's containing block + stacking context. "
+           (JSON/stringify d)))
+    (expect (<= centre-off 4)
+      (str tag "off-centre by " (.toFixed centre-off 1) "px WITHOUT the promotion — "
+           "the stage is not holding the geometry. " (JSON/stringify d)))
+    (expect (and (>= (.-width d) 660) (<= (.-width d) 760))
+      (str tag "width " (.toFixed (.-width d) 1) "px left the zen-sized band — the "
+           "drawer-scoped width rules took it back. " (JSON/stringify d)))
+    (expect (and (= (.-clientRects d) 1)
+                 (< (Math/abs (- (.-clientRectWidth d) (.-width d))) 1))
+      (str tag "client rect disagrees with its bounding rect. " (JSON/stringify d)))
+    (expect (and (.-inUrlbar (.-hitLeft d)) (.-inUrlbar (.-hitRight d)))
+      (str tag "CUT OFF — an edge point hit-tests outside #urlbar (left→"
+           (.-id (.-hitLeft d)) ", right→" (.-id (.-hitRight d)) "); the content deck "
+           "is painting over the palette. " (JSON/stringify d)))))
+
 ;; The pre-summon engine chip: the .searchmode-switcher box and the engine icon
 ;; inside it (a moz-button renders that <img> in its open shadow root), both
 ;; relative to #urlbar so they can be compared against the ghost's own box.
@@ -541,6 +617,14 @@
      (js/await (.executeScript mn RESTORE-BREAKOUT))
      (js/await (await-true EVICT-SETTLED 2000))
      (assert-promoted! (chrome-eval MEASURE-PROMOTION) "after blocker release")
+     ;; ...and it must be centred + painted even when the promotion is GONE, through
+     ;; every path that evicts it in the wild. This is what the stage buys; the
+     ;; watchdog above is belt-and-braces on top of it.
+     (doseq [path ["breakout blocker" "raw hidePopover" "uidensity change"]]
+       (assert-promotion-independent!
+         (js/await (.executeScript mn DEMOTE-AND-MEASURE [path])))
+       (js/await (.executeScript mn UNDEMOTE [path]))
+       (js/await (await-true EVICT-SETTLED 2000)))
      (js/await (.executeScript mn DISMISS-FLOATING))
 
      (js/await (await-true FLOATING-TORN-DOWN 2000))

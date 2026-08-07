@@ -932,6 +932,13 @@ Preserve these (security warnings):
   z-index: 10001 !important;
   /* Anchor the urlbar-results dropdown to our floating width. */
   --urlbar-width: var(--gjoa-floating-w) !important;
+  /* UrlbarInput#updateLayoutBreakoutDimensions writes --urlbar-container-height
+   * from `this.parentNode` — which is the viewport-sized #gjoa-urlbar-stage while
+   * the palette floats, so `[breakout-extend] > .urlbar-input-container { height:
+   * var(--urlbar-container-height) }` would stretch the input row to the whole
+   * window. Pin both to the resting input height. */
+  --urlbar-height: var(--urlbar-min-height) !important;
+  --urlbar-container-height: var(--urlbar-min-height) !important;
   /* Subtle scale-in so the centered bar reads as a deliberate appearance, not a
    * teleport. `scale` (individual property) composes with `transform: none`
    * above — no conflict. Disabled under prefers-reduced-motion below.
@@ -1005,6 +1012,33 @@ Preserve these (security warnings):
 @keyframes gjoa-urlbar-backdrop-fade {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* WINDOW-GLOBAL STAGE — drawer/urlbar.bjs parks #urlbar in here (a direct child of
+ * documentElement) while the palette floats, so its fixed geometry resolves against
+ * the viewport and it paints over the content deck without the top-layer promotion.
+ * `pointer-events: none` keeps the full-viewport stage from eating the backdrop's
+ * dismiss clicks; the palette takes its own back. */
+#gjoa-urlbar-stage {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10001 !important;
+  pointer-events: none !important;
+  /* It is a <toolbar> only so `#urlbar.closest("toolbar")` keeps resolving; it must
+   * paint nothing and impose no box of its own. */
+  display: block !important;
+  appearance: none !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+:root[gjoa-urlbar-floating] #urlbar {
+  pointer-events: auto !important;
 }
 
 /* New-tab intent: subtle visual hint that Enter will spawn a new tab.
