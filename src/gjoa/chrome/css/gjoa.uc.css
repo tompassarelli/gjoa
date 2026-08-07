@@ -1140,6 +1140,16 @@ Preserve these (security warnings):
   inset-block-start: calc(-1 * var(--gjoa-urlbar-breathing)) !important;
 }
 
+/* The breathing room above is only half the contract: the rule above raises the
+ * panel 8px over the input row but nothing opens the same gap BELOW it, so the
+ * text sat 15px from the panel top and 7px from the results separator — visibly
+ * bottom-flush. MARGIN, not padding: the input row's own box (and therefore its
+ * top) is untouched, so the no-jump invariant still holds. */
+:root[gjoa-urlbar-floating] #urlbar[breakout-extend] > .urlbar-input-container,
+#gjoa-urlbar-toolbar #urlbar[breakout-extend] > .urlbar-input-container {
+  margin-block-end: var(--gjoa-urlbar-breathing) !important;
+}
+
 /* Vertically center the security icon / text / star within the input row.
  * FF/nova leaves `.urlbar-input-container` at align-items:normal (≈stretch),
  * which top-aligns fixed-size children (the shield icon) instead of centering
