@@ -44,6 +44,14 @@
   return true;
 ")
 
+;; ENABLE-COMPACT sets a PREF, and the runner's RESET does not clear it — leaving it
+;; on puts every later file's sidebar off-canvas (urlbar-drawer's floating-palette
+;; geometry fails outright). Each test restores it.
+(def DISABLE-COMPACT :- String "
+  Services.prefs.clearUserPref('gjoa.sidebar.compact');
+  return true;
+")
+
 (def HAS-HOVER :- String "return document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');")
 
 ;; Same race as OPEN-MENU-AND-LEAVE, but with the drawer `e`-PINNED. Reads
@@ -82,7 +90,9 @@
      ;; release: once the menu closes, a later mouseleave may collapse it again — guard
      ;; against an over-correction that pins the sidebar open forever.
      (js/await (chrome-eval CLOSE-MENU-AND-LEAVE))
-     (js/await (await-true "return !document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');" 3000)))
+     (js/await (await-true "return !document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');" 3000))
+     (js/await (chrome-eval DISABLE-COMPACT))
+     (js/await (await-true "return !document.querySelector('#sidebar-container[data-gjoa-compact]');" 4000)))
 
    ;; The `e`-PINNED reveal (vim.bjs summonSidebar sets [gjoa-pinned], and
    ;; #sidebar-container[data-gjoa-compact][gjoa-pinned] is what keeps the drawer
@@ -107,6 +117,8 @@
      (js/await (await-true
        (str "const sb = document.getElementById('sidebar-container');"
             "return !sb.hasAttribute('gjoa-pinned') && !sb.hasAttribute('gjoa-has-hover');")
-       3000)))]))
+       3000))
+     (js/await (chrome-eval DISABLE-COMPACT))
+     (js/await (await-true "return !document.querySelector('#sidebar-container[data-gjoa-compact]');" 4000)))]))
 
 (js/export-default tests)
