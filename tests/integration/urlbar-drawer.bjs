@@ -28,8 +28,9 @@
 ;;      rules and drags the palette back to the drawer slot, where
 ;;      #gjoa-urlbar-toolbar's `overflow: hidden` cuts it off. ASSERT the three
 ;;      properties that failure violates: the palette ESCAPES the
-;;      #sidebar-container box, its width is inside the owner's 400-600px band,
-;;      and its visual rect equals its layout rect.
+;;      #sidebar-container box, its width is inside the owner's zen-sized band,
+;;      and its visual rect equals its layout rect. Plus the hint footer, which
+;;      must be present + visible while floating and ABSENT in the resting bar.
 ;;
 ;;   #2 EXPANDED dropdown panel must be OPAQUE (non-collapsed). On focus the
 ;;      urlbar gets [breakout-extend]; the bad nova-only calc made
@@ -92,6 +93,7 @@
     inset,
     breakoutExtend: urlbar.hasAttribute('breakout-extend'),
     inputContainerTop: ic ? ic.getBoundingClientRect().top : null,
+    hints: !!document.getElementById('gjoa-urlbar-hints'),
   };
 ")
 
@@ -109,10 +111,21 @@
     return e ? { id: e.id || e.localName, inUrlbar: (e === urlbar || urlbar.contains(e)) }
              : { id: null, inUrlbar: false }; };
   const rects = urlbar.getClientRects();
+  const hints = document.getElementById('gjoa-urlbar-hints');
+  const hr = hints ? hints.getBoundingClientRect() : null;
+  const view = urlbar.querySelector('.urlbarView');
+  const vr = view ? view.getBoundingClientRect() : null;
   return {
     urlbarWidth: u.width, urlbarLeft: u.left, urlbarRight: u.right,
     sidebarLeft: s.left, sidebarRight: s.right,
     windowWidth: window.innerWidth,
+    hints: !!hints,
+    hintsInUrlbar: !!(hints && urlbar.contains(hints)),
+    hintsVisible: !!(hr && hr.width > 0 && hr.height > 0
+                     && getComputedStyle(hints).display !== 'none'
+                     && getComputedStyle(hints).visibility !== 'hidden'),
+    hintsBelowResults: !!(hr && (!vr || hr.top >= vr.bottom - 1)),
+    hintsText: hints ? hints.textContent.trim() : null,
     floating: document.documentElement.hasAttribute('gjoa-urlbar-floating'),
     arming: document.documentElement.hasAttribute('gjoa-urlbar-arming'),
     breakoutExtend: urlbar.hasAttribute('breakout-extend'),
@@ -204,7 +217,8 @@
   return !d.hasAttribute('gjoa-urlbar-floating')
       && !d.hasAttribute('gjoa-urlbar-teardown')
       && !document.getElementById('gjoa-urlbar-ghost')
-      && !document.getElementById('gjoa-urlbar-backdrop');
+      && !document.getElementById('gjoa-urlbar-backdrop')
+      && !document.getElementById('gjoa-urlbar-hints');
 ")
 
 ;; finish-teardown deliberately takes #urlbar back OUT of the top layer, but the
@@ -245,8 +259,8 @@
              "vacuously on native Firefox defaults; rebuild the bundle/binary."))))))
 
 ;; The owner-spec contract for the Ctrl+L palette, asserted in every floating
-;; sub-state: it escapes the drawer, sits centred over the content, is 400-600px
-;; wide, and its painted box matches its layout rect.
+;; sub-state: it escapes the drawer, sits centred over the content, is zen-sized,
+;; carries the hint footer, and its painted box matches its layout rect.
 (defn assert-floating-overlay! [f :- Any phase :- String] :- Any
   (let [tag (str "floating palette (" phase "): ")]
     (expect (not (.-error f)) (str tag "MEASURE-FLOATING error: " (JSON/stringify f)))
@@ -267,12 +281,19 @@
       (expect (<= off 8)
         (str tag "OFF-CENTRE by " (.toFixed off 1) "px — anchored to the drawer "
              "slot, not centred over the content. " (JSON/stringify f))))
-    ;; (b) SPEC WIDTH: owner spec 400-600px; --gjoa-floating-w resolves to
-    ;; clamp(400px, 40vw, 600px) = 560px at the 1400px window the test pins.
-    (expect (and (>= (.-urlbarWidth f) 380) (<= (.-urlbarWidth f) 620))
+    ;; (b) SPEC WIDTH: owner spec "zen-sized" — clamp(600px, 50vw, 820px) resolves
+    ;; to 700px (half the window) at the 1400px window the test pins. The floor
+    ;; also catches a revert to the superseded 400-600px band (560px there).
+    (expect (and (>= (.-urlbarWidth f) 660) (<= (.-urlbarWidth f) 760))
       (str tag "width " (.toFixed (.-urlbarWidth f) 1)
-           "px is outside the owner's 400-600px band (±20px slack) at a "
+           "px is outside the zen-sized 700px±40 band at a "
            (.toFixed (.-windowWidth f) 1) "px window. " (JSON/stringify f)))
+    ;; (b2) HINT FOOTER: present, inside #urlbar, rendered, and below the results.
+    (expect (and (.-hints f) (.-hintsInUrlbar f) (.-hintsVisible f) (.-hintsBelowResults f))
+      (str tag "hint footer missing/hidden/misplaced — present=" (.-hints f)
+           " inUrlbar=" (.-hintsInUrlbar f) " visible=" (.-hintsVisible f)
+           " belowResults=" (.-hintsBelowResults f) " text=" (.-hintsText f)
+           ". " (JSON/stringify f)))
     ;; (c) NOT CLIPPED: visual rect == layout rect. Top-layer promotion is the
     ;; escape mechanism; one unfragmented client rect at the full width, plus both
     ;; edges hit-testing into #urlbar, is the painted box agreeing with it.
@@ -323,6 +344,11 @@
        (expect (not (.-error r)) (str "MEASURE-RESTING error: " (JSON/stringify r)))
        (expect (not (.-breakoutExtend r))
          "resting urlbar unexpectedly has [breakout-extend] — measure ran in the wrong state")
+       ;; The hint footer belongs to the FLOATING palette only; the resting drawer
+       ;; bar must not carry it (JS creates it on activate, drops it on teardown).
+       (expect (not (.-hints r))
+         (str "#gjoa-urlbar-hints present in the RESTING drawer urlbar — the hint "
+              "footer leaked out of the floating palette. " (JSON/stringify r)))
        ;; The bug spanned the urlbar to the full window width. Containment:
        ;; the urlbar must stay a drawer-sized box.
        (expect (< (.-urlbarWidth r) (* (.-windowWidth r) 0.6))

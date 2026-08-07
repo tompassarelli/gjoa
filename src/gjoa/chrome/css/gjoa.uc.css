@@ -878,11 +878,12 @@ Preserve these (security warnings):
  * "open in new tab" path). Mouse-click activation is deliberately NOT covered
  * here — the in-sidebar breakout-extend at-click-point behavior is preserved. */
 
-/* OWNER SPEC: 400-600px. The outer min() keeps the card-gap inset on windows too
- * narrow for the 400px floor. Every width property below repeats the expression —
- * Firefox's UrlbarInput sizing JS overrides any one of them it finds unset. */
+/* OWNER SPEC: zen-sized, ~half the window (700px at 1400px). The outer min()
+ * keeps the card-gap inset on windows too narrow for the 600px floor. Every
+ * width property below repeats the expression — Firefox's UrlbarInput sizing JS
+ * overrides any one of them it finds unset. */
 :root[gjoa-urlbar-floating] {
-  --gjoa-floating-w: min(clamp(400px, 40vw, 600px), calc(100vw - 40px));
+  --gjoa-floating-w: min(clamp(600px, 50vw, 820px), calc(100vw - 40px));
   /* Cap dropdown height so a long suggestion list doesn't bleed below the
    * viewport on tall-narrow windows. 100vh - 22vh (top offset) - 24vh (input
    * height + breathing room) ≈ 54vh of result list. */
@@ -908,6 +909,12 @@ Preserve these (security warnings):
   width: var(--gjoa-floating-w) !important;
   min-width: var(--gjoa-floating-w) !important;
   max-width: var(--gjoa-floating-w) !important;
+  /* `.urlbar[breakout]` pins height to --urlbar-height outside breakout-extend;
+   * the hint footer is a child, so the box must grow to contain it. `block` is
+   * what makes the footer stack BELOW the input row — the un-breakout `.urlbar`
+   * is `display: flex; flex-direction: row`, which would sit it alongside. */
+  height: auto !important;
+  display: block !important;
   transform: none !important;
   z-index: 10001 !important;
   /* Anchor the urlbar-results dropdown to our floating width. */
@@ -1093,6 +1100,48 @@ Preserve these (security warnings):
 :root[gjoa-urlbar-floating] #urlbar .urlbar-input-container,
 #gjoa-urlbar-toolbar #urlbar[breakout-extend] .urlbar-input-container {
   align-items: center !important;
+}
+
+/* Keybinding hint footer — #urlbar's LAST child (below .urlbarView), created by
+ * drawer/urlbar.bjs on floating activation; this gate is the second lock keeping
+ * it out of the resting drawer bar. `position: relative` is load-bearing: it
+ * puts the footer above the absolutely-positioned .urlbar-background. */
+#gjoa-urlbar-hints {
+  display: none !important;
+}
+:root[gjoa-urlbar-floating] #urlbar > #gjoa-urlbar-hints {
+  display: flex !important;
+  position: relative !important;
+  align-items: center !important;
+  gap: 20px !important;
+  padding: 9px 16px 10px !important;
+  border-top: 1px solid color-mix(in srgb, var(--gjoa-border) 55%, transparent) !important;
+  font: 11px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  color: var(--gjoa-fg-muted) !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+/* breakout-extend widens the box by 2·--urlbar-margin-inline and pads the input
+ * row by the same, so match it or the footer sits left of the results. */
+:root[gjoa-urlbar-floating] #urlbar[breakout-extend] > #gjoa-urlbar-hints {
+  padding-inline: calc(var(--urlbar-margin-inline, 0px) + 16px) !important;
+}
+:root[gjoa-urlbar-floating] #gjoa-urlbar-hints .gjoa-urlbar-hint {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  white-space: nowrap !important;
+}
+:root[gjoa-urlbar-floating] #gjoa-urlbar-hints .gjoa-urlbar-hint-key {
+  font: 600 10px/1 ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace !important;
+  color: var(--gjoa-accent) !important;
+  background: color-mix(in srgb, var(--gjoa-accent) 13%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--gjoa-accent) 26%, transparent) !important;
+  border-radius: 5px !important;
+  padding: 3px 6px !important;
+}
+:root[gjoa-urlbar-floating] #gjoa-urlbar-hints .gjoa-urlbar-hint-act {
+  opacity: 0.75 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

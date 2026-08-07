@@ -1,18 +1,46 @@
 #lang beagle/js
 (ns gjoa.drawer.urlbar
-  (:require [gjoa.macros :refer [q html-new attr! on! onc! offc! off! bool has? rmattr! css!]]
+  (:require [gjoa.macros :refer [q html-new htm attr! on! onc! offc! off! bool has? rmattr! css!]]
             [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
 (declare-extern [document window String] Any)
 
+;; The floating palette's hint footer, and the ONLY place its text is written.
+;; Must stay a projection of handle-accel below: ctrl+j → selectBy(+1) = DOWN,
+;; ctrl+k → selectBy(-1) = UP (vim convention), Escape → deactivate-floating.
+(def FLOATING-HINTS :- Any
+  [{:key "ctrl+j" :act "down"}
+   {:key "ctrl+k" :act "up"}
+   {:key "esc"    :act "exit"}])
+
 (js/export (defn make-urlbar! [deps] :- Any
   (let [urlbar (.-urlbar deps)
         root (.-documentElement document)
         log (create-logger! "urlbar")
-        state :- Any {:activated false :intent "current" :backdrop nil :ghost nil}
+        state :- Any {:activated false :intent "current" :backdrop nil :ghost nil :hints nil}
 
         intent-attr #(if (= % "newTab") "new-tab" "current")
+
+        ;; Append the hint footer as #urlbar's LAST child so it lands below
+        ;; .urlbarView (the results list). Idempotent — the re-arm path calls it
+        ;; too, since a stale node can be orphaned by a raced teardown.
+        ensure-hints (fn []
+          (when (not (bool (some-> (.-hints state) .-isConnected)))
+            (let [el (html-new "div")]
+              (set! (.-id el) "gjoa-urlbar-hints")
+              (attr! el "aria-hidden" "true")
+              (.forEach FLOATING-HINTS (fn [h]
+                (let [pair (htm "span" "gjoa-urlbar-hint")
+                      k (htm "span" "gjoa-urlbar-hint-key")
+                      a (htm "span" "gjoa-urlbar-hint-act")]
+                  (set! (.-textContent k) (.-key h))
+                  (set! (.-textContent a) (.-act h))
+                  (.appendChild pair k)
+                  (.appendChild pair a)
+                  (.appendChild el pair))))
+              (.appendChild urlbar el)
+              (set! (.-hints state) el))))
 
         ;; #149 ATOMIC TEARDOWN. The naive teardown removed `gjoa-urlbar-floating`
         ;; synchronously, which instantly reverted the urlbar from the centered
@@ -73,6 +101,9 @@
             (when (.-ghost state)
               (.remove (.-ghost state))
               (set! (.-ghost state) nil))
+            (when (.-hints state)
+              (.remove (.-hints state))
+              (set! (.-hints state) nil))
             ;; release the snap after the instant revert has painted (double-rAF: frame
             ;; one applies the snapped resting layout, frame two re-enables transitions
             ;; so later focus/expand animations still work).
@@ -149,6 +180,7 @@
                   ;; containing block (the compact sidebar) → clipped under the page content.
                   ;; Owner correctly called this a state-management failure, not a compositor
                   ;; bug. Re-assert the promotion here so every summon lands in the top layer.
+                  (ensure-hints)
                   (ensure-floating-promoted))
               (do (set! (.-activated state) true)
                   (log "activateFloating" {:intent (.-intent state)})
@@ -307,6 +339,7 @@
                       (.appendChild root bd)
                       (set! (.-backdrop state) bd)))
 
+                  (ensure-hints)
                   (ensure-floating-promoted)
                   ;; reveal once the popover has promoted + positioned (double-rAF); a
                   ;; setTimeout fallback covers a starved rAF (e.g. uncomposited window) so
