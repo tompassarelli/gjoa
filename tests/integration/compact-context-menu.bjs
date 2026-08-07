@@ -46,6 +46,25 @@
 
 (def HAS-HOVER :- String "return document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');")
 
+;; Same race as OPEN-MENU-AND-LEAVE, but with the drawer `e`-PINNED. Reads
+;; [gjoa-pinned] immediately after the dispatch: the defect was a synchronous
+;; removeAttribute at the top of on-sidebar-leave.
+(def PIN-THEN-MENU-AND-LEAVE :- String "
+  const XUL='http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul';
+  const sb=document.getElementById('sidebar-container');
+  if(!sb) return {error:'no sidebar-main'};
+  sb.setAttribute('gjoa-has-hover','true');
+  sb.setAttribute('gjoa-pinned','true');
+  let m=document.getElementById('gjoa-test-ctxmenu');
+  if(!m){ m=document.createElementNS(XUL,'menupopup'); m.id='gjoa-test-ctxmenu'; document.documentElement.appendChild(m); }
+  m.setAttribute('state','showing');
+  const pinnedBefore = sb.hasAttribute('gjoa-pinned');
+  sb.dispatchEvent(new MouseEvent('mouseleave',{relatedTarget:document.body}));
+  return { menuLive: !!document.querySelector(\"menupopup[state='showing'],menupopup[state='open']\"),
+           pinnedBefore, pinnedAfter: sb.hasAttribute('gjoa-pinned'),
+           hasHover: sb.hasAttribute('gjoa-has-hover') };
+")
+
 (js/export (def tests :- Any
   [(deftest "compact — sidebar stays expanded while a context menu is open (#88)" [mn]
      (js/await (chrome-eval ENABLE-COMPACT))
@@ -63,6 +82,31 @@
      ;; release: once the menu closes, a later mouseleave may collapse it again — guard
      ;; against an over-correction that pins the sidebar open forever.
      (js/await (chrome-eval CLOSE-MENU-AND-LEAVE))
-     (js/await (await-true "return !document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');" 3000)))]))
+     (js/await (await-true "return !document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');" 3000)))
+
+   ;; The `e`-PINNED reveal (vim.bjs summonSidebar sets [gjoa-pinned], and
+   ;; #sidebar-container[data-gjoa-compact][gjoa-pinned] is what keeps the drawer
+   ;; visible) must survive the same race. on-sidebar-leave used to strip the pin
+   ;; UNCONDITIONALLY, as its very first statement — before the is-guarded check one
+   ;; line below, which would have refused. So the drawer vanished on right-click.
+   (deftest "compact — an `e`-pinned drawer survives a context menu opening (#127)" [mn]
+     (js/await (chrome-eval ENABLE-COMPACT))
+     (js/await (await-true "return !!document.querySelector('#sidebar-container[data-gjoa-compact]');" 4000))
+     (let [r (js/await (chrome-eval PIN-THEN-MENU-AND-LEAVE))]
+       (expect (.-menuLive r) "precondition: a live menupopup[state=showing] should exist")
+       (expect (.-pinnedBefore r) "precondition: [gjoa-pinned] should be set before the leave")
+       ;; SYNCHRONOUS assertion: the defect stripped the attribute in the same tick as
+       ;; the mouseleave dispatch, so this reads the value the bug destroyed.
+       (expect (.-pinnedAfter r)
+         (str "REGRESSION #127: [gjoa-pinned] was stripped by mouseleave while a "
+              "context menu was open — the compact drawer dismisses on right-click. "
+              (JSON/stringify r))))
+     ;; And the pin must not outlive the menu: closing it with the pointer off the
+     ;; sidebar releases the deferred clear.
+     (js/await (chrome-eval CLOSE-MENU-AND-LEAVE))
+     (js/await (await-true
+       (str "const sb = document.getElementById('sidebar-container');"
+            "return !sb.hasAttribute('gjoa-pinned') && !sb.hasAttribute('gjoa-has-hover');")
+       3000)))]))
 
 (js/export-default tests)

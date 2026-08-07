@@ -80,8 +80,8 @@
     "compact-context-menu": {
       "category": "tabs",
       "tier": "fast",
-      "budgetMs": 1200,
-      "note": "[trimmable] No boot/nav (synthetic menupopup, headless-safe) \u2014 good. The 400ms fixed sleep is the only real waste: it waits 'for the",
+      "budgetMs": 1600,
+      "note": "[trimmable] No boot/nav (synthetic menupopup, headless-safe) \u2014 good. The 400ms fixed sleep is the only real waste: it waits 'for the. +400 2026-08-07: added the #127 pinned-drawer case in the same session (measured 345ms, synchronous assertion, no sleep).",
       "estSavingsMs": 200
     },
     "contrast": {

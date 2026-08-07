@@ -129,7 +129,13 @@
         hstate {:strip nil :flash-timer nil :urlbar-obs nil
                 :collapse-until 0 :retry-timer nil :watchdog nil}
 
-        shared {:ignore-next-hover false :open-popups 0}
+        shared {:ignore-next-hover false :open-popups 0 :pin-release-deferred false}
+
+        ;; SYNCHRONOUS menu probe. openPopupAtScreen sets menupopup state before the
+        ;; async popupshown that bumps open-popups, so the counter alone loses the race.
+        menu-open? (fn []
+          (bool (q document
+                   "menupopup:is([state='open'],[state='showing'],[open]), panel[panelopen]")))
 
         ensure-popover (fn []
           (when (not (.matches urlbar ":popover-open")) (.showPopover urlbar)))
@@ -162,7 +168,18 @@
           (when (not (is-ignored-popup e))
             (set! (.-open-popups shared) (Math/max 0 (- (.-open-popups shared) 1)))
             (let [t (.-target e)]
-              (dbg "popuphidden" {:id (.-id t) :tag (.-localName t) :_openPopups (.-open-popups shared)}))))
+              (dbg "popuphidden" {:id (.-id t) :tag (.-localName t) :_openPopups (.-open-popups shared)}))
+            ;; Release a pin whose clear on-sidebar-leave deferred, once the menu is
+            ;; really gone and the pointer is off the sidebar — otherwise a right-click
+            ;; that only opened the menu leaves the drawer pinned forever.
+            (when (and (.-pin-release-deferred shared)
+                       (has? sidebar-main "gjoa-pinned")
+                       (not (menu-open?))
+                       (not (.matches sidebar-main ":hover")))
+              (set! (.-pin-release-deferred shared) false)
+              (rmattr! sidebar-main "gjoa-pinned")
+              (dbg1 "popuphidden:pin-release")
+              (reconcile-compact-state "popuphidden-pin-release"))))
 
         reconcile-counter-if-stale (fn []
           (when (> (.-open-popups shared) 0)
@@ -185,7 +202,7 @@
                     ;; collapse check can run in that gap. Query the live menu directly
                     ;; (any open-ish state) so the sidebar never collapses out from under
                     ;; an open menu (#127: right-click a sidebar button keeps it revealed).
-                    (q document "menupopup:is([state='open'],[state='showing'],[open]), panel[panelopen]")
+                    (menu-open?)
                     (and urlbar (has? urlbar "breakout-extend"))
                     (q document "toolbarbutton[open='true']")
                     (q document ".tabbrowser-tab[multiselected]")
@@ -216,6 +233,8 @@
         reconcile-compact-state-horizontal (.-reconcile hops)]
 
     (let [on-sidebar-enter (fn [event]
+            ;; a fresh sidebar interaction owns the pin; a deferred clear is stale.
+            (set! (.-pin-release-deferred shared) false)
             (let [target (.-target event)
                   target-id (or (.-id target) (.-localName target))]
               (dbg "onSidebarEnter:entry" {:targetId target-id :_ignoreNextHover (.-ignore-next-hover shared) :flashPending (bool (.-flash-timer vstate))})
@@ -245,9 +264,13 @@
 
           on-sidebar-leave (fn [event]
             ;; #127: leaving the sidebar dismisses an `e`-pinned reveal — clearing the pin
-            ;; here drops the is-guarded hold so the normal leave→hide path runs (so the
-            ;; pin holds only until the user enters and leaves, or presses `e` again).
-            (rmattr! sidebar-main "gjoa-pinned")
+            ;; here drops the is-guarded hold so the normal leave→hide path runs. NOT while
+            ;; a menu is open: a right-click's openPopupAtScreen fires this in the same
+            ;; tick, and this clear runs BEFORE the is-guarded check below ever sees it.
+            ;; on-popup-hidden performs the deferred clear.
+            (if (menu-open?)
+              (set! (.-pin-release-deferred shared) true)
+              (rmattr! sidebar-main "gjoa-pinned"))
             (let [target (.-target event)
                   target-id (or (.-id target) (.-localName target))
                   exited-window (not (.-relatedTarget event))
