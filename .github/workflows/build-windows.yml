@@ -27,7 +27,7 @@ jobs:
     runs-on: ${{ inputs.fast && 'blacksmith-16vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 360
     env:
-      FF_VERSION: "153.0.1"
+      FF_VERSION: "153.0.3"
       # Pinned beagle worktree: the build tooling (.bjs + package.json) resolves
       # beagle-build / beagle from $BEAGLE_PIN_ROOT (default ~/code/beagle-pin).
       # CI clones the pin SHA into ../beagle and points the build at it, so the
