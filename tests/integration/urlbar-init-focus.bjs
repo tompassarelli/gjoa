@@ -203,6 +203,52 @@
               });
             "))]
          (expect (.-onBrowser st) "the guard pulled focus back out of content")
-         (expect (= (.-rescues st) 0) "the guard counted a hand-off to content as a rescue"))))]))
+         (expect (= (.-rescues st) 0) "the guard counted a hand-off to content as a rescue"))))
+
+   ;; The backdrop makes content unclickable while the palette is up, so a
+   ;; content-focus landing there is a startup round trip, never the user leaving —
+   ;; the guard used to read `activeElement.localName === 'browser'` as a deliberate
+   ;; departure and drop the caret out of an open address palette.
+   (deftest "tripwire keeps the caret when content steals it from an OPEN palette" [mn]
+     (await-true "return !!window.gjoaFocusGuard;" 5000)
+     (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")
+     (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 3000)
+     (await-true SETTLE 6000)
+     (chrome-eval SETUP)
+     (chrome-eval "
+        Services.prefs.setIntPref('gjoa.urlbar.focusRescues', 0);
+        window.gjoaFocusGuard.rearm();
+        return 1;
+      ")
+     (js/await (.performActions mn ctrl-l-actions))
+     (await-true (str "const d = document.documentElement;"
+                      "return d.hasAttribute('gjoa-urlbar-floating')"
+                      " && !d.hasAttribute('gjoa-urlbar-arming')"
+                      " && document.activeElement === gURLBar.inputField;")
+                 3000)
+     (chrome-eval "
+        window.__gjoaFrames = 0;
+        const tick = () => { window.__gjoaFrames++;
+          if (window.__gjoaFrames < 4) requestAnimationFrame(tick); };
+        gBrowser.selectedBrowser.focus();
+        requestAnimationFrame(tick);
+        return 1;
+      ")
+     (await-true "return window.__gjoaFrames >= 4;" 2000)
+     (let [st (JSON/parse (chrome-eval "
+            return JSON.stringify({
+              active: document.activeElement ? (document.activeElement.id ||
+                      document.activeElement.localName) : null,
+              isInput: document.activeElement === gURLBar.inputField,
+              rescues: Services.prefs.getIntPref('gjoa.urlbar.focusRescues', 0),
+            });
+          "))]
+       (chrome-eval "document.dispatchEvent(new CustomEvent('gjoa-urlbar-deactivate')); return 1;")
+       (await-true "return !document.documentElement.hasAttribute('gjoa-urlbar-floating');" 3000)
+       (expect (.-isInput st)
+         (str "content took the caret out of an OPEN palette and the tripwire let it — "
+              "focus is on " (.-active st) " (rescues=" (.-rescues st) ")"))
+       (expect (> (.-rescues st) 0)
+         "focus stayed in the input but the tripwire never counted the rescue")))]))
 
 (js/export-default tests)

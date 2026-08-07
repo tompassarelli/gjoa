@@ -187,20 +187,26 @@
         expand (fn []
           (when (not (.-urlbar-toolbar state))
             (log "expand")
-            ;; Both moves below carry #urlbar; without this the caret a user put
-            ;; there before the drawer initialized is silently dropped to <body>.
-            (with-urlbar-focus! (fn []
-              ;; Re-apply the persisted width — collapse() clears the inline width
-              ;; so the icon strip can go favicon-thin, so re-expanding must restore
-              ;; the user's chosen width (not snap back to native default).
-              (set! (.-width (.-style sidebar-main)) (str (pref-int WIDTH-PREF 300) "px"))
-              (when sidebar-main-element
-                (.insertBefore sidebar-main navigator-toolbox sidebar-main-element))
-              (let [tb (xul-id "toolbar" "gjoa-urlbar-toolbar")]
-                (.add (.-classList tb) "browser-toolbar")
-                (.appendChild tb urlbar-container)
-                (.after nav-bar tb)
-                (set! (.-urlbar-toolbar state) tb))))
+            ;; A hot-reload re-runs init! without the previous bundle removing what it
+            ;; built, so a live holder of the id is a stale duplicate — evict it AFTER
+            ;; the new toolbar has taken #urlbar-container off it.
+            (let [stale (by-id "gjoa-urlbar-toolbar")]
+              ;; Both moves below carry #urlbar; without this the caret a user put
+              ;; there before the drawer initialized is silently dropped to <body>.
+              (with-urlbar-focus! (fn []
+                ;; Re-apply the persisted width — collapse() clears the inline width
+                ;; so the icon strip can go favicon-thin, so re-expanding must restore
+                ;; the user's chosen width (not snap back to native default).
+                (set! (.-width (.-style sidebar-main)) (str (pref-int WIDTH-PREF 300) "px"))
+                (when sidebar-main-element
+                  (.insertBefore sidebar-main navigator-toolbox sidebar-main-element))
+                (let [tb (xul-id "toolbar" "gjoa-urlbar-toolbar")]
+                  (.add (.-classList tb) "browser-toolbar")
+                  (.appendChild tb urlbar-container)
+                  (.after nav-bar tb)
+                  (set! (.-urlbar-toolbar state) tb))))
+              (when (and stale (not (identical? stale (.-urlbar-toolbar state))))
+                (.remove stale)))
             (when urlbar
               (let [ro (ResizeObserver. sync-urlbar-width)]
                 (.observe ro sidebar-main)

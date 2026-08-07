@@ -482,6 +482,12 @@
               (let [rows-api (.-v rows-ref)
                     vim-api (.-v vim-ref)]
 
+                ;; A hot-reload re-runs init! without the previous bundle removing what
+                ;; it built; a live holder of one of these ids is that stale node, and
+                ;; leaving it stacks a second panel/header into the drawer column.
+                (doseq [id ["gjoa-pinned-container" "gjoa-tab-panel" "gjoa-space-header"]]
+                  (some-> (by-id id) .remove))
+
                 ;; Create pinned container
                 (set! (.-pinnedContainer state) (xul-id "vbox" "gjoa-pinned-container"))
                 (set! (.-hidden (.-pinnedContainer state)) true)

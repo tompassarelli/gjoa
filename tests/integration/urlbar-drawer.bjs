@@ -247,9 +247,11 @@
     headerTop: header ? header.getBoundingClientRect().top : null,
     gapAboveTabs: p.top - u.bottom,
     sidebarBottom: sc.getBoundingClientRect().bottom,
-    urlbarHVar: urlbar.style.getPropertyValue('--urlbar-height'),
-    containerHVar: c ? c.style.getPropertyValue('--urlbar-container-height') : null,
+    urlbarHVar: getComputedStyle(urlbar).getPropertyValue('--urlbar-height').trim(),
+    containerHVar: c ? getComputedStyle(c).getPropertyValue('--urlbar-container-height').trim() : null,
     containerId: c ? (c.id || c.localName) : null,
+    containerHeight: c ? c.getBoundingClientRect().height : null,
+    breakout: urlbar.hasAttribute('breakout'),
   };
 ")
 
@@ -265,8 +267,8 @@
     if (d.hasAttribute('gjoa-urlbar-teardown') || d.hasAttribute('gjoa-urlbar-floating')) return;
     const c = u.parentNode;
     window.__gjoaAnchorWrite = {
-      urlbarHVar: u.style.getPropertyValue('--urlbar-height'),
-      containerHVar: c ? c.style.getPropertyValue('--urlbar-container-height') : null,
+      urlbarHVar: getComputedStyle(u).getPropertyValue('--urlbar-height').trim(),
+      containerHVar: c ? getComputedStyle(c).getPropertyValue('--urlbar-container-height').trim() : null,
       containerId: c ? (c.id || c.localName) : null,
     };
     obs.disconnect();
@@ -547,6 +549,98 @@
   return true;
 ")
 
+;; #8 ROW-HEIGHT LATCH. UrlbarInput#updateLayoutBreakoutDimensions latches
+;; getBoundsWithoutFlushing(parentNode) into --urlbar-container-height two async hops
+;; after it was scheduled; an orientation flip in between moves #urlbar-container
+;; (an ANCESTOR — no connectedCallback, so nothing reschedules) and the pre-flip
+;; row height is written onto the post-flip one, permanently.
+(def MEASURE-LATCH :- String "
+  const id = x => document.getElementById(x);
+  const u = id('urlbar'), c = id('urlbar-container');
+  const tb = id('navigator-toolbox'), panel = id('gjoa-tab-panel');
+  if (!u || !c) return { error: 'missing element', urlbar: !!u, container: !!c };
+  return {
+    vertical: Services.prefs.getBoolPref('sidebar.verticalTabs', true),
+    containerParent: c.parentNode ? (c.parentNode.id || c.parentNode.localName) : null,
+    containerHVar: getComputedStyle(c).getPropertyValue('--urlbar-container-height').trim(),
+    urlbarHVar: getComputedStyle(u).getPropertyValue('--urlbar-height').trim(),
+    containerHeight: Math.round(c.getBoundingClientRect().height),
+    urlbarHeight: Math.round(u.getBoundingClientRect().height),
+    toolboxHeight: tb ? Math.round(tb.getBoundingClientRect().height) : null,
+    panelTop: panel ? Math.round(panel.getBoundingClientRect().top) : null,
+    breakout: u.hasAttribute('breakout'),
+    breakoutExtend: u.hasAttribute('breakout-extend'),
+  };
+")
+
+(def FLIP-ORIENTATION :- String "
+  const [vertical] = arguments;
+  Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false);
+  Services.prefs.setBoolPref('sidebar.verticalTabs', vertical);
+  return true;
+")
+
+;; Frames, never a clock: the post-move re-measure is promiseDocumentFlushed + rAF,
+;; so the settled read is a few frames out and nothing about it is time-based.
+(def ARM-FRAMES :- String "
+  window.__gjoaFrames = 0;
+  const tick = () => { window.__gjoaFrames++;
+    if (window.__gjoaFrames < 6) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+  return true;
+")
+(def FRAMES-DONE :- String "return window.__gjoaFrames >= 6;")
+
+;; #9 BROWSER FULLSCREEN. #gjoa-urlbar-stage is a <toolbar> (so #urlbar.closest
+;; resolves and keeps #allowBreakout), and Firefox's fullscreen chrome CSS collapses
+;; toolbars — the staged palette inherited that and painted nothing behind a visible
+;; backdrop. Driven through the product's own F11 entry point.
+(def TOGGLE-FULLSCREEN :- String "
+  try { BrowserCommands.fullScreen(); } catch (e) { return { error: String(e) }; }
+  return true;
+")
+(def IN-FULLSCREEN :- String
+  "return document.documentElement.hasAttribute('inFullscreen');")
+(def OUT-OF-FULLSCREEN :- String
+  "return !document.documentElement.hasAttribute('inFullscreen');")
+
+(def MEASURE-FULLSCREEN :- String "
+  const u = document.getElementById('urlbar');
+  const stage = document.getElementById('gjoa-urlbar-stage');
+  const r = u.getBoundingClientRect();
+  const cy = Math.round(r.top + r.height / 2);
+  const hit = x => { const e = document.elementFromPoint(Math.round(x), cy);
+    return e ? { id: e.id || e.localName, inUrlbar: (e === u || u.contains(e)) }
+             : { id: null, inUrlbar: false }; };
+  return {
+    inFullscreen: document.documentElement.hasAttribute('inFullscreen'),
+    floating: document.documentElement.hasAttribute('gjoa-urlbar-floating'),
+    staged: !!(stage && stage.contains(u)),
+    stageVis: stage ? getComputedStyle(stage).visibility : null,
+    urlbarVis: getComputedStyle(u).visibility,
+    width: r.width, left: r.left, right: r.right, windowWidth: window.innerWidth,
+    hitLeft: hit(r.left + 3), hitMid: hit(r.left + r.width / 2), hitRight: hit(r.right - 3),
+    activeId: document.activeElement ? (document.activeElement.id ||
+              document.activeElement.localName) : null,
+    isInput: document.activeElement === gURLBar.inputField,
+  };
+")
+
+;; #10 gjoa REMOVES [popover] to demote the bar out of the top layer, but that attr
+;; is Firefox's own markup and #updateLayoutBreakoutDimensions calls showPopover()
+;; unconditionally — which then threw NotSupportedError into the window, uncaught,
+;; skipping the rest of that frame's layout work.
+(def POPOVER-DEMOTED-PROBE :- String "
+  const u = document.getElementById('urlbar');
+  const had = u.getAttribute('popover');
+  try { u.hidePopover(); } catch (e) {}
+  u.removeAttribute('popover');
+  let threw = null;
+  try { u.showPopover(); } catch (e) { threw = String(e); }
+  if (had !== null) u.setAttribute('popover', had);
+  return { threw, shimmed: !!u.gjoaPopoverShim, restored: u.getAttribute('popover') };
+")
+
 (def RECT-EDGE :- Any ["left" "top" "width" "height"])
 
 (defn assert-row-held! [before :- Any during :- Any vector :- String phase :- String] :- Any
@@ -750,7 +844,18 @@
     (expect-eq (.-urlbarHVar a) (.-urlbarHVar rest0)
       (str tag "--urlbar-height leaked out of the floating palette"))
     (expect-eq (.-containerHVar a) (.-containerHVar rest0)
-      (str tag "--urlbar-container-height leaked onto #" (.-containerId a)))))
+      (str tag "--urlbar-container-height leaked onto #" (.-containerId a)))
+    ;; [breakout] is Firefox's, re-added by its own post-teardown measurement. When
+    ;; that never lands the vars still read right and the row silently collapses to
+    ;; the un-broken-out height for the life of the window.
+    (expect (.-breakout a)
+      (str tag "#urlbar came back WITHOUT [breakout] — the resting row is now "
+           (.toFixed (.-containerHeight a) 1) "px, was "
+           (.toFixed (.-containerHeight rest0) 1) "px. after=" (JSON/stringify a)))
+    (expect (<= (drift "containerHeight") TOL)
+      (str tag "the resting #" (.-containerId a) " is "
+           (.toFixed (.-containerHeight a) 1) "px tall, was "
+           (.toFixed (.-containerHeight rest0) 1) "px. after=" (JSON/stringify a)))))
 
 ;; The ghost is a look-alike, not a clone, so it is compared by GEOMETRY: for each
 ;; real box, some ghost box at the same offset within the same-width container.
@@ -1106,6 +1211,108 @@
          (js/await (.executeScript mn RESET-URLBAR))
          (js/await (.executeScript mn "window.resizeTo(arguments[0], arguments[1]); return true;"
                      [(.-w orig) (.-h orig)]))
-         (js/await (.executeScript mn RESTORE-VERTICAL)))))]))
+         (js/await (.executeScript mn RESTORE-VERTICAL)))))
+
+   (deftest "urlbar — an orientation flip while the bar is click-expanded does not latch the row height (#8)" [mn]
+     (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))
+     (js/await (require-gjoa-css! mn))
+     (js/await (.executeScript mn RESET-URLBAR))
+     (js/await (.executeScript mn ARM-FRAMES))
+     (js/await (await-true FRAMES-DONE 3000))
+     (let [rest0 (chrome-eval MEASURE-LATCH)]
+       (expect (not (.-error rest0))
+         (str "MEASURE-LATCH error before the flip: " (JSON/stringify rest0)))
+       (expect (and (.-vertical rest0) (= (.-containerParent rest0) "gjoa-urlbar-toolbar"))
+         (str "not in the expanded vertical drawer, so the flip below is not the one "
+              "under test. " (JSON/stringify rest0)))
+       ;; CLICK-EXPAND is the trigger: a bare flip, and a flip with the urlbar merely
+       ;; focused, are both clean — only [breakout-extend] at flip time leaks.
+       (js/await (.executeScript mn EXTEND-FLOATING))
+       (js/await (await-true
+                   "return document.getElementById('urlbar').hasAttribute('breakout-extend');"
+                   3000))
+       (js/await (.executeScript mn FLIP-ORIENTATION [false]))
+       (js/await (await-true
+                   "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 5000))
+       (js/await (.executeScript mn FLIP-ORIENTATION [true]))
+       (js/await (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 5000))
+       (js/await (.executeScript mn RESET-URLBAR))
+       (js/await (.executeScript mn ARM-FRAMES))
+       (js/await (await-true FRAMES-DONE 3000))
+       (let [a (chrome-eval MEASURE-LATCH)]
+         (js/await (.executeScript mn RESTORE-VERTICAL))
+         (expect (not (.-error a)) (str "MEASURE-LATCH error after the flip: " (JSON/stringify a)))
+         (expect (and (.-vertical a) (= (.-containerParent a) "gjoa-urlbar-toolbar"))
+           (str "the flip back did not restore the vertical drawer. " (JSON/stringify a)))
+         (expect-eq (.-containerHVar a) (.-containerHVar rest0)
+           (str "--urlbar-container-height latched across the orientation flip — the "
+                "other mode's row height is now pinned on #urlbar-container for the life "
+                "of this window. after=" (JSON/stringify a)))
+         (expect-eq (.-urlbarHVar a) (.-urlbarHVar rest0)
+           (str "--urlbar-height latched across the orientation flip. after=" (JSON/stringify a)))
+         (doseq [k ["containerHeight" "urlbarHeight" "toolboxHeight" "panelTop"]]
+           (let [d (Math/abs (- (Number (get a k)) (Number (get rest0 k))))]
+             (expect (<= d 2)
+               (str k " drifted " d "px across the orientation flip ("
+                    (get rest0 k) " → " (get a k) ") — the drawer column is "
+                    "permanently displaced. after=" (JSON/stringify a))))))))
+
+   (deftest "urlbar — the palette renders and takes focus in browser fullscreen (#9)" [mn]
+     (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))
+     (js/await (require-gjoa-css! mn))
+     (let [pop0 (js/await (.executeScript mn CAPTURE-POPOVER))]
+       (js/await (.executeScript mn TOGGLE-FULLSCREEN))
+       (js/await (await-true IN-FULLSCREEN 5000))
+       (js/await (.executeScript mn SUMMON-FLOATING))
+       (js/await (await-true FLOATING-ARMED 3000))
+       (let [f (chrome-eval MEASURE-FULLSCREEN)]
+         ;; leave fullscreen BEFORE asserting: a thrown assertion must not strand the
+         ;; rest of the suite in a fullscreen window.
+         (js/await (.executeScript mn DISMISS-FLOATING))
+         (js/await (await-true FLOATING-TORN-DOWN 3000))
+         (js/await (.executeScript mn TOGGLE-FULLSCREEN))
+         (js/await (await-true OUT-OF-FULLSCREEN 5000))
+         (js/await (.executeScript mn RESET-URLBAR))
+         (js/await (.executeScript mn RESTORE-POPOVER [(.-manual pop0) (.-open pop0)]))
+         (expect (.-inFullscreen f)
+           (str "the window never entered browser fullscreen, so this case asserts "
+                "nothing. " (JSON/stringify f)))
+         (expect (and (.-floating f) (.-staged f))
+           (str "the palette never engaged in fullscreen. " (JSON/stringify f)))
+         ;; #gjoa-urlbar-stage is a <toolbar>, and Firefox's fullscreen chrome CSS
+         ;; collapses toolbars; the staged #urlbar inherits it and paints nothing.
+         (expect (and (not= (.-stageVis f) "collapse") (= (.-urlbarVis f) "visible"))
+           (str "the staged palette computes stage visibility=" (.-stageVis f)
+                ", urlbar visibility=" (.-urlbarVis f)
+                " — it lays out but paints nothing. " (JSON/stringify f)))
+         (expect (and (.-inUrlbar (.-hitLeft f)) (.-inUrlbar (.-hitMid f))
+                      (.-inUrlbar (.-hitRight f)))
+           (str "the fullscreen palette is not hit-testable (left→" (.-id (.-hitLeft f))
+                ", mid→" (.-id (.-hitMid f)) ", right→" (.-id (.-hitRight f))
+                "). " (JSON/stringify f)))
+         (let [off (Math/abs (- (/ (+ (.-left f) (.-right f)) 2) (/ (.-windowWidth f) 2)))]
+           (expect (<= off 8)
+             (str "the fullscreen palette is off-centre by " (.toFixed off 1) "px. "
+                  (JSON/stringify f))))
+         (expect (.-isInput f)
+           (str "focus did not land in the urlbar input in fullscreen — it is on "
+                (.-activeId f) ", which a collapsed box cannot take. " (JSON/stringify f))))))
+
+   (deftest "urlbar — Firefox's unconditional showPopover() cannot throw at a gjoa-demoted bar (#10)" [mn]
+     (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))
+     (js/await (require-gjoa-css! mn))
+     (let [pop0 (js/await (.executeScript mn CAPTURE-POPOVER))
+           p (js/await (.executeScript mn POPOVER-DEMOTED-PROBE))]
+       (js/await (.executeScript mn RESET-URLBAR))
+       (js/await (.executeScript mn RESTORE-POPOVER [(.-manual pop0) (.-open pop0)]))
+       (expect (.-shimmed p)
+         (str "drawer/urlbar.bjs never installed the showPopover shim on #urlbar, so "
+              "every breakout re-measure taken while gjoa holds the bar demoted throws "
+              "into the window uncaught. " (JSON/stringify p)))
+       (expect (nil? (.-threw p))
+         (str "showPopover() on a gjoa-demoted #urlbar threw: " (.-threw p)
+              " — UrlbarInput#updateLayoutBreakoutDimensions calls it unconditionally, "
+              "so this aborts the rest of that frame's layout work. "
+              (JSON/stringify p)))))]))
 
 (js/export-default tests)

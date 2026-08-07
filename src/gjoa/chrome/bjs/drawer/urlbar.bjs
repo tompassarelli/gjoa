@@ -86,10 +86,11 @@
                     (.insertBefore p urlbar n)
                     (.appendChild p urlbar)))))))
 
-        ;; A reparent re-runs #updateLayoutBreakout, whose measure lands on a frame with
-        ;; [breakout] off the container — no min-height, no in-flow child — so Firefox
-        ;; latches the collapsed box into --urlbar-container-height, which in horizontal
-        ;; tabs IS the nav-bar row height. One correction, then Firefox owns it again.
+        ;; HORIZONTAL ONLY. In the drawer the row height is a CSS constant gjoa owns
+        ;; (`#gjoa-urlbar-toolbar #urlbar-container`); the nav-bar row has no such
+        ;; constant, and Firefox's post-teardown measure lands on a frame with
+        ;; [breakout] off the container — no in-flow child — so it latches the
+        ;; collapsed box as the row height. One correction, then Firefox owns it again.
         pin-container-height! (fn [c want]
           (when (.-pinObs state)
             (.disconnect (.-pinObs state))
@@ -109,6 +110,18 @@
                          (.disconnect obs)
                          (set! (.-pinObs state) nil)))
                 1000))))
+
+        ;; [popover] is Firefox's own markup on #urlbar and UrlbarInput calls
+        ;; showPopover() unconditionally, but gjoa removes the attr to demote the bar
+        ;; out of the top layer — so the promotion must no-op while demoted rather
+        ;; than throw NotSupportedError and abort the rest of that frame's work.
+        install-popover-shim! (fn []
+          (when (not (.-gjoaPopoverShim urlbar))
+            (let [native (.-showPopover urlbar)]
+              (when native
+                (set! (.-gjoaPopoverShim urlbar) true)
+                (set! (.-showPopover urlbar)
+                  (fn [] (when (has? urlbar "popover") (.call native urlbar))))))))
 
         ;; #149 ATOMIC TEARDOWN. The naive teardown removed `gjoa-urlbar-floating`
         ;; synchronously, which instantly reverted the urlbar from the centered
@@ -154,6 +167,9 @@
             (try
               (let [a (.-activeElement document)]
                 (when (and a (or (identical? a urlbar) (.contains urlbar a)))
+                  ;; announce the hand-off: the init-window focus guard rescues any
+                  ;; content-focus taken while the palette is up, this one included.
+                  (some-> window .-gjoaFocusGuard .release)
                   (some-> window .-gBrowser .-selectedBrowser .focus)))
               ;; Un-stage FIRST: everything below writes through `parentNode`/`container`
               ;; and must see the real #urlbar-container. Still behind the teardown
@@ -650,6 +666,7 @@
                         (some-> window .-gURLBar .-view .close)
                         (let [a (.-activeElement document)]
                           (when (and a (or (identical? a urlbar) (.contains urlbar a)))
+                            (some-> window .-gjoaFocusGuard .release)
                             (some-> window .-gBrowser .-selectedBrowser .focus)))
                         (catch Any err
                           (log "escape:teardown-error" {:msg (String err)}))))
@@ -676,6 +693,7 @@
 
         on-deactivate-request #(deactivate-floating)]
 
+    (install-popover-shim!)
     (onc! urlbar "focusout" on-focus-out)
     (onc! urlbar "keydown" on-keydown)
     (on! document "gjoa-urlbar-activate" on-activate-request)

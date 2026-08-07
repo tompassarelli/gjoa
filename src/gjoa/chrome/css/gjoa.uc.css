@@ -744,6 +744,17 @@
   padding: 0 !important;
 }
 
+/* MUST outrank Firefox's inline write: #updateLayoutBreakoutDimensions latches both
+ * off getBoundsWithoutFlushing(#urlbar-container) on a frame where the drawer slot
+ * has no in-flow child, and a reparent in flight (orientation flip) makes that the
+ * OTHER mode's row height, permanently. The drawer's row height is a constant. */
+#gjoa-urlbar-toolbar #urlbar-container {
+  --urlbar-container-height: var(--urlbar-min-height) !important;
+}
+:root:not([gjoa-urlbar-floating]) #gjoa-urlbar-toolbar #urlbar {
+  --urlbar-height: var(--urlbar-min-height) !important;
+}
+
 /* Contain the resting urlbar inside the drawer. The native urlbar is
  * `position: absolute` (urlbar-searchbar.css `.urlbar[breakout]`), and its
  * absolute-positioning containing block is the nearest positioned ancestor —
@@ -1027,6 +1038,11 @@ Preserve these (security warnings):
   /* It is a <toolbar> only so `#urlbar.closest("toolbar")` keeps resolving; it must
    * paint nothing and impose no box of its own. */
   display: block !important;
+  /* ...and being a <toolbar> is also why Firefox's `:root[inFullscreen] toolbar`
+   * rule collapses it — which the staged #urlbar INHERITS, so in browser
+   * fullscreen the palette laid out correctly and painted nothing. The stage is
+   * not chrome that fullscreen may hide. */
+  visibility: visible !important;
   appearance: none !important;
   background: transparent !important;
   border: none !important;
