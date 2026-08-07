@@ -483,7 +483,7 @@
                           (set-pref-bool! COMPACT-PREF true)
                           (let [safety-timer (setTimeout #(reconcile-compact-state "safety-timer-400ms") 400)
                                 handler (fn [e]
-                                          (when (and (= (.-target e) sidebar-main) (= (.-propertyName e) "transform"))
+                                          (when (and (identical? (.-target e) sidebar-main) (= (.-propertyName e) "transform"))
                                             (off! sidebar-main "transitionend" handler)
                                             (clearTimeout safety-timer)
                                             (reconcile-compact-state "transitionend-transform")))]
@@ -497,7 +497,7 @@
                           (set-pref-bool! HORIZONTAL-COMPACT-PREF true)
                           (let [safety-timer (setTimeout #(reconcile-compact-state-horizontal "safety-timer-400ms-hz") 400)
                                 handler (fn [e]
-                                          (when (and (= (.-target e) navigator-toolbox) (= (.-propertyName e) "transform"))
+                                          (when (and (identical? (.-target e) navigator-toolbox) (= (.-propertyName e) "transform"))
                                             (off! navigator-toolbox "transitionend" handler)
                                             (clearTimeout safety-timer)
                                             (reconcile-compact-state-horizontal "transitionend-transform-hz")))]
@@ -539,7 +539,7 @@
 
             on-sizemode-change #(reconcile-compact-state "sizemodechange")
 
-            on-window-blur #(when (= (.-target %) window)
+            on-window-blur #(when (identical? (.-target %) window)
                               (reconcile-compact-state "window-blur"))
 
             pin-sidebar (fn []

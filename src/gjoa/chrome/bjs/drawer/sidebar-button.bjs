@@ -45,7 +45,7 @@
         (cond
           reload-btn
           (.after reload-btn button)
-          (and nav-bar panel-ui (= (.-parentNode panel-ui) nav-bar))
+          (and nav-bar panel-ui (identical? (.-parentNode panel-ui) nav-bar))
           (.after panel-ui button)
           :else
           (.after sidebar-button button)))

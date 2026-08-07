@@ -128,7 +128,7 @@
             ;; teardown, so close the view + hide the popover + clear breakout unconditionally.
             (try
               (let [a (.-activeElement document)]
-                (when (or (= a urlbar) (and a (.contains urlbar a)))
+                (when (and a (or (identical? a urlbar) (.contains urlbar a)))
                   (some-> window .-gBrowser .-selectedBrowser .focus)))
               ;; Un-stage FIRST: everything below writes through `parentNode`/`container`
               ;; and must see the real #urlbar-container. Still behind the teardown
@@ -206,7 +206,9 @@
                   fire (fn [e]
                          (when (and (not (.-done h))
                                     (or (not e)
-                                        (and (= (.-target e) urlbar)
+                                        ;; `identical?`: transitionend BUBBLES, so a descendant's
+                                        ;; opacity fade must not fire the palette's teardown.
+                                        (and (identical? (.-target e) urlbar)
                                              (= (.-propertyName e) "opacity"))))
                            (set! (.-done h) true)
                            (try (.removeEventListener urlbar "transitionend" (.-f h))
@@ -302,17 +304,19 @@
                   ;; #urlbar-container: a re-measure that lands while the palette floats
                   ;; pins the PALETTE's box into --urlbar-height, and [breakout] drives
                   ;; the resting layout — both must come back at teardown.
-                  (set! (.-breakout0 state) (has? urlbar "breakout"))
-                  (set! (.-containerBreakout0 state)
-                        (bool (and (.-parentNode urlbar)
-                                   (has? (.-parentNode urlbar) "breakout"))))
-                  (set! (.-urlbarH0 state)
-                        (.getPropertyValue (.-style urlbar) "--urlbar-height"))
-                  (set! (.-containerH0 state)
-                        (if (.-parentNode urlbar)
-                          (.getPropertyValue (.-style (.-parentNode urlbar))
-                                             "--urlbar-container-height")
-                          ""))
+                  ;; `home` non-nil ⇒ still staged from an unfinished teardown, so these
+                  ;; would capture the PALETTE's geometry as the resting geometry.
+                  (when (nil? (.-home state))
+                    (let [c (container)]
+                      (set! (.-breakout0 state) (has? urlbar "breakout"))
+                      (set! (.-containerBreakout0 state)
+                            (bool (and c (has? c "breakout"))))
+                      (set! (.-urlbarH0 state)
+                            (.getPropertyValue (.-style urlbar) "--urlbar-height"))
+                      (set! (.-containerH0 state)
+                            (if c
+                              (.getPropertyValue (.-style c) "--urlbar-container-height")
+                              ""))))
                   ;; Leave a static look-alike (#gjoa-urlbar-ghost) in the resting
                   ;; slot so the real urlbar lifting to the centered palette doesn't
                   ;; collapse the slot / look like the bar "flew out" — the resting
@@ -327,8 +331,10 @@
                   ;; Instead build a plain styled div — shield glyph + placeholder text —
                   ;; sized/bordered to match the resting bar. Captured BEFORE the floating
                   ;; attr so the box metrics are the true resting ones.
-                  (when (not (.-ghost state))
-                    (let [parent (.-parentNode urlbar)]
+                  ;; `home` nil for the same reason as the snapshot above: mid-teardown
+                  ;; the "resting" rect this copies is the floating palette's.
+                  (when (and (not (.-ghost state)) (nil? (.-home state)))
+                    (let [parent (container)]
                       (when parent
                         (let [rect (.getBoundingClientRect urlbar)
                               cs (.getComputedStyle window urlbar)
@@ -558,7 +564,7 @@
             (setTimeout (fn []
               (when (.-activated state)
                 (let [a (.-activeElement document)]
-                  (when (not (bool (and a (or (= a urlbar) (.contains urlbar a)))))
+                  (when (not (bool (and a (or (identical? a urlbar) (.contains urlbar a)))))
                     (deactivate-floating)))))
               0)))
 
@@ -601,7 +607,7 @@
                       (try
                         (some-> window .-gURLBar .-view .close)
                         (let [a (.-activeElement document)]
-                          (when (or (= a urlbar) (and a (.contains urlbar a)))
+                          (when (and a (or (identical? a urlbar) (.contains urlbar a)))
                             (some-> window .-gBrowser .-selectedBrowser .focus)))
                         (catch Any err
                           (log "escape:teardown-error" {:msg (String err)}))))

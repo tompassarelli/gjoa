@@ -2,7 +2,7 @@
 (ns gjoa.tabs.layout
   (:require [gjoa.macros :refer [by-id xul-new attr! pref-bool has? rmattr! toggle! on!]]
             [gjoa.tabs.log :refer [create-logger!]]
-            [gjoa.tabs.helpers :refer [all-rows data-of! level-of-row]]
+            [gjoa.tabs.helpers :refer [all-rows data-of! level-of-row same-node?]]
             [gjoa.tabs.state :refer [row-of state]]))
 (define-mode strict)
 
@@ -91,7 +91,7 @@
                   (set! (.-flex (.-style el)) "0 0 auto")
                   (set! (.-width (.-style el)) "10px")
                   (set! (.-alignSpacer priv) el)))
-              (when (not= (.-firstChild target) (.-alignSpacer priv))
+              (when (not (same-node? (.-firstChild target) (.-alignSpacer priv)))
                 (.prepend target (.-alignSpacer priv))))))
 
         teardown-horizontal-align-spacer (fn []
@@ -122,7 +122,10 @@
                 (set! (.-toolboxResizeObs priv) nil))
 
               (let [toolbox (by-id "navigator-toolbox")
-                    toolbox-in-sidebar (and toolbox (= (.-parentNode toolbox) sidebar-main))
+                    ;; `same-node?`, never `=`: beagle's `=` is STRUCTURAL over own
+                    ;; enumerable keys, so any two DOM nodes compare EQUAL — every
+                    ;; node guard in this function is dead code without it.
+                    toolbox-in-sidebar (and toolbox (same-node? (.-parentNode toolbox) sidebar-main))
                     ;; The AUTHORITATIVE collapsed signal is FF's own
                     ;; `sidebar-launcher-expanded` attribute — NOT the toolbox's
                     ;; parent. The toolbox is reparented in/out of the sidebar by
@@ -151,17 +154,21 @@
                     (if (and toolbox-in-sidebar toolbox (.-pinnedContainer state))
                       (do
                         (when (and (.-spaceHeader state)
-                                   (not= (.-nextElementSibling toolbox) (.-spaceHeader state)))
+                                   (not (same-node? (.-nextElementSibling toolbox)
+                                                    (.-spaceHeader state))))
                           (.after toolbox (.-spaceHeader state)))
                         (let [header-anchor (or (.-spaceHeader state) toolbox)]
-                          (when (not= (.-nextElementSibling header-anchor) (.-pinnedContainer state))
+                          (when (not (same-node? (.-nextElementSibling header-anchor)
+                                                 (.-pinnedContainer state)))
                             (.after header-anchor (.-pinnedContainer state))))
-                        (when (not= (.-nextElementSibling (.-pinnedContainer state)) (.-panel state))
+                        (when (not (same-node? (.-nextElementSibling (.-pinnedContainer state))
+                                               (.-panel state)))
                           (.after (.-pinnedContainer state) (.-panel state))))
                       (when (and (.-pinnedContainer state)
-                                 (or (not= (.-parentNode (.-panel state)) sidebar-main)
-                                     (not= (.-firstElementChild sidebar-main)
-                                           (or (.-spaceHeader state) (.-pinnedContainer state)))))
+                                 (or (not (same-node? (.-parentNode (.-panel state)) sidebar-main))
+                                     (not (same-node? (.-firstElementChild sidebar-main)
+                                                      (or (.-spaceHeader state)
+                                                          (.-pinnedContainer state))))))
                         (.prepend sidebar-main (.-panel state))
                         (.prepend sidebar-main (.-pinnedContainer state))
                         (when (.-spaceHeader state)
@@ -179,10 +186,11 @@
                     (let [tabbrowser-tabs (by-id "tabbrowser-tabs")]
                       (when tabbrowser-tabs
                         (when (and (.-pinnedContainer state)
-                                   (not= (.-nextElementSibling tabbrowser-tabs) (.-pinnedContainer state)))
+                                   (not (same-node? (.-nextElementSibling tabbrowser-tabs)
+                                                    (.-pinnedContainer state))))
                           (.after tabbrowser-tabs (.-pinnedContainer state)))
                         (let [anchor (or (.-pinnedContainer state) tabbrowser-tabs)]
-                          (when (not= (.-nextElementSibling anchor) (.-panel state))
+                          (when (not (same-node? (.-nextElementSibling anchor) (.-panel state)))
                             (.after anchor (.-panel state))))))
                     (setup-horizontal-align-spacer)))
 

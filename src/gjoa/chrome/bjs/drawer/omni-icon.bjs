@@ -51,7 +51,7 @@
         (.appendChild btn menu)
         ;; Sit right after the hamburger (PanelUI), else at the nav-bar start.
         (let [pui (by-id "PanelUI-button")]
-          (if (and pui (= (.-parentNode pui) nav-bar))
+          (if (and pui (identical? (.-parentNode pui) nav-bar))
             (.after pui btn)
             (.prepend nav-bar btn)))
 

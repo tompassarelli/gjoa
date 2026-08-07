@@ -220,7 +220,10 @@
             ;; width — the sidebar stayed wide + still showed tab labels.
             (.removeProperty (.-style sidebar-main) "width")
 
-            (if (and urlbar-next (= (.-parentNode urlbar-next) urlbar-parent))
+            ;; `identical?`, never `=`: beagle's `=` is STRUCTURAL and two DOM nodes
+            ;; both have zero own keys, so `=` is true for ANY pair — and an
+            ;; insertBefore against a reference node that has since moved THROWS.
+            (if (and urlbar-next (identical? (.-parentNode urlbar-next) urlbar-parent))
               (.insertBefore urlbar-parent urlbar-container urlbar-next)
               (.appendChild urlbar-parent urlbar-container))
 
@@ -237,13 +240,13 @@
               ;; hamburger → extensions → sidebar order survives compact mode (#92).
               (when (and ext-btn sb-btn) (.after ext-btn sb-btn)))
 
-            (if (and toolbox-next (= (.-parentNode toolbox-next) toolbox-parent))
+            (if (and toolbox-next (identical? (.-parentNode toolbox-next) toolbox-parent))
               (.insertBefore toolbox-parent navigator-toolbox toolbox-next)
               (.appendChild toolbox-parent navigator-toolbox))))
 
         ;; --- context-menu fix ---
         on-context-menu (fn [e]
-          (when (= (.-parentNode navigator-toolbox) sidebar-main)
+          (when (identical? (.-parentNode navigator-toolbox) sidebar-main)
             (.stopPropagation e)))
 
         ;; --- nav-bar widget repair (#122) ---
