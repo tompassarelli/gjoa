@@ -578,6 +578,13 @@
 #nav-bar > #nav-bar-customization-target {
   flex: 1 1 auto !important;
 }
+/* Native CustomizableUI toolbarsprings (the pre-v3 urlbar auto-centering seat)
+ * keep their large default flex-grow here, putting ~112px gaps on both sides of
+ * the urlbar. Cap them so the row keeps one rhythm. Mirrors the
+ * #sidebar-container rule above. */
+#nav-bar > #nav-bar-customization-target > toolbarspring {
+  flex: 0 0 0 !important;
+}
 /* back → forward → refresh, pinned by `order` because neither DOM order nor the
  * nav-bar placements array is authoritative here (FF's vertical-tabs migration
  * reorders the array without moving the non-removable back/forward nodes).

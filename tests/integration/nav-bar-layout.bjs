@@ -55,6 +55,33 @@
     "return checkOrder(['back-button', 'forward-button', 'stop-reload-button', 'urlbar-container', "
     "'gjoa-sidebar-button|sidebar-button', 'unified-extensions-button', 'PanelUI-button']);"))
 
+;; A DEFAULT profile has no CustomizableUI springs left in nav-bar, but a migrated
+;; / customized one keeps `customizableui-special-spring1|2` flanking
+;; #urlbar-container — and toolbarbuttons.css gives those `flex: 80 80; max-width:
+;; 112px` inside #nav-bar. Inject the same element to put the row under the same
+;; pressure, measure, and remove it in the same script so nothing can leak.
+(def springPressureCheck :- String
+  (str orderCheckFn "
+  const target = document.getElementById('nav-bar-customization-target');
+  const uc = document.getElementById('urlbar-container');
+  if (!target || !uc || uc.parentElement !== target) {
+    return { skip: true, reason: 'no #urlbar-container inside #nav-bar-customization-target' };
+  }
+  const mk = () => { const s = document.createXULElement('toolbarspring');
+                     s.className = 'gjoa-test-spring'; return s; };
+  const a = mk(), b = mk();
+  let out;
+  try {
+    target.insertBefore(a, uc);
+    uc.after(b);
+    out = checkOrder(['back-button', 'forward-button', 'stop-reload-button', 'urlbar-container',
+                      'gjoa-sidebar-button|sidebar-button', 'unified-extensions-button', 'PanelUI-button']);
+    out.springWidths = [a.getBoundingClientRect().width, b.getBoundingClientRect().width];
+    out.springFlexGrow = getComputedStyle(a).flexGrow;
+  } finally { a.remove(); b.remove(); }
+  return out;
+"))
+
 (def allIconYCheck :- String "
   // Collect every visible icon in nav-bar (any depth — including inside
   // customization-target). Report each by id+ancestry+top-position so a
@@ -77,6 +104,22 @@
   }
   return { hits };
 ")
+
+;; The horizontal row must keep ONE rhythm: the two gaps flanking #urlbar-container
+;; (indices 3,4 of the horizontal id walk) stay near the tightest icon-cluster gap.
+;; Slack covers the urlbar's own margin-inline; a regrown spring is ~112px.
+(defn assert-even-rhythm! [r :- Any phase :- String] :- Any
+  (let [rects (.-rects r)
+        gap (fn [i] (- (.-left (aget rects i)) (.-right (aget rects (- i 1)))))
+        max-tight (.reduce [(gap 1) (gap 2) (gap 5) (gap 6)]
+                    (fn [a b] (Math/max a b)) 0)
+        ceiling (+ max-tight 15)]
+    (doseq [i [3 4]]
+      (expect (<= (gap i) ceiling)
+        (str "nav-bar (" phase "): gap before " (.-id (aget rects i)) " is " (gap i)
+             "px vs a " ceiling "px ceiling (tightest-cluster max " max-tight
+             "px + 15) — a toolbarspring around #urlbar-container is uncapped. "
+             (JSON/stringify r))))))
 
 (def tests :- Any
   [(deftest "nav-bar — gjoa-sidebar-button (if present) lives in nav-bar, immediately right of extensions" [mn]
@@ -157,7 +200,14 @@
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
      (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r (chrome-eval horizontalOrderIds)]
-       (expect (.-ok r) (.-msg r))))
+       (expect (.-ok r) (.-msg r))
+       (assert-even-rhythm! r "default profile"))
+     ;; Same row with the native springs present (a customized/migrated profile):
+     ;; uncapped they take ~112px each and split the row into two loud gaps.
+     (let [sp (chrome-eval springPressureCheck)]
+       (when (not (.-skip sp))
+         (expect (.-ok sp) (str "with toolbarsprings injected: " (.-msg sp)))
+         (assert-even-rhythm! sp "toolbarsprings injected"))))
 
    (deftest "nav-bar — full icon order survives live vertical<->horizontal flips" [mn]
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")

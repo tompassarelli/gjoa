@@ -174,8 +174,8 @@
     "nav-bar-layout": {
       "category": "nav-bar-layout",
       "tier": "fast",
-      "budgetMs": 900,
-      "note": "bumped 400->900: added full owner-spec order tests (fresh vertical/horizontal + live flip, 3 pref-toggle awaits)"
+      "budgetMs": 1000,
+      "note": "bumped 400->900: added full owner-spec order tests (fresh vertical/horizontal + live flip, 3 pref-toggle awaits). +100 2026-08-07: the horizontal test also runs one inject-measure-remove chrome call for the toolbarspring rhythm guard (no boot, no wait)"
     },
     "new-tab-honors-active-space": {
       "category": "new-tab-honors-active-space",
