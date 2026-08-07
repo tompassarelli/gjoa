@@ -1123,11 +1123,11 @@ Preserve these (security warnings):
   display: flex !important;
   position: relative !important;
   align-items: center !important;
-  gap: 20px !important;
-  padding: 9px 16px 10px !important;
-  border-top: 1px solid color-mix(in srgb, var(--gjoa-border) 55%, transparent) !important;
+  gap: 28px !important;
+  padding: 10px 16px 11px !important;
+  border-top: 1px solid color-mix(in srgb, var(--gjoa-border) 45%, transparent) !important;
   font: 11px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif !important;
-  color: var(--gjoa-fg-muted) !important;
+  color: var(--gjoa-text-faint) !important;
   pointer-events: none !important;
   user-select: none !important;
 }
@@ -1139,19 +1139,21 @@ Preserve these (security warnings):
 :root[gjoa-urlbar-floating] #gjoa-urlbar-hints .gjoa-urlbar-hint {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 7px !important;
+  gap: 8px !important;
   white-space: nowrap !important;
 }
+/* Keycap, not chip: the outline stays on the neutral ink ramp, never the accent. */
 :root[gjoa-urlbar-floating] #gjoa-urlbar-hints .gjoa-urlbar-hint-key {
-  font: 600 10px/1 ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace !important;
-  color: var(--gjoa-accent) !important;
-  background: color-mix(in srgb, var(--gjoa-accent) 13%, transparent) !important;
-  border: 1px solid color-mix(in srgb, var(--gjoa-accent) 26%, transparent) !important;
-  border-radius: 5px !important;
-  padding: 3px 6px !important;
+  font: 500 10px/1 ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace !important;
+  color: var(--gjoa-text-muted) !important;
+  background: color-mix(in oklch, var(--gjoa-ink) 4%, transparent) !important;
+  border: 1px solid var(--gjoa-line-strong) !important;
+  border-radius: 4px !important;
+  padding: 2px 5px !important;
 }
 :root[gjoa-urlbar-floating] #gjoa-urlbar-hints .gjoa-urlbar-hint-act {
-  opacity: 0.75 !important;
+  color: var(--gjoa-text-faint) !important;
+  opacity: 1 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
