@@ -19,8 +19,9 @@
         root (.-documentElement document)
         log (create-logger! "urlbar")
         state {:activated false :intent "current" :backdrop nil :ghost nil :hints nil
-               :healObs nil :healFn nil :breakout0 false :containerBreakout0 false
-               :urlbarH0 "" :containerH0 "" :stage nil :home nil}
+               :healObs nil :healFn nil
+               :urlbarH0 "" :containerH0 "" :stage nil :home nil
+               :popover0 nil :pinObs nil}
 
         intent-attr #(if (= % "newTab") "new-tab" "current")
 
@@ -85,6 +86,30 @@
                     (.insertBefore p urlbar n)
                     (.appendChild p urlbar)))))))
 
+        ;; A reparent re-runs #updateLayoutBreakout, whose measure lands on a frame with
+        ;; [breakout] off the container — no min-height, no in-flow child — so Firefox
+        ;; latches the collapsed box into --urlbar-container-height, which in horizontal
+        ;; tabs IS the nav-bar row height. One correction, then Firefox owns it again.
+        pin-container-height! (fn [c want]
+          (when (.-pinObs state)
+            (.disconnect (.-pinObs state))
+            (set! (.-pinObs state) nil))
+          (when (and c (not= want ""))
+            (let [obs (MutationObserver.
+                        (fn []
+                          (when (not= (.getPropertyValue (.-style c) "--urlbar-container-height")
+                                      want)
+                            (.disconnect obs)
+                            (set! (.-pinObs state) nil)
+                            (.setProperty (.-style c) "--urlbar-container-height" want))))]
+              (.observe obs c {:attributes true :attributeFilter ["style"]})
+              (set! (.-pinObs state) obs)
+              (.setTimeout window
+                (fn [] (when (identical? (.-pinObs state) obs)
+                         (.disconnect obs)
+                         (set! (.-pinObs state) nil)))
+                1000))))
+
         ;; #149 ATOMIC TEARDOWN. The naive teardown removed `gjoa-urlbar-floating`
         ;; synchronously, which instantly reverted the urlbar from the centered
         ;; position:fixed palette back to its resting in-sidebar INLINE box — that
@@ -138,14 +163,21 @@
               (some-> window .-gURLBar .-view .close)
               (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
                 (.hidePopover urlbar))
-              (rmattr! urlbar "popover")
+              ;; RESTORE the pre-summon promotion, never strip unconditionally: gjoa does
+              ;; not own [popover] — drawer/compact promotes the resting bar whenever
+              ;; compact is off (the steady state in horizontal tabs) and leaves it
+              ;; demoted when compact is on.
+              (if (= (.-popover0 state) "manual")
+                (do (attr! urlbar "popover" "manual")
+                    (when (and (not (bool (.matches urlbar ":popover-open")))
+                               (.-showPopover urlbar))
+                      (.showPopover urlbar)))
+                (rmattr! urlbar "popover"))
               (rmattr! urlbar "breakout-extend")
-              ;; Restore the PRE-SUMMON breakout state + the height vars Firefox may
-              ;; have re-measured off the FLOATING box while we held it.
-              (when (not (.-breakout0 state))
-                (rmattr! urlbar "breakout"))
-              (when (and (.-parentNode urlbar) (not (.-containerBreakout0 state)))
-                (rmattr! (.-parentNode urlbar) "breakout"))
+              ;; [breakout] stays Firefox's: #updateLayoutBreakoutDimensions strips it and
+              ;; re-adds a frame later, so any snapshot taken by a focusing summon reads a
+              ;; transient "off". Only the height vars below are ours to undo — we caused
+              ;; those writes by parking #urlbar on the viewport-sized stage.
               (if (= (.-urlbarH0 state) "")
                 (.removeProperty (.-style urlbar) "--urlbar-height")
                 (.setProperty (.-style urlbar) "--urlbar-height" (.-urlbarH0 state)))
@@ -154,7 +186,8 @@
                   (.removeProperty (.-style (.-parentNode urlbar))
                                    "--urlbar-container-height")
                   (.setProperty (.-style (.-parentNode urlbar))
-                                "--urlbar-container-height" (.-containerH0 state))))
+                                "--urlbar-container-height" (.-containerH0 state)))
+                (pin-container-height! (.-parentNode urlbar) (.-containerH0 state)))
               (catch Any e
                 (log "finishTeardown:collapse-error" {:msg (String e)})))
             ;; #150: suppress urlbar transitions for the restore frame so the resting
@@ -300,23 +333,21 @@
                   (ensure-floating-promoted))
               (do (set! (.-activated state) true)
                   (log "activateFloating" {:intent (.-intent state)})
-                  ;; Snapshot everything Firefox's breakout machinery owns on #urlbar /
-                  ;; #urlbar-container: a re-measure that lands while the palette floats
-                  ;; pins the PALETTE's box into --urlbar-height, and [breakout] drives
-                  ;; the resting layout — both must come back at teardown.
+                  ;; Snapshot the resting geometry Firefox re-measures off the FLOATING box
+                  ;; while we hold it, plus who owned the promotion (compact leaves none).
                   ;; `home` non-nil ⇒ still staged from an unfinished teardown, so these
                   ;; would capture the PALETTE's geometry as the resting geometry.
                   (when (nil? (.-home state))
                     (let [c (container)]
-                      (set! (.-breakout0 state) (has? urlbar "breakout"))
-                      (set! (.-containerBreakout0 state)
-                            (bool (and c (has? c "breakout"))))
                       (set! (.-urlbarH0 state)
                             (.getPropertyValue (.-style urlbar) "--urlbar-height"))
                       (set! (.-containerH0 state)
                             (if c
                               (.getPropertyValue (.-style c) "--urlbar-container-height")
-                              ""))))
+                              ""))
+                      ;; the ATTR, never `:popover-open`: #stopBreakout hidePopover()s on
+                      ;; every focus, so the open state reads a transient false here.
+                      (set! (.-popover0 state) (.getAttribute urlbar "popover"))))
                   ;; Leave a static look-alike (#gjoa-urlbar-ghost) in the resting
                   ;; slot so the real urlbar lifting to the centered palette doesn't
                   ;; collapse the slot / look like the bar "flew out" — the resting
@@ -333,7 +364,11 @@
                   ;; attr so the box metrics are the true resting ones.
                   ;; `home` nil for the same reason as the snapshot above: mid-teardown
                   ;; the "resting" rect this copies is the floating palette's.
+                  ;; FAIL-SAFE: this runs BEFORE the stage/backdrop/floating attrs, so a
+                  ;; throw would abort activation with `activated` already true — the
+                  ;; urlbar left neither floated nor dismissable. A missing ghost is cosmetic.
                   (when (and (not (.-ghost state)) (nil? (.-home state)))
+                   (try
                     (let [parent (container)]
                       (when parent
                         (let [rect (.getBoundingClientRect urlbar)
@@ -488,7 +523,12 @@
                               text-str (if has-value? value ph)]
                           (set! (.-id g) "gjoa-urlbar-ghost")
                           (attr! g "aria-hidden" "true")
-                          (css! g (str "position:relative;display:block;box-sizing:border-box;padding:0;"
+                          ;; LAYOUT-NEUTRAL like the bar it replaces (`.urlbar[breakout]` is
+                          ;; absolute): an in-flow stand-in would hand the container content
+                          ;; height it never had — the nav-bar row's height in horizontal.
+                          ;; No offsets + inserted in the urlbar's own DOM slot below ⇒ its
+                          ;; static position IS the urlbar's.
+                          (css! g (str "position:absolute;display:block;box-sizing:border-box;padding:0;"
                                        "width:" (.-width rect) "px;height:" (.-height rect) "px;"
                                        "pointer-events:none;overflow:hidden;white-space:nowrap;"
                                        "border:" (.-border cs) ";border-radius:" (.-borderRadius cs) ";"
@@ -523,8 +563,10 @@
                                          "left:" input-left "px;right:8px;overflow:hidden;"
                                          "text-overflow:ellipsis;opacity:" (if has-value? ".95" ".55") ";"))
                           (.appendChild g txt)
-                          (.appendChild parent g)
-                          (set! (.-ghost state) g)))))
+                          (.insertBefore parent g urlbar)
+                          (set! (.-ghost state) g))))
+                    (catch Any e
+                      (log "activateFloating:ghost-error" {:msg (String e)}))))
                   ;; #150b (2026-07-19): ARM opacity:0 (no transition) BEFORE the popover
                   ;; promotes to the top layer, then reveal on the next frame — so the
                   ;; float-in animation plays only from the settled centered geometry. The
@@ -655,4 +697,7 @@
        (when (.-healFn state)
          (off! urlbar "toggle" (.-healFn state))
          (set! (.-healFn state) nil))
+       (when (.-pinObs state)
+         (.disconnect (.-pinObs state))
+         (set! (.-pinObs state) nil))
        (deactivate-floating))})))
