@@ -8,7 +8,8 @@
 ;;        old one-phase synchronous revert.
 ;;   #150 flip-aware breakout — a `sidebar-positionend` branch on the
 ;;        `breakout-extend` rule grows the bar toward the page, not off-screen.
-;;   width — the centered palette is --gjoa-floating-w: min(860px, …) (was 720).
+;;   width — the centered palette is --gjoa-floating-w: clamp(400px, 40vw, 600px),
+;;        the owner's 400-600px band (was an 860px "roomier palette").
 ;; Static source assertion — instant, no browser/build.
 (ns gjoa.tests.urlbar-breakout
   (:require [fs :refer [existsSync readFileSync]]
@@ -48,7 +49,8 @@
           (.toBe (expect (has? css "sidebar-positionend")) true)
           (.toBe (expect (has? css "breakout-extend")) true))))
 
-    ;; the wider centered palette (860px, not the old 720px).
-    (test "palette width bumped to 860px"
+    ;; the centered palette sits in the owner's 400-600px band.
+    (test "palette width is the owner-spec 400-600px clamp"
       (fn []
-        (.toBe (expect (has? (readFileSync CSS "utf8") "--gjoa-floating-w:\\s*min\\(860px")) true)))))
+        (.toBe (expect (has? (readFileSync CSS "utf8")
+                             "--gjoa-floating-w:\\s*min\\(clamp\\(400px,\\s*40vw,\\s*600px\\)")) true)))))

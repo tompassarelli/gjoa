@@ -767,13 +767,15 @@
  * brief pin-to-sidebar-width experiment clipped the dropdown; the 600px spilled
  * too far. ~440px is the sweet spot. --urlbar-width is re-anchored to the SAME
  * value so the native .urlbarView results inherit it and can't clip. The wide
- * CENTERED command palette is the separate Ctrl+L `gjoa-urlbar-floating` path
- * (more specific selectors, see #region floating urlbar) — it wins when active.
+ * CENTERED command palette is the separate Ctrl+L `gjoa-urlbar-floating` path.
+ * INVARIANT: every in-sidebar geometry rule below carries
+ * `:root:not([gjoa-urlbar-floating])` — an unguarded one out-specifies the
+ * floating rules and drags the palette back to the drawer slot.
  * Scoped to #gjoa-urlbar-toolbar so it only applies in expanded layout. */
 :root {
   --gjoa-urlbar-expand-w: 440px;
 }
-#gjoa-urlbar-toolbar #urlbar:is([focused][breakout-extend]) {
+:root:not([gjoa-urlbar-floating]) #gjoa-urlbar-toolbar #urlbar:is([focused][breakout-extend]) {
   width: var(--gjoa-urlbar-expand-w) !important;
   --urlbar-width: var(--gjoa-urlbar-expand-w) !important;
   min-width: 0 !important;
@@ -791,7 +793,7 @@
  * grows toward the page/center. `--gjoa-urlbar-resting-w` is the untouched
  * resting width stashed by drawer/layout.bjs (sidebar inner width); the
  * `--urlbar-width` here is already clobbered to expand-w so it can't be used. */
-#sidebar-container[sidebar-positionend] #gjoa-urlbar-toolbar #urlbar:is([focused][breakout-extend]) {
+:root:not([gjoa-urlbar-floating]) #sidebar-container[sidebar-positionend] #gjoa-urlbar-toolbar #urlbar:is([focused][breakout-extend]) {
   transform: translateX(calc(-1 * (var(--gjoa-urlbar-expand-w) - var(--gjoa-urlbar-resting-w, var(--urlbar-width, 0px))))) !important;
 }
 
@@ -876,14 +878,11 @@ Preserve these (security warnings):
  * "open in new tab" path). Mouse-click activation is deliberately NOT covered
  * here — the in-sidebar breakout-extend at-click-point behavior is preserved. */
 
-/* Width: 860px ideal, never closer than 20px to either edge, never above
- * 860px. min(860px, 100vw - 40px) computes once and reapplies on every
- * window resize. All three width properties use the same expression so
- * Firefox's UrlbarInput sizing JS can't override any of them. (Bumped
- * 720→860 for a roomier command palette; the `100vw - 40px` cap keeps the
- * card-gap inset so it never reaches the window edge.) */
+/* OWNER SPEC: 400-600px. The outer min() keeps the card-gap inset on windows too
+ * narrow for the 400px floor. Every width property below repeats the expression —
+ * Firefox's UrlbarInput sizing JS overrides any one of them it finds unset. */
 :root[gjoa-urlbar-floating] {
-  --gjoa-floating-w: min(860px, calc(100vw - 40px));
+  --gjoa-floating-w: min(clamp(400px, 40vw, 600px), calc(100vw - 40px));
   /* Cap dropdown height so a long suggestion list doesn't bleed below the
    * viewport on tall-narrow windows. 100vh - 22vh (top offset) - 24vh (input
    * height + breathing room) ≈ 54vh of result list. */
@@ -926,6 +925,14 @@ Preserve these (security warnings):
 }
 @media (prefers-reduced-motion: reduce) {
   :root[gjoa-urlbar-floating] #urlbar { animation: none !important; }
+}
+
+/* The resting slot's `overflow: hidden` is the one drawer-width clipper in the
+ * urlbar's ancestor chain; open it while floating so a failed popover promotion
+ * degrades to "centered but painted", never to "cut off at the drawer edge". */
+:root[gjoa-urlbar-floating] #gjoa-urlbar-toolbar,
+:root[gjoa-urlbar-floating] #gjoa-urlbar-toolbar #urlbar-container {
+  overflow: visible !important;
 }
 
 /* #150b FIRST-PAINT ARMING (2026-07-19): activate() sets `gjoa-urlbar-arming` on

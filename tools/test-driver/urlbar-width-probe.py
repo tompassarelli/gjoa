@@ -22,7 +22,7 @@ MEAS = r"""
   // the placeholder text must sit INSIDE the ghost box (not spill below it)
   const txtRc = txt ? txt.getBoundingClientRect() : null;
   const txtInsideBox = (gr && txtRc) ? (txtRc.top >= gr.top-2 && txtRc.bottom <= gr.bottom+2) : false;
-  return JSON.stringify({iw:window.innerWidth, expectW:Math.min(860,window.innerWidth-40),
+  return JSON.stringify({iw:window.innerWidth, expectW:Math.min(Math.min(600,Math.max(400,0.4*window.innerWidth)),window.innerWidth-40),
     urlbarW:Math.round(rc.width), urlbarLeft:Math.round(rc.left),
     popoverOpen:u.matches(':popover-open'),
     floating:document.documentElement.hasAttribute('gjoa-urlbar-floating'),
@@ -50,7 +50,7 @@ def main():
     out["post_dismiss"]=summon()
     exp=out["fresh"]["expectW"]
     f, p = out["fresh"], out["post_dismiss"]
-    # >=90% of the min(860, 100vw-40) target — catches a palette stuck at the narrow
+    # >=90% of the min(clamp(400,40vw,600), 100vw-40) target — catches a palette stuck at the narrow
     # sidebar column width (~40%) while tolerating the ~20px box-model delta.
     out["checks"]={
       "fresh_full_width": f["urlbarW"] >= 0.90*exp,
