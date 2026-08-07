@@ -9,15 +9,27 @@
 ;;
 ;; Two regressions this guards (both from 264c94f reverting 5f57d8a / 29451f9):
 ;;
-;;   #1 RESTING urlbar must be CONTAINED in the drawer, not full-width. The
-;;      native urlbar is `position: absolute` with #navigator-toolbox as its
-;;      containing block, so the bad `width: 100%` resolved against the toolbox
-;;      and spanned the whole window. The fix restores `width: var(--urlbar-width)`
-;;      (JS-pinned by drawer/layout.bjs sync-urlbar-width to sidebar inner width).
-;;      ASSERT: at rest, #urlbar rect width is well under the WINDOW width and
-;;      ~= #sidebar-container inner width (minus 2·inset). NOT against
-;;      #navigator-toolbox — `expand` reparents the toolbox inside
+;;   #1 The Ctrl+L FLOATING palette must OVERLAY the page at spec width, and the
+;;      RESTING urlbar must stay contained in the drawer. Two halves of one
+;;      geometry contract, measured in one window:
+;;
+;;      RESTING (264c94f lock): the native urlbar is `position: absolute` with
+;;      #navigator-toolbox as its containing block, so the bad `width: 100%`
+;;      resolved against the toolbox and spanned the whole window. The fix
+;;      restores `width: var(--urlbar-width)` (JS-pinned by drawer/layout.bjs
+;;      sync-urlbar-width to sidebar inner width). ASSERT: width well under the
+;;      WINDOW width and ~= #sidebar-container inner width (minus 2·inset). NOT
+;;      against #navigator-toolbox — `expand` reparents the toolbox inside
 ;;      #sidebar-container, so that width just is the drawer width.
+;;
+;;      FLOATING (owner spec): Ctrl+L lifts #urlbar into the top layer and
+;;      centers it over the CONTENT. An in-sidebar geometry rule that loses its
+;;      `:root:not([gjoa-urlbar-floating])` guard out-specifies the floating
+;;      rules and drags the palette back to the drawer slot, where
+;;      #gjoa-urlbar-toolbar's `overflow: hidden` cuts it off. ASSERT the three
+;;      properties that failure violates: the palette ESCAPES the
+;;      #sidebar-container box, its width is inside the owner's 400-600px band,
+;;      and its visual rect equals its layout rect.
 ;;
 ;;   #2 EXPANDED dropdown panel must be OPAQUE (non-collapsed). On focus the
 ;;      urlbar gets [breakout-extend]; the bad nova-only calc made
@@ -83,6 +95,61 @@
   };
 ")
 
+;; Measure the FLOATING (Ctrl+L) palette. `hit` is the visual-vs-layout check: a
+;; box cut off by a clip ancestor stops hit-testing at the cut, so an edge point
+;; that resolves outside #urlbar means the painted box is narrower than the rect.
+(def MEASURE-FLOATING :- String "
+  const urlbar = document.getElementById('urlbar');
+  const sc = document.getElementById('sidebar-container');
+  if (!urlbar || !sc) return { error: 'missing element' };
+  const u = urlbar.getBoundingClientRect();
+  const s = sc.getBoundingClientRect();
+  const cy = Math.round(u.top + u.height / 2);
+  const hit = x => { const e = document.elementFromPoint(Math.round(x), cy);
+    return e ? { id: e.id || e.localName, inUrlbar: (e === urlbar || urlbar.contains(e)) }
+             : { id: null, inUrlbar: false }; };
+  const rects = urlbar.getClientRects();
+  return {
+    urlbarWidth: u.width, urlbarLeft: u.left, urlbarRight: u.right,
+    sidebarLeft: s.left, sidebarRight: s.right,
+    windowWidth: window.innerWidth,
+    floating: document.documentElement.hasAttribute('gjoa-urlbar-floating'),
+    arming: document.documentElement.hasAttribute('gjoa-urlbar-arming'),
+    breakoutExtend: urlbar.hasAttribute('breakout-extend'),
+    popoverOpen: urlbar.matches(':popover-open'),
+    clientRects: rects.length,
+    clientRectWidth: rects.length ? rects[0].width : null,
+    hitLeft: hit(u.left + 3), hitRight: hit(u.right - 3),
+  };
+")
+
+;; Summon / dismiss the floating palette through the same CustomEvents the Ctrl+L
+;; handler (drawer/index.bjs) dispatches into, so the test drives the real
+;; activate path without synthesizing a widget key event.
+(def SUMMON-FLOATING :- String "
+  document.dispatchEvent(new CustomEvent('gjoa-urlbar-activate', { detail: { intent: 'current' } }));
+  try { window.focus(); gURLBar.focus(); } catch (e) {}
+  return true;
+")
+(def DISMISS-FLOATING :- String "
+  document.dispatchEvent(new CustomEvent('gjoa-urlbar-deactivate'));
+  return true;
+")
+;; Same deterministic [breakout-extend] drive as MEASURE-EXTENDED, but WITHOUT
+;; leaving the floating state — a headless profile has no suggestions, so the
+;; view never opens on its own and the palette would never reach the state a real
+;; Ctrl+L lands in.
+(def EXTEND-FLOATING :- String "
+  const urlbar = document.getElementById('urlbar');
+  if (!urlbar) return false;
+  try {
+    urlbar.toggleAttribute('open', true);
+    if (window.gURLBar && window.gURLBar.startLayoutExtend) window.gURLBar.startLayoutExtend();
+    else urlbar.toggleAttribute('breakout-extend', true);
+  } catch (e) { urlbar.toggleAttribute('breakout-extend', true); }
+  return true;
+")
+
 ;; Drive the EXPANDED state the same way native Firefox does on focus, but
 ;; deterministically (no network / suggestion providers): focus the urlbar, mark
 ;; the view open (`view.isOpen` is just `input.hasAttribute('open')`,
@@ -129,6 +196,36 @@
   return true;
 ")
 
+;; Floating teardown is ASYNC (fade → transitionend → finish-teardown), so a test
+;; that summoned the palette must not return while the ghost still holds the
+;; resting slot — it displaces the input row and fails the no-jump test (#3).
+(def FLOATING-TORN-DOWN :- String "
+  const d = document.documentElement;
+  return !d.hasAttribute('gjoa-urlbar-floating')
+      && !d.hasAttribute('gjoa-urlbar-teardown')
+      && !document.getElementById('gjoa-urlbar-ghost')
+      && !document.getElementById('gjoa-urlbar-backdrop');
+")
+
+;; finish-teardown deliberately takes #urlbar back OUT of the top layer, but the
+;; drawer's steady resting state has it popover-promoted — and an in-flow urlbar
+;; lays its breakout-extend box out 8px lower, which fails #3. Capture/restore so
+;; summoning the palette here leaves the window as it was found.
+(def CAPTURE-POPOVER :- String "
+  const u = document.getElementById('urlbar');
+  return { manual: u && u.getAttribute('popover') === 'manual',
+           open: !!(u && u.matches(':popover-open')) };
+")
+(def RESTORE-POPOVER :- String "
+  const u = document.getElementById('urlbar');
+  const [manual, open] = arguments;
+  try {
+    if (u && manual && u.getAttribute('popover') !== 'manual') u.setAttribute('popover', 'manual');
+    if (u && open && !u.matches(':popover-open') && u.showPopover) u.showPopover();
+  } catch (e) {}
+  return true;
+")
+
 ;; GUARD against a vacuous pass on a dead-chrome binary: if GjoaLoader threw
 ;; (the $$bc-runtime mismatch class), NO gjoa stylesheet is registered and the
 ;; urlbar shows native FF behavior — under which the panel-height / no-jump
@@ -147,10 +244,61 @@
              "mismatch in a stale binary). This test would otherwise pass "
              "vacuously on native Firefox defaults; rebuild the bundle/binary."))))))
 
+;; The owner-spec contract for the Ctrl+L palette, asserted in every floating
+;; sub-state: it escapes the drawer, sits centred over the content, is 400-600px
+;; wide, and its painted box matches its layout rect.
+(defn assert-floating-overlay! [f :- Any phase :- String] :- Any
+  (let [tag (str "floating palette (" phase "): ")]
+    (expect (not (.-error f)) (str tag "MEASURE-FLOATING error: " (JSON/stringify f)))
+    (expect (.-floating f)
+      (str tag "gjoa-urlbar-floating not set — the Ctrl+L activate path never ran"))
+    ;; (a) ESCAPE + CENTRE. Every known form of "an in-sidebar rule out-specified
+    ;; the floating path" — width:var(--urlbar-width), left/right:auto, the
+    ;; sidebar-positionend translateX — anchors the box to the drawer slot, and
+    ;; some still spill a little past the drawer edge, so centring is the assertion
+    ;; that actually pins the contract.
+    (expect (or (< (.-urlbarLeft f) (- (.-sidebarLeft f) 1))
+                (> (.-urlbarRight f) (+ (.-sidebarRight f) 1)))
+      (str tag "CONTAINED in #sidebar-container ["
+           (.toFixed (.-sidebarLeft f) 1) ".." (.toFixed (.-sidebarRight f) 1)
+           "] — it must overlay the page content. " (JSON/stringify f)))
+    (let [off (Math/abs (- (/ (+ (.-urlbarLeft f) (.-urlbarRight f)) 2)
+                           (/ (.-windowWidth f) 2)))]
+      (expect (<= off 8)
+        (str tag "OFF-CENTRE by " (.toFixed off 1) "px — anchored to the drawer "
+             "slot, not centred over the content. " (JSON/stringify f))))
+    ;; (b) SPEC WIDTH: owner spec 400-600px; --gjoa-floating-w resolves to
+    ;; clamp(400px, 40vw, 600px) = 560px at the 1400px window the test pins.
+    (expect (and (>= (.-urlbarWidth f) 380) (<= (.-urlbarWidth f) 620))
+      (str tag "width " (.toFixed (.-urlbarWidth f) 1)
+           "px is outside the owner's 400-600px band (±20px slack) at a "
+           (.toFixed (.-windowWidth f) 1) "px window. " (JSON/stringify f)))
+    ;; (c) NOT CLIPPED: visual rect == layout rect. Top-layer promotion is the
+    ;; escape mechanism; one unfragmented client rect at the full width, plus both
+    ;; edges hit-testing into #urlbar, is the painted box agreeing with it.
+    (expect (.-popoverOpen f)
+      (str tag "NOT top-layer promoted (:popover-open false) — it is laid out "
+           "inside the drawer's clip chain. " (JSON/stringify f)))
+    (expect (and (= (.-clientRects f) 1)
+                 (< (Math/abs (- (.-clientRectWidth f) (.-urlbarWidth f))) 1))
+      (str tag "client rect disagrees with its bounding rect. " (JSON/stringify f)))
+    (expect (and (.-inUrlbar (.-hitLeft f)) (.-inUrlbar (.-hitRight f)))
+      (str tag "CLIPPED — an edge point hit-tests outside #urlbar (left→"
+           (.-id (.-hitLeft f)) ", right→" (.-id (.-hitRight f))
+           "), so the painted box is narrower than its layout rect. "
+           (JSON/stringify f)))))
+
 (js/export (def tests :- Any
-  [(deftest "urlbar — resting urlbar is CONTAINED in the drawer, not full window width (#1)" [mn]
+  [(deftest "urlbar — Ctrl+L palette OVERLAYS the content at spec width; resting bar stays in the drawer (#1)" [mn]
      (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))
      (js/await (require-gjoa-css! mn))
+     ;; Pin the window at 1400x900 so the width band below is a fixed number, not
+     ;; a function of whatever size the previous test left. Restored at the end.
+     (let [orig (js/await (.executeScript mn
+                  "return { w: window.outerWidth, h: window.outerHeight };"))
+           pop0 (js/await (.executeScript mn CAPTURE-POPOVER))]
+       (js/await (.executeScript mn "window.resizeTo(1400, 900); return true;"))
+       (js/await (await-true "return window.innerWidth === 1400;" 3000))
      ;; PRECONDITION: the gjoa drawer must have reparented #urlbar into
      ;; #gjoa-urlbar-toolbar (drawer/layout.bjs `expand`). Without it, #urlbar is
      ;; still in the native #nav-bar at full width — a width assertion there would
@@ -193,7 +341,34 @@
        ;; Belt-and-suspenders: the urlbar must sit inside the toolbox horizontally.
        (expect (and (>= (.-urlbarLeft r) (- (.-toolboxLeft r) 2))
                     (<= (.-urlbarRight r) (+ (.-toolboxRight r) 2)))
-         (str "resting urlbar overflows the toolbox horizontally. " (JSON/stringify r)))))
+         (str "resting urlbar overflows the toolbox horizontally. " (JSON/stringify r))))
+
+     ;; --- FLOATING: the Ctrl+L palette over the content -----------------------
+     (js/await (.executeScript mn SUMMON-FLOATING))
+     ;; `gjoa-urlbar-arming` holds the palette at opacity:0 until the popover has
+     ;; promoted and settled; measuring before it clears reads pre-promotion geometry.
+     (js/await (await-true
+                 (str "const d = document.documentElement;"
+                      "return d.hasAttribute('gjoa-urlbar-floating')"
+                      " && !d.hasAttribute('gjoa-urlbar-arming');")
+                 3000))
+     (assert-floating-overlay! (chrome-eval MEASURE-FLOATING) "on summon")
+     ;; A real Ctrl+L lands in [focused][breakout-extend] as soon as the view
+     ;; opens, and THAT is the state the in-sidebar expand rule competes for — the
+     ;; summon-only state never matches it. Drive it and re-assert.
+     (js/await (.executeScript mn EXTEND-FLOATING))
+     (js/await (await-true
+                 (str "const u = document.getElementById('urlbar');"
+                      "return !!u && u.hasAttribute('breakout-extend');")
+                 2000))
+     (assert-floating-overlay! (chrome-eval MEASURE-FLOATING) "in breakout-extend")
+     (js/await (.executeScript mn DISMISS-FLOATING))
+
+     (js/await (await-true FLOATING-TORN-DOWN 2000))
+     (js/await (.executeScript mn RESET-URLBAR))
+     (js/await (.executeScript mn RESTORE-POPOVER [(.-manual pop0) (.-open pop0)]))
+     (js/await (.executeScript mn "window.resizeTo(arguments[0], arguments[1]); return true;"
+                 [(.-w orig) (.-h orig)]))))
 
    (deftest "urlbar — expanded [breakout-extend] dropdown panel is OPAQUE (non-collapsed) (#2)" [mn]
      (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))

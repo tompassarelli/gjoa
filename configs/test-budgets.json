@@ -1,6 +1,6 @@
 {
   "_doc": "Per-test budgets + tiers. Policy: docs/stewardship/testing.md. Maintained by `bun run test:audit`. budgetMs=lean target wall time; tier=smoke|fast|slow|network for modular/locality runs.",
-  "suiteBudgetMs": 134250,
+  "suiteBudgetMs": 134650,
   "lastAudit": {
     "date": "2026-06-22",
     "healthySuiteP50Ms": 27200,
@@ -292,9 +292,9 @@
     "urlbar-drawer": {
       "category": "urlbar",
       "tier": "fast",
-      "budgetMs": 1800,
-      "note": "[trimmable] Zero fixed sleeps \u2014 chrome-only rect reads, no nav, no tab. Cleanest of the set on the sleep axis. Trims: (1) all 3 test",
-      "estSavingsMs": 200
+      "budgetMs": 2200,
+      "note": "[justified] Still zero fixed sleeps. #1 now drives the real Ctrl+L floating palette, so it pays a 1400x900 resize round-trip plus the async dismiss fade (~260ms transitionend fallback) that the overlay invariant needs; measured 1.77-1.86s for the file.",
+      "estSavingsMs": 0
     },
     "vim-content-focus": {
       "category": "tabs",
