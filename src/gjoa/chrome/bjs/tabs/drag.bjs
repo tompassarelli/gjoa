@@ -36,6 +36,12 @@
 (defn row-pinned? [row :- Any] :- Any
   (bool (and (.-_tab row) (.-pinned (.-_tab row)))))
 
+;; beagle `=` is STRUCTURAL: DOM nodes with no own enumerable keys (label, icon,
+;; pinned container, panel, spacer all have none) compare EQUAL. Every drop-routing
+;; guard that asks "is this event aimed at THAT node" must use identity.
+(defn same-node? [a :- Any b :- Any] :- Any
+  (bool (Object/is a b)))
+
 ;; Pretty-printer for a row -- used in log lines so we can correlate source
 ;; vs target across event boundaries without dumping the whole element.
 (defn row-desc [row :- Any] :- Any
@@ -123,13 +129,21 @@
           (set! (.-dropTarget ds) nil)
           (set! (.-dropPosition ds) nil))
 
+        ;; The pinned section is `hidden` (0x0, no drag events) while empty, so the
+        ;; into-empty-pinned path is unreachable unless the drag reveals it.
+        clear-drop-strip (fn []
+          (let [pc (.-pinnedContainer state)]
+            (when (and pc (has? pc "gjoa-drop-strip"))
+              (rmattr! pc "gjoa-drop-strip")
+              (set! (.-hidden pc) (not (bool (q pc ".gjoa-tab-row")))))))
+
         ;; --- handleContainerDrop ---
         ;; container-action: (fn [tab] ...) when dropTarget IS the container
         handle-container-drop (fn [e container-ref container-action]
           (.preventDefault e)
           (let [tab (.-_tab (.-dragSource ds))
-                dx (- (.-screenX e) (or (.-dragStartX ds) (.-screenX e)))
-                dy (- (.-screenY e) (or (.-dragStartY ds) (.-screenY e)))
+                dx (- (.-clientX e) (undef-or (.-dragStartX ds) (.-clientX e)))
+                dy (- (.-clientY e) (undef-or (.-dragStartY ds) (.-clientY e)))
                 moved-px2 (+ (* dx dx) (* dy dy))]
             (cond
               ;; #124 ROOT FIX (extended): the row-level drop got a movement
@@ -146,7 +160,7 @@
                     :movedPx2 moved-px2})
 
               tab
-              (if (= (.-dropTarget ds) container-ref)
+              (if (same-node? (.-dropTarget ds) container-ref)
                 (container-action tab)
                 (when (and (.-dropTarget ds)
                            (or (some-> ds .-dropTarget .-_tab)
@@ -156,7 +170,8 @@
                     (.-dropTarget ds) (.-dropPosition ds))))
 
               :else nil)
-            (clear-drop-indicator)))
+            (clear-drop-indicator)
+            (clear-drop-strip)))
 
         ;; --- showDropIndicator ---
         show-drop-indicator (fn [target-row position]
@@ -174,9 +189,8 @@
                   :horizontal (is-horizontal)})
             (if (is-horizontal)
               (do
-                (when (or (not (.-parentNode ind))
-                          (not= (.-parentNode ind)
-                                (.-documentElement document)))
+                (when (not (same-node? (.-parentNode ind)
+                                       (.-documentElement document)))
                   (.appendChild (.-documentElement document) ind))
                 (let [rect (.getBoundingClientRect target-row)
                       s (.-style ind)]
@@ -224,12 +238,12 @@
                    {:reason "no-tgt-data" :target (row-desc tgt-row)})
               (let [src-pinned (or (row-pinned? src-row)
                                    (and (bool (.-_group src-row))
-                                        (= (.-parentNode src-row)
-                                           (.-pinnedContainer state))))
+                                        (same-node? (.-parentNode src-row)
+                                                    (.-pinnedContainer state))))
                     tgt-pinned (or (row-pinned? tgt-row)
                                    (and (bool (.-_group tgt-row))
-                                        (= (.-parentNode tgt-row)
-                                           (.-pinnedContainer state))))
+                                        (same-node? (.-parentNode tgt-row)
+                                                    (.-pinnedContainer state))))
                     is-cross-container (not= src-pinned tgt-pinned)]
 
                 (log "executeDrop:enter"
@@ -589,10 +603,16 @@
                   (.preventDefault e)
                   (do
                     (set! (.-dragSource ds) row)
-                    ;; Record the pointer origin so the drop can reject a click / 1-2px
-                    ;; jitter (no movement threshold turned a click into a reparent — #124).
-                    (set! (.-dragStartX ds) (.-screenX e))
-                    (set! (.-dragStartY ds) (.-screenY e))
+                    (let [pc (.-pinnedContainer state)]
+                      (when (and pc (not (row-pinned? row))
+                                 (not (bool (q pc ".gjoa-tab-row"))))
+                        (set! (.-hidden pc) false)
+                        (attr! pc "gjoa-drop-strip" "true")))
+                    ;; Pointer origin for the #124 movement threshold. CLIENT coords,
+                    ;; not screen: within one window the deltas are identical, and
+                    ;; synthetic DragEvents carry only clientX/clientY.
+                    (set! (.-dragStartX ds) (.-clientX e))
+                    (set! (.-dragStartY ds) (.-clientY e))
                     (log "dragstart" {:source (row-desc row)})
                     (let [dt (.-dataTransfer e)]
                       (set! (.-effectAllowed dt) "move")
@@ -611,14 +631,15 @@
               (when (.-dragSource ds)
                 (rmattr! (.-dragSource ds) "gjoa-dragging"))
               (set! (.-dragSource ds) nil)
-              (clear-drop-indicator)))
+              (clear-drop-indicator)
+              (clear-drop-strip)))
 
           ;; dragover
           (let [last-logged :- Any {:v nil}]
             (on! row "dragover"
               (fn [e]
                 (when (and (.-dragSource ds)
-                           (not= (.-dragSource ds) row)
+                           (not (same-node? (.-dragSource ds) row))
                            (not (.includes (subtree-rows (.-dragSource ds))
                                   row)))
                   (.preventDefault e)
@@ -634,7 +655,7 @@
                                  (let [c (cell-under! (.-parentNode row)
                                            (.-clientX e) (.-clientY e))]
                                    (if (and c
-                                            (not= c (.-dragSource ds))
+                                            (not (same-node? c (.-dragSource ds)))
                                             (not (.includes
                                                    (subtree-rows (.-dragSource ds)) c)))
                                      c
@@ -705,7 +726,7 @@
             (fn [e]
               (let [related (.-relatedTarget e)]
                 (when (and (not (.contains row related))
-                           (= (.-dropTarget ds) row))
+                           (same-node? (.-dropTarget ds) row))
                   (clear-drop-indicator)))))
 
           ;; drop
@@ -719,8 +740,8 @@
               ;; must use it too. Falls back to the listener row when no dragover
               ;; ran (dropTarget unset).
               (let [tgt (or (.-dropTarget ds) row)
-                    dx (- (.-screenX e) (or (.-dragStartX ds) (.-screenX e)))
-                    dy (- (.-screenY e) (or (.-dragStartY ds) (.-screenY e)))
+                    dx (- (.-clientX e) (undef-or (.-dragStartX ds) (.-clientX e)))
+                    dy (- (.-clientY e) (undef-or (.-dragStartY ds) (.-clientY e)))
                     moved-px2 (+ (* dx dx) (* dy dy))]
                 (log "drop/row:fired"
                      {:listenerOnRow (row-desc row)
@@ -738,7 +759,7 @@
                   (< moved-px2 36)
                   (log "drop/row:abort" {:reason "below-drag-threshold (click, not drag)"})
 
-                  (= (.-dragSource ds) tgt)
+                  (same-node? (.-dragSource ds) tgt)
                   (log "drop/row:abort" {:reason "source-equals-target"})
 
                   (.includes (subtree-rows (.-dragSource ds)) tgt)
@@ -769,24 +790,24 @@
             (fn [e]
               (when (and (.-dragSource ds)
                          (not (row-pinned? (.-dragSource ds)))
-                         (= (.-target e) container))
-                  (let [last-row (q container
-                                   ".gjoa-tab-row:last-of-type")
-                        past-end (and last-row
-                                      (> (.-clientY e)
-                                         (.-bottom (.getBoundingClientRect last-row))))]
-                    (when-not past-end
-                      (.preventDefault e)
-                      (set! (.-dropEffect (.-dataTransfer e)) "move")
-                      (if last-row
-                        (do
-                          (set! (.-dropTarget ds) last-row)
-                          (set! (.-dropPosition ds) "after")
-                          (show-drop-indicator last-row "after"))
-                        (do
-                          (set! (.-dropTarget ds) container)
-                          (set! (.-dropPosition ds)
-                                "into-empty-pinned"))))))))
+                         (same-node? (.-target e) container))
+                  ;; The container's own bounds delimit the zone; anything inside it,
+                  ;; including the divider band below the last row, appends to the
+                  ;; pinned list. `:last-of-type` is tag-based and can resolve to a
+                  ;; space-filtered row with a 0-height rect.
+                  (let [last-row (last-of (Array/from
+                                            (qa container ".gjoa-tab-row:not([hidden])")))]
+                    (.preventDefault e)
+                    (set! (.-dropEffect (.-dataTransfer e)) "move")
+                    (if last-row
+                      (do
+                        (set! (.-dropTarget ds) last-row)
+                        (set! (.-dropPosition ds) "after")
+                        (show-drop-indicator last-row "after"))
+                      (do
+                        (set! (.-dropTarget ds) container)
+                        (set! (.-dropPosition ds)
+                              "into-empty-pinned")))))))
 
           ;; drop
           (on! container "drop"
@@ -797,8 +818,8 @@
                     (row-pinned? (.-dragSource ds))})
               (when (and (.-dragSource ds)
                          (not (row-pinned? (.-dragSource ds)))
-                         (or (= (.-target e) container)
-                             (= (.-dropTarget ds) container)))
+                         (or (same-node? (.-target e) container)
+                             (same-node? (.-dropTarget ds) container)))
                 (handle-container-drop e container
                   #(.pinTab gBrowser %))))))
 
@@ -808,8 +829,8 @@
           (on! p "dragover"
             (fn [e]
               (when (and (.-dragSource ds)
-                         (or (= (.-target e) p)
-                             (= (.-target e) (.-spacer state))))
+                         (or (same-node? (.-target e) p)
+                             (same-node? (.-target e) (.-spacer state))))
                 (let [src-pinned (row-pinned? (.-dragSource ds))
                       anchor {:v nil}]
                   (if src-pinned
@@ -848,14 +869,14 @@
           (on! p "drop"
             (fn [e]
               (log "drop/panel:fired"
-                   {:eventTargetIsPanel (= (.-target e) p)
+                   {:eventTargetIsPanel (same-node? (.-target e) p)
                     :eventTargetIsSpacer
-                    (= (.-target e) (.-spacer state))
+                    (same-node? (.-target e) (.-spacer state))
                     :hasDragSource (bool (.-dragSource ds))})
               (when (and (.-dragSource ds)
-                         (or (= (.-target e) p)
-                             (= (.-target e) (.-spacer state))
-                             (= (.-dropTarget ds) p)))
+                         (or (same-node? (.-target e) p)
+                             (same-node? (.-target e) (.-spacer state))
+                             (same-node? (.-dropTarget ds) p)))
                 (handle-container-drop e p
                   #(when (.-pinned %)
                      (.unpinTab gBrowser %)))))))]

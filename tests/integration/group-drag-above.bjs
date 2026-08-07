@@ -27,20 +27,96 @@
       label: r.querySelector(\".gjoa-tab-label, .gjoa-group-name\")?.textContent ?? \"\",
     }));")
 
+;; `screenX/screenY` are set as well as client coords so the guard asserts drop
+;; BEHAVIOUR rather than riding on whichever pair the #124 movement threshold reads.
+;; The target rect is measured AFTER dragstart: dragging an unpinned row reveals the
+;; empty pinned strip, which reflows the list under the pointer.
 (defn drag-script [src :- Int tgt :- Int] :- String
   (str "
     const rows = [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row, #gjoa-tab-panel .gjoa-group-row\")];
     const source = rows[" src "]; const target = rows[" tgt "];
     if (!source || !target) throw new Error(\"row missing src=" src " tgt=" tgt " len=\"+rows.length);
-    const tR = target.getBoundingClientRect();
-    const cY = tR.top + tR.height/2; const cX = tR.left + tR.width/2;
     const dt = new DataTransfer();
-    const fire = (el,type,x,y) => el.dispatchEvent(new DragEvent(type,{bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,dataTransfer:dt}));
+    const fire = (el,type,x,y) => el.dispatchEvent(new DragEvent(type,{bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,screenX:x+1000,screenY:y+1000,dataTransfer:dt}));
     const sR = source.getBoundingClientRect();
     fire(source,\"dragstart\",sR.left+5,sR.top+5);
+    const tR = target.getBoundingClientRect();
+    const cY = tR.top + tR.height/2; const cX = tR.left + tR.width/2;
     fire(target,\"dragenter\",cX,cY); fire(target,\"dragover\",cX,cY);
     fire(target,\"drop\",cX,cY); fire(source,\"dragend\",cX,cY);
     return true;"))
+
+;; --- drop-to-pin helpers ----------------------------------------------------
+;; Marker attribute (not label text): a label substring collision between the
+;; seeded and the dragged tab silently turns a failure into a pass.
+(defn add-marked-tab-js [marker :- String] :- String
+  (str "
+    const p = Services.scriptSecurityManager.getSystemPrincipal();
+    const t = gBrowser.addTab(\"about:blank\", { triggeringPrincipal: p });
+    t.setAttribute(\"gjoa-test-marker\", \"" marker "\");
+    window.gjoaTest.rows.scheduleTreeResync();
+    window.gjoaTest.rows.updateVisibility();
+    return true;"))
+
+(defn marked-row-ready-js [marker :- String] :- String
+  (str "
+    const t = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" marker "\");
+    return !!(t && window.gjoaTest.rowOf.get(t));"))
+
+(defn marked-pinned-js [marker :- String] :- String
+  (str "
+    const t = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" marker "\");
+    const r = t && window.gjoaTest.rowOf.get(t);
+    const pc = document.getElementById(\"gjoa-pinned-container\");
+    const panel = document.getElementById(\"gjoa-tab-panel\");
+    return !!(t && t.pinned && r && pc && pc.contains(r) && !panel.contains(r));"))
+
+;; Drag the marked row onto the pinned section. `mode`:
+;;   centre — the container's rect centre (the only target when it is empty)
+;;   band   — 4px above the container's bottom edge, i.e. inside the divider band
+;;            BELOW the last pinned row (the natural append aim point)
+;;   label  — a pinned row's `.gjoa-tab-label` child, which is what exercises the
+;;            structural-equality drop routing
+(defn pin-drag-js [marker :- String mode :- String] :- String
+  (str "
+    const M = \"" marker "\"; const mode = \"" mode "\";
+    const tab = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === M);
+    const row = tab && window.gjoaTest.rowOf.get(tab);
+    const pc = document.getElementById(\"gjoa-pinned-container\");
+    if (!tab || !row || !pc) return { error: \"setup: tab/row/pinned-container missing\" };
+    const dt = new DataTransfer();
+    const fire = (el,type,x,y) => el.dispatchEvent(new DragEvent(type,{bubbles:true,cancelable:true,view:window,clientX:x,clientY:y,screenX:x+1000,screenY:y+1000,dataTransfer:dt}));
+    const sr = row.getBoundingClientRect();
+    fire(row, \"dragstart\", sr.left+5, sr.top+5);
+    const pr = pc.getBoundingClientRect();
+    const pinnedRows = [...pc.querySelectorAll(\".gjoa-tab-row:not([hidden])\")];
+    const last = pinnedRows[pinnedRows.length - 1];
+    const lastBottom = last ? last.getBoundingClientRect().bottom : null;
+    let target = pc, x = pr.left + pr.width/2, y = pr.top + pr.height/2;
+    if (mode === \"band\") { y = pr.bottom - 4; }
+    else if (mode === \"label\") {
+      if (!last) return { error: \"label mode needs an existing pinned row\" };
+      const lr = last.getBoundingClientRect();
+      target = last.querySelector(\".gjoa-tab-label\") || last;
+      x = lr.left + lr.width/2; y = lr.top + lr.height/2;
+    }
+    fire(target, \"dragenter\", x, y); fire(target, \"dragover\", x, y);
+    const dropPrevented = !fire(target, \"drop\", x, y);
+    fire(row, \"dragend\", x, y);
+    return { ok: true, mode, x, y, pinnedRowsBefore: pinnedRows.length,
+             containerRect: { top: pr.top, bottom: pr.bottom, height: pr.height },
+             lastBottom, belowLastRow: lastBottom !== null && y > lastBottom,
+             targetTag: target.className || target.localName, dropPrevented };"))
+
+;; RESET-JS keeps pinned tabs, so this test MUST leave none behind.
+(def CLEANUP-PINNED :- String "
+  for (const t of [...gBrowser.tabs]) {
+    if (t.getAttribute(\"gjoa-test-marker\")) {
+      try { if (t.pinned) gBrowser.unpinTab(t); } catch (e) {}
+      try { gBrowser.removeTab(t); } catch (e) {}
+    }
+  }
+  return true;")
 
 (js/export (def tests :- Any
   [(deftest "drag: tab ABOVE an (empty) group dropped INTO it lands BELOW + indented" [mn]
@@ -89,6 +165,45 @@
                  (str "dropped tab must render BELOW the group, not above (tabIdx=" src2 " groupIdx=" grp2 ")"))
          (expect (> (.-level (aget after src2)) (.-level (aget after grp2)))
                  (str "dropped tab must be indented as a child of the group (tabLevel="
-                      (.-level (aget after src2)) " groupLevel=" (.-level (aget after grp2)) ")")))))]))
+                      (.-level (aget after src2)) " groupLevel=" (.-level (aget after grp2)) ")")))))
 
+   ;; Dropping an unpinned tab on the pinned SECTION pins it. Three scenarios, in
+   ;; order, because each leaves the pinned state the next one needs.
+   (deftest "drag: unpinned tab dropped on the pinned section pins it" [mn]
+     (js/await (ensure-sidebar-expanded mn))
+     (chrome-eval CLEANUP-PINNED)
+     (js/await (await-true
+       "return document.querySelectorAll('#gjoa-pinned-container .gjoa-tab-row').length === 0;" 3000))
+
+     ;; (a) EMPTY pinned container — hidden and 0x0, so the drag must reveal it.
+     (chrome-eval (add-marked-tab-js "pinguard-a"))
+     (js/await (await-true (marked-row-ready-js "pinguard-a") 3000))
+     (let [ra (chrome-eval (pin-drag-js "pinguard-a" "centre"))]
+       (expect (not (.-error ra)) (str "(a) " (.-error ra)))
+       (expect (= (.-pinnedRowsBefore ra) 0)
+         (str "(a) scenario needs an EMPTY pinned container, saw "
+              (.-pinnedRowsBefore ra) " rows. " (JSON/stringify ra)))
+       (js/await (await-true (marked-pinned-js "pinguard-a") 3000)))
+
+     ;; (b) The divider band BELOW the last pinned row — the natural append aim
+     ;; point, and the first thing a drag from the tab tree crosses going up.
+     (chrome-eval (add-marked-tab-js "pinguard-b"))
+     (js/await (await-true (marked-row-ready-js "pinguard-b") 3000))
+     (let [rb (chrome-eval (pin-drag-js "pinguard-b" "band"))]
+       (expect (not (.-error rb)) (str "(b) " (.-error rb)))
+       (expect (.-belowLastRow rb)
+         (str "(b) aim point y=" (.-y rb) " is NOT below the last pinned row's bottom "
+              (.-lastBottom rb) " — the scenario stopped covering the divider band. "
+              (JSON/stringify rb)))
+       (js/await (await-true (marked-pinned-js "pinguard-b") 3000)))
+
+     ;; (c) Control: dispatched on a pinned row's .gjoa-tab-label child, the node
+     ;; that structural `=` mistakes for the container / panel / spacer.
+     (chrome-eval (add-marked-tab-js "pinguard-c"))
+     (js/await (await-true (marked-row-ready-js "pinguard-c") 3000))
+     (let [rc (chrome-eval (pin-drag-js "pinguard-c" "label"))]
+       (expect (not (.-error rc)) (str "(c) " (.-error rc)))
+       (js/await (await-true (marked-pinned-js "pinguard-c") 3000)))
+
+     (chrome-eval CLEANUP-PINNED))]))
 (js/export-default tests)

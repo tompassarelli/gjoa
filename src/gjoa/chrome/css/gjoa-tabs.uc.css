@@ -135,8 +135,7 @@
 }
 /* Floating divider: thin inset line between pinned and unpinned tab
  * areas. Hidden when the pinned container has no rows — there's nothing
- * to separate. (Active during drag the container is un-hidden as a
- * thin hot-strip; the divider would visually duplicate that line.) */
+ * to separate. */
 #gjoa-pinned-container:has(.gjoa-tab-row)::after {
   content: "";
   display: block;
@@ -152,9 +151,14 @@
   align-self: stretch;
 }
 
-/* (Drop-zone "drop to pin" / "drop to unpin" affordances removed —
- * pin/unpin is reachable via right-click context menu and by dragging
- * onto an existing pinned row when at least one pinned tab exists.) */
+/* Drag of an unpinned row reveals an otherwise-hidden (empty) pinned section as a
+ * thin strip, so "drop to pin" has a target with no pinned tab already present.
+ * tabs/drag.bjs sets/clears the attribute across dragstart..dragend. */
+#gjoa-pinned-container[gjoa-drop-strip] {
+  min-height: 24px;
+  outline: 1px dashed color-mix(in srgb, currentColor 30%, transparent);
+  outline-offset: -2px;
+}
 
 /* Icons-only sidebar — match the tree panel's icons-only treatment so pinned
  * and unpinned rows collapse identically. */
