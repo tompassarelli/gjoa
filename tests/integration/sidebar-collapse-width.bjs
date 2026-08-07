@@ -75,6 +75,37 @@
   };
 ")
 
+;; Collapsed-rail geometry (#B6): first-tab offset, row height, footer button height.
+(def MEASURE-RAIL-RHYTHM :- String "
+  const panel = document.getElementById('gjoa-tab-panel');
+  if (!panel || !panel.hasAttribute('gjoa-icons-only')) return { error: 'not icons-only' };
+  const panelTop = panel.getBoundingClientRect().top;
+  const rows = Array.from(panel.querySelectorAll('.gjoa-tab-row'));
+  if (rows.length < 2) return { error: 'need >=2 tabs to measure spacing' };
+  const r0 = rows[0].getBoundingClientRect();
+  const r1 = rows[1].getBoundingClientRect();
+  const sideMain = document.querySelector('#sidebar-container sidebar-main');
+  const root = sideMain ? (sideMain.shadowRoot || sideMain) : null;
+  const footerBtn = root ? root.querySelector('moz-button.tools-overflow') : null;
+  const fRect = footerBtn ? footerBtn.getBoundingClientRect() : null;
+  return {
+    firstTabOffset: r0.top - panelTop,
+    interTabGap: r1.top - r0.bottom,
+    tabRowHeight: r0.height,
+    footerBtnHeight: fRect ? fRect.height : null,
+  };
+")
+
+;; Same footer-button measurement alone, usable in the expanded state to prove
+;; the collapsed-only --tab-min-height override doesn't leak.
+(def MEASURE-FOOTER-BTN :- String "
+  const sideMain = document.querySelector('#sidebar-container sidebar-main');
+  const root = sideMain ? (sideMain.shadowRoot || sideMain) : null;
+  const footerBtn = root ? root.querySelector('moz-button.tools-overflow') : null;
+  const fRect = footerBtn ? footerBtn.getBoundingClientRect() : null;
+  return { footerBtnHeight: fRect ? fRect.height : null };
+")
+
 (js/export (def tests :- Any
   [(deftest "sidebar — collapse narrows to favicon strip (no inline width pins it wide); expand restores (#833c5b9)" [mn]
      (let [pre (chrome-eval ENSURE-EXPANDED-WIDE)]
@@ -137,19 +168,48 @@
               (.toFixed (Number (.-width col)) 1) "px (expected < 80px). The persisted "
               "inline width kept it wide (the bug). " (JSON/stringify col))))
 
-     ;; --- EXPAND: must restore the persisted width ---
-     (js/await (.executeScript mn DRIVE-EXPAND))
-     (js/await (await-true
-                 (str "const sm = document.getElementById('sidebar-container');"
-                      "if (!sm || !sm.hasAttribute('sidebar-launcher-expanded')) return false;"
-                      "return sm.style.width !== '' && sm.getBoundingClientRect().width > 200;")
-                 5000))
-     (let [re (chrome-eval MEASURE-SIDEBAR)]
-       (expect (not (.-error re)) (str "MEASURE-SIDEBAR (re-expanded) error: " (JSON/stringify re)))
-       (expect (and (.-hasInlineWidth re) (> (Number (.-width re)) 200))
-         (str "re-expand did not restore the persisted width — width "
-              (.toFixed (Number (.-width re)) 1) "px, inline '" (.-inlineWidth re)
-              "' (expected wide + inline 320px). The expand-restore half regressed. "
-              (JSON/stringify re)))))]))
+     ;; --- RAIL RHYTHM (#B6): collapsed-rail vertical spacing ---
+     (chrome-eval "
+        const p = Services.scriptSecurityManager.getSystemPrincipal();
+        const t = gBrowser.addTab('about:blank', { triggeringPrincipal: p });
+        t.setAttribute('gjoa-test-marker', 'rail-rhythm');
+        window.gjoaTest.rows.scheduleTreeResync();
+        window.gjoaTest.rows.updateVisibility();
+        return true;")
+     (await-true "return document.querySelectorAll('#gjoa-tab-panel .gjoa-tab-row').length >= 2;" 3000)
+     (let [rhythm (chrome-eval MEASURE-RAIL-RHYTHM)]
+       (expect (not (.-error rhythm)) (str "MEASURE-RAIL-RHYTHM error: " (JSON/stringify rhythm)))
+       (expect (< (Math/abs (- (Number (.-firstTabOffset rhythm)) (Number (.-interTabGap rhythm)))) 0.5)
+         (str "first-tab top offset must equal the inter-tab gap — " (JSON/stringify rhythm)))
+       (expect (< (Number (.-tabRowHeight rhythm)) 32)
+         (str "collapsed tab row must be shorter than the 32px pre-fix baseline — " (JSON/stringify rhythm)))
+       (expect (> (Number (.-footerBtnHeight rhythm)) 36)
+         (str "collapsed footer button cluster must be taller than the un-overridden 36px default — "
+              (JSON/stringify rhythm)))
+       (chrome-eval "
+          const t = [...gBrowser.tabs].find(x => x.getAttribute('gjoa-test-marker') === 'rail-rhythm');
+          if (t) { try { gBrowser.removeTab(t); } catch {} }
+          return true;")
+
+       ;; --- EXPAND: must restore the persisted width, AND the footer --tab-min-height
+       ;; override must not leak past its collapsed-only guard.
+       (js/await (.executeScript mn DRIVE-EXPAND))
+       (js/await (await-true
+                   (str "const sm = document.getElementById('sidebar-container');"
+                        "if (!sm || !sm.hasAttribute('sidebar-launcher-expanded')) return false;"
+                        "return sm.style.width !== '' && sm.getBoundingClientRect().width > 200;")
+                   5000))
+       (let [re (chrome-eval MEASURE-SIDEBAR)]
+         (expect (not (.-error re)) (str "MEASURE-SIDEBAR (re-expanded) error: " (JSON/stringify re)))
+         (expect (and (.-hasInlineWidth re) (> (Number (.-width re)) 200))
+           (str "re-expand did not restore the persisted width — width "
+                (.toFixed (Number (.-width re)) 1) "px, inline '" (.-inlineWidth re)
+                "' (expected wide + inline 320px). The expand-restore half regressed. "
+                (JSON/stringify re))))
+       (let [exp-footer (chrome-eval MEASURE-FOOTER-BTN)]
+         (expect (not= (.-footerBtnHeight exp-footer) (.-footerBtnHeight rhythm))
+           (str "expanded footer button height (" (.-footerBtnHeight exp-footer)
+                ") must differ from the collapsed height (" (.-footerBtnHeight rhythm)
+                ") — the collapsed-only --tab-min-height override is leaking.")))))]))
 
 (js/export-default tests)

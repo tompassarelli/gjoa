@@ -86,6 +86,8 @@
   align-items: center !important;
   width: 100% !important;
   min-width: 50px !important;
+  /* Matches .gjoa-tab-row's `margin: 2px 0` so first-row top offset equals inter-row gap. */
+  padding-top: 2px !important;
 }
 
 #gjoa-tab-panel[gjoa-icons-only] .gjoa-tab-label,
@@ -98,8 +100,8 @@
 #gjoa-tab-panel[gjoa-icons-only] .gjoa-tab-row {
   width: 24px;
   height: 24px;
-  padding: 4px !important;
-  padding-inline-start: 4px !important;
+  padding: 2px !important;
+  padding-inline-start: 2px !important;
   justify-content: center;
   margin: 2px 0;
   min-height: unset;
@@ -169,8 +171,8 @@
 #gjoa-pinned-container[gjoa-icons-only] .gjoa-tab-row {
   width: 24px;
   height: 24px;
-  padding: 4px !important;
-  padding-inline-start: 4px !important;
+  padding: 2px !important;
+  padding-inline-start: 2px !important;
   justify-content: center;
   margin: 2px 0;
   min-height: unset;

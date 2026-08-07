@@ -359,6 +359,9 @@
   flex: 0 0 auto !important;
   min-height: 60px !important;
   padding: 0 !important;
+  /* Raises the footer button cluster above Firefox's 36px default; scoped
+   * to collapsed mode so it can't leak to other --tab-min-height consumers. */
+  --tab-min-height: 44px !important;
 }
 
 
