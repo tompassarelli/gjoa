@@ -1,0 +1,153 @@
+#lang beagle/js
+;; Urlbar focus ownership across the chrome-init window. Moving a subtree that
+;; contains the focused node drops focus to <body> and fires NO blur, so nothing
+;; downstream can notice or restore it: every reparent of #urlbar's ancestors
+;; must go through `with-urlbar-focus!`. The guard below is the tripwire for the
+;; rest of the init window.
+(ns gjoa.drawer.focus
+  (:require [gjoa.macros :refer [by-id bool onc! offc! on! off! pref-int set-pref-int!]]
+            [gjoa.tabs.log :refer [create-logger!]]))
+(define-mode strict)
+
+(declare-extern [document window] Any)
+
+(def RESCUE-PREF :- String "gjoa.urlbar.focusRescues")
+
+;; TRIPWIRE bounds, never the fix: how long after bundle load the guard stays
+;; armed, how long one activation's intent survives, and how many times a single
+;; startup may be rescued before we stop and leave the counter as the evidence.
+(def GUARD-WINDOW-MS :- Number 5000)
+(def INTENT-TTL-MS :- Number 1200)
+(def MAX-RESCUES :- Number 3)
+
+(js/export (defn urlbar-input [] :- Any
+  (or (some-> window .-gURLBar .-inputField)
+      (some-> (by-id "urlbar") (.querySelector ".urlbar-input")))))
+
+;; Look #urlbar up every call — the drawer moves it, so nothing about its
+;; position may be cached across one.
+(js/export (defn urlbar-focused? [] :- Any
+  (let [u (by-id "urlbar")
+        a (.-activeElement document)]
+    (bool (and u a (or (identical? a u) (.contains u a)))))))
+
+;; Run `f`, and if it moved the caret out of a urlbar that held it, put it back
+;; — same node, same selection. A no-op when the urlbar did not own focus.
+(js/export (defn with-urlbar-focus! [f :- Any] :- Any
+  (let [held (urlbar-focused?)
+        input (if held (urlbar-input) nil)
+        start (if input (.-selectionStart input) 0)
+        end (if input (.-selectionEnd input) 0)
+        dir (if input (or (.-selectionDirection input) "none") "none")]
+    (f)
+    (when (and held (not (urlbar-focused?)))
+      (try
+        (some-> window .-gURLBar .focus)
+        (when (and input (.-setSelectionRange input))
+          (.setSelectionRange input start end dir))
+        (catch Any _e nil))))))
+
+(js/export (defn make-focus-guard! [] :- Any
+  (let [log (create-logger! "urlbar/focus-guard")
+        st {:until (+ (Date/now) GUARD-WINDOW-MS)
+            :intent 0 :kind "" :rescues 0 :watching false}
+        ;; `check` and `watch!` are mutually recursive; the let is sequential, so
+        ;; the forward edge rides a holder (the compact.bjs `fwd` pattern).
+        fwd {:check nil}
+
+        armed? (fn [] (< (Date/now) (.-until st)))
+
+        watch! (fn []
+          (when (not (.-watching st))
+            (set! (.-watching st) true)
+            (.requestAnimationFrame window (fn [] (.check fwd)))))
+
+        rescue! (fn []
+          (set! (.-rescues st) (+ (.-rescues st) 1))
+          (set-pref-int! RESCUE-PREF (+ (pref-int RESCUE-PREF 0) 1))
+          (log "rescue" {:kind (.-kind st) :n (.-rescues st)})
+          (try
+            (some-> window .-gURLBar .focus)
+            ;; Ctrl+L means "select the address"; a click already placed its own
+            ;; caret and a held focus keeps whatever it had.
+            (when (= (.-kind st) "key") (some-> window .-gURLBar .select))
+            (catch Any _e nil)))
+
+        ;; A click INSIDE the page dispatches no chrome mousedown, so focus
+        ;; landing on the content browser is indistinguishable from the user
+        ;; deliberately leaving the urlbar — hand it over, never rescue it.
+        content-owns? (fn []
+          (let [a (.-activeElement document)]
+            (bool (and a (= (.-localName a) "browser")))))
+
+        check (fn []
+          (set! (.-watching st) false)
+          (when (and (> (.-intent st) 0) (armed?))
+            (cond
+              (urlbar-focused?)
+                (when (< (- (Date/now) (.-intent st)) INTENT-TTL-MS) (watch!))
+              (content-owns?)
+                (set! (.-intent st) 0)
+              :else
+                (do (rescue!)
+                    (if (>= (.-rescues st) MAX-RESCUES)
+                      (set! (.-intent st) 0)
+                      (watch!))))))
+
+        note! (fn [kind]
+          (when (armed?)
+            (set! (.-intent st) (Date/now))
+            (set! (.-kind st) kind)
+            (watch!)))
+
+        ;; An activation aimed anywhere else is the user changing their mind:
+        ;; the guard must never pull focus back out from under it.
+        clear! (fn [] (set! (.-intent st) 0))
+
+        ;; `.contains` stops at a shadow boundary and the urlbar's input lives
+        ;; inside one, so the composed path — which crosses it — decides.
+        aimed-at-urlbar? (fn [e]
+          (let [u (by-id "urlbar")
+                path (if (.-composedPath e) (.composedPath e) nil)
+                t (.-target e)]
+            (bool (and u (or (and path (.includes path u))
+                             (and t (or (identical? u t) (.contains u t))))))))
+
+        on-mousedown (fn [e]
+          (if (aimed-at-urlbar? e) (note! "click") (clear!)))
+
+        on-keydown (fn [e]
+          (let [accel (or (.-ctrlKey e) (.-metaKey e))]
+            (cond
+              (and accel (not (.-shiftKey e)) (not (.-altKey e))
+                   (or (= (.-key e) "l") (= (.-key e) "L")))
+                (note! "key")
+              (= (.-key e) "Escape")
+                (clear!)
+              :else nil)))
+
+        on-activate (fn [_e] (note! "key"))]
+
+    (set! (.-check fwd) check)
+    (onc! document "mousedown" on-mousedown)
+    (onc! document "keydown" on-keydown)
+    (on! document "gjoa-urlbar-activate" on-activate)
+    ;; A click / Ctrl+L that landed BEFORE the bundles loaded leaves no event to
+    ;; catch — only the state. A urlbar that already owns focus at load IS a
+    ;; standing activation, so arm on it.
+    (when (urlbar-focused?) (note! "hold"))
+
+    {:rescues (fn [] (.-rescues st))
+     ;; Re-open the guard window on a live window — the only way to exercise the
+     ;; tripwire after startup (tests, and a hot-reloaded bundle).
+     :rearm (fn []
+       (set! (.-until st) (+ (Date/now) GUARD-WINDOW-MS))
+       (set! (.-rescues st) 0)
+       (set! (.-intent st) 0)
+       (when (urlbar-focused?) (note! "hold")))
+     :destroy (fn []
+       (set! (.-until st) 0)
+       (set! (.-intent st) 0)
+       (offc! document "mousedown" on-mousedown)
+       (offc! document "keydown" on-keydown)
+       (off! document "gjoa-urlbar-activate" on-activate))})))

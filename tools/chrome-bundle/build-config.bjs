@@ -33,6 +33,7 @@
    (->Entry "gjoa-drawer.uc.js"
             [(str B "/tabs/log.js")
              (str B "/drawer/timing.js")
+             (str B "/drawer/focus.js")
              (str B "/drawer/banner.js")
              (str B "/drawer/compact.js")
              (str B "/drawer/drag-overlay.js")

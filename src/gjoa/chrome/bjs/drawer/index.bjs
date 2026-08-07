@@ -6,6 +6,7 @@
             [gjoa.drawer.sidebar-button :refer [make-sidebar-button!]]
             [gjoa.drawer.banner :refer [make-banner!]]
             [gjoa.drawer.omni-icon :refer [make-omni-icon!]]
+            [gjoa.drawer.focus :refer [make-focus-guard!]]
             [gjoa.drawer.layout :refer [make-layout!]]))
 (define-mode strict)
 
@@ -21,7 +22,11 @@
     (if (or (not sidebar-main) (not navigator-toolbox) (not urlbar-container) (not nav-bar))
       (.error console "gjoa-drawer: missing required elements")
 
-      (let [layout (make-layout! {:sidebarMain sidebar-main
+      ;; BEFORE make-layout!: the layout's first act is the reparent, and the
+      ;; guard must already hold any activation the user aimed at the urlbar.
+      (let [focus-guard (make-focus-guard!)
+
+            layout (make-layout! {:sidebarMain sidebar-main
                                   :navigatorToolbox navigator-toolbox
                                   :urlbarContainer urlbar-container
                                   :navBar nav-bar
@@ -52,6 +57,9 @@
         ;; (.toggle) — no duplicated toggle logic. Mirrors gjoaBlocking /
         ;; gjoaDarkMode / gjoaTheme window-global convention.
         (set! (.-gjoaCompact window) compact)
+        ;; The guard's window closes seconds after startup; the handle is how a
+        ;; test (or a hot-reload) re-opens it on a live window.
+        (set! (.-gjoaFocusGuard window) focus-guard)
 
         (let [sidebar-button (make-sidebar-button! {:sidebarMain sidebar-main
                                                     :compact compact})
@@ -71,11 +79,13 @@
               (.destroy drag-overlay)
               (.destroy compact)
               (set! (.-gjoaCompact window) nil)
+              (set! (.-gjoaFocusGuard window) nil)
               (when (.-urlbar-key state)
                 (offc! document "keydown" (.-urlbar-key state))
                 (set! (.-urlbar-key state) nil))
               (when (.-urlbar-api state) (.destroy (.-urlbar-api state)))
               (.destroy sidebar-button)
+              (.destroy focus-guard)
               (.destroy banner)))
 
           (.log console "gjoa-drawer: initialized"))))))

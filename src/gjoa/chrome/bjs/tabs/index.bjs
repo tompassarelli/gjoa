@@ -556,7 +556,7 @@
                   (.createModeline vim-api)
                   (.setupVimKeys vim-api)
                   (.setupGlobalKeys vim-api)
-                  (.focusPanel vim-api)
+                  (.focusPanelUnlessUrlbar vim-api)
 
                   ;; Install event listeners
                   (let [teardown-events (.install events)]

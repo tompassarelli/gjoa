@@ -1,6 +1,7 @@
 #lang beagle/js
 (ns gjoa.drawer.layout
   (:require [gjoa.macros :refer [by-id q xul-new xul-id pref-int set-pref-int! pref-bool set-pref-bool! on! off! has?]]
+            [gjoa.drawer.focus :refer [with-urlbar-focus!]]
             [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
@@ -186,17 +187,20 @@
         expand (fn []
           (when (not (.-urlbar-toolbar state))
             (log "expand")
-            ;; Re-apply the persisted width — collapse() clears the inline width
-            ;; so the icon strip can go favicon-thin, so re-expanding must restore
-            ;; the user's chosen width (not snap back to native default).
-            (set! (.-width (.-style sidebar-main)) (str (pref-int WIDTH-PREF 300) "px"))
-            (when sidebar-main-element
-              (.insertBefore sidebar-main navigator-toolbox sidebar-main-element))
-            (let [tb (xul-id "toolbar" "gjoa-urlbar-toolbar")]
-              (.add (.-classList tb) "browser-toolbar")
-              (.appendChild tb urlbar-container)
-              (.after nav-bar tb)
-              (set! (.-urlbar-toolbar state) tb))
+            ;; Both moves below carry #urlbar; without this the caret a user put
+            ;; there before the drawer initialized is silently dropped to <body>.
+            (with-urlbar-focus! (fn []
+              ;; Re-apply the persisted width — collapse() clears the inline width
+              ;; so the icon strip can go favicon-thin, so re-expanding must restore
+              ;; the user's chosen width (not snap back to native default).
+              (set! (.-width (.-style sidebar-main)) (str (pref-int WIDTH-PREF 300) "px"))
+              (when sidebar-main-element
+                (.insertBefore sidebar-main navigator-toolbox sidebar-main-element))
+              (let [tb (xul-id "toolbar" "gjoa-urlbar-toolbar")]
+                (.add (.-classList tb) "browser-toolbar")
+                (.appendChild tb urlbar-container)
+                (.after nav-bar tb)
+                (set! (.-urlbar-toolbar state) tb))))
             (when urlbar
               (let [ro (ResizeObserver. sync-urlbar-width)]
                 (.observe ro sidebar-main)
@@ -220,29 +224,31 @@
             ;; width — the sidebar stayed wide + still showed tab labels.
             (.removeProperty (.-style sidebar-main) "width")
 
-            ;; `identical?`, never `=`: beagle's `=` is STRUCTURAL and two DOM nodes
-            ;; both have zero own keys, so `=` is true for ANY pair — and an
-            ;; insertBefore against a reference node that has since moved THROWS.
-            (if (and urlbar-next (identical? (.-parentNode urlbar-next) urlbar-parent))
-              (.insertBefore urlbar-parent urlbar-container urlbar-next)
-              (.appendChild urlbar-parent urlbar-container))
+            ;; Same caret contract as expand: these moves carry #urlbar.
+            (with-urlbar-focus! (fn []
+              ;; `identical?`, never `=`: beagle's `=` is STRUCTURAL and two DOM nodes
+              ;; both have zero own keys, so `=` is true for ANY pair — and an
+              ;; insertBefore against a reference node that has since moved THROWS.
+              (if (and urlbar-next (identical? (.-parentNode urlbar-next) urlbar-parent))
+                (.insertBefore urlbar-parent urlbar-container urlbar-next)
+                (.appendChild urlbar-parent urlbar-container))
 
-            (.remove (.-urlbar-toolbar state))
-            (set! (.-urlbar-toolbar state) nil)
+              (.remove (.-urlbar-toolbar state))
+              (set! (.-urlbar-toolbar state) nil)
 
-            (let [spring2 (by-id "customizableui-special-spring2")
-                  ext-btn (by-id "unified-extensions-button")
-                  sb-btn (by-id "gjoa-sidebar-button")]
-              (when spring2 (.after urlbar-container spring2))
-              (when (and spring2 ext-btn) (.after spring2 ext-btn))
-              ;; keep gjoa's swapped sidebar button immediately after the
-              ;; extensions button through the collapse reflow, so the
-              ;; hamburger → extensions → sidebar order survives compact mode (#92).
-              (when (and ext-btn sb-btn) (.after ext-btn sb-btn)))
+              (let [spring2 (by-id "customizableui-special-spring2")
+                    ext-btn (by-id "unified-extensions-button")
+                    sb-btn (by-id "gjoa-sidebar-button")]
+                (when spring2 (.after urlbar-container spring2))
+                (when (and spring2 ext-btn) (.after spring2 ext-btn))
+                ;; keep gjoa's swapped sidebar button immediately after the
+                ;; extensions button through the collapse reflow, so the
+                ;; hamburger → extensions → sidebar order survives compact mode (#92).
+                (when (and ext-btn sb-btn) (.after ext-btn sb-btn)))
 
-            (if (and toolbox-next (identical? (.-parentNode toolbox-next) toolbox-parent))
-              (.insertBefore toolbox-parent navigator-toolbox toolbox-next)
-              (.appendChild toolbox-parent navigator-toolbox))))
+              (if (and toolbox-next (identical? (.-parentNode toolbox-next) toolbox-parent))
+                (.insertBefore toolbox-parent navigator-toolbox toolbox-next)
+                (.appendChild toolbox-parent navigator-toolbox))))))
 
         ;; --- context-menu fix ---
         on-context-menu (fn [e]
@@ -309,7 +315,8 @@
 
     (inject-sidebar-shadow-overrides)
     ;; Must precede make-sidebar-button! (index.bjs) — the swap needs the native node.
-    (heal-once!)
+    ;; CustomizableUI rebuilds nav-bar widgets, so it too can move the focused urlbar.
+    (with-urlbar-focus! heal-once!)
     (when (has? sidebar-main "sidebar-launcher-expanded") (expand))
 
     ;; --- symmetric footer ---

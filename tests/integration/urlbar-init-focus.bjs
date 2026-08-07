@@ -1,0 +1,208 @@
+#lang beagle/js
+;; INVARIANT: an activation aimed at the urlbar keeps the urlbar — including
+;; across the drawer's reparent of #navigator-toolbox / #urlbar-container, which
+;; is what chrome init runs and what silently dropped the caret to <body>
+;; (Gecko fires NO blur when the focused node is MOVED, so nothing downstream
+;; could notice). #1 sweeps the surgery in TIME across each activation vector;
+;; #2/#3 pin the tripwire that catches any other init-window focus thief.
+(ns gjoa.tests.integration.urlbar-init-focus
+  (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for]]))
+(define-mode strict)
+
+(declare-extern [JSON] Any)
+
+;; The per-test RESET selects a fresh content tab, and that focus completes on a
+;; later parent<->child round trip — wait for focus to stop moving before any
+;; activation, or that stray landing reads as a lost caret.
+(def SETTLE :- String "
+  const a = document.activeElement;
+  if (window.__gjoaFocusSettle && window.__gjoaFocusSettle.el === a) {
+    return Date.now() - window.__gjoaFocusSettle.t > 400;
+  }
+  window.__gjoaFocusSettle = { el: a, t: Date.now() };
+  return false;
+")
+
+;; The layout that hosts the in-drawer urlbar — the reparent under test only
+;; exists in the expanded vertical drawer.
+(def ENSURE-EXPANDED :- String "
+  Services.prefs.setBoolPref('sidebar.verticalTabs', true);
+  Services.prefs.setBoolPref('sidebar.revamp', true);
+  const sm = document.getElementById('sidebar-container');
+  if (sm && !sm.hasAttribute('sidebar-launcher-expanded')) {
+    sm.setAttribute('sidebar-launcher-expanded', '');
+  }
+  return !!document.getElementById('urlbar');
+")
+
+;; Drop focus and hand back the urlbar input's hit point, so the click vector
+;; aims at the live box rather than a remembered one. Blur locally, NEVER via
+;; selectedBrowser.focus(): a content focus completes on a later parent↔child
+;; round trip that would land after the activation and read as a lost caret.
+(def SETUP :- String "
+  gURLBar.value = 'gjoa.test/init-focus';
+  try { if (document.activeElement) document.activeElement.blur(); } catch (e) {}
+  gURLBar.blur();
+  const r = gURLBar.inputField.getBoundingClientRect();
+  return JSON.stringify({ x: Math.round(r.left + r.width / 2),
+                          y: Math.round(r.top + r.height / 2) });
+")
+
+;; Schedule the startup DOM surgery `off` ms after the activation: dropping and
+;; re-setting sidebar-launcher-expanded drives the SAME collapse/expand pair
+;; drawer/layout.bjs runs at init, reparenting #urlbar-container both ways.
+(defn arm-js [off :- Any] :- String
+  (str "
+  const sm = document.getElementById('sidebar-container');
+  const inp = gURLBar.inputField;
+  window.__gjoaInitFocus = { done: false,
+    start: inp.selectionStart, end: inp.selectionEnd,
+    active: document.activeElement === inp };
+  setTimeout(() => {
+    sm.removeAttribute('sidebar-launcher-expanded');
+    setTimeout(() => {
+      sm.setAttribute('sidebar-launcher-expanded', '');
+      setTimeout(() => { window.__gjoaInitFocus.done = true; }, 60);
+    }, 40);
+  }, " off ");
+  return JSON.stringify(window.__gjoaInitFocus);
+"))
+
+(def READ :- String "
+  const inp = gURLBar.inputField;
+  const armed = window.__gjoaInitFocus;
+  return JSON.stringify({
+    isInput: document.activeElement === inp,
+    activeId: document.activeElement ? (document.activeElement.id ||
+              document.activeElement.localName) : null,
+    start: inp.selectionStart, end: inp.selectionEnd,
+    armedStart: armed.start, armedEnd: armed.end, armedActive: armed.active,
+    toolbar: !!document.getElementById('gjoa-urlbar-toolbar'),
+  });
+")
+
+;; WebDriver's Control key code point, written numerically so no editor or
+;; transport can normalize the private-use character away.
+(def CTRL :- String (.fromCharCode String 57353))
+
+(defn click-actions [x :- Any y :- Any] :- Any
+  [{:type "pointer" :id "m" :parameters {:pointerType "mouse"}
+    :actions [{:type "pointerMove" :duration 0 :origin "viewport" :x x :y y}
+              {:type "pointerDown" :button 0}
+              {:type "pause" :duration 20}
+              {:type "pointerUp" :button 0}]}])
+
+(def ctrl-l-actions :- Any
+  [{:type "key" :id "kbd"
+    :actions [{:type "keyDown" :value CTRL} {:type "keyDown" :value "l"}
+              {:type "keyUp" :value "l"} {:type "keyUp" :value CTRL}]}])
+
+;; Every summon vector a user has at startup: the native focus Firefox itself
+;; performs (and what Ctrl+L is before gjoa's own handler is loaded), a real
+;; click, and gjoa's floating-palette Ctrl+L.
+(def VECTORS :- Any ["native" "click" "ctrl-l"])
+(def OFFSETS :- Any [0 16 48 140])
+
+(js/export (def tests :- Any
+  [(deftest "urlbar activation survives the drawer reparent — every vector, swept across the surgery" [mn]
+     (await-true "return !!document.getElementById('urlbar');" 5000)
+     (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")
+     (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 3000)
+     (await-true SETTLE 6000)
+
+     (doseq [vector VECTORS]
+       (doseq [off OFFSETS]
+         (let [pt (JSON/parse (chrome-eval SETUP))]
+           (cond
+             (= vector "native")
+               (chrome-eval "gURLBar.focus(); gURLBar.select(); return 1;")
+             (= vector "click")
+               (js/await (.performActions mn (click-actions (.-x pt) (.-y pt))))
+             :else
+               (js/await (.performActions mn ctrl-l-actions)))
+
+           (let [armed (JSON/parse (chrome-eval (arm-js off)))]
+             (expect (.-active armed)
+               (str vector " @" off "ms: the activation itself never reached the urlbar input"))
+             (await-true "return !!(window.__gjoaInitFocus && window.__gjoaInitFocus.done);" 4000)
+             (let [st (JSON/parse (chrome-eval READ))]
+               (expect (.-isInput st)
+                 (str vector " @" off "ms: the reparent took focus off the urlbar input — active="
+                      (.-activeId st)))
+               (expect (and (= (.-start st) (.-armedStart st)) (= (.-end st) (.-armedEnd st)))
+                 (str vector " @" off "ms: selection lost across the reparent — armed ["
+                      (.-armedStart st) "," (.-armedEnd st) "] became ["
+                      (.-start st) "," (.-end st) "]"))
+               (expect (.-toolbar st)
+                 (str vector " @" off "ms: #gjoa-urlbar-toolbar did not come back"))))))
+       ;; Leave the palette down so the next vector starts from the resting bar.
+       (chrome-eval "document.dispatchEvent(new CustomEvent('gjoa-urlbar-deactivate')); return 1;")
+       (await-true "return !document.documentElement.hasAttribute('gjoa-urlbar-floating');" 2000)))
+
+   (deftest "init-window tripwire re-applies a urlbar activation that resolves elsewhere" [mn]
+     (await-true "return !!window.gjoaFocusGuard;" 5000)
+     (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")
+     (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 3000)
+     (await-true SETTLE 6000)
+     ;; Blur BEFORE arming: an armed guard treats a bare blur as theft too (that
+     ;; is the reparent's own signature), and the subject here is the click.
+     (let [pt (JSON/parse (chrome-eval SETUP))
+           before (chrome-eval "
+            Services.prefs.setIntPref('gjoa.urlbar.focusRescues', 0);
+            window.gjoaFocusGuard.rearm();
+            return Services.prefs.getIntPref('gjoa.urlbar.focusRescues', 0);
+          ")]
+       (expect (= before 0) "rescue counter did not reset")
+       (js/await (.performActions mn (click-actions (.-x pt) (.-y pt))))
+       (await-true "return document.activeElement === gURLBar.inputField; /* click landed */" 2000)
+       ;; A thief exactly like the one that shipped: the tab panel grabbing the
+       ;; keyboard while the user's activation was aimed at the urlbar. The
+       ;; guard re-applies on a frame, so wait FRAMES, never a clock.
+       (chrome-eval "
+          window.__gjoaFrames = 0;
+          const tick = () => { window.__gjoaFrames++;
+            if (window.__gjoaFrames < 4) requestAnimationFrame(tick); };
+          document.getElementById('gjoa-tab-panel').focus();
+          requestAnimationFrame(tick);
+          return 1;
+        ")
+       (await-true "return window.__gjoaFrames >= 4;" 2000)
+       (let [st (JSON/parse (chrome-eval "
+              return JSON.stringify({
+                active: document.activeElement ? (document.activeElement.id ||
+                        document.activeElement.localName) : null,
+                isInput: document.activeElement === gURLBar.inputField,
+                rescues: Services.prefs.getIntPref('gjoa.urlbar.focusRescues', 0),
+              });
+            "))]
+         (expect (.-isInput st)
+           (str "the tripwire left focus on " (.-active st)
+                " after a urlbar activation was stolen (rescues=" (.-rescues st) ")"))
+         (expect (> (.-rescues st) 0)
+                 "focus was restored but the tripwire never counted it"))))
+
+   (deftest "tripwire hands focus over to content instead of fighting it" [mn]
+     (await-true "return !!window.gjoaFocusGuard;" 5000)
+     (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")
+     (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 3000)
+     (await-true SETTLE 6000)
+     (let [pt (JSON/parse (chrome-eval SETUP))]
+       (chrome-eval "
+          Services.prefs.setIntPref('gjoa.urlbar.focusRescues', 0);
+          window.gjoaFocusGuard.rearm();
+          return 1;
+        ")
+       (js/await (.performActions mn (click-actions (.-x pt) (.-y pt))))
+       (await-true "return document.activeElement === gURLBar.inputField; /* click landed */" 2000)
+       (chrome-eval "gBrowser.selectedBrowser.focus(); return 1;")
+       (await-true "return document.activeElement === gBrowser.selectedBrowser;" 1000)
+       (let [st (JSON/parse (chrome-eval "
+              return JSON.stringify({
+                onBrowser: document.activeElement === gBrowser.selectedBrowser,
+                rescues: Services.prefs.getIntPref('gjoa.urlbar.focusRescues', 0),
+              });
+            "))]
+         (expect (.-onBrowser st) "the guard pulled focus back out of content")
+         (expect (= (.-rescues st) 0) "the guard counted a hand-off to content as a rescue"))))]))
+
+(js/export-default tests)

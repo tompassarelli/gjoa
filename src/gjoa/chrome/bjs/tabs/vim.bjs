@@ -497,6 +497,22 @@
               (when row (set-cursor row))))
           (update-modeline))
 
+        ;; Startup only. The panel is the DEFAULT keyboard target, never a
+        ;; preemption: gjoa's bundles load after the window is interactive, so a
+        ;; urlbar that already owns the caret is the user's click/Ctrl+L and this
+        ;; must leave it alone (the panel would then eat their keystrokes as vim
+        ;; commands). Cursor + modeline still initialize.
+        focus-panel-unless-urlbar (fn []
+          (let [u (by-id "urlbar")
+                a (.-activeElement document)]
+            (if (bool (and u a (or (identical? a u) (.contains u a))))
+              (do
+                (when (not (.-cursor state))
+                  (let [row (.get row-of (.-selectedTab gBrowser))]
+                    (when row (set-cursor row))))
+                (update-modeline))
+              (focus-panel))))
+
         blur-panel (fn []
           (set! (.-panel-active vs) false)
           (set! (.-chord vs) nil)
@@ -1916,6 +1932,7 @@
      :activateVim activate-vim
      :moveCursor move-cursor
      :focusPanel focus-panel
+     :focusPanelUnlessUrlbar focus-panel-unless-urlbar
      :blurPanel blur-panel
      :createModeline create-modeline
      :setupVimKeys setup-vim-keys
