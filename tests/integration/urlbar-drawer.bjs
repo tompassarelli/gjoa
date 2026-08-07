@@ -226,6 +226,88 @@
 ;; Floating teardown is ASYNC (fade → transitionend → finish-teardown), so a test
 ;; that summoned the palette must not return while the ghost still holds the
 ;; resting slot — it displaces the input row and fails the no-jump test (#3).
+;; #6 RESTING ANCHOR: the drawer boxes the float path can displace, plus the two
+;; inline vars teardown writes back — so a leak is attributed, not just observed.
+(def MEASURE-ANCHOR :- String "
+  const id = x => document.getElementById(x);
+  const urlbar = id('urlbar'), panel = id('gjoa-tab-panel'), header = id('gjoa-space-header');
+  const sc = id('sidebar-container');
+  if (!urlbar || !panel || !sc) return { error: 'missing element',
+    urlbar: !!urlbar, panel: !!panel, sc: !!sc };
+  const u = urlbar.getBoundingClientRect(), p = panel.getBoundingClientRect();
+  const c = urlbar.parentNode;
+  return {
+    urlbarBottom: u.bottom, urlbarHeight: u.height,
+    panelTop: p.top, panelHeight: p.height,
+    headerTop: header ? header.getBoundingClientRect().top : null,
+    gapAboveTabs: p.top - u.bottom,
+    sidebarBottom: sc.getBoundingClientRect().bottom,
+    urlbarHVar: urlbar.style.getPropertyValue('--urlbar-height'),
+    containerHVar: c ? c.style.getPropertyValue('--urlbar-container-height') : null,
+    containerId: c ? (c.id || c.localName) : null,
+  };
+")
+
+;; What finish-teardown WROTE, not what survived: Firefox often repairs a leaked
+;; value a frame later (why the displacement is intermittent). This observer's
+;; microtask runs in teardown's own task. The floating-attr test rejects
+;; activate-floating's clear of a pending teardown, which is not a teardown.
+(def ARM-TEARDOWN-WATCH :- String "
+  const d = document.documentElement, u = document.getElementById('urlbar');
+  window.__gjoaAnchorWrite = null;
+  const obs = new MutationObserver(() => {
+    if (window.__gjoaAnchorWrite) return;
+    if (d.hasAttribute('gjoa-urlbar-teardown') || d.hasAttribute('gjoa-urlbar-floating')) return;
+    const c = u.parentNode;
+    window.__gjoaAnchorWrite = {
+      urlbarHVar: u.style.getPropertyValue('--urlbar-height'),
+      containerHVar: c ? c.style.getPropertyValue('--urlbar-container-height') : null,
+      containerId: c ? (c.id || c.localName) : null,
+    };
+    obs.disconnect();
+  });
+  obs.observe(d, { attributes: true, attributeFilter: ['gjoa-urlbar-teardown'] });
+  return true;
+")
+(def READ-TEARDOWN-WATCH :- String "return window.__gjoaAnchorWrite;")
+
+(def FLOATING-ARMED :- String "
+  const d = document.documentElement;
+  return d.hasAttribute('gjoa-urlbar-floating') && !d.hasAttribute('gjoa-urlbar-arming');
+")
+
+;; The backdrop swallows every click while the palette floats, so its mousedown
+;; is the dismiss the owner actually performs when clicking away.
+(def DISMISS-VIA-BACKDROP :- String "
+  const bd = document.getElementById('gjoa-urlbar-backdrop');
+  if (!bd) return false;
+  bd.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  return true;
+")
+
+;; finish-teardown holds [gjoa-urlbar-snap] across a double-rAF while the resting
+;; geometry re-applies; its release is the settled frame to measure in.
+(def SNAP-RELEASED :- String "
+  return !document.documentElement.hasAttribute('gjoa-urlbar-snap');
+")
+
+;; Hammered Ctrl+L / Escape, driven BROWSER-side — a marionette round-trip between
+;; the steps lets the ~130ms fade finish and the case stops meaning anything.
+(def DISMISS-THEN-RESUMMON :- String "
+  const [resolve] = arguments;
+  const u = document.getElementById('urlbar');
+  const deactivate = () => document.dispatchEvent(new CustomEvent('gjoa-urlbar-deactivate'));
+  deactivate();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const stage = document.getElementById('gjoa-urlbar-stage');
+    const staged = !!stage && stage.contains(u);
+    const paletteH = u.style.getPropertyValue('--urlbar-height');
+    document.dispatchEvent(new CustomEvent('gjoa-urlbar-activate', { detail: { intent: 'current' } }));
+    try { window.focus(); gURLBar.focus(); } catch (e) {}
+    requestAnimationFrame(() => { deactivate(); resolve({ staged, paletteH }); });
+  }));
+")
+
 (def FLOATING-TORN-DOWN :- String "
   const d = document.documentElement;
   return !d.hasAttribute('gjoa-urlbar-floating')
@@ -498,6 +580,41 @@
            "), so the painted box is narrower than its layout rect. "
            (JSON/stringify f)))))
 
+;; #6 INVARIANT: a float/dismiss cycle is a round trip — same anchors, same
+;; pre-summon inline breakout vars.
+(defn assert-resting-anchor! [a :- Any wrote :- Any rest0 :- Any mode :- String] :- Any
+  (let [tag (str "resting anchor after a " mode " dismiss: ")
+        TOL 2
+        drift (fn [k :- String]
+                (Math/abs (- (Number (get a k)) (Number (get rest0 k)))))]
+    (expect (not (.-error a)) (str tag "MEASURE-ANCHOR error: " (JSON/stringify a)))
+    ;; The write itself — deterministic where the surviving geometry is not.
+    (expect wrote
+      (str tag "no teardown was observed at all, so nothing below was exercised."))
+    (expect-eq (.-containerHVar wrote) (.-containerHVar rest0)
+      (str tag "finish-teardown wrote a stage-derived --urlbar-container-height "
+           "onto #" (.-containerId wrote)))
+    (expect-eq (.-urlbarHVar wrote) (.-urlbarHVar rest0)
+      (str tag "finish-teardown wrote a palette-derived --urlbar-height onto #urlbar"))
+    (expect (<= (drift "panelTop") TOL)
+      (str tag "#gjoa-tab-panel top drifted " (.toFixed (drift "panelTop") 1)
+           "px (resting " (.toFixed (.-panelTop rest0) 1) " → " (.toFixed (.-panelTop a) 1)
+           ") — the tab list no longer sits under the urlbar. after=" (JSON/stringify a)))
+    (expect (<= (drift "headerTop") TOL)
+      (str tag "#gjoa-space-header top drifted " (.toFixed (drift "headerTop") 1)
+           "px. after=" (JSON/stringify a)))
+    (expect (<= (drift "gapAboveTabs") TOL)
+      (str tag "the gap between the urlbar bottom and the tab list grew by "
+           (.toFixed (- (.-gapAboveTabs a) (.-gapAboveTabs rest0)) 1)
+           "px. after=" (JSON/stringify a)))
+    (expect (<= (drift "urlbarHeight") TOL)
+      (str tag "the resting #urlbar is " (.toFixed (.-urlbarHeight a) 1) "px tall, was "
+           (.toFixed (.-urlbarHeight rest0) 1) "px. after=" (JSON/stringify a)))
+    (expect-eq (.-urlbarHVar a) (.-urlbarHVar rest0)
+      (str tag "--urlbar-height leaked out of the floating palette"))
+    (expect-eq (.-containerHVar a) (.-containerHVar rest0)
+      (str tag "--urlbar-container-height leaked onto #" (.-containerId a)))))
+
 ;; The ghost is a look-alike, not a clone, so it is compared by GEOMETRY: for each
 ;; real box, some ghost box at the same offset within the same-width container.
 (defn assert-ghost-chip! [c :- Any gh :- Any phase :- String] :- Any
@@ -726,6 +843,45 @@
            (js/await (.executeScript mn RESTORE-POPOVER [(.-manual pop0) (.-open pop0)]))
            (expect (.-searchmode c1)
              (str "search mode did not reach #urlbar: " (JSON/stringify c1)))
-           (assert-ghost-chip! c1 g1 "searchmode with text")))))]))
+           (assert-ghost-chip! c1 g1 "searchmode with text")))))
+
+   (deftest "urlbar — the drawer's resting anchors survive every float/dismiss cycle (#6)" [mn]
+     (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))
+     (js/await (require-gjoa-css! mn))
+     (let [pop0 (js/await (.executeScript mn CAPTURE-POPOVER))
+           rest0 (chrome-eval MEASURE-ANCHOR)]
+       (expect (not (.-error rest0))
+         (str "MEASURE-ANCHOR error before any summon: " (JSON/stringify rest0)))
+       (expect (and (> (.-panelTop rest0) 0) (> (.-panelHeight rest0) 0))
+         (str "no laid-out #gjoa-tab-panel to anchor against — the assertions below "
+              "would pass vacuously. " (JSON/stringify rest0)))
+       (doseq [mode ["escape" "backdrop" "resummon"]]
+         (js/await (.executeScript mn ARM-TEARDOWN-WATCH))
+         (js/await (.executeScript mn SUMMON-FLOATING))
+         (js/await (await-true FLOATING-ARMED 3000))
+         (if (= mode "resummon")
+           ;; The reproducing shape: the second activation captures its "resting"
+           ;; snapshot while #urlbar is still on the viewport-sized stage in its
+           ;; floating [breakout] geometry, and teardown writes THAT to the drawer.
+           (let [r (js/await (.executeAsyncScript mn DISMISS-THEN-RESUMMON))]
+             (expect (.-staged r)
+               (str "the re-summon did not land inside the dismiss fade (#urlbar "
+                    "already back in its slot), so this case asserts nothing: "
+                    (JSON/stringify r)))
+             (expect (not= (.-paletteH r) "")
+               (str "the palette never got a re-measured --urlbar-height, so there is "
+                    "no floating value for the re-summon to mistake for the resting "
+                    "one: " (JSON/stringify r)))
+             nil)
+           (js/await (.executeScript mn (if (= mode "backdrop")
+                                          DISMISS-VIA-BACKDROP
+                                          DISMISS-FLOATING))))
+         (js/await (await-true FLOATING-TORN-DOWN 3000))
+         (js/await (await-true SNAP-RELEASED 2000))
+         (assert-resting-anchor! (chrome-eval MEASURE-ANCHOR)
+                                 (chrome-eval READ-TEARDOWN-WATCH)
+                                 rest0 mode))
+       (js/await (.executeScript mn RESET-URLBAR))
+       (js/await (.executeScript mn RESTORE-POPOVER [(.-manual pop0) (.-open pop0)]))))]))
 
 (js/export-default tests)

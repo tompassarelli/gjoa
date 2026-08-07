@@ -1,6 +1,6 @@
 {
   "_doc": "Per-test budgets + tiers. Policy: docs/stewardship/testing.md. Maintained by `bun run test:audit`. budgetMs=lean target wall time; tier=smoke|fast|slow|network for modular/locality runs.",
-  "suiteBudgetMs": 134650,
+  "suiteBudgetMs": 135850,
   "lastAudit": {
     "date": "2026-06-22",
     "healthySuiteP50Ms": 27200,
@@ -292,8 +292,8 @@
     "urlbar-drawer": {
       "category": "urlbar",
       "tier": "fast",
-      "budgetMs": 3800,
-      "note": "[justified] Still zero fixed sleeps. #1 now drives the real Ctrl+L floating palette, so it pays a 1400x900 resize round-trip plus the async dismiss fade (~260ms transitionend fallback) that the overlay invariant needs; measured 1.77-1.86s for the file. +200ms 2026-08-07: #1 also drives Firefox's own breakout-blocker eviction (2 chrome calls + 2 two-frame await-trues) in the already-booted window. +800ms 2026-08-07: #4 (ghost keeps the engine chip) summons+dismisses the palette TWICE — once per urlbar state, default and searchmode — and each dismiss waits the same async teardown; measured 711ms for the case. +600ms 2026-08-08: #5 (promotion-independence) forces the palette out of the top layer through 3 eviction paths, each 2 chrome calls + one two-frame await-true, on the palette already floating in #1 — no extra summon/dismiss.",
+      "budgetMs": 5000,
+      "note": "[justified] Still zero fixed sleeps. #1 now drives the real Ctrl+L floating palette, so it pays a 1400x900 resize round-trip plus the async dismiss fade (~260ms transitionend fallback) that the overlay invariant needs; measured 1.77-1.86s for the file. +200ms 2026-08-07: #1 also drives Firefox's own breakout-blocker eviction (2 chrome calls + 2 two-frame await-trues) in the already-booted window. +800ms 2026-08-07: #4 (ghost keeps the engine chip) summons+dismisses the palette TWICE \u2014 once per urlbar state, default and searchmode \u2014 and each dismiss waits the same async teardown; measured 711ms for the case. +600ms 2026-08-08: #5 (promotion-independence) forces the palette out of the top layer through 3 eviction paths, each 2 chrome calls + one two-frame await-true, on the palette already floating in #1 \u2014 no extra summon/dismiss. +1200ms 2026-08-08: #6 (resting-anchor round trip) runs 3 float/dismiss cycles \u2014 escape, backdrop mousedown, and a re-summon INSIDE the fade \u2014 each waiting the async teardown plus the snap release; measured 1094ms for the case.",
       "estSavingsMs": 0
     },
     "vim-content-focus": {
