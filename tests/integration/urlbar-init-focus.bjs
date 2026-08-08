@@ -81,6 +81,23 @@
   });
 ")
 
+;; The content area's own hit point — a real page click, the one gesture that
+;; distinguishes a hand-off from a steal (both land focus on <browser>).
+(def CONTENT-POINT :- String "
+  const r = gBrowser.selectedBrowser.getBoundingClientRect();
+  return JSON.stringify({ x: Math.round(r.left + r.width / 2),
+                          y: Math.round(r.top + r.height / 2) });
+")
+
+;; The tripwire re-applies on a frame, so every read of its outcome waits FRAMES.
+(def FOUR-FRAMES :- String "
+  window.__gjoaFrames = 0;
+  const tick = () => { window.__gjoaFrames++;
+    if (window.__gjoaFrames < 4) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+  return 1;
+")
+
 ;; WebDriver's Control key code point, written numerically so no editor or
 ;; transport can normalize the private-use character away.
 (def CTRL :- String (.fromCharCode String 57353))
@@ -181,7 +198,45 @@
          (expect (> (.-rescues st) 0)
                  "focus was restored but the tripwire never counted it"))))
 
+   ;; The hand-off is a GESTURE, not a destination: a click in the page dispatches
+   ;; a trusted chrome mousedown at the <browser> element, which is the only thing
+   ;; that tells the user leaving apart from a startup thief — both land focus on
+   ;; the same element. Drive the real click, never selectedBrowser.focus().
    (deftest "tripwire hands focus over to content instead of fighting it" [mn]
+     (await-true "return !!window.gjoaFocusGuard;" 5000)
+     (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")
+     (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 3000)
+     (await-true SETTLE 6000)
+     (let [pt (JSON/parse (chrome-eval SETUP))
+           cpt (JSON/parse (chrome-eval CONTENT-POINT))]
+       (chrome-eval "
+          Services.prefs.setIntPref('gjoa.urlbar.focusRescues', 0);
+          window.gjoaFocusGuard.rearm();
+          return 1;
+        ")
+       (js/await (.performActions mn (click-actions (.-x pt) (.-y pt))))
+       (await-true "return document.activeElement === gURLBar.inputField; /* click landed */" 2000)
+       (js/await (.performActions mn (click-actions (.-x cpt) (.-y cpt))))
+       (await-true "return document.activeElement === gBrowser.selectedBrowser;" 2000)
+       (chrome-eval FOUR-FRAMES)
+       (await-true "return window.__gjoaFrames >= 4;" 2000)
+       (let [st (JSON/parse (chrome-eval "
+              return JSON.stringify({
+                onBrowser: document.activeElement === gBrowser.selectedBrowser,
+                active: document.activeElement ? (document.activeElement.id ||
+                        document.activeElement.localName) : null,
+                rescues: Services.prefs.getIntPref('gjoa.urlbar.focusRescues', 0),
+              });
+            "))]
+         (expect (.-onBrowser st)
+           (str "the guard pulled focus back out of content after a real page click — "
+                "focus is on " (.-active st)))
+         (expect (= (.-rescues st) 0) "the guard counted a hand-off to content as a rescue"))))
+
+   ;; The I2 failure: a startup routine focuses the content browser after the user's
+   ;; activation landed. It reads exactly like the hand-off above at the destination
+   ;; and nothing like it at the gesture — no mousedown — so it must be rescued.
+   (deftest "tripwire re-applies an activation a content-focus steal took, with no gesture" [mn]
      (await-true "return !!window.gjoaFocusGuard;" 5000)
      (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")
      (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 3000)
@@ -194,16 +249,22 @@
         ")
        (js/await (.performActions mn (click-actions (.-x pt) (.-y pt))))
        (await-true "return document.activeElement === gURLBar.inputField; /* click landed */" 2000)
-       (chrome-eval "gBrowser.selectedBrowser.focus(); return 1;")
-       (await-true "return document.activeElement === gBrowser.selectedBrowser;" 1000)
+       (chrome-eval (str "gBrowser.selectedBrowser.focus();\n" FOUR-FRAMES))
+       (await-true "return window.__gjoaFrames >= 4;" 2000)
        (let [st (JSON/parse (chrome-eval "
               return JSON.stringify({
-                onBrowser: document.activeElement === gBrowser.selectedBrowser,
+                isInput: document.activeElement === gURLBar.inputField,
+                active: document.activeElement ? (document.activeElement.id ||
+                        document.activeElement.localName) : null,
                 rescues: Services.prefs.getIntPref('gjoa.urlbar.focusRescues', 0),
               });
             "))]
-         (expect (.-onBrowser st) "the guard pulled focus back out of content")
-         (expect (= (.-rescues st) 0) "the guard counted a hand-off to content as a rescue"))))
+         (expect (.-isInput st)
+           (str "a gesture-less content-focus steal took the caret out of the urlbar the "
+                "user had just aimed at, and the tripwire let it — focus is on "
+                (.-active st) " (rescues=" (.-rescues st) ")"))
+         (expect (> (.-rescues st) 0)
+           "focus stayed in the input but the tripwire never counted the rescue"))))
 
    ;; The backdrop makes content unclickable while the palette is up, so a
    ;; content-focus landing there is a startup round trip, never the user leaving —

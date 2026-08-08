@@ -5,7 +5,7 @@
 ;; must go through `with-urlbar-focus!`. The guard below is the tripwire for the
 ;; rest of the init window.
 (ns gjoa.drawer.focus
-  (:require [gjoa.macros :refer [by-id bool has? onc! offc! on! off! pref-int set-pref-int!]]
+  (:require [gjoa.macros :refer [by-id bool onc! offc! on! off! pref-int set-pref-int!]]
             [gjoa.tabs.log :refer [create-logger!]]))
 (define-mode strict)
 
@@ -73,17 +73,13 @@
             (when (= (.-kind st) "key") (some-> window .-gURLBar .select))
             (catch Any _e nil)))
 
-        ;; A click INSIDE the page dispatches no chrome mousedown, so focus
-        ;; landing on the content browser is indistinguishable from the user
-        ;; deliberately leaving the urlbar — hand it over, never rescue it. Not
-        ;; while the palette floats: the backdrop makes content unclickable, so
-        ;; that is a startup round trip taking the caret out of an open palette.
-        ;; gjoa's own hand-offs (teardown, Escape) call `release` first.
+        ;; Departure is a GESTURE (a page click dispatches a chrome mousedown at
+        ;; <browser>, which clears below), never a destination — so a content-focus
+        ;; is theft. Except under the INFERRED "hold" intent: nobody aimed at the
+        ;; urlbar, and fighting a new window's startup hand-off destabilizes init.
         content-owns? (fn []
           (let [a (.-activeElement document)]
-            (bool (and a (= (.-localName a) "browser")
-                       (not (has? (.-documentElement document)
-                                  "gjoa-urlbar-floating"))))))
+            (bool (and a (= (.-localName a) "browser") (= (.-kind st) "hold")))))
 
         check (fn []
           (set! (.-watching st) false)

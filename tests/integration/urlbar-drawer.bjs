@@ -564,6 +564,11 @@
     containerParent: c.parentNode ? (c.parentNode.id || c.parentNode.localName) : null,
     containerHVar: getComputedStyle(c).getPropertyValue('--urlbar-container-height').trim(),
     urlbarHVar: getComputedStyle(u).getPropertyValue('--urlbar-height').trim(),
+    // The INLINE pair is what Firefox latches and gjoa's !important pins mask:
+    // a computed-only read passes while the other mode's row height sits on the
+    // element, waiting for any mode whose CSS does not out-rank it.
+    containerHInline: c.style.getPropertyValue('--urlbar-container-height'),
+    urlbarHInline: u.style.getPropertyValue('--urlbar-height'),
     containerHeight: Math.round(c.getBoundingClientRect().height),
     urlbarHeight: Math.round(u.getBoundingClientRect().height),
     toolboxHeight: tb ? Math.round(tb.getBoundingClientRect().height) : null,
@@ -578,6 +583,32 @@
   Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false);
   Services.prefs.setBoolPref('sidebar.verticalTabs', vertical);
   return true;
+")
+
+;; The three drawer variants the owner runs. compact pins the drawer revealed —
+;; a hover-hidden drawer has no resting box for the flip to displace.
+(def SET-DRAWER-MODE :- String "
+  const [mode] = arguments;
+  const sc = document.getElementById('sidebar-container');
+  Services.prefs.setBoolPref('sidebar.revamp', true);
+  Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false);
+  Services.prefs.setBoolPref('sidebar.verticalTabs', true);
+  Services.prefs.setBoolPref('sidebar.position_start', mode !== 'sidebar-right');
+  Services.prefs.setBoolPref('gjoa.sidebar.compact', mode === 'compact-on');
+  if (sc) {
+    if (mode === 'compact-on') sc.setAttribute('gjoa-pinned', 'true');
+    else sc.removeAttribute('gjoa-pinned');
+  }
+  return mode;
+")
+
+;; Firefox re-latches the pair when the click-expand ends; both empty means that
+;; re-measure has not landed yet, and a frame count would race it.
+(def RELATCHED :- String "
+  const u = document.getElementById('urlbar');
+  const c = document.getElementById('urlbar-container');
+  return !!(u && c && u.style.getPropertyValue('--urlbar-height')
+            && c.style.getPropertyValue('--urlbar-container-height'));
 ")
 
 ;; Frames, never a clock: the post-move re-measure is promiseDocumentFlushed + rAF,
@@ -1214,48 +1245,69 @@
          (js/await (.executeScript mn RESTORE-VERTICAL)))))
 
    (deftest "urlbar — an orientation flip while the bar is click-expanded does not latch the row height (#8)" [mn]
-     (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))
-     (js/await (require-gjoa-css! mn))
-     (js/await (.executeScript mn RESET-URLBAR))
-     (js/await (.executeScript mn ARM-FRAMES))
-     (js/await (await-true FRAMES-DONE 3000))
-     (let [rest0 (chrome-eval MEASURE-LATCH)]
-       (expect (not (.-error rest0))
-         (str "MEASURE-LATCH error before the flip: " (JSON/stringify rest0)))
-       (expect (and (.-vertical rest0) (= (.-containerParent rest0) "gjoa-urlbar-toolbar"))
-         (str "not in the expanded vertical drawer, so the flip below is not the one "
-              "under test. " (JSON/stringify rest0)))
-       ;; CLICK-EXPAND is the trigger: a bare flip, and a flip with the urlbar merely
-       ;; focused, are both clean — only [breakout-extend] at flip time leaks.
-       (js/await (.executeScript mn EXTEND-FLOATING))
-       (js/await (await-true
-                   "return document.getElementById('urlbar').hasAttribute('breakout-extend');"
-                   3000))
-       (js/await (.executeScript mn FLIP-ORIENTATION [false]))
-       (js/await (await-true
-                   "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 5000))
-       (js/await (.executeScript mn FLIP-ORIENTATION [true]))
+     ;; Every drawer variant the owner runs: the leak rides the reparent, which is
+     ;; shared, but each variant pins the row height with different CSS, so only the
+     ;; INLINE pair below tells the same story in all three.
+     (doseq [mode ["vertical" "sidebar-right" "compact-on"]]
+       (js/await (.executeScript mn SET-DRAWER-MODE [mode]))
+       (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))
+       (js/await (require-gjoa-css! mn))
        (js/await (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 5000))
        (js/await (.executeScript mn RESET-URLBAR))
        (js/await (.executeScript mn ARM-FRAMES))
        (js/await (await-true FRAMES-DONE 3000))
-       (let [a (chrome-eval MEASURE-LATCH)]
-         (js/await (.executeScript mn RESTORE-VERTICAL))
-         (expect (not (.-error a)) (str "MEASURE-LATCH error after the flip: " (JSON/stringify a)))
-         (expect (and (.-vertical a) (= (.-containerParent a) "gjoa-urlbar-toolbar"))
-           (str "the flip back did not restore the vertical drawer. " (JSON/stringify a)))
-         (expect-eq (.-containerHVar a) (.-containerHVar rest0)
-           (str "--urlbar-container-height latched across the orientation flip — the "
-                "other mode's row height is now pinned on #urlbar-container for the life "
-                "of this window. after=" (JSON/stringify a)))
-         (expect-eq (.-urlbarHVar a) (.-urlbarHVar rest0)
-           (str "--urlbar-height latched across the orientation flip. after=" (JSON/stringify a)))
-         (doseq [k ["containerHeight" "urlbarHeight" "toolboxHeight" "panelTop"]]
-           (let [d (Math/abs (- (Number (get a k)) (Number (get rest0 k))))]
-             (expect (<= d 2)
-               (str k " drifted " d "px across the orientation flip ("
-                    (get rest0 k) " → " (get a k) ") — the drawer column is "
-                    "permanently displaced. after=" (JSON/stringify a))))))))
+       (let [rest0 (chrome-eval MEASURE-LATCH)]
+         (expect (not (.-error rest0))
+           (str mode ": MEASURE-LATCH error before the flip: " (JSON/stringify rest0)))
+         (expect (and (.-vertical rest0) (= (.-containerParent rest0) "gjoa-urlbar-toolbar"))
+           (str mode ": not in the expanded vertical drawer, so the flip below is not the "
+                "one under test. " (JSON/stringify rest0)))
+         ;; CLICK-EXPAND is the trigger: a bare flip, and a flip with the urlbar merely
+         ;; focused, are both clean — only [breakout-extend] at flip time leaks.
+         (js/await (.executeScript mn EXTEND-FLOATING))
+         (js/await (await-true
+                     "return document.getElementById('urlbar').hasAttribute('breakout-extend');"
+                     3000))
+         (js/await (.executeScript mn FLIP-ORIENTATION [false]))
+         (js/await (await-true
+                     "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 5000))
+         (js/await (.executeScript mn FLIP-ORIENTATION [true]))
+         (js/await (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 5000))
+         (js/await (.executeScript mn RESET-URLBAR))
+         ;; The re-measure the reparent invalidated is re-taken when the extend ends,
+         ;; so wait for Firefox to WRITE the pair again — a frame count would race it.
+         (js/await (await-true RELATCHED 4000))
+         (js/await (.executeScript mn ARM-FRAMES))
+         (js/await (await-true FRAMES-DONE 3000))
+         (let [a (chrome-eval MEASURE-LATCH)]
+           (expect (not (.-error a))
+             (str mode ": MEASURE-LATCH error after the flip: " (JSON/stringify a)))
+           (expect (and (.-vertical a) (= (.-containerParent a) "gjoa-urlbar-toolbar"))
+             (str mode ": the flip back did not restore the vertical drawer. "
+                  (JSON/stringify a)))
+           (expect-eq (.-containerHInline a) (.-containerHInline rest0)
+             (str mode ": the other mode's row height is latched INLINE on "
+                  "#urlbar-container (--urlbar-container-height) — gjoa's !important pin "
+                  "hides it here, and the next mode whose CSS does not out-rank it wears "
+                  "it. after=" (JSON/stringify a)))
+           (expect-eq (.-urlbarHInline a) (.-urlbarHInline rest0)
+             (str mode ": --urlbar-height is latched INLINE on #urlbar. after="
+                  (JSON/stringify a)))
+           (expect-eq (.-containerHVar a) (.-containerHVar rest0)
+             (str mode ": --urlbar-container-height latched across the orientation flip — "
+                  "the other mode's row height is now pinned on #urlbar-container for the "
+                  "life of this window. after=" (JSON/stringify a)))
+           (expect-eq (.-urlbarHVar a) (.-urlbarHVar rest0)
+             (str mode ": --urlbar-height latched across the orientation flip. after="
+                  (JSON/stringify a)))
+           (doseq [k ["containerHeight" "urlbarHeight" "toolboxHeight" "panelTop"]]
+             (let [d (Math/abs (- (Number (get a k)) (Number (get rest0 k))))]
+               (expect (<= d 2)
+                 (str mode ": " k " drifted " d "px across the orientation flip ("
+                      (get rest0 k) " → " (get a k) ") — the drawer column is "
+                      "permanently displaced. after=" (JSON/stringify a))))))))
+     (js/await (.executeScript mn SET-DRAWER-MODE ["vertical"]))
+     (js/await (.executeScript mn RESTORE-VERTICAL)))
 
    (deftest "urlbar — the palette renders and takes focus in browser fullscreen (#9)" [mn]
      (js/await (.executeScript mn ENSURE-EXPANDED-DRAWER))

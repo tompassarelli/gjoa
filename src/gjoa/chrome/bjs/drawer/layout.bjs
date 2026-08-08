@@ -27,6 +27,7 @@
         state {:urlbar-toolbar nil
                :resize-obs nil
                :mutation-obs nil
+               :extend-obs nil
                :updating false}
 
         ;; --- inject-sidebar-shadow-overrides ---
@@ -108,6 +109,50 @@
                 ;; inside that rule, so it needs this untouched copy.
                 (.setProperty (.-style urlbar) "--gjoa-urlbar-resting-w" (str w "px")))
               (set! (.-updating state) false)))
+
+        ;; Parent AND container: while the palette floats the parent is the stage.
+        drop-breakout-dimensions! (fn []
+          (when urlbar
+            (.removeProperty (.-style urlbar) "--urlbar-height")
+            (when (.-parentNode urlbar)
+              (.removeProperty (.-style (.-parentNode urlbar))
+                               "--urlbar-container-height")))
+          (when urlbar-container
+            (.removeProperty (.-style urlbar-container) "--urlbar-container-height")))
+
+        ;; The blocker pair is Firefox's own public re-measure entry
+        ;; (decrementBreakoutBlockerCount → #updateLayoutBreakout); the flush is what
+        ;; makes it read the settled layout rather than the pre-move one.
+        relatch-breakout! (fn []
+          (try
+            (.then (.promiseDocumentFlushed window (fn [] nil))
+              (fn [_r]
+                (let [u (.-gURLBar window)]
+                  (when (and u (.-incrementBreakoutBlockerCount u))
+                    (.incrementBreakoutBlockerCount u)
+                    (.decrementBreakoutBlockerCount u))))
+              (fn [_e] nil))
+            (catch Any _e nil)))
+
+        ;; A re-measure taken while the bar is CLICK-EXPANDED measures the expanded
+        ;; box, so the reconnect a move causes latches the row we left onto the row we
+        ;; enter — drop both and re-measure once the extend ends. Never while the
+        ;; palette floats: drawer/urlbar.bjs owns both vars for its lifetime.
+        remeasure-breakout! (fn []
+          (when (.-extend-obs state)
+            (.disconnect (.-extend-obs state))
+            (set! (.-extend-obs state) nil))
+          (when (and urlbar (has? urlbar "breakout-extend")
+                     (not (has? (.-documentElement document) "gjoa-urlbar-floating")))
+            (drop-breakout-dimensions!)
+            (let [obs (MutationObserver.
+                        (fn []
+                          (when (not (has? urlbar "breakout-extend"))
+                            (.disconnect obs)
+                            (set! (.-extend-obs state) nil)
+                            (relatch-breakout!))))]
+              (.observe obs urlbar {:attributes true :attributeFilter ["breakout-extend"]})
+              (set! (.-extend-obs state) obs))))
 
         ;; --- collect-icons ---
         collect-icons (fn [scope hits]
@@ -207,6 +252,7 @@
                   (set! (.-urlbar-toolbar state) tb))))
               (when (and stale (not (identical? stale (.-urlbar-toolbar state))))
                 (.remove stale)))
+            (remeasure-breakout!)
             (when urlbar
               (let [ro (ResizeObserver. sync-urlbar-width)]
                 (.observe ro sidebar-main)
@@ -254,7 +300,8 @@
 
               (if (and toolbox-next (identical? (.-parentNode toolbox-next) toolbox-parent))
                 (.insertBefore toolbox-parent navigator-toolbox toolbox-next)
-                (.appendChild toolbox-parent navigator-toolbox))))))
+                (.appendChild toolbox-parent navigator-toolbox))))
+            (remeasure-breakout!)))
 
         ;; --- context-menu fix ---
         on-context-menu (fn [e]
@@ -386,5 +433,6 @@
              (.disconnect sym-resize-obs)
              (some-> state .-resize-obs .disconnect)
              (some-> state .-mutation-obs .disconnect)
+             (some-> state .-extend-obs .disconnect)
              (off! navigator-toolbox "contextmenu" on-context-menu)
              (off! window "resize" sync-symmetric-footer))}))))))
