@@ -787,12 +787,14 @@
                   (let [m (.match src (RegExp. (.-from ex)))]
                     (if (not (and m (aget m 1)))
                       (.push problems (str id ": extractRegex /" (.-from ex) "/ found no regex literal in " rel))
-                      (let [lit: Any (aget m 1)
+                      ;; `:-` is the ONLY inline binding marker the pinned beagle
+                      ;; (configs/beagle.ref) parses; the glued `name:` surface is newer.
+                      (let [lit :- Any (aget m 1)
                             ;; strip the surrounding slashes (and any flags) → the regex body.
-                            body-m: Any (.match lit (RegExp. "^/(.*)/([a-z]*)$"))
-                            body: Any (if body-m (aget body-m 1) lit)
-                            flags: Any (if body-m (aget body-m 2) "")
-                            re: Any (try (RegExp. body flags) (catch Error _e nil))]
+                            body-m :- Any (.match lit (RegExp. "^/(.*)/([a-z]*)$"))
+                            body :- Any (if body-m (aget body-m 1) lit)
+                            flags :- Any (if body-m (aget body-m 2) "")
+                            re :- Any (try (RegExp. body flags) (catch Error _e nil))]
                         (if (not re)
                           (.push problems (str id ": extracted literal `" lit "` is not a constructable RegExp"))
                           (do
