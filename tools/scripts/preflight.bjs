@@ -932,6 +932,24 @@
                 "gjoa.darkmode.normalize.enabled is not defaulted true in dark-mode-prefs.bjs"
                 "the APCA backstop fixes the recurring unreadable-dark-mode reports — restore the `true` default; if disabling deliberately, update Gate W with the rationale"))))))
 
+;; Gate X — mirrors release.yml's tag-vs-displayVersion check locally, before push.
+;; Only fires when HEAD carries a v* tag; untagged commits have nothing to compare.
+(defn gateX [] :- Any
+  (let [tagRes (sh "git describe --exact-match --tags HEAD 2>/dev/null" {})]
+    (if (not (.-ok tagRes))
+      (pass "X" "release tag matches gjoa.json displayVersion" "HEAD is not tagged — nothing to check")
+      (let [tag (.trim (.-out tagRes))]
+        (if (not (.match tag (RegExp. "^v[0-9]")))
+          (pass "X" "release tag matches gjoa.json displayVersion" (str "HEAD tag `" tag "` is not a version tag — skipping"))
+          (let [gjoa (.parse JSON (readFileSync GJOA-JSON "utf8"))
+                tagVersion (.slice tag 1)
+                configVersion (.-displayVersion gjoa)]
+            (if (= tagVersion configVersion)
+              (pass "X" "release tag matches gjoa.json displayVersion" (str "HEAD tag `" tag "` matches displayVersion " configVersion))
+              (fail "X" "release tag matches gjoa.json displayVersion"
+                    (str "HEAD tag `" tag "` (" tagVersion ") does not match gjoa.json displayVersion " configVersion)
+                    (str "bump gjoa.json displayVersion to " tagVersion " (or delete/retag) before `git push origin " tag "` — this is what CI's release.yml validate job would reject")))))))))
+
 ;; ── Run + render ──────────────────────────────────────────────────────────
 (defn main! [] :- Any
   (console/log (bold "gjoa preflight"))
@@ -943,7 +961,7 @@
                ["I" gateI] ["J" gateJ] ["K" gateK] ["L" gateL] ["M" gateM]
                ["N" gateN] ["O" gateO] ["P" gateP] ["Q" gateQ]
                ["R" gateR] ["S" gateS!] ["T" gateT] ["U" gateU] ["V" gateV]
-               ["W" gateW]]]
+               ["W" gateW] ["X" gateX]]]
     (doseq [gate gates]
       (let [fn (aget gate 1)]
         (try (fn)

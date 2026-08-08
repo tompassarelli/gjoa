@@ -72,6 +72,10 @@ The `baseline-firefox` value in `configs/upstream-provenance.json` is a *version
 
 This is strictly finer than the release-tag forecast: baseline-anchored, works against **any** commit (nightly / arbitrary SHA, not just tags), and a per-file mathematical guarantee. **Gate V** runs integrity mode (lock vs its own baseline tag) — asserting the lock still describes the current patch surface at the declared baseline; skip-aware (FF clone is dev-only) and WARN-level.
 
+## Release tag matches `gjoa.json` (Gate X)
+
+`release.yml`'s `validate` job rejects a pushed `vX.Y.Z` tag that disagrees with `gjoa.json`'s `displayVersion` — but only after the tag already left the machine (2026-08-07: `v0.4.5` pushed while `displayVersion` still said `0.4.4`, CI failed in 3s, no installers built). **Gate X** (`preflight.bjs`, HARD) reruns that same comparison locally whenever HEAD carries a version tag, so `bun run preflight` catches the drift before `git push origin vX.Y.Z`.
+
 ### The galaxy-brain play — the blob OID is a coordinate in Mozilla's history
 
 Once a patch's baseline is a content OID instead of a version string, each layer reuses git's existing machinery for a compounding win:

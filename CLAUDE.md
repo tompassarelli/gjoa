@@ -37,7 +37,7 @@ hot-reload. Proposing a nix rebuild to verify a *chrome* fix is the smell.
 
 1. **`bun run import` first** — the flake compiles `engine/`, which reflects
    `src/gjoa/` only after an import (a stale engine cost a whole build 2026-06-14).
-2. **`bun run preflight`** — 23 gates (A–W) catch patch / eval / alignment /
+2. **`bun run preflight`** — 24 gates (A–X) catch patch / eval / alignment /
    security breakage before a 2–3 h compile. The live gate registry + what each
    enforces is **GENERATED** in [`docs/stewardship/topology.md`](docs/stewardship/topology.md)
    (Gate T fails on docs↔machinery drift) — never hand-maintain a gate list here.
