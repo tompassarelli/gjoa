@@ -4,7 +4,7 @@ name: Release
 # platform/architecture targets (on free GitHub-hosted runners) and assembles
 # a DRAFT GitHub release with the binaries
 # attached, named gjoa-<version>-<platform>.<ext>. The draft is deliberate: a human
-# reviews the generated release notes and clicks Publish — CI never publishes on its own.
+# reviews the authored release notes and clicks Publish — CI never publishes on its own.
 #
 #   git tag v0.4.1 && git push origin v0.4.1
 #
@@ -32,6 +32,15 @@ jobs:
           config_version="$(jq -r '.displayVersion' gjoa.json)"
           if [[ "$tag_version" != "$config_version" ]]; then
             echo "::error::tag $GITHUB_REF_NAME does not match gjoa.json displayVersion $config_version"
+            exit 1
+          fi
+          notes_path=".github/release-notes/${GITHUB_REF_NAME}.md"
+          if [[ ! -s "$notes_path" ]]; then
+            echo "::error::missing authored release notes at $notes_path"
+            exit 1
+          fi
+          if ! grep -Eq '^## (Highlights|Changes)$' "$notes_path"; then
+            echo "::error::$notes_path must contain a Highlights or Changes section"
             exit 1
           fi
           echo "validated $GITHUB_REF_NAME against gjoa.json"
@@ -62,6 +71,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -93,6 +104,6 @@ jobs:
           draft: true
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: .github/release-notes/${{ github.ref_name }}.md
           files: release/*
           fail_on_unmatched_files: true
