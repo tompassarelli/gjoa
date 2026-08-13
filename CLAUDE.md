@@ -47,24 +47,17 @@ hot-reload. Proposing a nix rebuild to verify a *chrome* fix is the smell.
 
 (The Sunday-only cadence rule was rescinded 2026-06-15 — build whenever needed.)
 
-## Never reap the engine-hosting worktree — the build closure is rooted in it
+## The engine-hosting checkout is a pin — `~/code/gjoa/pins/dev-runtime`
 
-The container symlinks `~/code/gjoa/engine` and `~/code/gjoa/active` point *into*
-one worktree, and that worktree's `result` out-link is what keeps the nix build
-closure GC-rooted. **A worktree is not reapable while those symlinks point at
-it.** Reaping it deletes the only GC anchors (the `result` out-link and the
-`.direnv/` flake roots), so the next `nix-collect-garbage` eats a 2–3 h closure.
+It is not a lane: `~/code/gjoa/pins/dev-runtime.pin` names who consumes it, and
+nothing under `pins/` is swept, reaped, or written by automation. `~/code/gjoa/active`
+is its alias. Read the manifest before changing anything about that checkout.
 
-Before reaping any gjoa worktree:
-
-1. Repoint or remove `engine`/`active` deliberately — a dangling `engine`
-   symlink after a reap is the failure mode that cost **two full Firefox
-   recompiles on 2026-08-07**.
-2. Migrate the `result` out-link to the container-level anchor
-   `~/code/gjoa/gjoa-current` **before** the tree goes:
-   `nix-store -r --indirect --add-root ~/code/gjoa/gjoa-current $(readlink -f result)`.
-   A bare `ln -s` does **not** create a GC root — only a registered indirect
-   root survives the collector.
+The nix build closure is rooted at the pin's path, and only a *registered
+indirect* GC root survives the collector — a bare `ln -s` is not one. The
+container-level anchor is `~/code/gjoa/gjoa-current`; re-register it after a
+build with
+`nix-store -r --indirect --add-root ~/code/gjoa/gjoa-current $(readlink -f result)`.
 
 (`nix.settings.keep-outputs`/`keep-derivations` are on host-wide since
 2026-08-07, but they only preserve what is still rooted — the anchor is still
