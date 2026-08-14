@@ -1,11 +1,10 @@
 # Pinned fram ref — the FROZEN fram commit gjoa's projector/codegraph tooling
 # (tools/projector/*) resolves against, NOT live ~/code/fram. gjoa depends on fram
 # ONLY for the code-as-claims projector (CI Gate C), never for the browser build.
-# A dedicated shared-pin worktree at this ref lives at ~/code/fram-pin; .envrc points
-# FRAM_PIN_ROOT there so the projector floats on a known-good fram, isolated from
-# fram-2's self-host churn (which lives in a SEPARATE worktree, ~/code/fram-lease,
-# not merged to fram main). fram's claim-engine + EDN-AST surface is stable across
-# that churn (fram-2 confirmed 2026-06-21) — so this is a deliberate floor, not a
-# break-driven pin. This is the shared fram pin (same SHA the north coordinator
-# stages); bump DELIBERATELY together with the swarm when self-host lands in main.
-969bdc1
+# This full object ID names an immutable checkout at
+# ~/code/fram/pins/<full-object-id>, with a same-name .pin sidecar naming Gjoa as
+# its consumer. Local tooling derives that path from this file; CI may supply an
+# explicit FRAM_PIN_ROOT checkout of the same object. To advance, create the new
+# detached content-addressed pin and sidecar, then update this file. Never change
+# the HEAD or bytes of an existing pin.
+969bdc1d2b33a441629011f78b2b77c8f5cff759
