@@ -101,10 +101,10 @@ live in the gates + [`docs/stewardship/topology.md`](docs/stewardship/topology.m
 - **Production-mode paths must work in nix** — the dev overlay hides `// TODO`
   stubs that a nix build exposes.
 
-## Reference + pointers
+## Resources + pointers
 
-- On disk: `~/code/reference/zen-browser/` (peer fork) ·
-  `~/code/reference/firefox/` (mozilla-central).
+- On disk: `~/code/resources/zen-browser/` (peer fork) ·
+  `~/code/resources/firefox/` (mozilla-central).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — map, rebuild ladder, decision tree.
 - [`docs/build-pipeline.md`](docs/build-pipeline.md) — binary-vs-chrome cadence, what
   `gjoa hotreload` loads, the "looks broken / stale chrome" recovery. **Verify chrome

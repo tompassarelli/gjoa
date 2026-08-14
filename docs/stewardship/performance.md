@@ -71,7 +71,7 @@ patch's expected `rebases-broken-per-year ≈ rung_base × upstream-churn`.
   native `.rs/.cpp/.cc/.h/.webidl` = **3.0** (conflicts per release), `.mjs/.js`
   overlay = **0.5** (per major version), build-wiring (`moz.build`/`jar.mn`) =
   **0.05** (~never).
-- **churn** = commits touching each file in `~/code/reference/firefox` over the
+- **churn** = commits touching each file in `~/code/resources/firefox` over the
   last year (`git log --since='1 year ago'`).
 
 This is a *perf budget on our own maintenance throughput* — it ranks the

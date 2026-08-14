@@ -35,7 +35,7 @@ seam-cost  =  rung_base  ×  upstream_churn
 ```
 
 - **`rung_base`** — the Lane cadence multiplier, inferred from the highest-cadence file kind the patch touches: native `.rs/.cpp/.cc/.h/.webidl` = **3.0**, `.mjs/.js` = **0.5**, build-wiring (moz.build/jar.mn) = **0.05** (`rung-base`, patch-cost.bjs:33).
-- **`upstream_churn`** — commits touching each declared file in `~/code/reference/firefox` over the last year (`churn`, patch-cost.bjs:20, shells `git log --since='1 year ago'` against the mozilla-central clone).
+- **`upstream_churn`** — commits touching each declared file in `~/code/resources/firefox` over the last year (`churn`, patch-cost.bjs:20, shells `git log --since='1 year ago'` against the mozilla-central clone).
 
 The product approximates **expected rebases-broken-per-year**, and the report ranks descending so demotion effort targets the costliest carriers first. The rung multipliers encode the Lane doctrine's cadence claim directly (native = 6× a sys.mjs seam, 60× a build seam).
 
@@ -44,7 +44,7 @@ The product approximates **expected rebases-broken-per-year**, and the report ra
 Before committing to a Firefox bump, `bun run forecast [from] [to]` intersects the **upstream delta** (files Mozilla changed between two release tags) with the files gjoa's patches touch — **no download, no build**:
 
 1. Resolve `from` (gjoa.json) / `to` (latest stable via `product-details.mozilla.org`) to Mozilla release tags. `version->tag` (conflict-forecast.bjs:26) hard-rejects any string that isn't `^[0-9]+(\.[0-9]+){1,3}(esr)?$` — these flow from the network and gjoa.json into a `git` shell-out, so the regex is a command-injection guard.
-2. `git diff --name-only <from-tag> <to-tag>` against the reference clone = the changed-file set.
+2. `git diff --name-only <from-tag> <to-tag>` against the upstream clone = the changed-file set.
 3. For each patch, intersect its `# touches:` files with the delta; report affected patches **ranked by seam tier** (review `native-src` first).
 
 Output is either `CLEAN — all patches apply unchanged` or the blast-radius list. A real point-release bump with a fully disjoint patch surface validated the clean path. This converts "will this bump hurt?" from a 45-min gamble into a sub-second read. (Precise per-symbol blast-radius ranking via the fram call graph is the deferred turtle; v1 ranks by tier, which needs no graph.)
