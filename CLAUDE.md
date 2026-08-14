@@ -47,21 +47,26 @@ hot-reload. Proposing a nix rebuild to verify a *chrome* fix is the smell.
 
 (The Sunday-only cadence rule was rescinded 2026-06-15 — build whenever needed.)
 
-## The engine-hosting checkout is an immutable content pin
+## The engine-hosting checkout is a locked mutable runtime worktree
 
-The current pin is
-`~/code/gjoa/pins/1d5054b80068e3f636a0d7e5f4b30863a502546f`; its same-name
-`.pin` sidecar names the runtime consumer. `~/code/gjoa/active` is the stable
-consumer selector and must resolve to that full-object-ID path. The checkout's
-bytes and HEAD are immutable and nothing under `pins/` is swept or reaped; only
-the sibling manifest is administered. To advance the runtime, create a new
-detached full-object-ID pin and sidecar, then update `~/code/gjoa/active`. Never
-check out a different ref inside an existing pin.
+`~/code/gjoa/active` is the stable selector and must resolve to the locked
+worktree at `~/code/gjoa/worktrees/dev-runtime`. This checkout intentionally
+holds mutable ignored build and runtime state, including `.gjoa-sync-stamp`,
+`dist/`, `.beagle-tools`, and `engine/`. Its Git worktree lock prevents ordinary
+reaping, and its non-disposable ignored state independently makes `wt-reap`
+refuse it. It is not a content pin and has no `.pin` sidecar. Do not infer a
+built binary's source provenance from the worktree's current HEAD; the build
+output reports its source revision independently.
 
-The nix build closure is rooted at the pin's path, and only a *registered
-indirect* GC root survives the collector — a bare `ln -s` is not one. The
-container-level anchor is `~/code/gjoa/gjoa-current`; re-register it after a
-build with
+Frozen source inputs are different: `configs/beagle.ref` and `configs/fram.ref`
+select immutable content-addressed checkouts under the corresponding
+`~/code/beagle/pins/<full-object-id>` and
+`~/code/fram/pins/<full-object-id>` containers.
+
+The nix build closure is rooted at the runtime worktree's path, and only a
+*registered indirect* GC root survives the collector — a bare `ln -s` is not
+one. The container-level anchor is `~/code/gjoa/gjoa-current`; re-register it
+after a build with
 `nix-store -r --indirect --add-root ~/code/gjoa/gjoa-current $(readlink -f result)`.
 
 (`nix.settings.keep-outputs`/`keep-derivations` are on host-wide since
