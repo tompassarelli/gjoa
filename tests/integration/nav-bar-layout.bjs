@@ -1,5 +1,5 @@
 #lang beagle/js
-;; Verify the gjoa nav-bar layout per OWNER ROW-ORDER SPEC v3 (supersedes v2):
+;; Verify the gjoa nav-bar layout contract:
 ;;   VERTICAL/expanded:  [☰ hamburger][🧩 extensions][□ sidebar-toggle]  ←GAP→  [← → ↻]
 ;;   HORIZONTAL/compact: [← → ↻] <urlbar> [□ sidebar-toggle][🧩 extensions][☰ hamburger]
 ;; Asserts visual left-to-right ordering AND a visible gap between groups.
@@ -55,8 +55,8 @@
     "return checkOrder(['back-button', 'forward-button', 'stop-reload-button', 'urlbar-container', "
     "'gjoa-sidebar-button|sidebar-button', 'unified-extensions-button', 'PanelUI-button']);"))
 
-;; A DEFAULT profile has no CustomizableUI springs left in nav-bar, but a migrated
-;; / customized one keeps `customizableui-special-spring1|2` flanking
+;; A default profile has no CustomizableUI springs in nav-bar, but a customized
+;; one can keep `customizableui-special-spring1|2` flanking
 ;; #urlbar-container — and toolbarbuttons.css gives those `flex: 80 80; max-width:
 ;; 112px` inside #nav-bar. Inject the same element to put the row under the same
 ;; pressure, measure, and remove it in the same script so nothing can leak.
@@ -202,7 +202,7 @@
      (let [r (chrome-eval horizontalOrderIds)]
        (expect (.-ok r) (.-msg r))
        (assert-even-rhythm! r "default profile"))
-     ;; Same row with the native springs present (a customized/migrated profile):
+     ;; Same row with the native springs present in a customized profile:
      ;; uncapped they take ~112px each and split the row into two loud gaps.
      (let [sp (chrome-eval springPressureCheck)]
        (when (not (.-skip sp))

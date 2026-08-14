@@ -816,7 +816,7 @@
              "slot, not centred over the content. " (JSON/stringify f))))
     ;; (b) SPEC WIDTH: owner spec "zen-sized" — clamp(600px, 50vw, 820px) resolves
     ;; to 700px (half the window) at the 1400px window the test pins. The floor
-    ;; also catches a revert to the superseded 400-600px band (560px there).
+    ;; and pins the current 700px target band.
     (expect (and (>= (.-urlbarWidth f) 660) (<= (.-urlbarWidth f) 760))
       (str tag "width " (.toFixed (.-urlbarWidth f) 1)
            "px is outside the zen-sized 700px±40 band at a "

@@ -3,10 +3,10 @@
 // mechanical: docs/stewardship/ names real machinery, and that machinery is
 // documented — "if a name here stops resolving, that is a bug" becomes a GATE.
 //
-//   bun run stewardship:gen     write docs/stewardship/topology.md (the generated map)
-//   bun run stewardship:check   regen→memory, diff committed, fail on drift OR dangling refs
+//   bun tools/stewardship/topology.mjs gen     write the generated map
+//   bun tools/stewardship/topology.mjs check   fail on drift or dangling refs
 //
-// Projection of: tools/scripts/preflight.bjs (the A–S gate registry) +
+// Projection of: tools/scripts/preflight.bjs (the current gate registry) +
 // docs/stewardship/*.md (every gate/file/script they cite) + package.json scripts.
 // A hand-list would rot; this is generated + gated, like Gate P / security-patches.json.
 
@@ -83,8 +83,8 @@ function emit(a) {
   L.push("");
   L.push("> Projection of `tools/scripts/preflight.bjs` (the gate registry) +");
   L.push("> `docs/stewardship/*.md` + `package.json` scripts. Regenerate with");
-  L.push("> `bun run stewardship:gen`; drift or a dangling reference fails");
-  L.push("> `bun run stewardship:check`. A hand-list would rot — this can't.");
+  L.push("> `bun tools/stewardship/topology.mjs gen`; drift or a dangling reference fails");
+  L.push("> `bun tools/stewardship/topology.mjs check`. A hand-list would rot — this can't.");
   L.push("");
   L.push(`## Preflight gates (${a.reg.size})`);
   L.push("");
@@ -125,7 +125,7 @@ function main() {
     if (a.danglingGates.length) console.error(`  DANGLING gate refs: ${a.danglingGates.join(", ")}`);
     if (a.danglingFiles.length) console.error(`  DANGLING file refs: ${a.danglingFiles.join(", ")}`);
     if (a.danglingScripts.length) console.error(`  DANGLING script refs: ${a.danglingScripts.join(", ")}`);
-    if (drift) console.error("  topology.md is STALE — run `bun run stewardship:gen`");
+    if (drift) console.error("  topology.md is STALE — run `bun tools/stewardship/topology.mjs gen`");
     if (a.orphanGates.length) console.warn(`  warn: undocumented gates: ${a.orphanGates.join(", ")}`);
     if (dangling || drift) { console.error("stewardship:check FAILED"); process.exit(1); }
     console.log(`stewardship:check ok — ${a.reg.size} gates, ${a.fileRefs.size} file refs all resolve, no drift`);

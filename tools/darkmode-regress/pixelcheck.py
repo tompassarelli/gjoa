@@ -57,9 +57,6 @@ B3_DELTA_E_MAX = 30.0
 # B4: logo visibility — rect-scoped internal L* contrast (ruling 1.4)
 # B4_LOGO_THRESHOLD: None = not yet calibrated (emit DRAFT); set mechanically
 # after calibration proves ≥2x separation (worst true-negative / best true-positive).
-# Full-band fallback when no logo rects available:
-B4_HEADER_HEIGHT = 150      # px from top (fallback header-band legacy)
-B4_MIN_LSTAR_STDDEV = 20.0  # legacy full-band threshold (DRAFT only)
 B4_LOGO_THRESHOLD = None    # rect-scoped threshold — UNSET pending calibration
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -256,42 +253,6 @@ def rule_B1_B2(img_path, mask_path, tmp_prefix, shot):
 
     return b1, b2
 
-
-def rule_B2(img_path, mask_path, tmp_prefix, shot):
-    """Legacy wrapper — use rule_B1_B2 for efficiency."""
-    _, b2 = rule_B1_B2(img_path, mask_path, tmp_prefix, shot)
-    return b2
-
-    # Find worst (largest) island
-    worst = None
-    failing = []
-    for c in components:
-        if c['area'] >= B2_ISLAND_PX:
-            failing.append(c)
-            if worst is None:
-                worst = c
-
-    passed = len(failing) == 0
-    evidence = {
-        'threshold_px': B2_ISLAND_PX,
-        'threshold_pct': 5.0,
-        'shot': shot,
-        'island_count': len(failing),
-    }
-    if worst:
-        evidence['largest_island'] = {
-            'area': worst['area'],
-            'pct_viewport': round(100 * worst['area'] / VIEWPORT_PX, 1),
-            'bbox': worst['bbox'],
-        }
-
-    return {
-        'rule': 'B2',
-        'result': 'PASS' if passed else 'FAIL',
-        'evidence': evidence,
-    }
-
-
 def rule_B3(gjoa_path, light_path, rects, shot):
     """
     B3: per replaced-content rect, mean ΔE76 between gjoa and light arm ≤ threshold.
@@ -360,27 +321,12 @@ def rule_B4(img_path, shot, logo_rects=None):
 
     B4 is non-gating regardless of verdict (ruling 1.4, stays non-gating until chief flips).
 
-    Fallback: when no logo_rects, falls back to the legacy full-band header heuristic
-    (DRAFT, not calibrated for this purpose).
     """
     if not logo_rects:
-        # Legacy fallback: full-band header band (high false-positive rate, DRAFT only)
-        try:
-            stddev = lstar_stddev_region(img_path, 0, 0, VIEWPORT_W, B4_HEADER_HEIGHT)
-            mean_l = mean_lstar_region(img_path, 0, 0, VIEWPORT_W, B4_HEADER_HEIGHT)
-        except Exception as e:
-            return {'rule': 'B4', 'result': 'ERROR',
-                    'evidence': {'error': str(e)[:100], 'shot': shot}}
         return {
             'rule': 'B4',
-            'result': 'DRAFT',
-            'evidence': {
-                'shot': shot, 'mode': 'fallback_header_band',
-                'header_mean_lstar': round(mean_l, 1),
-                'header_lstar_stddev': round(stddev, 1),
-                'note': 'no logo rects from Channel A — full-band heuristic (unreliable)',
-                'region': {'x': 0, 'y': 0, 'w': VIEWPORT_W, 'h': B4_HEADER_HEIGHT},
-            }
+            'result': 'SKIP',
+            'evidence': {'shot': shot, 'reason': 'no logo rects'}
         }
 
     # Rect-scoped: measure each logo rect

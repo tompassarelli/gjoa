@@ -1,5 +1,5 @@
 #lang beagle/js
-;; Per-site dark-mode HYBRID (task #43), tested through the REAL production path:
+;; Per-site dark mode, tested through the real production path:
 ;; the GjoaDarkmode actor measures the rendered page background in the content
 ;; process and sets BrowsingContext.colorInversionOverride, which drives
 ;; nsPresContext::mColorInversion for THAT document. A themeless light page must
@@ -18,16 +18,16 @@
 (define-mode strict)
 (declare-extern [Number] Any)
 
-(def TOP :- String "http://127.0.0.1:8975/") ;; no-bg page (UA-dark under hybrid)
+(def TOP :- String "http://127.0.0.1:8975/") ;; no-bg page
 (def LIGHT-TOP :- String "http://127.0.0.1:8975/light") ;; hardcoded-light themeless site
 
-;; Hybrid on; global engine invert OFF so ONLY the actor's per-document decision
+;; Dark mode on; global engine invert off so only the actor's per-document decision
 ;; can invert.
-(def HYBRID-JS :- String
+(def DARK-JS :- String
   (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', true);"
-       " Services.prefs.setStringPref('gjoa.darkmode.mode', 'hybrid');"
+       " Services.prefs.setStringPref('gjoa.darkmode.mode', 'dark');"
        " Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false);"
-       " return 'hybrid';"))
+       " return 'dark';"))
 
 ;; Inject an explicit white-bg / black-text probe box into the content doc.
 (def INJECT-BOX :- String
@@ -35,15 +35,15 @@
        " d.style.backgroundColor='rgb(255,255,255)'; d.style.color='rgb(0,0,0)';"
        " document.body.appendChild(d); return 'injected';"))
 
-;; Tier b: hybrid + the engine pre-paint default-invert. A themeless top doc is
+;; Tier b: dark mode + the engine pre-paint default-invert. A themeless top doc is
 ;; inverted by the ENGINE at construction (no actor round-trip); a native-dark
 ;; page is retracted pre-paint (PresShell::Initialize) and keeps its theme.
-(def HYBRID-B-JS :- String
+(def DARK-B-JS :- String
   (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', true);"
-       " Services.prefs.setStringPref('gjoa.darkmode.mode', 'hybrid');"
+       " Services.prefs.setStringPref('gjoa.darkmode.mode', 'dark');"
        " Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false);"
        " Services.prefs.setBoolPref('gjoa.darkmode.hybrid.default-invert', true);"
-       " return 'hybrid-b';"))
+       " return 'dark-b';"))
 
 (def DARK-TOP :- String "http://127.0.0.1:8975/dark") ;; authored-dark (#111) fixture
 
@@ -75,22 +75,22 @@
        "} catch(e){ done('ERR:'+(e&&e.message||e)); } })();"))
 
 (js/export (def tests :- Any
-  [(deftest "darkmode hybrid: actor inverts a themeless (light) page (painted, chrome-side)" [mn ctx]
+  [(deftest "darkmode: actor inverts a themeless light page (painted, chrome-side)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     (chrome-eval HYBRID-JS)
+     (chrome-eval DARK-JS)
      ;; actor measures /light -> 'active' -> sets colorInversionOverride -> recascade.
      ;; Read the PAINTED page chrome-side (content getComputedStyle discards under invert).
      (let [lum (js/await (.executeAsyncScript mn (render-lum-js LIGHT-TOP 150 100) []))]
-       (console/log (str "[dm-hybrid] actor /light center-lum=" lum))
-       (expect (< (Number lum) 80) (str "themeless-light should invert to DARK under the hybrid actor; lum=" lum))))
+       (console/log (str "[darkmode] actor /light center-lum=" lum))
+       (expect (< (Number lum) 80) (str "themeless-light should invert to dark; lum=" lum))))
    ;; Tier b: the ENGINE default-invert darkens a themeless page at cascade time,
    ;; without any actor round-trip. Inject a white box and assert it computes
    ;; black — proving (A) sets mColorInversion at construction.
    (deftest "darkmode tier-b: engine default-invert darkens a themeless page (painted)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     (chrome-eval HYBRID-B-JS)
+     (chrome-eval DARK-B-JS)
      (let [lum (js/await (.executeAsyncScript mn (render-lum-js LIGHT-TOP 150 100) []))]
-       (console/log (str "[dm-hybrid] tier-b /light center-lum=" lum))
+       (console/log (str "[darkmode] tier-b /light center-lum=" lum))
        (expect (< (Number lum) 80) (str "themeless-light should invert to DARK under tier-b default-invert; lum=" lum))))
    ;; Tier b: a native-dark page (authored #111) is left un-inverted pre-paint by
    ;; PresShell::Initialize -> ApplyHybridDefaultInvertIfThemeless (it only flips
@@ -99,20 +99,15 @@
    ;; white (inversion is off for this doc).
    (deftest "darkmode tier-b: native-dark page keeps its theme — white probe stays white (painted)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     (chrome-eval HYBRID-B-JS)
+     (chrome-eval DARK-B-JS)
      ;; /dark bakes a white probe top-left (0,0,80,80). Native-dark is NOT inverted
      ;; pre-paint (PresShell::Initialize only flips themeless pages), so the white
      ;; probe STAYS WHITE; if inversion wrongly fired it would go black. Painted read.
      (let [lum (js/await (.executeAsyncScript mn (render-lum-js DARK-TOP 40 40) []))]
-       (console/log (str "[dm-hybrid] tier-b /dark white-probe-lum=" lum))
+       (console/log (str "[darkmode] tier-b /dark white-probe-lum=" lum))
        (expect (> (Number lum) 150) (str "native-dark must NOT invert: the white probe should stay WHITE; lum=" lum))))
-   ;; v2 taxonomy regression guard: NO mode is OS-conditional anymore. The old
-   ;; OS-branching "system" (whose dark branch was secretly the hybrid engine) is
-   ;; gone. "dark" sets the pre-paint default-invert ON unconditionally (dark-first
-   ;; on ANY OS); "system" is conventional follow-OS with default-invert OFF on any
-   ;; OS. Spoof the OS via ui.systemUsesDarkTheme and assert default-invert tracks
-   ;; the MODE, not the OS — i.e. flipping the OS must NOT move it in either mode.
-   (deftest "darkmode v2: default-invert is per-mode, never OS-driven" [mn ctx]
+   ;; Dark sets pre-paint default-invert unconditionally. System follows the OS.
+   (deftest "darkmode: default-invert follows the selected appearance" [mn ctx]
      (js/await (.setContext mn "chrome"))
      ;; "dark": default-invert ON regardless of OS
      (chrome-eval (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', true);"
@@ -146,7 +141,7 @@
    (deftest "darkmode #49: explicit override pre-empts the engine flip (sync, pre-paint)" [mn ctx]
      (js/await (.setContext mn "chrome"))
      (chrome-eval (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', true);"
-                       " Services.prefs.setStringPref('gjoa.darkmode.mode', 'hybrid');"
+                       " Services.prefs.setStringPref('gjoa.darkmode.mode', 'dark');"
                        " Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false);"
                        " Services.prefs.setBoolPref('gjoa.darkmode.hybrid.default-invert', true);"
                        " Services.prefs.setStringPref('gjoa.darkmode.user.off', '127.0.0.1');"
@@ -183,7 +178,7 @@
    ;; /light page; force-native overrides -> it STAYS light. Painted, chrome-side.
    (deftest "darkmode override: user.force-native keeps a themeless-light page light (painted)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     (chrome-eval HYBRID-B-JS)
+     (chrome-eval DARK-B-JS)
      (chrome-eval "Services.prefs.setCharPref('gjoa.darkmode.user.force-native', '127.0.0.1'); return 'fn';")
      (let [lum (js/await (.executeAsyncScript mn (render-lum-js LIGHT-TOP 150 100) []))]
        (console/log (str "[dm-override] force-native /light center-lum=" lum))
@@ -195,7 +190,7 @@
    ;; the keep -> #111 page bg inverts to a light center. Painted, chrome-side.
    (deftest "darkmode override: user.force-invert inverts a native-dark page (painted)" [mn ctx]
      (js/await (.setContext mn "chrome"))
-     (chrome-eval HYBRID-B-JS)
+     (chrome-eval DARK-B-JS)
      (chrome-eval "Services.prefs.setCharPref('gjoa.darkmode.user.force-invert', '127.0.0.1'); return 'fi';")
      (let [lum (js/await (.executeAsyncScript mn (render-lum-js DARK-TOP 150 100) []))]
        (console/log (str "[dm-override] force-invert /dark center-lum=" lum))

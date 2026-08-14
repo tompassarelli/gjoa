@@ -31,11 +31,6 @@ artifacts/
 # Gjoa prep tool source cache (downloaded firefox tarballs)
 .cache/
 
-# Local measurement telemetry (test:report / test:profile read this) — run-local
-# data, not tracked; the README documents the dir + survives a fresh clone.
-metrics/*
-!metrics/README.md
-
 # IDE / OS
 .vscode/
 .DS_Store
@@ -50,14 +45,8 @@ gjoa-arx
 # Private, never-commit strategy/vision docs
 private-docs/
 
-# private security audit ledger — never tracked
-tools/security/audit-ledger.bjs
-
 # dev launcher auto-sync stamp (gjoa dev)
 .gjoa-sync-stamp
-
-# Build ledger moved to private-docs/build-logs/ (can leak nix paths / internal detail)
-BUILD-LEDGER.md
 
 # Internal agent notes / status / scratch / handoffs — NOT user-facing docs.
 # Keep out of git. Put private notes under docs/private/.

@@ -145,21 +145,6 @@ of in the writable `gjoa-dev/` overlay.
 
 ---
 
-## The Sunday rule (Rule #0 of CLAUDE.md)
-
-**One nix or full mach build per week. Sunday.**
-
-Any unexpected rebuild outside this window is a failure event. If you
-hit one, it goes in `private-docs/build-logs/` with a postmortem describing
-which preflight check should have caught it.
-
-You don't need to remember the preflight. Claude runs it when proposing
-a rebuild and shows you the result. **Your job is to look at the
-proposal and say go or wait.** You should never be debugging which
-flag to use.
-
----
-
 ## Are we using nixpkgs's Firefox?
 
 **No.** This is the most common confusion. The clear answer:
@@ -239,9 +224,7 @@ can see when they diverge.
 
 ## Pointers
 
-- [`CLAUDE.md`](../CLAUDE.md) — operational rules, Rule #0 (Sunday rebuild budget)
-- `private-docs/build-logs/` (private) — every build's date + outcome + postmortem
-- [`docs/build-and-dev-loop.md`](build-and-dev-loop.md) — long-form reference (file types, mach command details, troubleshooting)
+- [`CLAUDE.md`](../CLAUDE.md) — operational rules
+- [`docs/build-pipeline.md`](build-pipeline.md) — build lanes, import flow, and troubleshooting
 - [`docs/nix-dev-options.md`](nix-dev-options.md) — comparison of nix-dev paths, impurity tradeoffs
-- [`docs/dev-loader.md`](dev-loader.md) — chrome loader architecture
 - [`docs/security-policy.md`](security-policy.md) — Firefox version pin update cadence

@@ -53,9 +53,7 @@
    * Derived from the Gjøa — Amundsen's Northwest-Passage ship: the polar-night
    * sea, arctic ice, the aurora. Authored in OKLCH from THREE anchors; surfaces,
    * text tiers and states are DERIVED, not hand-set. Theming-v2 M0 (anchors) +
-   * M1/M2 (base16 ingestion + variants) (private-docs/theming-v2-brief.md).
-   * Non-breaking: the legacy --gjoa-bg/-fg/... names below alias the new tokens so
-   * the shield (further down) keeps working unchanged. */
+   * M1/M2 (base16 ingestion + variants). */
 
   /* ── base16 → gjoa token mapping (Layer 3 — the unification) ────────────────
    *
@@ -134,14 +132,6 @@
   --gjoa-danger:       light-dark(oklch(58% 0.180 25),  var(--gjoa-base08));
   --gjoa-success:      light-dark(oklch(58% 0.130 158), var(--gjoa-base0B)); /* aurora-green */
 
-  /* legacy aliases (M0 non-breaking; shield reads these) */
-  --gjoa-bg:           var(--gjoa-surface-0);
-  --gjoa-bg-elevated:  var(--gjoa-surface-1);
-  --gjoa-bg-popout:    var(--gjoa-surface-0);
-  --gjoa-fg:           var(--gjoa-text-normal);
-  --gjoa-fg-muted:     var(--gjoa-text-muted);
-  --gjoa-border:       var(--gjoa-line-subtle);
-  --gjoa-accent:       var(--gjoa-aurora);
 }
 
 /* ── Variant: Nord (the Arctic cousin) ──────────────────────────────────────
@@ -177,10 +167,9 @@
  * literal palette so transparent / unset tokens can't paint nothing. */
 @media -moz-pref("gjoa.theme.useSystem") {
   :root {
-    --gjoa-bg:           var(--sidebar-background-color, light-dark(#f9f9fb, #1c1b22));
-    --gjoa-bg-popout:    var(--sidebar-background-color, light-dark(#f9f9fb, #1c1b22));
-    --gjoa-bg-elevated:  var(--toolbar-field-background-color, light-dark(#ffffff, #2b2a33));
-    --gjoa-fg:           var(--sidebar-text-color, light-dark(#15141a, #fbfbfe));
+    --gjoa-surface-0:   var(--sidebar-background-color, light-dark(#f9f9fb, #1c1b22));
+    --gjoa-surface-1:   var(--toolbar-field-background-color, light-dark(#ffffff, #2b2a33));
+    --gjoa-text-normal: var(--sidebar-text-color, light-dark(#15141a, #fbfbfe));
   }
 }
 
@@ -200,85 +189,64 @@
 @media not -moz-pref("gjoa.theme.useSystem") {
   :root {
     /* Toolbar surfaces */
-    --toolbar-bgcolor:                          var(--gjoa-bg) !important;
-    --toolbar-color:                            var(--gjoa-fg) !important;
+    --toolbar-bgcolor:                          var(--gjoa-surface-0) !important;
+    --toolbar-color:                            var(--gjoa-text-normal) !important;
     --toolbar-color-scheme:                     light dark !important;
-    --lwt-accent-color:                         var(--gjoa-bg) !important;
-    --lwt-accent-color-inactive:                var(--gjoa-bg) !important;
-    --lwt-text-color:                           var(--gjoa-fg) !important;
+    --lwt-accent-color:                         var(--gjoa-surface-0) !important;
+    --lwt-accent-color-inactive:                var(--gjoa-surface-0) !important;
+    --lwt-text-color:                           var(--gjoa-text-normal) !important;
 
     /* Toolbar buttons */
-    --toolbarbutton-icon-fill:                  var(--gjoa-fg) !important;
-    --toolbarbutton-icon-fill-attention:        var(--gjoa-accent) !important;
-    --toolbarbutton-hover-background:           var(--gjoa-bg-elevated) !important;
-    --toolbarbutton-active-background:          color-mix(in srgb, var(--gjoa-fg) 15%, transparent) !important;
-    --lwt-toolbarbutton-icon-fill:              var(--gjoa-fg) !important;
-    --lwt-toolbarbutton-hover-background:       var(--gjoa-bg-elevated) !important;
-    --lwt-toolbarbutton-active-background:      color-mix(in srgb, var(--gjoa-fg) 15%, transparent) !important;
+    --toolbarbutton-icon-fill:                  var(--gjoa-text-normal) !important;
+    --toolbarbutton-icon-fill-attention:        var(--gjoa-aurora) !important;
+    --toolbarbutton-hover-background:           var(--gjoa-surface-1) !important;
+    --toolbarbutton-active-background:          color-mix(in srgb, var(--gjoa-text-normal) 15%, transparent) !important;
 
-    /* Urlbar / search field. Variable names are EXACT per FF152 source —
-     * the focus-state name is `--toolbar-field-background-color-focus`
-     * (suffix `-focus`, NOT `--toolbar-field-focus-background-color`). The
-     * expanded command palette / focused urlbar paints `.urlbar-background`
-     * with the `-focus` var (urlbar-searchbar.css:287); the resting field
-     * uses the plain var (urlbar-searchbar.css:139). Both must be set or the
-     * field falls back to FF's `rgb(66,65,77)` gray. The two `-focus`-WORD
-     * names below (`--toolbar-field-focus-*`) are LWT-legacy aliases FF still
-     * reads in some paths — kept for belt-and-suspenders. */
-    --toolbar-field-background-color:           var(--gjoa-bg-elevated) !important;
-    --toolbar-field-background-color-focus:     var(--gjoa-bg-elevated) !important;
-    --toolbar-field-color:                      var(--gjoa-fg) !important;
-    --toolbar-field-text-color:                 var(--gjoa-fg) !important;
-    --toolbar-field-text-color-focus:           var(--gjoa-fg) !important;
-    --toolbar-field-border-color:               var(--gjoa-border) !important;
-    --toolbar-field-focus-background-color:     var(--gjoa-bg-elevated) !important;
-    --toolbar-field-focus-color:                var(--gjoa-fg) !important;
-    --toolbar-field-focus-border-color:         var(--gjoa-accent) !important;
-    --lwt-toolbar-field-background-color:       var(--gjoa-bg-elevated) !important;
-    --lwt-toolbar-field-color:                  var(--gjoa-fg) !important;
-    --lwt-toolbar-field-border-color:           var(--gjoa-border) !important;
-    --lwt-toolbar-field-focus:                  var(--gjoa-bg-elevated) !important;
-    --lwt-toolbar-field-focus-color:            var(--gjoa-fg) !important;
-    /* In-field page-action button boxes (bookmark star, etc.). Real FF152
-     * names are `--urlbar-box-background-color{,-focus,-hover,-active}`
-     * (tokens.css:11-14) — the earlier `--urlbar-box-bgcolor` names were a
-     * typo and a no-op, so the boxes painted FF's `rgb(66,65,77)` gray. */
-    --urlbar-box-background-color:              var(--gjoa-bg-elevated) !important;
-    --urlbar-box-background-color-focus:        var(--gjoa-bg-elevated) !important;
-    --urlbar-box-background-color-hover:        color-mix(in srgb, var(--gjoa-fg) 8%, transparent) !important;
-    --urlbar-box-background-color-active:       color-mix(in srgb, var(--gjoa-fg) 14%, transparent) !important;
+    /* Urlbar and search field */
+    --toolbar-field-background-color:           var(--gjoa-surface-1) !important;
+    --toolbar-field-color:                      var(--gjoa-text-normal) !important;
+    --toolbar-field-border-color:               var(--gjoa-line-subtle) !important;
+    --toolbar-field-focus-background-color:     var(--gjoa-surface-1) !important;
+    --toolbar-field-focus-color:                var(--gjoa-text-normal) !important;
+    --toolbar-field-focus-border-color:         var(--gjoa-aurora) !important;
+
+    /* In-field page-action button boxes (bookmark star, etc.) */
+    --urlbar-box-background-color:              var(--gjoa-surface-1) !important;
+    --urlbar-box-background-color-focus:        var(--gjoa-surface-1) !important;
+    --urlbar-box-background-color-hover:        color-mix(in srgb, var(--gjoa-text-normal) 8%, transparent) !important;
+    --urlbar-box-background-color-active:       color-mix(in srgb, var(--gjoa-text-normal) 14%, transparent) !important;
 
     /* Urlbar dropdown row colors. Variables are LOWERCASE per Firefox source
      * (browser/themes/shared/urlbar/tokens.css:23 + view-nova.css:74) — earlier
      * camelCase overrides were silently ignored. Selected row tracks the
      * hover color so Ctrl+J/K navigation matches mouse hover exactly. */
-    --urlbarview-background-color-hover:        color-mix(in srgb, var(--gjoa-fg) 8%, transparent) !important;
-    --urlbarview-background-color-selected:     color-mix(in srgb, var(--gjoa-fg) 8%, transparent) !important;
-    --urlbarview-text-color-selected:           var(--gjoa-fg) !important;
+    --urlbarview-background-color-hover:        color-mix(in srgb, var(--gjoa-text-normal) 8%, transparent) !important;
+    --urlbarview-background-color-selected:     color-mix(in srgb, var(--gjoa-text-normal) 8%, transparent) !important;
+    --urlbarview-text-color-selected:           var(--gjoa-text-normal) !important;
 
     /* Sidebar */
-    --sidebar-background-color:                 var(--gjoa-bg) !important;
-    --sidebar-text-color:                       var(--gjoa-fg) !important;
-    --sidebar-border-color:                     var(--gjoa-border) !important;
-    --tabpanel-background-color:                var(--gjoa-bg) !important;
+    --sidebar-background-color:                 var(--gjoa-surface-0) !important;
+    --sidebar-text-color:                       var(--gjoa-text-normal) !important;
+    --sidebar-border-color:                     var(--gjoa-line-subtle) !important;
+    --tabpanel-background-color:                var(--gjoa-surface-0) !important;
 
     /* Tabs (gjoa hides the native strip but Firefox still reads these
      * for the tab-switcher previews etc.) */
-    --tab-selected-bgcolor:                     var(--gjoa-bg-elevated) !important;
-    --tab-selected-textcolor:                   var(--gjoa-fg) !important;
-    --tab-loading-fill:                         var(--gjoa-accent) !important;
+    --tab-selected-bgcolor:                     var(--gjoa-surface-1) !important;
+    --tab-selected-textcolor:                   var(--gjoa-text-normal) !important;
+    --tab-loading-fill:                         var(--gjoa-aurora) !important;
     --lwt-tab-line-color:                       transparent !important;
     --lwt-background-tab-separator-color:       transparent !important;
 
     /* Separators / chrome-content seams */
-    --toolbarseparator-color:                   var(--gjoa-border) !important;
+    --toolbarseparator-color:                   var(--gjoa-line-subtle) !important;
     --tabs-navbar-separator-color:              transparent !important;
     --chrome-content-separator-color:           transparent !important;
 
     /* Popups / autocomplete */
-    --arrowpanel-background:                    var(--gjoa-bg-elevated) !important;
-    --arrowpanel-color:                         var(--gjoa-fg) !important;
-    --arrowpanel-border-color:                  var(--gjoa-border) !important;
+    --arrowpanel-background:                    var(--gjoa-surface-1) !important;
+    --arrowpanel-color:                         var(--gjoa-text-normal) !important;
+    --arrowpanel-border-color:                  var(--gjoa-line-subtle) !important;
   }
 }
 
@@ -328,7 +296,7 @@
 #sidebar-container {
   overflow: visible !important;
   flex-direction: column !important;
-  background-color: var(--gjoa-bg) !important;
+  background-color: var(--gjoa-surface-0) !important;
   background-image: none !important;
 }
 
@@ -451,7 +419,7 @@
 
 #navigator-toolbox {
   flex: none !important;
-  background-color: var(--gjoa-bg) !important;
+  background-color: var(--gjoa-surface-0) !important;
   background-image: none !important;
   position: relative !important;
   z-index: 3 !important;
@@ -469,7 +437,7 @@
    * uses vertical tabs, so the nav-bar lost that rule and fell back to a
    * transparent/neutral-gray window background. Paint it with the gjoa surface
    * explicitly so it matches the toolbox + sidebar. */
-  background-color: var(--gjoa-bg) !important;
+  background-color: var(--gjoa-surface-0) !important;
 }
 
 /* -1px compensates for XUL toolbarbutton internal padding we can't override.
@@ -515,7 +483,7 @@
   padding-inline-end: 0 !important;
 }
 
-/* === gjoa nav-bar layout — OWNER ROW-ORDER SPEC v3 (supersedes v2) =========
+/* === gjoa nav-bar layout — owner row-order contract =========================
  * Two layouts, mode-conditional:
  *
  *   EXPANDED  [☰ hamburger][🧩 ext][□ sidebar-toggle] ←GAP→ [← → ↻]
@@ -592,7 +560,7 @@
   flex: 0 0 0 !important;
 }
 /* back → forward → refresh, pinned by `order` because neither DOM order nor the
- * nav-bar placements array is authoritative here (FF's vertical-tabs migration
+ * nav-bar placements array is authoritative here (Firefox vertical-tabs state
  * reorders the array without moving the non-removable back/forward nodes).
  * Negative keeps the cluster ahead of the default-order urlbar/springs/ext. */
 #nav-bar > #nav-bar-customization-target > #back-button {
@@ -628,7 +596,7 @@
 }
 
 /* --- EXPANDED-mode nav-bar (inside #sidebar-container) ----------------------
- * Target (owner spec v3, supersedes v2): [☰ hamburger][🧩 ext][□ sidebar] ──gap── [← → ↻]
+ * Target: [☰ hamburger][🧩 ext][□ sidebar] ──gap── [← → ↻]
  * sidebar-toggle now joins the LEFT cluster after extensions; refresh is
  * rightmost.
  *
@@ -846,8 +814,8 @@
   display: flex;
   align-items: center;
   padding-inline: 8px;
-  background-color: var(--toolbar-field-background-color, var(--gjoa-bg-elevated)) !important;
-  color: color-mix(in srgb, var(--gjoa-fg) 55%, transparent);
+  background-color: var(--toolbar-field-background-color, var(--gjoa-surface-1)) !important;
+  color: color-mix(in srgb, var(--gjoa-text-normal) 55%, transparent);
   font: message-box;
   font-size: inherit;
   white-space: nowrap;
@@ -887,7 +855,7 @@ Preserve these (security warnings):
   width: 100%;
   height: 46px;
   box-sizing: border-box;
-  background-color: var(--gjoa-bg);
+  background-color: var(--gjoa-surface-0);
   background-image: none;
 }
 
@@ -1188,7 +1156,7 @@ Preserve these (security warnings):
   align-items: center !important;
   gap: 28px !important;
   padding: 10px 16px 11px !important;
-  border-top: 1px solid color-mix(in srgb, var(--gjoa-border) 45%, transparent) !important;
+  border-top: 1px solid color-mix(in srgb, var(--gjoa-line-subtle) 45%, transparent) !important;
   font: 11px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif !important;
   color: var(--gjoa-text-faint) !important;
   pointer-events: none !important;
@@ -1292,7 +1260,7 @@ Preserve these (security warnings):
   pointer-events: none !important;
   border-radius: var(--gjoa-card-radius) !important;
   box-shadow: var(--gjoa-card-shadow) !important;
-  background-color: var(--gjoa-bg) !important;
+  background-color: var(--gjoa-surface-0) !important;
   transition: transform var(--gjoa-transition-duration) var(--gjoa-transition-easing) !important;
 }
 
@@ -1320,7 +1288,7 @@ Preserve these (security warnings):
 }
 
 /* Round the card cleanly: the moved-in toolbox / nav-bar paint transparent so the
- * card's own rounded --gjoa-bg shows at the corners (mirrors the static card). */
+ * card's own rounded --gjoa-surface-0 shows at the corners (mirrors the static card). */
 #sidebar-container[data-gjoa-compact] #navigator-toolbox,
 #sidebar-container[data-gjoa-compact] #nav-bar {
   background-color: transparent !important;
@@ -1461,7 +1429,7 @@ Preserve these (security warnings):
   }
 
   /* Round BOTH cards on all four corners (radius = --gjoa-card-radius). The
-   * card's own --gjoa-bg background paints the rounded corners. */
+   * card's own --gjoa-surface-0 background paints the rounded corners. */
   #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-container,
   #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox {
     border-radius: var(--gjoa-card-radius) !important;
@@ -1471,11 +1439,11 @@ Preserve these (security warnings):
    * expansion must spill past the card on click). So we can't clip the card to
    * round its top corners. Instead, make the topmost painted children — the
    * moved-in navigator-toolbox and its nav-bar — TRANSPARENT inside the card so
-   * the drawer card's own rounded --gjoa-bg background shows at the corners
+   * the drawer card's own rounded --gjoa-surface-0 background shows at the corners
    * instead of a square opaque toolbar rect. (Same colour, so it only changes
    * the corner; the toolbar still reads as gjoa-bg.) */
   #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-container {
-    background-color: var(--gjoa-bg) !important;
+    background-color: var(--gjoa-surface-0) !important;
   }
   #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-container #navigator-toolbox,
   #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-container #nav-bar {
@@ -1486,7 +1454,7 @@ Preserve these (security warnings):
    * breakout child, so clipping is safe and is what actually rounds the page's
    * corners. */
   #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #tabbrowser-tabbox {
-    background-color: var(--gjoa-bg) !important;
+    background-color: var(--gjoa-surface-0) !important;
     overflow: clip !important;
   }
 

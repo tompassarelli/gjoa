@@ -8,8 +8,7 @@
 ;;   - shared infra (runner, bundler, dsl, marionette, tags.json) → can't
 ;;     scope safely, fall back to the full FAST lane (--exclude-lane slow,network)
 ;;
-;; Spawns the runner with the resolved flags, inheriting stdio so the
-;; package.json pipe into record-metrics.js still works.
+;; Spawns the runner with the resolved flags and inherits stdio.
 (ns gjoa.tools.test-driver.changed
   (:require [fs :refer [existsSync readFileSync]]
             [path :refer [join]]

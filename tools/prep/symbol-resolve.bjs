@@ -6,7 +6,6 @@
 ;;   resolved  — the symbol is present/reachable (green)
 ;;   not-found — moved / deleted / field gone (RED — the build will break)
 ;;   ambiguous — cfg-gated / deep-glob / missing objdir (warn, never a false green)
-;; Design: private-docs/research-fork-currency-gate-l.md (Gate L v1).
 (ns gjoa.tools.prep.symbol-resolve
   (:require [fs :refer [existsSync readFileSync]]
             [path :refer [join dirname]]

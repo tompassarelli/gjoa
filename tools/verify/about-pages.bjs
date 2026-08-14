@@ -3,7 +3,7 @@
 ;; pointer actor, against a real baked binary.
 ;;
 ;; Spawns gjoa headless under Marionette and drives PRIVILEGED chrome JS:
-;;   1. about:sovereignty / about:gjoa / about:knobs each resolve to a
+;;   1. about:sovereignty / about:gjoa each resolve to a
 ;;      registered nsIAboutModule (getURIFlags succeeds = the factory is live).
 ;;   2. about:preferences gets the gjoa pointer injected (#gjoa-prefs-pointer)
 ;;      by the GjoaAboutPrefs child actor — proving the window-actor wiring.
@@ -34,7 +34,7 @@
 ;; Chrome-context: does each about: name resolve to a live nsIAboutModule?
 (def ABOUT-PROBE :- String
   (str "const out = [];\n"
-       "for (const what of ['sovereignty','gjoa','knobs']) {\n"
+       "for (const what of ['sovereignty','gjoa']) {\n"
        "  const contract = '@mozilla.org/network/protocol/about;1?what=' + what;\n"
        "  let registered = contract in Components.classes;\n"
        "  let flags = null, err = null;\n"

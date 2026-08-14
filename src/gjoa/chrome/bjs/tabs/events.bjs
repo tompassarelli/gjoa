@@ -273,7 +273,6 @@
                         (.startsWith spec "about:newtab")
                         (.startsWith spec "about:home")
                         (.startsWith spec "about:gjoa")
-                        (.startsWith spec "about:knobs")
                         (.startsWith spec "about:sovereignty"))
                 (try (.setIcon gBrowser tab "chrome://gjoa/content/gjoa.svg")
                      (catch Any _e nil))))

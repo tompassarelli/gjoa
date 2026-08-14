@@ -23,14 +23,6 @@
 (defn show-children [el :- Any] :- Any
   (.forEach (Array/from (.-children el)) #(set! (.-hidden %) false)))
 
-;; URL bail list — DELIBERATELY EMPTY. It used to blanket-disable vim on privileged
-;; about: pages because (PaleFox era) we couldn't tell whether the user was typing
-;; into a form on a page we didn't own. We own the browser now: the content-focus
-;; state manager (contentInputFocused) reads editable focus on EVERY page — including
-;; privileged parent-process ones, via the <browser>'s contentDocument — so vim works
-;; on every about: page and yields only when a form field is actually focused. Kept
-;; as a structured escape hatch in case one page ever needs a hard bail.
-(def PRIVILEGED-BAIL-URI-PREFIXES :- Any [])
 ;; THE command registry — the single source of truth for the global (normal-mode)
 ;; vim keymap. Each command has a stable :id (what about:vim and `:bind` reference,
 ;; and the gjoa.keys.<id>.enabled toggle), a :default key, a :desc, and a :cat.
@@ -570,11 +562,6 @@
             (let [uri (current-spec)]
               (if (not uri) "" (.toLowerCase (.-hostname (URL. uri)))))
             (catch Any _e "")))
-
-        is-privileged-uri (fn [] :- Bool
-          (try
-            (.some PRIVILEGED-BAIL-URI-PREFIXES #(.startsWith (current-spec) %))
-            (catch Any _e false)))
 
         current-host-blacklisted (fn [] :- Bool
           (let [host (current-host)]
@@ -1579,7 +1566,7 @@
                             "gjoa.tabs.newTabPosition" arg)
                           (modeline-msg (str ":tabpos -> " arg) 2500)))))
 
-                (or (= name "space") (= name "spc"))
+                (= name "space")
                 (let [sub (.toLowerCase (or (aget args 1) "list"))
                       rest (.trim (.join (.slice args 2) " "))]
                   (cond
@@ -1843,7 +1830,6 @@
               (let [a (.-activeElement document)]
                 (when (and (not (.isActive picker))
                            (not (.-renaming vs))
-                           (not (is-privileged-uri))
                            (not (.contentInputFocused contentFocus))
                            (not (current-host-blacklisted))
                            (not (and a (not= a (.-panel state))

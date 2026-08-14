@@ -6,9 +6,7 @@
 ;; Each record is `<name>\t<sha256-of-patch-file>`. A patch is skipped ONLY when
 ;; its name is recorded AND the recorded hash matches the patch file's current
 ;; hash. A CHANGED patch (same name, new content) hashes differently, so it is
-;; re-applied instead of silently skipped (which once nearly shipped a stale
-;; 0008). Backward-compatible: an old record with no tab/hash → unknown content
-;; → treated as needs-recheck (re-hash + re-apply).
+;; re-applied instead of silently skipped.
 ;;
 ;; We use git apply rather than git am because mozilla-central's tree isn't
 ;; commit-aware in the way we'd need — we just want a plain patch application.
@@ -19,7 +17,7 @@
             [gjoa.tools.prep.patch-header :refer [check-all]]
             [gjoa.tools.prep.log :refer [log]]))
 (define-mode strict)
-(declare-extern [Bun process] Any)
+(declare-extern [Bun process Error] Any)
 
 (def APPLIED-LOG :- String ".gjoa-applied-patches")
 
@@ -52,10 +50,7 @@
       (js/await (run-git ["git" "-c" "user.email=prep@gjoa" "-c" "user.name=prep"
                           "commit" "-q" "-m" "vanilla mozilla-central"] ENGINE-DIR)))))
 
-;; Read the applied-patches log into a Map of name -> recorded-hash. Each line is
-;; `<name>\t<hash>`. A legacy line with no tab (old format, name only) yields a
-;; nil hash — which the apply loop reads as "content unknown, re-check" and
-;; re-applies (then records the real hash going forward).
+;; Read the applied-patches log into a Map of name -> recorded-hash.
 (defn readApplied [] :- Any
   (let [path (join ENGINE-DIR APPLIED-LOG)
         applied (Map.)]
@@ -65,12 +60,10 @@
             lines (.filter (.split text "\n") (fn [s] (.-length (.trim s))))]
         (.forEach lines
           (fn [line :- String]
-            (let [tab (.indexOf line "\t")]
-              (if (< tab 0)
-                ;; Legacy record: name only, no hash → nil (needs recheck).
-                (.set applied (.trim line) nil)
-                (.set applied (.trim (.slice line 0 tab))
-                              (.trim (.slice line (+ tab 1))))))))
+            (let [m (.match line (RegExp. "^([^\\t]+)\\t([0-9a-f]{64})$"))]
+              (when (not m)
+                (throw (Error. (str "invalid " APPLIED-LOG " record: " line))))
+              (.set applied (.trim (aget m 1)) (aget m 2)))))
         applied))))
 
 ;; Persist the applied-patches log from a Map of name -> hash, sorted by name,
@@ -144,10 +137,7 @@
                 (let [name (aget allPatches i)]
                   (let [curHash (js/await (sha256OfFile (join PATCHES-DIR name)))
                         recordedHash (.get applied name)]
-                    ;; Skip ONLY when the name is recorded AND its hash matches the
-                    ;; patch file's current content. A missing record OR a nil hash
-                    ;; (legacy name-only entry) OR a hash mismatch (changed patch)
-                    ;; all fall through to re-apply — closing the stale-patch hole.
+                    ;; Skip only when the name and current content hash match.
                     (if (and (.has applied name) (= recordedHash curHash))
                       (recur (+ i 1) newCount)
                       (do

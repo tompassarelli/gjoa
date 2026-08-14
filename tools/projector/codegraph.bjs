@@ -9,7 +9,7 @@
 ;;   who-calls <fn>     direct callers of a function
 ;;   blast-radius <fn>  transitive dependents (what breaks if you change it)
 ;;   leverage [N]       functions ranked by blast-radius size
-;;   emit [--fram]      the graph as claim triples (EDN, or fram log)
+;;   emit               the graph as claim triples
 ;;   stats              corpus totals
 ;;
 ;; WHY emitted JS and not `beagle callers`: `beagle callers` under-reports —
@@ -236,7 +236,7 @@
 ;; ── Claim emission ─────────────────────────────────────────────────────────
 ;; Each function node and each call edge becomes a triple. Subject ids are the
 ;; node's integer index; predicates: kind/name/module/calls/leverage.
-(defn emit-claims! [graph :- Any fram? :- Bool] :- Any
+(defn emit-claims! [graph :- Any] :- Any
   (let [ids (.filter (.-ids graph) (fn [id :- String] :- Bool (not (.startsWith id TOPLEVEL))))
         idx (Map.)
         _n (doseq [i (.keys ids)] (.set idx (aget ids i) i))
@@ -252,17 +252,9 @@
         (doseq [callee (Array/from (.get (.-fwd graph) id))]
           (when (.has idx callee)
             (push! i "calls" (.get idx callee) true)))))
-    (when fram?
-      (doseq [i (.keys rows)]
-        (let [r (aget rows i)]
-          (.log console (str "{:tx " (+ i 1) ", :op \"assert\", :l " (.-s r)
-                             ", :p " (JSON/stringify (.-p r))
-                             ", :r " (if (.-link r) (.-o r) (JSON/stringify (.-o r)))
-                             ", :frame \"gjoa-codegraph\"}")))))
-    (when (not fram?)
-      (doseq [r rows]
-        (.log console (str "[" (.-s r) " " (JSON/stringify (.-p r)) " "
-                           (if (.-link r) (.-o r) (JSON/stringify (.-o r))) "]"))))
+    (doseq [r rows]
+      (.log console (str "[" (.-s r) " " (JSON/stringify (.-p r)) " "
+                         (if (.-link r) (.-o r) (JSON/stringify (.-o r))) "]")))
     (.error console (str "\n; " (.-length ids) " nodes, " (.-length rows) " claims"))))
 
 (defn stats! [graph :- Any] :- Any
@@ -301,7 +293,7 @@
 (js/export (defn build-graph! [] :- Any (build-graph)))
 
 (defn usage! [] :- Any
-  (.log console "usage: codegraph <who-calls|blast-radius> <fn> | leverage [N] | emit [--fram] | stats")
+  (.log console "usage: codegraph <who-calls|blast-radius> <fn> | leverage [N] | emit | stats")
   (.exit process 2))
 
 (defn main! [] :- Any
@@ -313,7 +305,7 @@
       (= cmd "who-calls") (if arg (who-calls! graph arg) (usage!))
       (= cmd "blast-radius") (if arg (blast-radius! graph arg) (usage!))
       (= cmd "leverage") (leverage! graph (or (and arg (Number/parseInt arg 10)) 20))
-      (= cmd "emit") (emit-claims! graph (= arg "--fram"))
+      (= cmd "emit") (emit-claims! graph)
       (= cmd "stats") (stats! graph)
       :else (usage!))))
 

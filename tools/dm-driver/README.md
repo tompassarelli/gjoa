@@ -6,15 +6,15 @@ Two tiers:
 
 | tier | command | what it does | wall-time |
 |------|---------|--------------|-----------|
-| **check** (default) | `bun run dm:check` | each target in **engine** mode at the default darkness (`bgLightness 16`); assert mean luminance < per-target max + (for the white page) bg pixel ≈ `#0d0d0d`. PASS/FAIL table, nonzero exit on any fail. | < ~2 min |
-| **deep** | `bun run dm:check:deep` | sweep `{modes} × {bgLightness} × {window sizes} × {targets}`; capture + measure each, write a results matrix + thumbnails. Engine-mode rows are hard asserts; other modes are captures for visual review. | ~15–20 min (full) |
+| **check** (default) | `bash tools/dm-driver/dm-check.sh` | each target in **uniform** mode at the default darkness (`bgLightness 16`); assert mean luminance < per-target max + (for the white page) bg pixel ≈ `#0d0d0d`. PASS/FAIL table, nonzero exit on any fail. | < ~2 min |
+| **deep** | `bash tools/dm-driver/dm-check.sh --deep` | sweep `{modes} × {bgLightness} × {window sizes} × {targets}`; capture + measure each, write a results matrix + thumbnails. Uniform rows are hard asserts; other modes are captures for visual review. | ~15–20 min (full) |
 
-Rendering needs the mach devShell (the binary's runtime libs); the `bun run`
-scripts wrap the call in `nix develop .#mach`. To run the script directly:
+Rendering needs the mach environment because the binary loads its runtime libraries.
+With the repository direnv active:
 
 ```sh
-nix develop .#mach -c bash tools/dm-driver/dm-check.sh          # check
-nix develop .#mach -c bash tools/dm-driver/dm-check.sh --deep   # deep
+bash tools/dm-driver/dm-check.sh          # check
+bash tools/dm-driver/dm-check.sh --deep   # deep
 ```
 
 Image analysis (`magick`) runs in the default shell; only the render step needs
@@ -26,7 +26,7 @@ thumbnails + `deep-matrix.tsv` land there too.
 `gjoa --headless … -screenshot OUT.png URL` renders a page then **exits** — no
 long-lived browser, no teardown race. Dark mode is set per-render via a fresh
 profile `user.js` whose prefs mirror `src/gjoa/chrome/bjs/dark-mode/index.bjs`
-(`apply-mode!`): engine mode = `content-override=1` + `invert.enabled=true`
+(`apply!`): uniform mode = `content-override=1` + `invert.enabled=true`
 (force light theme so the engine inverts everything to the `bgLightness` floor —
 the Dark-Reader-style uniform dark).
 
@@ -62,14 +62,14 @@ empty PNG.
     }
   ],
   "deep": {                     // axes for the --deep sweep
-    "modes":        ["system", "hybrid", "auto", "engine"],
+    "modes":        ["dark", "uniform", "light", "system", "off"],
     "bgLightness":  [8, 16, 24],
     "windowSizes":  ["1280,800", "768,1024"]
   }
 }
 ```
 
-**Assertions** (check tier, and engine rows of the deep tier):
+**Assertions** (check tier, and uniform rows of the deep tier):
 
 - `meanLum <= meanLumMax` — the whole screenshot's perceived brightness is in
   the dark band.
@@ -77,10 +77,10 @@ empty PNG.
   `bgTolerance` (per-channel, 0..1) of `bgHex`. Omit `bg*` for real sites whose
   backgrounds aren't a single flat color.
 
-Non-engine deep rows are **captures, not asserts** — `system`/`auto`/`hybrid` on
-a light site legitimately stay light (they follow the OS theme / honor the
-site's own theme), so asserting "dark" there would be wrong. They're recorded in
-the matrix + thumbnails for eyeball review.
+Other deep rows are **captures, not asserts**. `dark` preserves a site's native
+dark theme, `system` follows the OS, `light` forces light, and `off` parks the
+engine, so a single dark-band assertion is not appropriate for those modes. The
+matrix and thumbnails retain their measured output for visual review.
 
 ### Extending
 
@@ -104,4 +104,3 @@ alternate manifest with `DM_MANIFEST=/path/to.json`. Other env overrides:
   ```
   (Launch gjoa with `--marionette --remote-allow-system-access` and
   `GJOA_DEV_LOADER=1 GJOA_ALLOW_INSECURE=1` first.)
-```

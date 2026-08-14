@@ -42,11 +42,9 @@
 ;; binary's provenance metadata (proof it was built against UNMODIFIED Mozilla
 ;; blobs). No build right now — we only compute + commit the local manifest.
 (def IDENTITY :- String (join REPO "configs" "provenance-identity.json"))
-;; L5: committable (non-gitignored) output of the provenance × security
-;; cross-check. private-docs/security-findings.edn is the GITIGNORED human
-;; audit ledger; THIS is the machine artifact a gate can diff in a tracked file.
-(def SEC-LEDGER :- String (join REPO "configs" "provenance-security-findings.json"))
-(def FF :- String (join (.-HOME (.-env process)) "code" "reference" "firefox"))
+;; L5: tracked output of the provenance × security cross-check.
+(def SEC-REPORT :- String (join REPO "configs" "provenance-security-findings.json"))
+(def FF :- String (join (.-HOME (.-env process)) "code" "resources" "firefox"))
 
 (defn gjoa-version [] :- String
   (.-version (.-firefox (JSON/parse (readFileSync (join REPO "gjoa.json") "utf8")))))
@@ -152,21 +150,17 @@
     (.match pth (RegExp. "\\.(mjs|js)$")) "sys.mjs"
     :else "build"))
 
-;; Lock entries are EITHER the legacy bare-OID string (pre-L2 lock) OR the L2
-;; shape {:oid <string> :hunks [...]}. These read both so an un-relocked file
-;; never crashes check! (an old lock degrades to whole-file-OID precision).
 (defn entry-oid [e :- Any] :- String
-  (if (and e (.-oid e)) (.-oid e) e))
+  (.-oid e))
 (defn entry-hunks [e :- Any] :- Any
-  (if (and e (.-hunks e)) (.-hunks e) []))
+  (.-hunks e))
 
 ;; L4 — baked provenance identity. One sha256 over the WHOLE locked surface:
 ;; every (patch, file) in sorted order, its blob OID, then each hunk's
 ;; header+range+hash in locked (diff) order. Deterministic (lock! emits a stable
 ;; order), so re-locking the same FF tree reproduces the same digest. One record
 ;; per line (newline-joined); fields are paths (no spaces) / hex OIDs / hunk
-;; lines that always start "  @@" — unambiguous. Reads both the legacy bare-OID
-;; and the L2 object entry. This single value is the supply-chain coordinate the
+;; lines that always start "  @@" — unambiguous. This single value is the supply-chain coordinate the
 ;; build would stamp into the binary: "built against exactly these Mozilla bytes."
 (defn aggregate-digest [patches :- Any] :- String
   (let [p (or patches {})
@@ -215,8 +209,7 @@
                               "each hunk's baseline old-side line span hashed at the Firefox tag. `check` diffs vs "
                               "any ref: identical OID => provably unrotted (skip); OID changed but every hunk hash "
                               "intact => still apply-safe (edit was OUTSIDE the hunks); a changed hunk => potential "
-                              "conflict; \"absent\" => a file gjoa creates (collision-checked). Legacy bare-string "
-                              "entries still read (degrade to whole-file precision). `digest` = one sha256 over the "
+                              "conflict; \"absent\" => a file gjoa creates (collision-checked). `digest` = one sha256 over the "
                               "whole locked surface (baked-identity coordinate; self-verifying — `check` flags a "
                               "hand-edit). Regenerate after any patch/baseline change: provenance lock.")
                :baseline version
@@ -263,8 +256,7 @@
       (.push drift (str "lock baseline " (.-baseline lock) " ≠ gjoa.json " version " — re-lock")))
     ;; L4 baked-identity integrity: the lock's aggregate digest must match its own
     ;; content — a hand-edited OID/hunk (the supply-chain tamper case) breaks it.
-    ;; Skipped for legacy locks with no digest (degrade, never false-fail).
-    (when (and (.-digest lock) (not= (.-digest lock) (aggregate-digest (.-patches lock))))
+    (when (not= (.-digest lock) (aggregate-digest (.-patches lock)))
       (.push drift "lock digest ≠ recomputed content digest — hand-edited/tampered, re-lock"))
     (let [names (list-patches)
           lockPatches (.-patches lock)]
@@ -363,7 +355,7 @@
         d (aggregate-digest (.-patches lock))
         stored (.-digest lock)]
     (console/log (str "provenance digest @ " (.-tag lock) ": " d))
-    (when (and stored (not= stored d))
+    (when (not= stored d)
       (console/log (str "  ✗ stored lock digest " stored " ≠ recomputed " d " — lock hand-edited/tampered; re-lock")))
     (console/log "  (build-gated: the compile stamps this into the binary's provenance metadata)")))
 
@@ -374,7 +366,7 @@
 ;; files at <ref>: if the blob/hunk at the mitigation's anchor moved, Mozilla may
 ;; have fixed it themselves (drop the patch) or refactored around it (re-verify
 ;; the mitigation). Findings go to configs/provenance-security-findings.json (a
-;; tracked, diffable artifact — unlike the gitignored private-docs ledger).
+;; tracked, diffable artifact.
 ;; VACUOUSLY GREEN today: zero patches carry a `# security:` block; the overlay
 ;; mitigations in configs/security-mitigations.json are chrome JS (src/gjoa/…),
 ;; not upstream-anchored, so they are out of provenance scope by construction.
@@ -418,7 +410,6 @@
                           "rides on — they may have fixed it (drop the patch) or refactored (re-verify). Empty list = "
                           "the honest baseline (zero security-tagged patches). Overlay mitigations in "
                           "configs/security-mitigations.json are chrome JS, not upstream-anchored — out of scope here. "
-                          "The gitignored human ledger is private-docs/security-findings.edn; THIS is the tracked machine artifact. "
                           "Regenerate via `upstream-provenance check --security`.")
                :generator "tools/prep/upstream-provenance.bjs (check --security)"
                :baseline (.-baseline lock)
@@ -426,7 +417,7 @@
                :ref ref
                :securityPatches sec-names
                :findings findings}]
-      (writeFileSync SEC-LEDGER (str (JSON/stringify doc nil 2) "\n"))
+      (writeFileSync SEC-REPORT (str (JSON/stringify doc nil 2) "\n"))
       (console/log (str "provenance × security — lock @ " (.-tag lock) " vs " ref
                         (if integrity "  (integrity check)" "")))
       (if (= (.-length sec-names) 0)

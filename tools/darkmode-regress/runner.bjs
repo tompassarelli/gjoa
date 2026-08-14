@@ -229,16 +229,11 @@
               t1 (if verify? (parse-normalizer-timings dumplog) [])
               _settle2 (when (and verify? (= (.-length t1) 0)) (js/await (sleep! 2500)))
               norm-timings (if (and verify? (= (.-length t1) 0)) (parse-normalizer-timings dumplog) t1)]
-          (doseq [t norm-timings]
-            (try (.appendFileSync fs "metrics/darkmode-normalize.jsonl"
-                   (str (JSON/stringify (.assign Object {:ts (.now Date)} t)) "\n"))
-                 (catch Error e nil)))
           (when (> (.-length norm-timings) 0)
             (let [mss (.map norm-timings (fn [t :- Any] :- Any (.-ms t)))
                   tot (.reduce mss (fn [a :- Any b :- Any] :- Any (+ a b)) 0)]
               (.log console (str "normalizer: " (.-length norm-timings) " passes measured, "
-                                 "mean " (.round Math (/ tot (.-length norm-timings))) "ms"
-                                 " → metrics/darkmode-normalize.jsonl"))))
+                                 "mean " (.round Math (/ tot (.-length norm-timings))) "ms"))))
           (.writeFileSync fs (.join path outdir "report.json")
             (JSON/stringify {:threshold threshold :normalize normalize? :results results
                              :normalizeTimings norm-timings} nil 2))

@@ -47,8 +47,7 @@ gjoa hotreload
 ```
 
 `gjoa build faster` requires `engine/obj-*/` to already exist (one
-prior `gjoa build` cold-built it). If it doesn't, run a full
-`gjoa build` first — that's a Sunday-only commitment.
+prior `gjoa build` cold-built it). If it doesn't, run a full `gjoa build` first.
 
 ## I want to run the tests
 
@@ -61,10 +60,8 @@ gjoa test:integration:nix           # same suite against result/bin/gjoa
 
 ## I want to rebuild from scratch (Lane 3)
 
-Before you do anything, **read CLAUDE.md Rule #0** and run `bun run preflight`
-(gates A–W). The Sunday-only cadence rule is gone (rescinded 2026-06-15) — build
-whenever it's needed, but run `import` + `preflight` first so a stale engine or a
-`.rej` doesn't waste the compile, and log the outcome to `private-docs/build-logs/`.
+Run `bun run import` and `bun run preflight` first so the engine and patch surface
+are current before the compile.
 
 If approved:
 

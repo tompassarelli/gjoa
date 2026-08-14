@@ -1,5 +1,5 @@
 {
-  "$comment": "Per-mitigation regression manifest (#121). Each entry binds a SHIPPED security mitigation to the source that implements it + (where applicable) behavioral selector cases. preflight Gate R asserts every `mustMatch` regex still hits `file`, and for the cosmetic entry EXTRACTS the UNSAFE_SELECTOR regex literal from source and re-tests it against mustReject/mustAccept. A mitigation that silently rots (belt deleted, cap removed, pref flipped) goes RED here BEFORE a build. The `id` keys cross-reference private-docs/security-findings.edn :status mitigated/fixed — tools/security/audit-ledger.bjs `findings` warns if a mitigated finding has no gate here.",
+  "$comment": "Each entry binds a shipped security mitigation to its source and behavioral selector cases. Preflight Gate R asserts every mustMatch regex still hits and re-tests extracted validator regexes against mustReject/mustAccept.",
   "mitigations": {
     "cosmetic-css-injection-unvalidated-selectors": {
       "file": "src/gjoa/toolkit/components/content-classifier/GjoaCosmeticChild.sys.mjs",

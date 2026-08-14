@@ -1,15 +1,6 @@
 #lang beagle/js
-;; Regression: vim must WORK on gjoa's own privileged chrome-UI pages (about:gjoa),
-;; and YIELD when a form field there is focused — WITHOUT bailing by URL.
-;;
-;; History: vim used to blanket-bail on about: pages (PaleFox-era crutch for lacking
-;; privileged focus state). The user (2026-06-22): "we own the browser now — every about
-;; page should work with vim, and the state manager should know if I'm editing a
-;; form." Fix: contentInputFocused reads editable focus on privileged parent-process
-;; pages directly off the <browser>'s contentDocument (the content frame script can't
-;; run there). This test proves BOTH halves on about:gjoa in one run:
-;;   A. no form focused → 't' opens the tabs picker (vim is live, NOT bailed).
-;;   B. a text input focused → 't' opens NOTHING (state manager yields to typing).
+;; Vim works on privileged chrome UI and yields while a form field is focused.
+;; This exercises both focus states on about:gjoa in one run.
 (ns gjoa.tests.integration.vim-privileged-bail
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for sleep]]))
 (define-mode strict)

@@ -9,11 +9,9 @@
 ;;     without native dark support.
 ;; Modes (pref gjoa.darkmode.mode): "dark" (DEFAULT — native-dark sites keep their own
 ;; theme, themeless pages engine-inverted into the Darkness band), "uniform" (force
-;; EVERY site to one controlled darkness), "system" (conventional follow-OS, gjoa adds
-;; no inversion), "off". Legacy about:config ids fold in: hybrid/auto -> dark, engine ->
-;; uniform, filter -> the legacy compositor invert (about:config-only).
+;; every site to one controlled darkness), "light", "system" (follow the OS), and "off".
 (ns gjoa.dark-mode.index
-  (:require [gjoa.macros :refer [html-new attr! rmattr! pref-bool pref-str pref-int
+  (:require [gjoa.macros :refer [attr! rmattr! pref-bool pref-str
                                  set-pref-bool! set-pref-str! set-pref-int! on1!]]))
 (define-mode strict)
 
@@ -21,17 +19,9 @@
 
 (def PREF-ENABLED :- String "gjoa.darkmode.enabled")
 (def PREF-MODE :- String "gjoa.darkmode.mode")
-;; One-shot marker for the v2 taxonomy migration (see migrate-mode!). Pre-cutover
-;; "system" meant the OS-conditional hybrid engine; the new "system" is conventional
-;; pass-through, so a stored "system" is rewritten to "dark" exactly once.
-(def PREF-MIGRATED :- String "gjoa.darkmode.mode.migrated-v2")
 (def PREF-CONTENT-OVERRIDE :- String "layout.css.prefers-color-scheme.content-override")
 ;; gjoa engine-level dark mode flag (read by nsPresContext::UpdateColorInversion).
 (def PREF-INVERT :- String "gjoa.darkmode.invert.enabled")
-;; "Darkness" knob (the bgLightness floor) + a one-shot marker to heal profiles stuck
-;; on the pre-cutover backwards knob (see migrate-darkness!).
-(def PREF-BGLIGHTNESS :- String "gjoa.darkmode.invert.bgLightness")
-(def PREF-DARKNESS-MIGRATED :- String "gjoa.darkmode.invert.darkness-knob-migrated-v1")
 ;; Per-site override host-lists (active in "dark" mode, via GjoaDarkmodeParent).
 (def PREF-FORCE-NATIVE :- String "gjoa.darkmode.user.force-native")
 (def PREF-FORCE-INVERT :- String "gjoa.darkmode.user.force-invert")
@@ -56,14 +46,7 @@
 (def PREF-RFP-OVERRIDES :- String "privacy.resistFingerprinting.overrides")
 (def RFP-COLORSCHEME-EXEMPT :- String "+AllTargets,-CSSPrefersColorScheme")
 
-(def FILTER-CSS-ID :- String "gjoa-darkmode-filter-style")
-(def FILTER-CSS :- String
-  (str "#tabbrowser-tabpanels browser { filter: invert(0.9) hue-rotate(180deg) !important; } "
-       "#tabbrowser-tabpanels browser img, #tabbrowser-tabpanels browser video, "
-       "#tabbrowser-tabpanels browser canvas, #tabbrowser-tabpanels browser svg "
-       "{ filter: invert(1) hue-rotate(180deg) !important; }"))
-
-(def state :- Any {:filter-el nil :unsub nil})
+(def state :- Any {:unsub nil})
 
 ;; content-override: 0 = dark, 1 = light, 2 = no override.
 (defn set-content-override! [v :- Any] :- Any
@@ -89,19 +72,6 @@
       (when (= cur RFP-COLORSCHEME-EXEMPT)
         (set-pref-str! PREF-RFP-OVERRIDES "")))))
 
-(defn apply-filter! [] :- Any
-  (when (not (.-filter-el state))
-    (let [style (html-new "style")]
-      (set! (.-id style) FILTER-CSS-ID)
-      (set! (.-textContent style) FILTER-CSS)
-      (.appendChild (.-documentElement document) style)
-      (set! (.-filter-el state) style))))
-
-(defn remove-filter! [] :- Any
-  (when (.-filter-el state)
-    (.remove (.-filter-el state))
-    (set! (.-filter-el state) nil)))
-
 (defn set-chrome-scheme! [dark :- Boolean] :- Any
   (let [root (.-documentElement document)]
     (if dark
@@ -119,18 +89,14 @@
 (defn system-dark? [] :- Boolean
   (.-matches (.matchMedia window "(prefers-color-scheme: dark)")))
 
-;; The 4 surfaced modes (dark / uniform / system / off), no OS branch in any of
-;; them — the previous build's OS-conditional "system" (whose dark branch was
-;; secretly the hybrid engine) was the single biggest surprise; it is gone.
-;; "dark" is the unconditional hybrid engine (the default). Legacy about:config
-;; ids fold in via the :else / explicit arms: hybrid/auto -> dark combo, engine ->
-;; uniform combo, filter -> its own legacy combo, anything else -> dark.
+;; The surfaced modes are dark, uniform, light, system, and off. An unknown
+;; preference value resolves to dark, the product default.
 (defn apply! [] :- Any
   (let [en (enabled?)
         m (mode-)]
     (cond
       (or (not en) (= m "off"))
-        (do (set-chrome-scheme! false) (set-content-override! 2) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! false) (remove-filter!))
+        (do (set-chrome-scheme! false) (set-content-override! 2) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! false))
       ;; "system": RESOLVE to Dark or Light by the OS preference (system-dark?), then
       ;; apply that appearance — System is not a separate "do nothing" mode, it just
       ;; picks which of Dark/Light to be. "Force" is the orthogonal axis (Dark already
@@ -140,28 +106,24 @@
       ;; when the OS theme flips, so this tracks the OS live.
       (= m "system")
         (if (system-dark?)
-          (do (set-chrome-scheme! true)  (set-content-override! 0) (set-invert! false) (set-default-invert! true)  (set-rfp-colorscheme-exempt! true)  (remove-filter!))
-          (do (set-chrome-scheme! false) (set-content-override! 1) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! false) (remove-filter!)))
-      ;; "uniform" (was "engine"): force LIGHT, then the engine luminance-inverts every
+          (do (set-chrome-scheme! true)  (set-content-override! 0) (set-invert! false) (set-default-invert! true)  (set-rfp-colorscheme-exempt! true))
+          (do (set-chrome-scheme! false) (set-content-override! 1) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! false)))
+      ;; "uniform": force light, then the engine luminance-inverts every
       ;; absolute color into the Darkness band — one controlled dark over ALL sites,
       ;; even native-dark ones. Content is light by design, so clear the RFP exemption.
-      (or (= m "uniform") (= m "engine"))
-        (do (set-chrome-scheme! true) (set-content-override! 1) (set-invert! true) (set-default-invert! false) (set-rfp-colorscheme-exempt! false) (remove-filter!))
-      ;; "filter": legacy compositor invert (about:config-only, superseded by uniform).
-      (= m "filter")
-        (do (set-chrome-scheme! true) (set-content-override! 0) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! true) (apply-filter!))
+      (= m "uniform")
+        (do (set-chrome-scheme! true) (set-content-override! 1) (set-invert! true) (set-default-invert! false) (set-rfp-colorscheme-exempt! false))
       ;; "light": conventional Light appearance — force prefers-color-scheme:light so every
       ;; site shows its light theme on ANY OS; gjoa adds NO inversion. The step-out-of-dark
       ;; appearance (distinct from the master switch, which parks the whole engine).
       (= m "light")
-        (do (set-chrome-scheme! false) (set-content-override! 1) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! false) (remove-filter!))
-      ;; "dark" (DEFAULT; was "hybrid"): force prefers-color-scheme:dark so native-dark
+        (do (set-chrome-scheme! false) (set-content-override! 1) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! false))
+      ;; "dark" (DEFAULT): force prefers-color-scheme:dark so native-dark
       ;; sites activate their own theme; the engine pre-paint default-inverts themeless
       ;; pages (no flash) and the GjoaDarkmode actor refines per-site. The ONLY tier
       ;; where the 3 per-site lists are live. UNCONDITIONAL — dark on any OS.
-      ;; :else also catches the legacy "auto" id -> treat as dark (gap-filling on).
       :else
-        (do (set-chrome-scheme! true) (set-content-override! 0) (set-invert! false) (set-default-invert! true) (set-rfp-colorscheme-exempt! true) (remove-filter!)))))
+        (do (set-chrome-scheme! true) (set-content-override! 0) (set-invert! false) (set-default-invert! true) (set-rfp-colorscheme-exempt! true)))))
 
 ;; Public toggle API (for a future toolbar button), exposed on window.
 (defn toggle [] :- Boolean
@@ -170,15 +132,12 @@
     new-state))
 
 ;; Cycle the four user-facing states: dark everywhere (default), uniform controlled
-;; dark, follow-OS system, off. The two dark intents are kept adjacent so a user
-;; toggling a stubborn site flips dark<->uniform without leaving darkness; the legacy
-;; engine/filter/hybrid/auto ids fold forward into the new cycle.
+;; dark, follow-OS system, off.
 (defn cycle-mode [] :- String
   (let [cur (mode-)
         nxt (cond (= cur "dark")   "light"
                   (= cur "light")  "system"
                   (= cur "system") "dark"
-                  ;; legacy/about:config-only ids fold into the appearance cycle
                   :else "dark")]
     (set-pref-str! PREF-MODE nxt)
     nxt))
@@ -203,54 +162,14 @@
     (catch Any e
       (console/error "gjoa-darkmode: set-darkmode-defaults! failed" e))))
 
-;; One-shot v2 taxonomy migration. A literal USER-branch "system" is a pre-cutover
-;; stored value that meant the OS-conditional hybrid engine (dark on a dark OS). The
-;; new "system" is conventional pass-through, so rewrite "system" -> "dark" exactly
-;; once — preserving the old dark-OS darkening AND adding light-OS darkening (dark-
-;; first). Guarded by a marker pref so a deliberate post-migration re-pick of "system"
-;; is never stomped. Default-branch users (never set mode) need no migration: the
-;; default itself moved system -> dark. Legacy hybrid/auto/engine/filter map correctly
-;; in apply!, so they are left untouched.
-(defn migrate-mode! [] :- Any
-  (try
-    (let [prefs (.-prefs Services)]
-      (when (not (pref-bool PREF-MIGRATED false))
-        (when (and (.prefHasUserValue prefs PREF-MODE)
-                   (= (pref-str PREF-MODE "") "system"))
-          (set-pref-str! PREF-MODE "dark"))
-        (set-pref-bool! PREF-MIGRATED true)))
-    (catch Any e
-      (console/error "gjoa-darkmode: migrate-mode! failed" e))))
-
-;; The "Darkness" knob shipped backwards: titled "Darkness" but bound straight to
-;; bgLightness (higher = LIGHTER), so dragging "Darkness" up LIGHTENED the page. The
-;; knob now reads correctly (settings.js `invert`); heal profiles stuck on a light
-;; value — bgLightness > 50 is a near-white page in dark mode, a knob-direction
-;; mistake, never a real preference. Reset to the dark default exactly once.
-(defn migrate-darkness! [] :- Any
-  (try
-    (when (not (pref-bool PREF-DARKNESS-MIGRATED false))
-      (when (> (pref-int PREF-BGLIGHTNESS 16) 50)
-        (set-pref-int! PREF-BGLIGHTNESS 16))
-      (set-pref-bool! PREF-DARKNESS-MIGRATED true))
-    (catch Any e
-      (console/error "gjoa-darkmode: migrate-darkness! failed" e))))
-
 (defn destroy! [] :- Any
   (let [u (.-unsub state)]
     (when u (u)))
   (set! (.-unsub state) nil)
-  (set-chrome-scheme! false)
-  (remove-filter!))
+  (set-chrome-scheme! false))
 
 (defn init-! [] :- Any
   (set-darkmode-defaults!)
-  (migrate-darkness!)
-  ;; (migrate-mode!) intentionally NOT called. The default moved to "dark"
-  ;; (unconditional — see set-darkmode-defaults!), so default-branch users land
-  ;; on dark with no migration. Tradeoff (accepted): a user who explicitly stored
-  ;; "system" pre-cutover keeps it (now plain OS-follow, which can mis-read a dark
-  ;; OS) rather than being silently rewritten — they can re-pick Dark.
   (apply!)
   (let [observer {:observe (fn [_s _t _d] (apply!))}
         mql (.matchMedia window "(prefers-color-scheme: dark)")

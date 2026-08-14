@@ -1,11 +1,8 @@
 #lang beagle/js
 ;; Ephemeral test-profile factory.
 ;;
-;; gjoa doesn't need a per-profile chrome/ copy the way palefox did —
-;; chrome JS gets loaded by gjoa's built-in loader from
-;; <install_root>/gjoa-dev/, not from the profile. So all we need is
-;; a fresh profile dir with a user.js that enables Marionette and
-;; silences interruptions.
+;; Chrome JS loads from <install_root>/gjoa-dev/. The test profile only needs
+;; a user.js that enables Marionette and silences interruptions.
 (ns gjoa.tools.test-driver.profile
   (:require [fs/promises :refer [mkdtemp writeFile rm]]
             [path :refer [join]]

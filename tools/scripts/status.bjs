@@ -4,7 +4,7 @@
 ;; Answers the recurring questions: what version of Firefox are we on,
 ;; what's Mozilla shipping, what's nixpkgs shipping, what's Zen on, are
 ;; there unfixed CVEs against our pin, what changes are pending, what's
-;; my rebuild budget, what command should I run next.
+;; and what command should I run next.
 ;;
 ;; Every run does fresh network pulls -- no caching. ~1-2 sec total
 ;; because the fetches happen in parallel. If you're offline, missing
@@ -20,14 +20,11 @@
 ;; don't need the extern declared, so neither is listed here.
 (declare-extern [AbortSignal] Any)
 
-;; REPO-ROOT / ENGINE-DIR come from tools/prep/paths.bjs (cwd-based, since
-;; tools run via `bun run` from the repo root -- the old .ts used
-;; import.meta.dir, which has no beagle equivalent).
+;; REPO-ROOT / ENGINE-DIR come from tools/prep/paths.bjs.
 (def MACH-BIN :- String (join ENGINE-DIR "obj-x86_64-pc-linux-gnu" "dist" "bin" "gjoa-bin"))
 (def MACH-DEV-OVERLAY :- String (join ENGINE-DIR "obj-x86_64-pc-linux-gnu" "dist" "bin" "gjoa-dev"))
 (def NIX-RESULT :- String (join REPO-ROOT "result" "bin" "gjoa"))
 (def DIST-CHROME :- String (join REPO-ROOT "dist" "chrome"))
-(def LEDGER :- String (join REPO-ROOT "private-docs" "build-logs" "ledger.md"))
 (def GJOA-JSON :- String (join REPO-ROOT "gjoa.json"))
 
 ;; -- ANSI helpers ------------------------------------------------------------
@@ -217,37 +214,6 @@
             :else (.push other file)))))
     {:lane1 lane1 :lane2 lane2 :lane3 lane3 :other other}))
 
-(defn ledgerEntries [] :- Any
-  (if (not (existsSync LEDGER))
-    []
-    (let [text (readFileSync LEDGER "utf8")
-          rows []
-          rowRe (RegExp. "^\\|\\s*(\\d{4}-\\d{2}-\\d{2})\\s*\\|\\s*(\\w+)\\s*\\|\\s*([^|]+?)\\s*\\|\\s*([^|]+?)\\s*\\|")]
-      (doseq [line (.split text "\n")]
-        (let [m (.match line rowRe)]
-          (when m
-            (.push rows {:date (aget m 1)
-                         :type (aget m 2)
-                         :reason (.trim (aget m 3))
-                         :outcome (.trim (aget m 4))}))))
-      rows)))
-
-(defn buildsThisWeek [entries :- Any] :- Any
-  (let [sevenAgo (Date. (- (Date/now) (* 7 86400000)))]
-    (.-length (.filter entries
-                       (fn [e]
-                         (let [d (Date. (.-date e))]
-                           (and (not (isNaN (.getTime d)))
-                                (>= d sevenAgo)
-                                (or (= (.-type e) "nix") (= (.-type e) "mach-full")))))))))
-
-(defn nextSunday [] :- Any
-  (let [now (Date.)
-        days (or (mod (- 7 (.getDay now)) 7) 7) ;; 0=Sun -> next Sunday = 7
-        d (Date. (+ (.getTime now) (* days 86400000)))
-        iso (.slice (.toISOString d) 0 10)]
-    (str iso " (in " days " day" (if (= days 1) "" "s") ")")))
-
 ;; -- Rendering ---------------------------------------------------------------
 (defn section [title :- String] :- Any
   (console/log "")
@@ -274,8 +240,6 @@
               hasDist (existsSync DIST-CHROME)
               hasDevOverlay (existsSync MACH-DEV-OVERLAY)
               lanes (gitStatusByLane)
-              ledger (ledgerEntries)
-              buildsWeek (buildsThisWeek ledger)
               ;; Overall threat color.
               critical (or (> (or (:inTheWildCount oracles) 0) 0)
                            (and (:mozillaLatest oracles)
@@ -318,14 +282,6 @@
           (row "dist/chrome"     (if hasDist (str (green "✓") "  " (dim (if (mtime DIST-CHROME) (fmtAge (mtime DIST-CHROME)) "?"))) (dim "·  stale, run `bun run chrome:dist`")))
           (row "dev-mode overlay" (if hasDevOverlay (green "✓") (dim "·  gjoa-dev/ not symlinked yet")))
 
-          (section "REBUILD BUDGET")
-          (let [budgetColor (if (> buildsWeek 1) red (if (= buildsWeek 1) yellow green))]
-            (row "builds this week" (str (budgetColor (str buildsWeek)) " / 1 (Rule #0)")))
-          (row "next Sunday"      (nextSunday))
-          (when (> (.-length ledger) 0)
-            (let [last (aget ledger 0)]
-              (row "last logged"     (str (.-date last) " (" (.-type last) ") -- " (.-outcome last)))))
-
           (section "WORKING TREE")
           (console/log (str "  " (dim "Lane 1: chrome TS/CSS -- `gjoa sync` + restart, ~1s, no rebuild")))
           (console/log (str "  " (dim "Lane 2: Firefox .sys.mjs / patches / branding -- `bun run import && ./mach build faster`, ~30s")))
@@ -342,12 +298,12 @@
           (let [rec []]
             (cond
               (.-length (:lane3 lanes))
-              (.push rec (red "Lane 3 changes pending. Wait for Sunday. Confirm rebuild with Claude."))
+              (.push rec (red "Lane 3 changes pending. Run the full build when ready."))
               (.-length (:lane2 lanes))
               (if (not hasMach)
                 (do
                   (.push rec (yellow "Lane 2 changes pending but no mach binary."))
-                  (.push rec (str "  nix develop .#mach  &&  cd engine && ./mach build   " (dim "(~30-60 min cold; do on Sunday)"))))
+                  (.push rec (str "  nix develop .#mach  &&  cd engine && ./mach build   " (dim "(~30-60 min cold)"))))
                 (do
                   (.push rec (yellow "Lane 2 changes pending."))
                   (.push rec "  bun run import  &&  (cd engine && ./mach build faster)  &&  gjoa hotreload")))
@@ -364,7 +320,7 @@
             (console/log (dim (str "oracles offline: " (.join (:errors oracles) ", ")))))
 
           (console/log "")
-          (console/log (dim "docs/ARCHITECTURE.md  ·  CLAUDE.md Rule #0  ·  private-docs/build-logs/")))))))
+          (console/log (dim "docs/ARCHITECTURE.md  ·  CLAUDE.md")))))))
 
 ;; Entry point: run via `bun run`. Gated on import.meta.main so the CLI runs
 ;; only when invoked directly, never on import.

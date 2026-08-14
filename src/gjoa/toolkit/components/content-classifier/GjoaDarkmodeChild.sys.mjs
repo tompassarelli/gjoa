@@ -83,7 +83,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       return;
     }
     if (event.type === "DOMWindowCreated") {
-      // gjoa's OWN chrome UI pages (about:gjoa / about:knobs / about:sovereignty and
+      // gjoa's own chrome UI pages (about:gjoa / about:sovereignty and
       // the gjoa new-tab) are authored dark already. NEVER run them through the
       // web-content inverter, in ANY mode: mark them 'inactive' synchronously at
       // document-start. The engine reads this per-document override BEFORE the global
@@ -91,7 +91,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       // (where an already-dark page would otherwise be dark->light inverted — the
       // washed-out "looks like light mode" settings page).
       const gjoaUiURL = (this.document && this.document.documentURI) || "";
-      if (/^(about:(gjoa|knobs|sovereignty|newtab|home)\b|chrome:\/\/gjoa)/.test(gjoaUiURL)) {
+      if (/^(about:(gjoa|sovereignty|newtab|home)\b|chrome:\/\/gjoa)/.test(gjoaUiURL)) {
         try {
           this.browsingContext.colorInversionOverride = "inactive";
         } catch (e) {}
@@ -1696,13 +1696,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   }
 
   // Parse a COMPUTED color string to sRGB [r,g,b] (0..255), or null. Handles BOTH
-  // serializations Gecko emits: legacy rgb()/rgba() AND oklch() — the engine's
-  // luminance inversion (patch 0009) produces OKLCH values, so every color the
-  // engine touched serializes as oklch. The old rgb-only regex read
-  // "oklch(0.77 0.03 260)" as R=0.77 G=0.03 B=260 — a garbage near-black — which
-  // made the APCA judge see "dark text" wherever the engine had inverted text
-  // LIGHT: exactly the elements the normalizer exists to check (an exempt light
-  // image backdrop under engine-lightened text was judged legible and skipped).
+  // serializations Gecko emits: rgb()/rgba() and oklch(). Engine inversion
+  // produces OKLCH values, so both forms are part of the current input contract.
   // Regression-critical gate for #darkenStrayLightBands: does a candidate element
   // qualify as a stray light BAND worth darkening on a native-dark page? Kept pure
   // + static so its truth table is unit-tested (stray-band-gate.functional.mjs).

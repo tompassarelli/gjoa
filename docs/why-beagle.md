@@ -25,10 +25,6 @@ do, plus a fifth that goes beyond authoring entirely:
   JS it emits — inline types (`:- T`), `;;` comments that don't survive emit, and
   Lisp's one-form-per-line verticality all cost lines. The chrome layer is **8,516
   LOC of `.bjs` source → 6,612 LOC of emitted JS**. Beagle is not "fewer lines."
-- **Cross-codebase LOC vs the old TS (palefox) is confounded.** gjoa does strictly
-  more (SQLite history, Spaces, multi-window sync), the archive has multiple
-  iterations of each file, and conventions differ. Any single beagle-vs-TS ratio
-  from it is cherry-picked. We don't headline one.
 - **Performance is a wash.** Chrome JS runs in the same SpiderMonkey whether it
   came from Beagle or TS; Beagle emits ~the same JS. The only real edges are small:
   macros inline (zero-cost) where a TS helper `byId()` is a runtime call, and
@@ -182,8 +178,8 @@ build workflows):
 - **Gate B** proves the committed `0011` claim-doc
   (`patches/0003-newtab-redirector-gjoa.claims.json`) reproduces its textual patch
   output **exactly**.
-- Anchor-recovery (`anchor.bjs`) survives reflow *and a method rename* — fuzzy-
-  matching on params + body-identifier overlap when the name itself changes.
+- Structural anchor matching (`anchor.bjs`) relocates a target after surrounding
+  reflow or a method rename by matching parameters and body-identifier overlap.
 
 The payoff for gjoa today is concrete: **a patch you can't silently lose to an
 upstream refactor.**
@@ -205,7 +201,7 @@ bun run projector:codegraph emit                         # the graph as claim tr
 `leverage` is the one a `grep` can't give you: it ranks every function by the size
 of its **transitive** dependent set — "what is load-bearing." `blast-radius` is the
 "what breaks if I change this" answer. The graph emits as `(subject, predicate,
-object)` claim triples (`defines` / `calls` / `leverage`), in EDN or Fram-log form.
+object)` claim triples (`defines` / `calls` / `leverage`) in EDN.
 
 Two properties keep it honest rather than approximate:
 

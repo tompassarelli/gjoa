@@ -413,8 +413,8 @@
                       "#181a1b"))))))
 
 ;; Constructs that must NEVER reach the generated USER_SHEET: url() can pull /
-;; exfiltrate remote resources, @import pulls a remote stylesheet, and the legacy
-;; expression() runs script. Dark Reader's color-correction CSS doesn't need any
+;; exfiltrate remote resources, @import pulls a remote stylesheet, and
+;; expression() can run script. Dark Reader's color-correction CSS doesn't need any
 ;; of them, so finding one means the corpus carried something we won't ship — we
 ;; REJECT the entry (fail closed) rather than silently strip and emit a maybe-
 ;; broken rule. Matching is case-insensitive; whitespace is allowed before the '('.

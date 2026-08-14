@@ -290,7 +290,7 @@
     (cond
       (= topic "chrome-document-loaded")
         ;; subject IS the Document directly (chrome-document-loaded contract);
-        ;; no QueryInterface dance — nsIDOMDocument was removed years ago.
+        ;; no QueryInterface is required.
         (let [doc subject
               window (some-> doc .-defaultView)]
           (load-browser-window! window))
@@ -306,9 +306,8 @@
       (.setBoolPref d "gjoa.toolbar.newTabButton" false)
       ;; Home/startup page is the gjoa new-tab page. "about:newtab" (and
       ;; "about:home") are routed to chrome://gjoa-newtab at the channel layer by
-      ;; the AboutNewTabRedirector patch (patches/0003-newtab-redirector-gjoa) —
-      ;; FF152 dropped the legacy AboutNewTab.newTabURL hook, so the redirect can
-      ;; no longer be done from JS. The home button, new windows, and a
+      ;; the AboutNewTabRedirector patch (patches/0003-newtab-redirector-gjoa).
+      ;; The home button, new windows, and a
       ;; home-based startup all land on the same custom page as new tabs.
       (.setCharPref d "browser.startup.homepage" "about:newtab")
       ;; The about:home startup cache pre-renders the activity-stream document we
@@ -489,7 +488,7 @@
 (def profile-observer :- Any
   {:observe (fn [_subject :- Any _topic :- Any _data :- Any] :- Any (apply-privacy-profile!))})
 
-;; --- about: pages (sovereignty + knobs) --------------------------------------
+;; --- about: pages -------------------------------------------------------------
 ;; Register a privileged chrome page as a real about:<what> page at runtime (no
 ;; rebuild, no Mozilla-source patch). The page reads build-provenance prefs + toggles
 ;; and renders the verifiable truth. (NOTE: about-module flag/principal semantics are
@@ -534,12 +533,8 @@
 (defn register-about-pages! [] :- Any
   (register-about! "sovereignty" "chrome://gjoa/content/sovereignty/sovereignty.html"
                    "{6a7c1e90-5b3d-4c2a-9f81-7e0d3a6b2c54}")
-  ;; about:gjoa is gjoa's settings home; about:knobs stays as a back-compat alias to
-  ;; the same page (so an existing link still works). Distinct class-ids per about: URL.
   (register-about! "gjoa" "chrome://gjoa/content/settings/settings.html"
                    "{b3d8f1a2-4c5e-4a9b-8f02-1e7d6c3b9a40}")
-  (register-about! "knobs" "chrome://gjoa/content/settings/settings.html"
-                   "{c4e9a2b3-5d6f-4b1c-9013-2f8e7d4ca051}")
   ;; about:vim — the keybinding customizer (reads gjoa.keys.commands, edits
   ;; gjoa.keys.bindings; the vim dispatch resolves the same pref live).
   (register-about! "vim" "chrome://gjoa/content/vim/vim.html"

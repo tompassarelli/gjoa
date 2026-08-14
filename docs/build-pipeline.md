@@ -46,29 +46,16 @@ look broken even though HEAD is perfect.
 This is the #1 cause of "it looks corrupt." (For chrome-only edits you don't even
 need to quit — `gjoa sync` + restart is enough; no rebuild.)
 
-## "My app looks broken" — recovery, in order
+## Fast visual check
 
+Quit any open instance, launch `gjoa hotreload`, then run the current gallery when
+you need a deterministic chrome render:
+
+```sh
+bash tools/test-driver/chrome-gallery.sh --state default
 ```
-icons missing / layout corrupt / stale-looking?
-│
-├─ 1. Is a 10-hour-old instance still open?  ──▶ QUIT FULLY, relaunch `gjoa hotreload`.
-│      (relaunch re-syncs current bundles)        Resolves ~all stale-chrome cases.
-│
-├─ 2. Still broken with a FRESH window?  ──▶ verify the BUILD is fine, headless:
-│        bash tools/test-driver/chrome-gallery.sh --state default
-│      Open /tmp/gjoa-gallery/default.png. Icons present there = build is good,
-│      so the fault is your PROFILE, not the code → step 3.
-│
-├─ 3. Profile chrome-state stale (old toolbar layout persisted)?
-│      Back up + reset ONLY the chrome window state — keeps history/bookmarks/tabs:
-│        cp ~/.mozilla/firefox/t3cvidst.default/xulstore.json /tmp/xulstore.bak
-│        rm ~/.mozilla/firefox/t3cvidst.default/xulstore.json
-│      Relaunch. (Restores default toolbar/icon layout.)
-│
-└─ 4. Want a guaranteed-clean window without touching your daily profile?
-         gjoa hotreload -f -no-remote -profile /tmp/gjoa-clean
-       Throwaway profile, current bundles, foreground logs.
-```
+
+The screenshot lands at `/tmp/gjoa-gallery/default.png`.
 
 ## How I verify visually now (so you don't have to QA)
 

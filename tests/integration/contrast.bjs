@@ -14,7 +14,7 @@
 ;; Dark-mode contrast-regression harness (#55) — the no-mistakes gate.
 ;;
 ;; For each golden fixture it drives the REAL binary in the production dark-mode
-;; config (enabled + mode="hybrid"), then measures whether text is actually
+;; config (enabled + mode="dark"), then measures whether text is actually
 ;; legible on the RENDERED result:
 ;;   1. navigate (chrome-side progress listener) + settle (actor round-trip + paint)
 ;;   2. enumerate visible text runs in content (Range.getClientRects, page-relative)
@@ -55,11 +55,11 @@
    "svg-logo" 0
    "dark-text-hero" 0})
 
-;; Production dark-mode config (the default): master toggle on, hybrid mode (the
+;; Production dark-mode config (the default): master toggle on, dark mode (the
 ;; GjoaDarkmode actor inverts themeless-light docs per-document).
 (def PREFS-JS :- String
   (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', true);"
-       " Services.prefs.setCharPref('gjoa.darkmode.mode', 'hybrid');"
+       " Services.prefs.setCharPref('gjoa.darkmode.mode', 'dark');"
        " return 'on';"))
 
 ;; darkmode OFF — for the rect-enumeration pass. Content getComputedStyle works
@@ -130,7 +130,7 @@
     ;; ready; a one-shot executeScript here fails on that transient. Then enumerate.
     (await-true "return document.readyState === 'complete';" 8000)
     (let [meta (JSON/parse (js/await (.executeScript mn ENUMERATE-JS)))]
-      ;; PASS 2 — enable production darkmode (hybrid) + re-navigate so the page
+      ;; PASS 2 — enable production dark mode + re-navigate so the page
       ;; re-cascades INVERTED, then read the PAINTED result chrome-side (the metric
       ;; is now painted contrast — exactly what M3 guarantees).
       (js/await (.setContext mn "chrome"))

@@ -33,8 +33,8 @@ browser.jar:
   content/gjoa/sovereignty/sovereignty.css (content/sovereignty/sovereignty.css)
   content/gjoa/sovereignty/sovereignty.js (content/sovereignty/sovereignty.js)
   content/gjoa/sovereignty/manifest.json (content/sovereignty/manifest.json)
-# about:gjoa — gjoa's settings home (about:knobs is a back-compat alias to the same
-# page). PRIVILEGED (reads + flips prefs), registered at runtime by GjoaLoader.
+# about:gjoa — gjoa's settings home. PRIVILEGED (reads + flips prefs), registered
+# at runtime by GjoaLoader.
   content/gjoa/settings/settings.html (content/settings/settings.html)
   content/gjoa/settings/settings.css (content/settings/settings.css)
   content/gjoa/settings/settings.js (content/settings/settings.js)

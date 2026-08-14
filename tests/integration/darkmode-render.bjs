@@ -29,15 +29,15 @@
 
 (defn set-dm [mn :- Any on :- Bool] :- Any
   (.executeScript mn (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', " (if on "true" "false") ");"
-                          " Services.prefs.setCharPref('gjoa.darkmode.mode','hybrid'); return 'ok';")))
+                          " Services.prefs.setCharPref('gjoa.darkmode.mode','dark'); return 'ok';")))
 
 (js/export (def tests :- Any
-  [(deftest "darkmode render: hybrid inverts a themeless-light page to dark (chrome-side)" [mn ctx]
+  [(deftest "darkmode render: dark mode inverts a themeless-light page (chrome-side)" [mn ctx]
      (js/await (.setContext mn "chrome"))
      (js/await (set-dm mn true))
      (let [lum (js/await (.executeAsyncScript mn (render-lum-js "http://127.0.0.1:8975/light") []))]
-       (console/log (str "[darkmode-render] hybrid-ON themeless-light center-lum=" lum))
-       (expect (< (Number lum) 80) (str "themeless-light should render DARK under hybrid; got lum=" lum))))
+       (console/log (str "[darkmode-render] dark-ON themeless-light center-lum=" lum))
+       (expect (< (Number lum) 80) (str "themeless-light should render DARK; got lum=" lum))))
    (deftest "darkmode render: OFF leaves a themeless-light page light (control)" [mn ctx]
      (js/await (.setContext mn "chrome"))
      (js/await (set-dm mn false))

@@ -20,11 +20,11 @@
   max-height: 68vh !important;
   overflow-y: auto !important;
   padding: 16px !important;
-  background: color-mix(in srgb, var(--gjoa-bg-elevated) 88%, transparent) !important;
+  background: color-mix(in srgb, var(--gjoa-surface-1) 88%, transparent) !important;
   -webkit-backdrop-filter: blur(20px) saturate(1.3) !important;
   backdrop-filter: blur(20px) saturate(1.3) !important;
-  color: var(--gjoa-fg) !important;
-  border: 1px solid color-mix(in srgb, var(--gjoa-border) 70%, transparent) !important;
+  color: var(--gjoa-text-normal) !important;
+  border: 1px solid color-mix(in srgb, var(--gjoa-line-subtle) 70%, transparent) !important;
   border-radius: 16px !important;
   box-shadow:
     0 28px 70px -16px rgba(0, 0, 0, 0.6),
@@ -44,7 +44,7 @@
 
 #gjoa-which-key .gjoa-wk-header {
   font-weight: 600 !important;
-  color: var(--gjoa-fg-muted) !important;
+  color: var(--gjoa-text-muted) !important;
   font-size: 10.5px !important;
   letter-spacing: 0.12em !important;
   text-transform: uppercase !important;
@@ -61,7 +61,7 @@
 }
 /* the faintest lift on alternating rows for scannability */
 #gjoa-which-key .gjoa-wk-row:nth-child(even) {
-  background: color-mix(in srgb, var(--gjoa-fg) 3%, transparent) !important;
+  background: color-mix(in srgb, var(--gjoa-text-normal) 3%, transparent) !important;
 }
 
 #gjoa-which-key .gjoa-wk-key,
@@ -70,16 +70,16 @@
   font: 600 12px/1 ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace !important;
   text-align: center !important;
   padding: 5px 9px !important;
-  color: var(--gjoa-accent) !important;
-  background: color-mix(in srgb, var(--gjoa-accent) 13%, transparent) !important;
-  border: 1px solid color-mix(in srgb, var(--gjoa-accent) 26%, transparent) !important;
+  color: var(--gjoa-aurora) !important;
+  background: color-mix(in srgb, var(--gjoa-aurora) 13%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--gjoa-aurora) 26%, transparent) !important;
   border-radius: 8px !important;
 }
 #gjoa-which-key .gjoa-wk-key { min-width: 26px !important; }
 #gjoa-which-key .gjoa-wk-cmd {
   min-width: 8em !important; text-align: left !important; white-space: nowrap !important;
 }
-#gjoa-which-key .gjoa-wk-desc { color: var(--gjoa-fg) !important; opacity: 0.92 !important; }
+#gjoa-which-key .gjoa-wk-desc { color: var(--gjoa-text-normal) !important; opacity: 0.92 !important; }
 
 @media (prefers-reduced-motion: reduce) {
   #gjoa-which-key { animation: none !important; }

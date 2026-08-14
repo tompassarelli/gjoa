@@ -53,16 +53,8 @@
 
 (js/export (defn read-pinned-id [tab :- Any] :- Int
   (try
-    (let [get-attr (fn [a] (and (.-getAttribute tab) (.getAttribute tab a)))
-          try-legacy (fn []
-            (let [raw (get-attr "pfx-id")]
-              (when raw
-                (let [n (Number raw)]
-                  (when n
-                    (try (attr! tab PIN-ATTR (String n)) (catch Any _e nil))
-                    n)))))
-          raw (get-attr PIN-ATTR)]
-      (or (and raw (Number raw)) (try-legacy) 0))
+    (let [raw (and (.-getAttribute tab) (.getAttribute tab PIN-ATTR))]
+      (or (and raw (Number raw)) 0))
     (catch Any _e 0))))
 
 (js/export (defn tree-data! [tab :- Any] :- Any
@@ -73,8 +65,8 @@
                (do
                  (when (>= pinned-id (.-nextTabId state))
                    (set! (.-nextTabId state) (+ pinned-id 1)))
-                 (log "treeData:pfxId"
-                      {:pfxId pinned-id
+                 (log "treeData:pinnedId"
+                      {:id pinned-id
                        :label (.-label tab)
                        :nextTabId (.-nextTabId state)})
                  pinned-id)

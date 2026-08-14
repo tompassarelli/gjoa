@@ -92,7 +92,7 @@
             [(str B "/dark-mode/index.js")]
             (.join ["// ==UserScript=="
                     "// @name           Gjoa Dark Mode"
-                    "// @description    Chrome-level dark mode: native color-scheme override + optional CSS inversion filter"
+                    "// @description    Chrome-level dark mode: native color-scheme override + engine inversion"
                     "// @include        main"
                     "// ==/UserScript=="]
                    "\n"))

@@ -1,6 +1,6 @@
 # CLAUDE.md — gjoa project guide
 
-gjoa is a Firefox 152 fork authored in **beagle** (`.bjs` → JS / `.sys.mjs`). This
+gjoa is a Firefox fork authored in **beagle** (`.bjs` → JS / `.sys.mjs`). This
 file is the always-loaded surface: load-bearing rules + thin pointers. The rich
 detail lives in the docs it references — keep those current, keep this lean.
 
@@ -13,7 +13,7 @@ detail lives in the docs it references — keep those current, keep this lean.
   **CI-built on a `vX.Y.Z` tag push** (free GitHub runners by default; Blacksmith =
   paid opt-in `fast: true`). → `docs/daily-loop.md` "I want to cut a release".
 
-🚨 **Chrome JS/CSS/layout broken? Mach, not nix** (2026-05-27 postmortem). Nix =
+🚨 **Chrome JS/CSS/layout broken? Mach, not nix.** Nix =
 sealed `/nix/store` omni.ja; mach = writable `engine/obj-*/` + `gjoa sync`
 hot-reload. Proposing a nix rebuild to verify a *chrome* fix is the smell.
 
@@ -28,24 +28,17 @@ hot-reload. Proposing a nix rebuild to verify a *chrome* fix is the smell.
    `ChromeUtils.importESModule` ~never · `.sys.mjs` per major FF · native per
    release, Mozilla refactors signatures constantly). Ask "can this be chrome JS?"
    before any source patch.
-4. **Audit-before-modify on big tasks.** List Lane 1/2/3 candidates, propose Lane 1
-   first, wait for go.
+4. **Choose the cheapest lane that owns the behavior.**
 5. **`patches/*.patch` files are harmless; *applying* them (the rebuild) isn't.**
-6. **Lane 3 queue lives in TaskCreate**, not in this file.
 
 ## Before any Lane 3 build — prevent the *wasted* build (the actual goal)
 
 1. **`bun run import` first** — the flake compiles `engine/`, which reflects
-   `src/gjoa/` only after an import (a stale engine cost a whole build 2026-06-14).
-2. **`bun run preflight`** — 24 gates (A–X) catch patch / eval / alignment /
+   `src/gjoa/` only after an import.
+2. **`bun run preflight`** — the current gates catch patch / eval / alignment /
    security breakage before a 2–3 h compile. The live gate registry + what each
    enforces is **GENERATED** in [`docs/stewardship/topology.md`](docs/stewardship/topology.md)
    (Gate T fails on docs↔machinery drift) — never hand-maintain a gate list here.
-3. **Log the outcome** to `private-docs/build-logs/` (a new atomic file per build).
-   Any unexpected rebuild gets a postmortem: trigger / why preflight missed it /
-   new gate to add / could it have been Lane 1.
-
-(The Sunday-only cadence rule was rescinded 2026-06-15 — build whenever needed.)
 
 ## The engine-hosting checkout is a locked mutable runtime worktree
 
@@ -58,10 +51,8 @@ refuse it. It is not a content pin and has no `.pin` sidecar. Do not infer a
 built binary's source provenance from the worktree's current HEAD; the build
 output reports its source revision independently.
 
-Frozen source inputs are different: `configs/beagle.ref` and `configs/fram.ref`
-select immutable content-addressed checkouts under the corresponding
-`~/code/beagle/pins/<full-object-id>` and
-`~/code/fram/pins/<full-object-id>` containers.
+Frozen source inputs are different: `configs/beagle.ref` selects an immutable
+content-addressed checkout under `~/code/beagle/pins/<full-object-id>`.
 
 The nix build closure is rooted at the runtime worktree's path, and only a
 *registered indirect* GC root survives the collector — a bare `ln -s` is not
@@ -75,13 +66,10 @@ yours to move.)
 
 ## Test stewardship — a slow suite is the project-killer
 
-The integration suite runs constantly; un-stewarded it rots into a compounding
-velocity tax. Policy + profiler:
+The integration suite runs constantly. Policy:
 [`docs/stewardship/testing.md`](docs/stewardship/testing.md) — read it before
-adding/editing tests. No test enters un-budgeted (`configs/test-budgets.json`);
-prefer a unit test over a browser boot; a fixed `(sleep N)` is a smell —
-`await-true` a real condition. `bun run test:profile` grades actual-vs-budget +
-gates regressions.
+adding/editing tests. Prefer a unit test over a browser boot; a fixed `(sleep N)`
+is a smell — `await-true` a real condition.
 
 ## Anti-goals
 
@@ -106,12 +94,11 @@ live in the gates + [`docs/stewardship/topology.md`](docs/stewardship/topology.m
 - On disk: `~/code/resources/zen-browser/` (peer fork) ·
   `~/code/resources/firefox/` (mozilla-central).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — map, rebuild ladder, decision tree.
-- [`docs/build-pipeline.md`](docs/build-pipeline.md) — binary-vs-chrome cadence, what
-  `gjoa hotreload` loads, the "looks broken / stale chrome" recovery. **Verify chrome
+- [`docs/build-pipeline.md`](docs/build-pipeline.md) — binary-vs-chrome cadence and what
+  `gjoa hotreload` loads. **Verify chrome
   visually with `bash tools/test-driver/chrome-gallery.sh` — never push manual QA back on the user.**
 - [`docs/daily-loop.md`](docs/daily-loop.md) — command cheatsheet + verify-vs-release tree.
 - [`docs/nix-dev-options.md`](docs/nix-dev-options.md) — when mach vs nix.
 - [`docs/stewardship/`](docs/stewardship/README.md) — the maintenance manifesto
   (security / testing / performance / churn + the generated gate topology).
-- `private-docs/build-logs/` — every build's outcome + postmortems (private).
 - `bun run status` · `bun run preflight` — operational dashboard · mandatory pre-build gate.

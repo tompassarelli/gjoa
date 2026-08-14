@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-// Parent half of the gjoa per-site dark-mode HYBRID actor. Decides the
+// Parent half of the gjoa per-site dark-mode actor. Decides the
 // per-document colorInversionOverride from trusted parent-process state: the
 // dark-mode mode, the per-site override prefs, and (for the auto refiner) the
 // child's measurement of whether the page authored itself dark.
@@ -402,17 +402,15 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
     }
   }
 
-  #hybridActive() {
-    // Active for the explicit "hybrid" mode AND whenever the engine's pre-paint
-    // default-invert is on (e.g. "system" mode while the OS is dark) — that pref
-    // is the single signal that hybrid behavior is live, so the actor's curated
-    // fixes + refiner track it without knowing the mode string.
+  #darkActive() {
+    // The default-invert pref also activates this path while system mode resolves
+    // to dark, so the actor tracks the controller's resolved appearance.
     if (!Services.prefs.getBoolPref(ENABLED_PREF, false)) {
       return false;
     }
     const m = Services.prefs.getStringPref(MODE_PREF, "dark");
     return (
-      m === "dark" || m === "hybrid" ||
+      m === "dark" ||
       Services.prefs.getBoolPref(DEFAULT_INVERT_PREF, false)
     );
   }
@@ -421,7 +419,7 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
   // per-site prefs. Returns { override, css, inject } or null when nothing
   // explicit applies (the engine default-invert + auto refiner then decide).
   async #explicit() {
-    if (!this.#hybridActive()) {
+    if (!this.#darkActive()) {
       return null;
     }
     const host = hostOf(this.trustedUrl());
@@ -490,7 +488,7 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
   //                                     engine's durable mHybridDefaultInvert decision.
   // Threshold + math mirror scorer.js so the actor's decision == the QA grader's verdict.
   async #auto(data) {
-    if (!this.#hybridActive()) {
+    if (!this.#darkActive()) {
       return { override: "none", css: "", inject: "" };
     }
     // Transparent root, snapshot untrustworthy: the child measured html AND body as
@@ -628,9 +626,9 @@ export class GjoaDarkmodeParent extends JSWindowActorParent {
   // text fails the floor against its sampled backdrop, return a corrective color —
   // pre-inverted iff inversion is active so the engine renders the intended tone.
   async #normalize(data) {
-    // Independent of mode: the retone applies in ANY dark mode (engine, hybrid, …)
+    // Independent of mode: the retone applies in every dark appearance.
     // where dark mode is enabled — the per-doc `inverted` flag the child measured
-    // decides whether to pre-invert, so we don't need #hybridActive here.
+    // decides whether to pre-invert, so we don't need #darkActive here.
     if (
       !Services.prefs.getBoolPref(ENABLED_PREF, false) ||
       !Services.prefs.getBoolPref(NORMALIZE_PREF, false)

@@ -25,8 +25,6 @@
 (def FLAKE :- String (join REPO-ROOT "flake.nix"))
 (def PATCHES-DIR :- String (join REPO-ROOT "patches"))
 (def GJOA-JSON :- String (join REPO-ROOT "gjoa.json"))
-(def LEDGER :- String (join REPO-ROOT "private-docs" "build-logs" "ledger.md"))
-(def NIX-RESULT :- String (join REPO-ROOT "result" "bin" "gjoa"))
 
 (def tty :- Any (.-isTTY (.-stdout process)))
 (defn c [s :- String code :- String] :- String
@@ -201,21 +199,6 @@
                    ;; localeCompare (>= 0 means nixpkgsNss >= minNss).
                    (if (>= (.localeCompare (String nixpkgsNss) (String minNss)) 0) "auto-disabled" "ACTIVE (will fetch Mozilla tarball)")))))))))
 
-;; ── Gate E: existing binary status (informational gate) ───────────────────
-(defn gateE [] :- Any
-  (if (not (existsSync NIX-RESULT))
-    (pass "E" "existing binary status" "no result/ symlink (fresh rebuild)")
-    (let [omni (join REPO-ROOT "result" "lib" "gjoa" "browser" "omni.ja")]
-      (if (not (existsSync omni))
-        (pass "E" "existing binary status" "result/ exists but no omni.ja (probably broken — rebuild)")
-        (let [r (sh (str "unzip -p " omni " chrome/chrome.manifest 2>/dev/null | grep -c \"^content gjoa\" || true") {})
-              count (or (parseInt (.trim (.-out r)) 10) 0)]
-          (if (> count 0)
-            ;; Binary already has the registration — rebuild only needed if you've
-            ;; actually changed something that affects it.
-            (pass "E" "existing binary status" (str "current result/ has " count " `content gjoa` line(s); rebuild is REPLACING a working binary"))
-            (pass "E" "existing binary status" "current result/ has NO `content gjoa` registration — rebuild needed to restore chrome bundles")))))))
-
 ;; ── Gate F: nix daemon will accept flake settings ─────────────────────────
 ;;
 ;; Two separate nix permission mechanisms get conflated easily:
@@ -225,8 +208,7 @@
 ;;
 ;; For `__noChroot = true` to actually take effect, the daemon's
 ;; `sandbox` setting must be `relaxed` (or `false`). `sandbox = true`
-;; rejects it at eval time even for trusted users. This gate caught
-;; me on 2026-05-26 — see build-logs postmortem.
+;; rejects it at eval time even for trusted users.
 (defn gateF [] :- Any
   ;; Strip nix comment lines before matching so we don't false-positive
   ;; on `__noChroot = true` written inside an explanation comment.
@@ -265,28 +247,6 @@
           (.join (.slice (.filter (.split (.-out r) "\n")
                                   (fn [l] (.includes (.toLowerCase l) "error"))) 0 5) "\n      ")))
       (pass "G" "nix flake evaluates without errors" (str "derivation resolves to " (.slice (.pop (.split (.trim (.-out r)) "\n")) -50))))))
-
-;; ── Gate H: diff since last working build ─────────────────────────────────
-(defn gateH [] :- Any
-  (if (not (existsSync LEDGER))
-    (pass "H" "diff since last working build" "no ledger yet (first build)")
-    (let [ledger (readFileSync LEDGER "utf8")
-          lastSuccess (.find (.split ledger "\n")
-                             (fn [l] (and (.test (RegExp. "^\\|\\s*\\d{4}-\\d{2}-\\d{2}") l)
-                                          (.test (RegExp. "success|works" "i") l)
-                                          (not (.test (RegExp. "broken|fail" "i") l)))))]
-      (if (nil? lastSuccess)
-        (pass "H" "diff since last working build" "no successful build logged yet")
-        ;; Find last commit before that date (approximate)
-        (let [dateMatch (.match lastSuccess (RegExp. "^\\|\\s*(\\d{4}-\\d{2}-\\d{2})"))
-              date (or (if dateMatch (aget dateMatch 1) nil) "")]
-          (sh (str "git log --oneline --since='" date "' --until='now' --pretty=format:'%h %s' 2>&1 | head -30") {})
-          (let [changed (sh "git diff --name-only HEAD~5..HEAD 2>&1 | head -50" {})
-                lines (.filter (.split (.-out changed) "\n") (fn [x] x))]
-            (pass "H" "diff since last working build"
-              (str (.-length lines) " files changed in recent commits (review for prereqs):\n      "
-                   (.join (.slice lines 0 15) "\n      ")
-                   (if (> (.-length lines) 15) (str "\n      ... and " (- (.-length lines) 15) " more") "")))))))))
 
 ;; ── Gate I: chrome bundle three-way alignment ─────────────────────────────
 (defn gateI [] :- Any
@@ -377,7 +337,7 @@
 ;; module move; background_image field removal) or ships a silent no-op
 ;; (FF152 deleting AboutNewTab.newTabURL). A `# depends-on:` / `;; @gjoa-depends-on`
 ;; block declares those anchors; Gate L resolves each against engine/, RED before
-;; the build if one vanished. Design: private-docs/research-fork-currency-gate-l.md.
+;; the build if one vanished.
 (def OVERLAY-FILES :- Any
   [(join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "GjoaLoader.bjs")])
 ;; Count raw `# depends-on` bullets — every `- <kind> ...` line whose kind carries a
@@ -634,28 +594,11 @@
 ;; (a stale MACH-build artifact between builds). Scan this FIRST.
 (def GJOA-BUNDLE-DIST-DIR :- String
   (join REPO-ROOT "dist" "chrome" "JS"))
-;; obj-* deploy dir — only fresh right after a mach build; a FALLBACK, never preferred
-;; (preferring it scanned last-build's stale bundles → false Gate-Q failures).
-(def GJOA-BUNDLE-DIR :- String
-  (join ENGINE-DIR "obj-x86_64-pc-linux-gnu" "dist" "bin" "browser" "chrome" "browser" "content" "gjoa" "scripts"))
-;; engine/ src copy — final fallback when neither built output exists.
-(def GJOA-BUNDLE-SRC-DIR :- String
-  (join ENGINE-DIR "browser" "components" "gjoa" "content" "scripts"))
-
-;; export surface of the vendored core.js: `export function NAME`,
-;; `export const NAME`, and re-exports `export { A as B }` (B is the exported
-;; name) / `export { A }` (A is exported).
+;; Canonical direct export surface of the vendored core.js.
 (defn core-export-surface [src :- String] :- Any
   (let [surface (Set.)]
     (doseq [m (Array/from (.matchAll src (RegExp. "export\\s+(?:function|const)\\s+([A-Za-z_$][A-Za-z0-9_$]*)" "g")))]
       (.add surface (aget m 1)))
-    ;; `export { a as b, c }` → exported names are b and c.
-    (doseq [m (Array/from (.matchAll src (RegExp. "export\\s*\\{([^}]*)\\}" "g")))]
-      (doseq [clause (.split (aget m 1) ",")]
-        (let [t (.trim clause)]
-          (when (> (.-length t) 0)
-            (let [asM (.match t (RegExp. "\\bas\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\s*$"))]
-              (.add surface (if asM (aget asM 1) (.trim (aget (.split t (RegExp. "\\s")) 0)))))))))
     surface))
 
 ;; beagle-runtime EXPORT symbols a chrome file references for CLOSURE checking
@@ -688,17 +631,13 @@
   (if (not (existsSync VENDORED-CORE))
     (warn "Q" "$$bc runtime export-closure (emit ↔ core.js)"
       "engine/.../beagle/core.js not vendored yet — run after `bun run import`")
-    (let [surface (core-export-surface (readFileSync VENDORED-CORE "utf8"))
-          ;; Scan the loader + every deployed bundle (or its engine/ source
-          ;; fallback when the obj-* deploy dir isn't populated).
-          bundle-dir (cond
-                       (existsSync GJOA-BUNDLE-DIST-DIR) GJOA-BUNDLE-DIST-DIR
-                       (existsSync GJOA-BUNDLE-DIR) GJOA-BUNDLE-DIR
-                       :else GJOA-BUNDLE-SRC-DIR)
-          bundle-files (if (existsSync bundle-dir)
-                         (.map (.filter (readdirSync bundle-dir) (fn [f :- String] :- Bool (.endsWith f ".uc.js")))
-                               (fn [f :- String] :- String (join bundle-dir f)))
-                         [])
+    (if (not (existsSync GJOA-BUNDLE-DIST-DIR))
+      (fail "Q" "$$bc runtime export-closure (emit ↔ core.js)"
+        "dist/chrome/JS is missing"
+        "run `bun run chrome:dist` to produce the canonical chrome bundle output")
+      (let [surface (core-export-surface (readFileSync VENDORED-CORE "utf8"))
+          bundle-files (.map (.filter (readdirSync GJOA-BUNDLE-DIST-DIR) (fn [f :- String] :- Bool (.endsWith f ".uc.js")))
+                             (fn [f :- String] :- String (join GJOA-BUNDLE-DIST-DIR f)))
           ;; Any other emitted gjoa .sys.mjs that imports the beagle runtime.
           gjoa-dir (join ENGINE-DIR "browser" "components" "gjoa")
           mjs-files (if (existsSync gjoa-dir)
@@ -746,11 +685,11 @@
           (str (.-length offenders) " emitted runtime reference(s) not exported by the vendored core.js")
           (str "the beagle emit references a $$bc symbol the vendored core.js doesn't export "
                "(ESM named-import of a missing export = module-load SyntaxError → gjoa chrome never initializes). "
-               "reconcile via the compat re-export in tools/prep/overlay.bjs (vendor-core-js!) or bump configs/beagle.ref to a beagle whose core.js exports it:\n    "
+               "bump configs/beagle.ref to a Beagle object whose core.js directly exports it, then re-import:\n    "
                (.join offenders "\n    ")))
         (pass "Q" "$$bc runtime export-closure (emit ↔ core.js)"
           (str (.-length files) " emitted file(s) scanned; all $$bc refs (namespace + named-import) ⊆ "
-               (.-size surface) " core.js exports"))))))
+               (.-size surface) " core.js exports")))))))
 
 ;; ── Gate R: security mitigations intact (#121) ──────────────────────────────
 ;; configs/security-mitigations.json is a per-mitigation regression manifest: for
@@ -893,7 +832,7 @@
     (catch Any e
       (fail "T" "stewardship tapestry intact (docs ↔ machinery)"
             (.trim (if (.-stdout e) (.toString (.-stdout e)) (or (.-message e) "check failed")))
-            "a docs/stewardship/ ref dangled or topology.md is stale — `bun run stewardship:gen`, then commit"))))
+            "a docs/stewardship/ ref dangled or topology.md is stale — `bun tools/stewardship/topology.mjs gen`, then commit"))))
 
 ;; Gate U — patch numbering coherence (#128): every subsystem domain occupies a
 ;; contiguous numeric block (no foreign patch wedged into another domain's run).
@@ -964,7 +903,7 @@
   (console/log "")
 
   (let [gates [["A" gateA!] ["B" gateB] ["C" gateC] ["D" gateD]
-               ["E" gateE] ["F" gateF] ["G" gateG] ["H" gateH]
+               ["F" gateF] ["G" gateG]
                ["I" gateI] ["J" gateJ] ["K" gateK] ["L" gateL] ["M" gateM]
                ["N" gateN] ["O" gateO] ["P" gateP] ["Q" gateQ]
                ["R" gateR] ["S" gateS!] ["T" gateT] ["U" gateU] ["V" gateV]

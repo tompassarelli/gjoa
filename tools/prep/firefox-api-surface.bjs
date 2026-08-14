@@ -12,10 +12,8 @@
 ;; HONEST SCOPE: this is an existence-level *removal* detector (the member name
 ;; still appears in upstream non-test source), NOT an object-scoped signature
 ;; check. Distinctive names (importESModule, makeDirectory, newChannelFrom...) are
-;; reliable; very common names (addTab) are looser. Typing the seams precisely was
-;; rejected: the `Obj/method` extern form is NOT closed-world (an undeclared member
-;; emits freely), so it gives no enforcement — see private-docs/research-externs-
-;; hardening.md. This monitors the surface instead of pretending to type it.
+;; reliable; very common names (addTab) are looser. The `Obj/method` extern form is
+;; not closed-world, so this tool monitors the surface directly.
 ;;   bun run firefox-api-drift
 (ns gjoa.tools.prep.firefox-api-surface
   (:require [gjoa.tools.prep.sh :refer [sh]]

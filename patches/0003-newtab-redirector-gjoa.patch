@@ -5,8 +5,7 @@
 #
 gjoa new-tab page — route about:home + about:newtab to chrome://gjoa-newtab.
 
-FF152 replaced the legacy AboutNewTab.newTabURL override with
-AboutNewTabRedirector, whose newChannel() hardcodes the built-in
+AboutNewTabRedirector.newChannel() hardcodes the built-in
 activity-stream addon (defaultURL) and ignores newTabURL entirely. Both the
 parent/base and privileged-child newChannel paths now return a channel to
 the gjoa forced-dark navigator page for home + newtab, bypassing the
@@ -21,8 +20,8 @@ activity-stream addon and the about:home startup cache.
 -    let chromeURI = this.getChromeURI(uri);
 -
 +    // gjoa: serve the custom forced-dark newtab page for home + newtab, never the
-+    // built-in activity-stream addon. FF152 removed the AboutNewTab.newTabURL
-+    // hook, so this redirector is the only override point. Returned directly (not
++    // built-in activity-stream addon. This redirector is the channel boundary.
++    // Returned directly (not
 +    // suspended on addon init) since the gjoa page has no built-in-addon dependency.
      if (
        uri.spec.startsWith("about:home") ||

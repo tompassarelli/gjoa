@@ -245,32 +245,6 @@
             # personal build; does not change the .drv hash.
             NIX_ENFORCE_NO_NATIVE = false;
 
-            # BOLT deferred (2026-06-14): emit-relocs + dontStrip do NOT survive
-            # Mozilla's own packaging strip of libxul, so they produced no
-            # BOLT-able binary, only cost. Re-adding BOLT needs verified mozconfig
-            # --disable-strip/--disable-install-strip in its own cycle. See
-            # BUILD-LEDGER 2026-06-14 postmortem. Lean stripped libxul for now.
-
-            # =================================================================
-            # sccache wiring is DISABLED here for now.
-            #
-            # Background: we tried `__noChroot = true` to give the build
-            # write access to ~/.cache/sccache-gjoa so cache state survives
-            # across nix builds. The nix daemon rejected it with
-            # `sandbox = true` in nix.conf (not just a trusted-users
-            # question — `__noChroot` requires `sandbox = relaxed`). Two
-            # build attempts on 2026-05-26 died at evaluation before we
-            # caught this; see BUILD-LEDGER postmortems.
-            #
-            # To turn sccache persistence back on, either:
-            #   (a) set `sandbox = relaxed` in nixos-config nix-settings
-            #       (system-wide loosening, affects every nix build), or
-            #   (b) run sccache as a daemon outside the sandbox + connect
-            #       via SCCACHE_REDIS (more setup, narrower blast radius)
-            #
-            # Until either lands, this block stays empty and nix builds
-            # are cold every time. Mach builds (the daily path) have no
-            # sandbox and already share state across runs via the objdir.
           });
 
         # Quickbuild variant — what you build day-to-day. Skips PGO+LTO.
@@ -286,13 +260,8 @@
         # NOT distribute this — other people get the portable CI builds
         # (.github/workflows/, mach --enable-optimize, no -march=native).
         #
-        # PGO TEMPORARILY DROPPED (2026-06-15): nixpkgs PGO runs the instrumented
-        # browser for profiling, and gjoa's history-sqlite feature deadlocks the
-        # profile-before-change AsyncShutdown barrier on that fast start→quit
-        # (Sqlite stops processing statements once the barrier engages, so the
-        # in-flight migration can't finish — builds #2 and #3 both died here).
-        # Re-enable pgoSupport once history shutdown is clean. PGO's
-        # gjoa-vs-stock-Firefox delta is marginal anyway (stock FF is already PGO'd).
+        # PGO stays disabled because the history SQLite connection deadlocks the
+        # profile-before-change shutdown barrier during the instrumented run.
         gjoa-native-unwrapped = mkGjoa {
           pgoSupport = false;
           ltoSupport = true;

@@ -3,7 +3,7 @@
   "subsystems": {
     "darkmode":  ["darkmode-hybrid", "darkmode-invert", "darkmode-render"],
     "contrast":  ["contrast"],
-    "adblock":   ["adblock-cosmetic", "adblock-cosmetic-actor", "adblock-production", "adblock-ui", "adblock-validate"],
+    "adblock":   ["adblock-cosmetic", "adblock-cosmetic-actor", "adblock-production", "adblock-ui"],
     "scriptlet": ["scriptlet-engine", "youtube-scriptlet"],
     "tabs":      ["tab-mode-toggle", "tab-tree-machine", "tab-close-button", "nav-bar-layout", "sidebar-symmetric-icons", "groups", "group-drag-above", "horizontal-grid-drag", "vim-hotkeys", "help-menu", "compact-context-menu"],
     "urlbar":    ["urlbar-drawer", "urlbar-init-focus"],
@@ -12,8 +12,8 @@
     "misc":      ["sqlite"]
   },
   "lanes": {
-    "slow":    ["adblock-production", "adblock-validate", "darkmode-hybrid", "darkmode-render", "contrast"],
-    "network": ["youtube-scriptlet", "scriptlet-engine", "adblock-production", "adblock-validate", "adblock-cosmetic-actor", "darkmode-invert", "darkmode-hybrid", "darkmode-render", "contrast"]
+    "slow":    ["adblock-production", "darkmode-hybrid", "darkmode-render", "contrast"],
+    "network": ["youtube-scriptlet", "scriptlet-engine", "adblock-production", "adblock-cosmetic-actor", "darkmode-invert", "darkmode-hybrid", "darkmode-render", "contrast"]
   },
   "sources": {
     "src/gjoa/chrome/bjs/dark-mode/": ["darkmode", "contrast"],

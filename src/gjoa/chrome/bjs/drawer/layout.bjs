@@ -329,7 +329,7 @@
             (catch Any _e nil)))
 
         ;; Persisted slot only — visual order is pinned by nav-bar CSS `order`,
-        ;; since this index and the DOM disagree (FF's vertical-tabs migration).
+        ;; because this persisted index and the rendered DOM order differ.
         nav-bar-slot-after (fn [anchor-id]
           (try
             (let [p (placement-of anchor-id)]

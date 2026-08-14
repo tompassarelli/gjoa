@@ -1,0 +1,22 @@
+#lang beagle/js
+;; Static contract for the about:gjoa navigation scroll-spy.
+(ns gjoa.tests.settings-scroll-spy
+  (:require [fs :refer [readFileSync]]
+            [path :refer [join]]))
+(define-mode strict)
+
+;; bun:test is prepended to the generated module by the test build.
+(declare-extern [describe expect test] Any)
+
+(def SETTINGS-DIR :- String
+  "src/gjoa/browser/components/gjoa/content/settings")
+(def JS :- String (readFileSync (join SETTINGS-DIR "settings.js") "utf8"))
+(def GUARD-RE :- Any (RegExp. "scrollHeight\\s*-\\s*(\\d+)"))
+
+(describe "about:gjoa settings scroll-spy"
+  (fn []
+    (test "activates the final section before the literal page end"
+      (fn []
+        (let [m (.match JS GUARD-RE)]
+          (.toBeTruthy (expect m))
+          (.toBeGreaterThanOrEqual (expect (parseInt (aget m 1) 10)) 100))))))

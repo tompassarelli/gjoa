@@ -251,8 +251,7 @@
         0))))
 
 ;; --apply: rename the patch files + rekey configs/patch-hashes.json (content
-;; unchanged, so hashes are preserved). Refs in prose (build-logs, registry
-;; comments) are grep-warned, not auto-edited — those are human review.
+;; unchanged, so hashes are preserved). Prose references are reported for review.
 (defn apply-renumber! [] :- Any
   (let [patches (load-all)
         moves (renumber-plan patches)]
@@ -268,7 +267,7 @@
           (console/log (str "  renamed " (.-from-name m) " → " (.-to-name m))))
         (writeFileSync HASHES (str (JSON/stringify hashes nil 2) "\n"))
         (console/log (str "patch-hashes.json rekeyed (" (.-length moves) " entr(ies)). "
-                          "Grep private-docs/build-logs/ / tools/prep/darkmode-registry.bjs for stale `patches/NNNN-` refs."))))))
+                          "Review tracked references to renamed patch paths."))))))
 
 (defn main! [] :- Any
   (let [argv (.slice (.-argv process) 2)

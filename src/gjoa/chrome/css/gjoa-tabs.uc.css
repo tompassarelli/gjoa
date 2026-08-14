@@ -69,7 +69,7 @@
   scrollbar-width: thin;
   /* Explicit opaque bg so a translucent ancestor / compositor blur can't
    * paint through the panel even if #sidebar-container's bg got clobbered. */
-  background-color: var(--gjoa-bg);
+  background-color: var(--gjoa-surface-0);
 }
 #gjoa-tab-panel:focus { outline: none; }
 
@@ -132,7 +132,7 @@
    * first row; the divider's `::after` y-margin owns the gap below. So
    * showing/hiding the pinned container can't shift the tab list. */
   padding: 0;
-  background-color: var(--gjoa-bg);
+  background-color: var(--gjoa-surface-0);
 }
 #gjoa-pinned-container[hidden] {
   display: none !important;
@@ -220,7 +220,7 @@
   background: color-mix(in srgb, currentColor 5%, transparent);
 }
 .gjoa-tab-row[selected] {
-  background: var(--gjoa-bg-elevated);
+  background: var(--gjoa-surface-1);
 }
 
 /* Favicon */
@@ -405,7 +405,7 @@
 
 .gjoa-tab-row:focus-within,
 .gjoa-group-row:focus-within {
-  outline: 2px solid var(--gjoa-accent);
+  outline: 2px solid var(--gjoa-aurora);
   outline-offset: -1px;
   border-radius: 4px;
 }
@@ -544,10 +544,10 @@
 
 /* Popout children — solid background so they obscure whatever paints
  * underneath. Applies to popouts in BOTH the panel and pinned containers.
- * `var(--gjoa-bg-popout)` defaults to an opaque literal so this can't bleed
+ * `var(--gjoa-surface-0)` defaults to an opaque literal so this can't bleed
  * the toolbar / urlbar / page through (see gjoa.css palette region). */
 :is(#gjoa-tab-panel, #gjoa-pinned-container)[gjoa-horizontal] [gjoa-popout-child] {
-  background: var(--gjoa-bg-popout) !important;
+  background: var(--gjoa-surface-0) !important;
   background-image: none !important;
   margin-top: 0;
   margin-bottom: 0;
@@ -586,11 +586,11 @@
   z-index: 9999 !important;
   width: min(720px, 90vw) !important;
   max-height: 60vh !important;
-  background: color-mix(in srgb, var(--gjoa-bg-elevated) 90%, transparent) !important;
+  background: color-mix(in srgb, var(--gjoa-surface-1) 90%, transparent) !important;
   -webkit-backdrop-filter: blur(20px) saturate(1.3) !important;
   backdrop-filter: blur(20px) saturate(1.3) !important;
-  color: var(--gjoa-fg) !important;
-  border: 1px solid color-mix(in srgb, var(--gjoa-border) 70%, transparent) !important;
+  color: var(--gjoa-text-normal) !important;
+  border: 1px solid color-mix(in srgb, var(--gjoa-line-subtle) 70%, transparent) !important;
   border-radius: 16px !important;
   box-shadow:
     0 32px 80px -18px rgba(0, 0, 0, 0.62),
@@ -618,11 +618,11 @@
   align-items: center !important;
   gap: 10px !important;
   padding: 13px 18px !important;
-  border-bottom: 1px solid color-mix(in srgb, var(--gjoa-border) 60%, transparent) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--gjoa-line-subtle) 60%, transparent) !important;
 }
 
 #gjoa-picker .gjoa-picker-prompt {
-  color: var(--gjoa-accent) !important;
+  color: var(--gjoa-aurora) !important;
   font-weight: 600 !important;
 }
 
@@ -631,7 +631,7 @@
   background: transparent !important;
   border: none !important;
   outline: none !important;
-  color: var(--gjoa-fg) !important;
+  color: var(--gjoa-text-normal) !important;
   font: inherit !important;
 }
 
@@ -654,11 +654,11 @@
 }
 
 #gjoa-picker .gjoa-picker-row[gjoa-picker-selected="true"] {
-  background: color-mix(in srgb, var(--gjoa-accent) 15%, transparent) !important;
+  background: color-mix(in srgb, var(--gjoa-aurora) 15%, transparent) !important;
 }
 
 #gjoa-picker .gjoa-picker-row:hover:not([gjoa-picker-selected="true"]) {
-  background: color-mix(in srgb, var(--gjoa-fg) 6%, transparent) !important;
+  background: color-mix(in srgb, var(--gjoa-text-normal) 6%, transparent) !important;
 }
 
 /* Tree context rows — dim text so direct matches stand out. */
@@ -689,14 +689,14 @@
 }
 
 #gjoa-picker .gjoa-picker-secondary {
-  color: var(--gjoa-fg-muted) !important;
+  color: var(--gjoa-text-muted) !important;
   font-size: 0.85em !important;
   margin-inline-start: auto !important;
 }
 
 #gjoa-picker .gjoa-picker-empty {
   padding: 16px 14px !important;
-  color: var(--gjoa-fg-muted) !important;
+  color: var(--gjoa-text-muted) !important;
   font-style: italic !important;
 }
 

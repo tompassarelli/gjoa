@@ -12,15 +12,10 @@ export class GjoaAboutPrefsParent extends JSWindowActorParent {
       return;
     }
     try {
-      // `topChromeWindow` is the correct way to reach the chrome window from a
-      // parent actor. `top.embedderElement?.ownerGlobal` (the old path) is null
-      // when about:preferences loads in its own privileged-about process, so the
-      // open SILENTLY no-op'd — the reported "button does nothing" bug. Fall
-      // through both, then the most-recent browser window, and NEVER fail
-      // silently (a missing window must surface, not vanish).
+      // Prefer the actor's owning chrome window; the most-recent browser window
+      // covers actor teardown races.
       const win =
         this.browsingContext?.topChromeWindow ||
-        this.browsingContext?.top?.embedderElement?.ownerGlobal ||
         Services.wm.getMostRecentWindow("navigator:browser");
       if (win?.openTrustedLinkIn) {
         win.openTrustedLinkIn("about:gjoa", "tab");

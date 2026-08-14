@@ -72,7 +72,7 @@
 
    (deftest "Session-like — panel construction is bulletproof: even with pre-set spaces state, panel exists and has rows for every tab" [mn]
      ;; This pokes at the user's actual failure shape: profile state
-     ;; includes spaces / migrated prefs, the panel still must render.
+     ;; includes spaces and persisted prefs, the panel still must render.
      (await-true "return !!document.getElementById(\"gjoa-tab-panel\");" 2000)
 
      ;; Force a "messy" state: create some spaces, set a non-Main one

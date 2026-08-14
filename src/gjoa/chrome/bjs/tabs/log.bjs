@@ -18,19 +18,6 @@
         (set! (.-log-path state) p)
         p)))
 
-(defn migrate-legacy-log! [] :- Any
-  (let [new-path (log-path!)
-        old-path (.join PathUtils
-                   (.-path (.get (.-dirsvc Services) "ProfD" (.-nsIFile Ci)))
-                   "palefox-debug.log")]
-    (-> (.exists IOUtils old-path)
-        (.then (fn [old-exists]
-          (when old-exists
-            (-> (.exists IOUtils new-path)
-                (.then (fn [new-exists]
-                  (when (not new-exists)
-                    (.move IOUtils old-path new-path)))))))))))
-
 (defn flush-lines! [] :- Any
   (let [batch (.splice lines 0)]
     (if (= 0 (.-length batch))
@@ -49,8 +36,7 @@
 (defn maybe-rotate! [] :- Any
   (when (not (.-rotate-checked state))
     (set! (.-rotate-checked state) true)
-    (-> (migrate-legacy-log!)
-        (.then (fn [] (.stat IOUtils (log-path!))))
+    (-> (.stat IOUtils (log-path!))
         (.then (fn [info]
           (when (> (.-size info) LOG-MAX-BYTES)
             (.write IOUtils (log-path!) (Uint8Array. 0) {:mode "overwrite"}))))

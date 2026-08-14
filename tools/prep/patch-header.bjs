@@ -53,7 +53,7 @@
 ;; the `# gjoa-patch:` header — a marker line then indented `#   key: value` fields,
 ;; with `refs:` as a `#     - <ref>` list:
 ;;   # security:
-;;   #   id: <finding-id matching configs/security-mitigations.json + security-findings.edn>
+;;   #   id: <finding-id matching configs/security-mitigations.json>
 ;;   #   refs:
 ;;   #     - CVE-2025-XXXX
 ;;   #     - MFSA-2025-NN
@@ -160,7 +160,7 @@
               (recur (+ i 1) (+ problems 1)))
 
             ;; A `# security:` block MUST carry an `id:` — it keys the finding in
-            ;; configs/security-mitigations.json + private-docs/security-findings.edn
+            ;; configs/security-mitigations.json
             ;; and is what preflight Gate S / the disclosure generator group on. An
             ;; id-less security block is unattributable; HARD problem.
             (and (.-security p) (not (.-id (.-security p))))

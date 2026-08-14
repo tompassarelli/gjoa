@@ -124,14 +124,12 @@ The thesis throughout: **minimize the surface we own, and make every remaining p
 
 ## Pre-build integrity gates — catch breakage before a wasted compile
 
-Beyond the churn-specific levers above, preflight runs a band of build-integrity gates so an upstream-tracking or wiring break dies in seconds, not 26 minutes into a compile — each motivated by a real `private-docs/build-logs/` postmortem:
+Beyond the churn-specific levers above, preflight runs a band of build-integrity gates so an upstream-tracking or wiring break dies before a compile:
 
 - **Gate C** — no production-mode `TODO`/`future commit` no-op landmines (the dev-overlay-hides-stub class).
 - **Gate D** — dependency floors satisfied (NSS overlay etc. vs nixpkgs).
-- **Gate E** — current binary recoverability status (don't burn a build if the existing one still works).
 - **Gate F** — the nix daemon will accept the flake's settings (`sandbox = relaxed` for `__noChroot`).
 - **Gate G** — the flake `nix eval`s without errors (catches eval-time rejections pre-compile).
-- **Gate H** — the diff since the last working build is reviewed for prereqs.
 - **Gate I** — chrome bundles align three ways (loader ↔ `jar.mn` ↔ `chrome-bake`).
 - **Gate N** — every knob is backed + reversible (debloat is a toggle, not a deletion — keeps divergence reversible).
 - **Gate O** — no bare `beagle/` import in a shipped `.sys.mjs` (the value-semantics chrome-break class).
@@ -145,4 +143,3 @@ Beyond the churn-specific levers above, preflight runs a band of build-integrity
 - `tools/prep/patch-order.bjs` (ordering/batching analyzer + minimal renumber)
 - `tools/prep/upstream-provenance.bjs` + `configs/upstream-provenance.json` (whole-file blob OID **+ L2 hunk anchors**) · `configs/provenance-identity.json` (L4 baked digest) · `configs/provenance-security-findings.json` (L5 `check --security` cross-check)
 - `tools/scripts/preflight.bjs` Gate L (surface contracts), Gate M (beagle-currency), Gate S (security-critical patches persist), Gate U (patch numbering coherence)
-- `private-docs/build-logs/` — the postmortems that motivated each gate

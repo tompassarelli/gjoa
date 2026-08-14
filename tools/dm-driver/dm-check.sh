@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # Tiered dark-mode visual-test driver for gjoa.
 #
-#   dm:check (default / lightweight): render each manifest target in ENGINE mode
+#   dm-check (default / lightweight): render each manifest target in UNIFORM mode
 #     at the default darkness (bgLightness 16), measure mean luminance + the bg
 #     pixel, and ASSERT the result is in the dark band. PASS/FAIL table; nonzero
 #     exit if any assert fails. Target wall-time < ~2 min.
 #
-#   dm:check --deep (comprehensive): sweep {modes} x {bgLightness} x {window
+#   dm-check --deep (comprehensive): sweep {modes} x {bgLightness} x {window
 #     sizes} over the same targets, capture + measure each, and write a results
 #     matrix (+ thumbnails). The "flip a switch for deeper coverage" tier.
 #
-# Rendering needs the mach devShell so the binary finds its runtime libs:
-#   nix develop .#mach -c bash tools/dm-driver/dm-check.sh
-#   nix develop .#mach -c bash tools/dm-driver/dm-check.sh --deep
-# (the `dm:check` / `dm:check:deep` package.json scripts wrap this.)
+# Rendering needs the repository's mach environment so the binary finds its
+# runtime libraries. Run from the active repository direnv:
+#   bash tools/dm-driver/dm-check.sh
+#   bash tools/dm-driver/dm-check.sh --deep
 #
 # `gjoa`'s `-screenshot` renders a page then EXITS — no long-lived browser, no
 # teardown problem. Paint-time inversion shows even before page JS runs, so this
@@ -43,20 +43,24 @@ command -v magick >/dev/null 2>&1 || { echo "✗ magick not on PATH" >&2; exit 3
 mkdir -p "$OUTDIR"
 
 # --- mode -> prefs (mirrors src/gjoa/chrome/bjs/dark-mode/index.bjs apply-mode!) ---
-# Emits the user.js lines for a given mode. Engine forces light + invert so the
-# engine darkens everything to the bgLightness floor (Dark-Reader-style).
+# Emits the user.js lines for a current mode. Uniform forces light and then
+# inverts every page into the configured dark band.
 mode_prefs() {
   case "$1" in
-    engine) echo 'user_pref("layout.css.prefers-color-scheme.content-override", 1);
-user_pref("gjoa.darkmode.invert.enabled", true);' ;;
-    system|hybrid|auto) echo 'user_pref("layout.css.prefers-color-scheme.content-override", 0);
-user_pref("gjoa.darkmode.invert.enabled", false);' ;;
-    filter) echo 'user_pref("layout.css.prefers-color-scheme.content-override", 0);
-user_pref("gjoa.darkmode.invert.enabled", false);' ;;
+    dark) echo 'user_pref("layout.css.prefers-color-scheme.content-override", 0);
+user_pref("gjoa.darkmode.invert.enabled", false);
+user_pref("gjoa.darkmode.hybrid.default-invert", true);' ;;
+    uniform) echo 'user_pref("layout.css.prefers-color-scheme.content-override", 1);
+user_pref("gjoa.darkmode.invert.enabled", true);
+user_pref("gjoa.darkmode.hybrid.default-invert", false);' ;;
+    light) echo 'user_pref("layout.css.prefers-color-scheme.content-override", 1);
+user_pref("gjoa.darkmode.invert.enabled", false);
+user_pref("gjoa.darkmode.hybrid.default-invert", false);' ;;
+    system) echo 'user_pref("gjoa.darkmode.invert.enabled", false);' ;;
     off) echo 'user_pref("layout.css.prefers-color-scheme.content-override", 2);
-user_pref("gjoa.darkmode.invert.enabled", false);' ;;
-    *) echo 'user_pref("layout.css.prefers-color-scheme.content-override", 1);
-user_pref("gjoa.darkmode.invert.enabled", true);' ;;
+user_pref("gjoa.darkmode.invert.enabled", false);
+user_pref("gjoa.darkmode.hybrid.default-invert", false);' ;;
+    *) echo "unknown dark-mode mode: $1" >&2; return 2 ;;
   esac
 }
 
@@ -104,11 +108,10 @@ render() {
 #
 # NOTE on luminance: ImageMagick 7's `-colorspace Gray` / `-grayscale` convert
 # through LINEAR light, which massively inflates the mean for dark images (a
-# #0d0d0d page reads ~0.53 instead of ~0.05) — that made the naive
-# `-colorspace Gray -format '%[fx:mean]'` recipe (used by the older dm-shoot.sh)
-# unusable as a "is it dark?" gate. We instead read the per-channel sRGB means
+# #0d0d0d page reads ~0.53 instead of ~0.05), so it cannot serve as an
+# "is it dark?" gate. We instead read the per-channel sRGB means
 # directly (no linearization) and combine with Rec.709 weights, which gives the
-# honest perceptual brightness (0..1) — #0d0d0d -> ~0.05.
+# intended perceptual brightness (0..1) — #0d0d0d -> ~0.05.
 measure() {
   local png="$1" sx="$2"
   local r g b bg
@@ -170,7 +173,7 @@ print("\t".join(["#G", defWin, str(defTmo), str(defMean), defXY]))
 # Deep axes line.
 dp = m.get("deep", {})
 print("\t".join(["#D",
-                 ",".join(dp.get("modes", ["engine"])),
+                 ",".join(dp.get("modes", ["uniform"])),
                  ",".join(str(x) for x in dp.get("bgLightness", [16])),
                  ";".join(dp.get("windowSizes", [defWin]))]))
 for t in m.get("targets", []):
@@ -211,7 +214,7 @@ fi
 
 # ---------------- lightweight tier ----------------
 run_check() {
-  printf '%s\n' "=== dm:check — engine mode, bgLightness 16, ${DEF_WIN} ==="
+  printf '%s\n' "=== dm:check — uniform mode, bgLightness 16, ${DEF_WIN} ==="
   printf '%-12s %-9s %-9s %-9s %-7s %s\n' TARGET MEAN MAXMEAN BG-PIXEL BG-OK RESULT
   printf '%s\n' "------------------------------------------------------------------------"
   while IFS=$'\t' read -r tid kind payload meanMax bgHex bgTol bgXY; do
@@ -219,7 +222,7 @@ run_check() {
     total=$((total+1))
     local is_local=0; [ "$kind" = "local" ] && is_local=1
     local out="$OUTDIR/check-$tid.png"
-    render "$out" "$payload" "$is_local" engine 16 "$DEF_WIN" "$DEF_TMO"
+    render "$out" "$payload" "$is_local" uniform 16 "$DEF_WIN" "$DEF_TMO"
     local rc=$? sz; sz=$(stat -c%s "$out" 2>/dev/null || echo 0)
     if [ "$rc" -ne 0 ] || [ "$sz" -lt 1000 ]; then
       printf '%-12s %-9s %-9s %-9s %-7s %s\n' "$tid" "-" "$meanMax" "-" "-" "${R}FAIL(render rc=$rc sz=$sz)${Z}"
@@ -279,10 +282,11 @@ run_deep() {
           local res; res=$(measure "$out" "$bgXY")
           local mean="${res%%|*}" bgpx="${res#*|}"
           local bghex; bghex=$(pixel_to_hex "$bgpx")
-          # Only engine mode carries the hard dark-band assert; the others are
-          # captured for visual review (system/auto on a light site stays light).
+          # Uniform carries the hard dark-band assertion. The other current
+          # modes are captured for visual review because their output depends on
+          # page theme, system theme, or the intentionally disabled state.
           local verdict
-          if [ "$mode" = "engine" ]; then
+          if [ "$mode" = "uniform" ]; then
             local ok; ok=$(python3 -c "print(1 if float('$mean') <= float('$meanMax') else 0)")
             if [ "$ok" = "1" ]; then verdict="${G}PASS${Z}"; else verdict="${R}FAIL${Z}"; fail_count=$((fail_count+1)); fi
           else
@@ -297,9 +301,9 @@ run_deep() {
   printf '%s\n' "------------------------------------------------------------------------------"
   printf 'matrix: %s   thumbs: %s\n' "$matrix" "$thumbs"
   if [ "$fail_count" -eq 0 ]; then
-    printf '%sengine-mode asserts: all PASS%s (non-engine rows are captures, not asserts)\n' "$G" "$Z"
+    printf '%suniform-mode assertions: all PASS%s (other rows are captures)\n' "$G" "$Z"
   else
-    printf '%s%d engine-mode assert(s) FAILED%s\n' "$R" "$fail_count" "$Z"
+    printf '%s%d uniform-mode assertion(s) FAILED%s\n' "$R" "$fail_count" "$Z"
   fi
 }
 

@@ -10,7 +10,7 @@
             [gjoa.tabs.log :refer [create-logger!]]
             [gjoa.tabs.history :refer [make-history!]]
             [gjoa.tabs.content-focus :refer [make-content-focus!]]
-            [gjoa.firefox.prefs :refer [ensure-vertical-tabs-default migrate-legacy-prefs migrate-toolbar-defaults apply-menubar-default]]
+            [gjoa.firefox.prefs :refer [ensure-vertical-tabs-default apply-menubar-default]]
             [gjoa.spaces.niri :refer [make-niri-binding!]]
             [gjoa.platform.index :refer [make-gjoa!]]
             [gjoa.tabs.snapshot :refer [make-saver!]]
@@ -464,10 +464,6 @@
   ;; Defensive: pre-panel steps wrapped in try/catch
   (try (ensure-vertical-tabs-default)
     (catch Any e (console/error "gjoa-tabs: ensureVerticalTabsDefault threw — continuing" e)))
-  (try (migrate-legacy-prefs)
-    (catch Any e (console/error "gjoa-tabs: migrateLegacyPrefs threw — continuing" e)))
-  (try (migrate-toolbar-defaults)
-    (catch Any e (console/error "gjoa-tabs: migrateToolbarDefaults threw — continuing" e)))
   (try (apply-menubar-default document)
     (catch Any e (console/error "gjoa-tabs: applyMenubarDefault threw — continuing" e)))
   (try (try-register-pin-attr!)
@@ -508,7 +504,7 @@
                   (.appendChild (.-spaceHeader state) header-label))
                 (on! (.-spaceHeader state) "click"
                   (fn []
-                    (try (.runExCommand (.-v vim-ref) "spc list")
+                    (try (.runExCommand (.-v vim-ref) "space list")
                       (catch Any e (console/error "gjoa: space header click failed" e)))))
                 (update-space-header)
 

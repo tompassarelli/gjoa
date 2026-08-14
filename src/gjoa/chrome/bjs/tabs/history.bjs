@@ -16,47 +16,32 @@
 ;; touching the DB so we don't pay a write cost for no-op saves.
 
 (declare-extern [Services Ci PathUtils ChromeUtils crypto String] Any)
-(def SCHEMA-VERSION :- Int 3)
-
 (def INSTANCE-ID-PREF :- String "gjoa.instance.id")
 
-;; Schema migrations as ordered SQL strings. Each entry migrates from
-;; index N to N+1. The v1->v2 migration backfills instance_id separately
-;; (post-migration, in JS) because it needs the live instanceId value.
-;;
 ;; Note: Sqlite.sys.mjs rejects SQL strings matching /\bLIKE\b\s(?![@:?])/i
 ;; — including in COMMENTS. Schema SQL is kept comment-free.
-;;
-;; v2->v3 creates an FTS5 virtual table (requires SQLITE_ENABLE_FTS5, enabled
-;; by patch 0007). Migration is attempted in JS — if FTS5 is unavailable the
-;; migration still completes, and search falls back to substring queries.
 (def fts-available :- Any {:v false})
-(def MIGRATIONS :- Any
-  [;; v0 -> v1: initial schema
-   "CREATE TABLE events (
+(def SCHEMA :- Any
+  ["CREATE TABLE IF NOT EXISTS events (
     id        INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL,
     hash      TEXT    NOT NULL UNIQUE,
     snapshot  TEXT    NOT NULL,
-    tag       TEXT
-  );
-  CREATE INDEX events_timestamp ON events(timestamp DESC);
-  CREATE INDEX events_tag       ON events(tag) WHERE tag IS NOT NULL;
-
-  CREATE TABLE events_search_content (
+    tag       TEXT,
+    instance_id TEXT NOT NULL
+  )"
+   "CREATE INDEX IF NOT EXISTS events_timestamp ON events(timestamp DESC)"
+   "CREATE INDEX IF NOT EXISTS events_tag ON events(tag) WHERE tag IS NOT NULL"
+   "CREATE INDEX IF NOT EXISTS events_instance ON events(instance_id)"
+   "CREATE TABLE IF NOT EXISTS events_search_content (
     rowid    INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     url      TEXT NOT NULL,
     label    TEXT NOT NULL
-  );
-  CREATE INDEX esc_event ON events_search_content(event_id);
-  CREATE INDEX esc_url   ON events_search_content(url);
-  CREATE INDEX esc_label ON events_search_content(label)"
-   ;; v1 -> v2: per-record instanceId
-   "ALTER TABLE events ADD COLUMN instance_id TEXT;
-  CREATE INDEX events_instance ON events(instance_id)"
-   ;; v2 -> v3: FTS5 (handled in JS, not SQL — see apply-migration-step)
-   "SELECT 1"])
+  )"
+   "CREATE INDEX IF NOT EXISTS esc_event ON events_search_content(event_id)"
+   "CREATE INDEX IF NOT EXISTS esc_url ON events_search_content(url)"
+   "CREATE INDEX IF NOT EXISTS esc_label ON events_search_content(label)"])
 
 (def log :- Any (create-logger! "history"))
 (def state :- Any {:conn nil :lastHash nil :instanceId nil})
@@ -105,74 +90,23 @@
                   (.forEach bytes
                     (fn [b] (.push hex-parts (.padStart (.toString b 16) 2 "0"))))
                   (.join hex-parts ""))))))
-;; Migrate legacy palefox-history.sqlite files.
-;; Processes suffixes ["", "-wal", "-shm"] sequentially via recursion.
-(defn migrate-legacy-suffix [prof-dir :- String path :- String suffixes :- Any idx :- Int] :- Any
-  (when (< idx (.-length suffixes))
-    (let [suffix (aget suffixes idx)
-          old-path (.join PathUtils prof-dir (str "palefox-history.sqlite" suffix))
-          new-path (str path suffix)]
-      (-> (.exists IOUtils old-path)
-          (.then #(when %
-                    (-> (.exists IOUtils new-path)
-                        (.then (fn [new-exists]
-                          (when (not new-exists)
-                            (-> (.move IOUtils old-path new-path)
-                                (.then (fn [] (log "migrateLegacyDB" {:from old-path :to new-path}))))))))))
-          (.catch #(log "migrateLegacyDB:fail" {:suffix suffix :error (String %)}))
-          (.then #(migrate-legacy-suffix prof-dir path suffixes (+ idx 1)))))))
-
-;; Apply schema migrations, processing from current version to SCHEMA-VERSION
-;; via recursive helper.
 (defn execute-stmts [conn :- Any stmts :- Any idx :- Int] :- Any
   (when (< idx (.-length stmts))
-    (let [trimmed (.trim (aget stmts idx))]
-      (if (= trimmed "")
-        (execute-stmts conn stmts (+ idx 1))
-        (-> (.execute conn trimmed)
-            (.then #(execute-stmts conn stmts (+ idx 1))))))))
+    (-> (.execute conn (aget stmts idx))
+        (.then #(execute-stmts conn stmts (+ idx 1))))))
 
 (defn try-create-fts [conn :- Any] :- Any
   (-> (.execute conn
         "CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(url, label, content=events_search_content, content_rowid=rowid)")
       (.then #(do (set! (.-v fts-available) true)
                   (.execute conn "INSERT INTO events_fts(events_fts) VALUES('rebuild')")))
-      (.then #(log "migrate:fts5" {:status "created"}))
-      (.catch #(log "migrate:fts5" {:status "unavailable" :error (String %)}))))
+      (.then #(log "fts5" {:status "ready"}))
+      (.catch #(do (set! (.-v fts-available) false)
+                   (log "fts5" {:status "unavailable" :error (String %)})))))
 
-(defn probe-fts [conn :- Any] :- Any
-  (-> (.execute conn "SELECT * FROM events_fts LIMIT 0")
-      (.then #(set! (.-v fts-available) true))
-      (.catch #(set! (.-v fts-available) false))))
-
-(defn apply-migration-step [conn :- Any v :- Int] :- Any
-  (when (< v SCHEMA-VERSION)
-    (let [sql (aget MIGRATIONS v)]
-      (if (not sql)
-        (throw (Error. (str "gjoa-history: no migration for v" v " -> v" (+ v 1))))
-        (-> (.executeTransaction conn
-              #(let [stmts (.split sql (RegExp. ";\\s*\\n"))]
-                 (-> (execute-stmts conn stmts 0)
-                     (.then (fn []
-                       (when (= v 1)
-                         (let [id (load-instance-id!)]
-                           (-> (.execute conn
-                                 "UPDATE events SET instance_id = ? WHERE instance_id IS NULL"
-                                 [id])
-                               (.then (fn [] (log "migrate:backfill-instance" {:id id}))))))))
-                     (.then (fn [] (.execute conn (str "PRAGMA user_version = " (+ v 1))))))))
-            (.then #(when (= v 2) (try-create-fts conn)))
-            (.then #(apply-migration-step conn (+ v 1))))))))
-
-(defn apply-migrations [conn :- Any] :- Any
-  (-> (.execute conn "PRAGMA user_version")
-      (.then #(let [current (if (and % (.-length %) (aget % 0))
-                              (or (.getResultByName (aget % 0) "user_version") 0)
-                              0)]
-                (if (>= current SCHEMA-VERSION)
-                  (do (log "migrate:current" {:version current}) nil)
-                  (do (log "migrate:apply" {:from current :to SCHEMA-VERSION})
-                      (apply-migration-step conn current)))))))
+(defn initialize-schema [conn :- Any] :- Any
+  (-> (.executeTransaction conn #(execute-stmts conn SCHEMA 0))
+      (.then #(try-create-fts conn))))
 
 (defn prime-last-hash [conn :- Any] :- Any
   (-> (.execute conn "SELECT hash FROM events ORDER BY id DESC LIMIT 1")
@@ -187,13 +121,11 @@
           sqlite (.-Sqlite sqlite-mod)
           prof-dir (.-path (.get (.-dirsvc Services) "ProfD" (.-nsIFile Ci)))
           path (.join PathUtils prof-dir "gjoa-history.sqlite")]
-      (-> (migrate-legacy-suffix prof-dir path ["" "-wal" "-shm"] 0)
-          (.then #(do (log "openConnection" {:path path})
-                      (.openConnection sqlite {:path path})))
+      (-> (.openConnection sqlite {:path path})
+          (.then #(do (log "openConnection" {:path path}) %))
           (.then #(-> (.execute % "PRAGMA journal_mode = WAL")
                       (.then (fn [] (.execute % "PRAGMA foreign_keys = ON")))
-                      (.then (fn [] (apply-migrations %)))
-                      (.then (fn [] (probe-fts %)))
+                      (.then (fn [] (initialize-schema %)))
                       (.then (fn []
                         (set! (.-conn state) %)
                         (prime-last-hash %)))
@@ -208,23 +140,13 @@
         min (.padStart (String (.getMinutes dt)) 2 "0")]
     (str "Session - " day-short " " yyyy "/" mm "/" dd " " hh ":" min)))
 
-;; Returns nil for a row whose snapshot won't parse (e.g. legacy rows written
-;; before the canonicalize undefined-fix). Callers (query-rows) filter nils so
-;; one corrupt row can't reject the whole `:restore` / `:history` query.
 (defn decode-row [row :- Any] :- Any
-  (let [snap (.getResultByName row "snapshot")
-        parsed (try (JSON/parse snap)
-                 (catch Any e
-                   (console/warn "gjoa-tabs: skipping unparseable history snapshot"
-                     (.getResultByName row "id") (.-message e))
-                   nil))]
-    (when parsed
-      {:id (.getResultByName row "id")
-       :timestamp (.getResultByName row "timestamp")
-       :hash (.getResultByName row "hash")
-       :snapshot parsed
-       :tag (.getResultByName row "tag")
-       :instanceId (or (.getResultByName row "instance_id") "")})))
+  {:id (.getResultByName row "id")
+   :timestamp (.getResultByName row "timestamp")
+   :hash (.getResultByName row "hash")
+   :snapshot (JSON/parse (.getResultByName row "snapshot"))
+   :tag (.getResultByName row "tag")
+   :instanceId (.getResultByName row "instance_id")})
 
 ;; Extract (url, label) pairs from a snapshot for search indexing.
 (defn extract-searchable-rows [snapshot :- Any] :- Any
@@ -266,7 +188,7 @@
 (def EVENTS-COLS :- String "SELECT id, timestamp, hash, snapshot, tag, instance_id FROM events")
 (defn query-rows [sql :- String params :- Any] :- Any
   (-> (with-conn #(.execute % sql params))
-      (.then #(.filter (.map % decode-row) Boolean))))
+      (.then #(.map % decode-row))))
 (defn query-one [sql :- String params :- Any] :- Any
   (-> (with-conn #(.execute % sql params))
       (.then #(when (.-length %) (decode-row (aget % 0))))))

@@ -3,15 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 // Content half of gjoa's INPUT-STATE actor — the "am I typing into a form right
-// now?" detector that lets vim keys yield to editing, PLUS the smooth-scroll
-// driver. It replaces a legacy `loadFrameScript(data:...)` that FF152's script-
-// filename validation rejects ("unsafe filename: data:...") — which had silently
-// broken editable-focus detection AND j/k smooth-scroll on all web content.
-//
-// Why an actor (not a frame script): gjoa's other content features (cosmetic,
-// dark-mode) are JSWindowActors; frame scripts are the decaying path (the data:
-// rejection is the canary). The actor also runs on privileged about: pages a
-// content-process frame script never reaches.
+// now?" detector that lets vim keys yield to editing, plus the smooth-scroll
+// driver. The actor runs in both web content and privileged about: pages.
 //
 // The editable predicate distills what Vimium + Tridactyl learned across millions
 // of users — input-type BLACKLIST (unknown type => editable, per HTML5), textarea,

@@ -1,9 +1,7 @@
 #lang beagle/js
 ;; Locate the gjoa binary inside engine/obj-*/dist/bin/.
 ;;
-;; gjoa is its own Firefox build, so we don't need palefox's "test rig"
-;; (a separate stock-Firefox install + autoconfig bootstrap). The binary
-;; produced by `mach build` lives under engine/obj-*/dist/bin/gjoa-bin
+;; The binary produced by `mach build` lives under engine/obj-*/dist/bin/gjoa-bin
 ;; (or `gjoa` for the wrapper). The chrome JS gets loaded by gjoa's
 ;; built-in loader when <install_root>/gjoa-dev/ exists, which
 ;; `bun run chrome:install` sets up.

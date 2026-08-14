@@ -1,5 +1,5 @@
 {
-  "note": "Tiered dark-mode visual-test manifest for tools/dm-driver/dm-check.sh. The `check` tier renders each target in ENGINE mode at the default darkness (bgLightness 16) and asserts the result lands in the dark band. The `deep` tier sweeps modes x bgLightness x window sizes (axes below) over the same targets. Schema documented in README.md.",
+  "note": "Tiered dark-mode visual-test manifest for tools/dm-driver/dm-check.sh. The `check` tier renders each target in uniform mode at the default darkness (bgLightness 16) and asserts the result lands in the dark band. The `deep` tier sweeps the current modes x bgLightness x window sizes over the same targets. Schema documented in README.md.",
   "schemaVersion": 1,
 
   "defaults": {
@@ -41,7 +41,7 @@
   ],
 
   "deep": {
-    "modes": ["system", "hybrid", "auto", "engine"],
+    "modes": ["dark", "uniform", "light", "system", "off"],
     "bgLightness": [8, 16, 24],
     "windowSizes": ["1280,800", "768,1024"]
   }

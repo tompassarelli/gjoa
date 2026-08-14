@@ -16,8 +16,6 @@ bookmarks, tab snapshots). Patch the third_party/sqlite3/src/moz.build
 to define `SQLITE_ENABLE_FTS5 = 1` so the extension gets linked into
 libsqlite3.
 
-We do NOT enable FTS3 — it's the legacy extension; FTS5 supersedes it.
-
 diff --git a/third_party/sqlite3/src/moz.build b/third_party/sqlite3/src/moz.build
 --- a/third_party/sqlite3/src/moz.build
 +++ b/third_party/sqlite3/src/moz.build
