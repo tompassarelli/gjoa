@@ -47,11 +47,16 @@ hot-reload. Proposing a nix rebuild to verify a *chrome* fix is the smell.
 
 (The Sunday-only cadence rule was rescinded 2026-06-15 — build whenever needed.)
 
-## The engine-hosting checkout is a pin — `~/code/gjoa/pins/dev-runtime`
+## The engine-hosting checkout is an immutable content pin
 
-It is not a lane: `~/code/gjoa/pins/dev-runtime.pin` names who consumes it, and
-nothing under `pins/` is swept, reaped, or written by automation. `~/code/gjoa/active`
-is its alias. Read the manifest before changing anything about that checkout.
+The current pin is
+`~/code/gjoa/pins/1d5054b80068e3f636a0d7e5f4b30863a502546f`; its same-name
+`.pin` sidecar names the runtime consumer. `~/code/gjoa/active` is the stable
+consumer selector and must resolve to that full-object-ID path. The checkout's
+bytes and HEAD are immutable and nothing under `pins/` is swept or reaped; only
+the sibling manifest is administered. To advance the runtime, create a new
+detached full-object-ID pin and sidecar, then update `~/code/gjoa/active`. Never
+check out a different ref inside an existing pin.
 
 The nix build closure is rooted at the pin's path, and only a *registered
 indirect* GC root survives the collector — a bare `ln -s` is not one. The

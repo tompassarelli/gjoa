@@ -12,7 +12,8 @@
 
 ;; Derive the libclang path WITHOUT relying on the ambient env.
 ;;
-;; `bun run import` runs under the DEFAULT direnv shell (beagle-pin env), which
+;; `bun run import` runs under the DEFAULT direnv shell (content-addressed Beagle
+;; pin env), which
 ;; does NOT set LIBCLANG_PATH — only the heavy `.#mach` shell does. So prep used
 ;; to emit a mozconfig with no --with-libclang-path, and the later `cd engine &&
 ;; ./mach configure` would die "could not find libclang". We close that gap by

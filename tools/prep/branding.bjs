@@ -22,9 +22,18 @@
 ;; It's a bash script (no Windows shebang support) — launched via `bash` at the
 ;; :cmd site; forward-slash the path for bash on Windows. (.fromCharCode String 92)
 ;; is a backslash; no-op on *nix.
+(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
+(def BEAGLE-REF :- String
+  (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
+        ref (.find lines (fn [l :- String] :- Bool
+                           (and (> (.-length (.trim l)) 0)
+                                (not (.startsWith (.trim l) "#")))))]
+    (if ref
+      (.trim ref)
+      (throw (Error. "configs/beagle.ref has no Beagle object ID")))))
 (def BEAGLE-PIN-ROOT :- String
   (or (.-BEAGLE_PIN_ROOT (.-env process))
-      (resolve (.-HOME (.-env process)) "code" "beagle-pin")))
+      (resolve (.-HOME (.-env process)) "code" "beagle" "pins" BEAGLE-REF)))
 (def BEAGLE-BUILD :- String
   (.replaceAll (resolve BEAGLE-PIN-ROOT "bin" "beagle-build") (String/fromCharCode 92) "/"))
 

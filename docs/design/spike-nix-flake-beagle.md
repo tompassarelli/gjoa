@@ -1,10 +1,12 @@
 # SPIKE #113 — beagle as a pinned nix flake input
 
-> **STATUS: SPIKE / DESIGN. Branch `spike/nix-flake-beagle`. NOT merged, NOT
-> built.** This document is the feasibility verdict + migration plan + risk
-> assessment for replacing the raco-link + `PLTCOLLECTS` beagle pin with a nix
-> **flake input**. The companion `flake.beagle-input.draft.nix` is a WIP sketch
-> of the input declaration + devshell wiring — illustration only.
+> **STATUS: HISTORICAL / NON-INSTRUCTIONAL SPIKE.** This records a superseded
+> feasibility study from branch `spike/nix-flake-beagle`; it was not merged or
+> built. Current tooling derives an immutable local checkout at
+> `~/code/beagle/pins/<full-object-id>` directly from `configs/beagle.ref`.
+> Commands and migration phases below are preserved as design context, not
+> operational instructions. The companion `flake.beagle-input.draft.nix` is
+> likewise illustrative only.
 
 ---
 
@@ -43,8 +45,8 @@ places. Any migration must address every one:
 |---|----------|---------------|-----------------------|
 | 1 | `.envrc` (local dev) | `beagle-build` CLI + racket `beagle` collection | symlinks `$BEAGLE_PIN_ROOT/beagle-lib` → `.beagle-pin-collects/beagle`, sets `PLTCOLLECTS=.beagle-pin-collects:` |
 | 2 | `.envrc` (bun runtime) | `beagle/core.js` ($$bc value-semantics runtime) | symlinks `node_modules/beagle` → `$BEAGLE_PIN_ROOT/beagle-lib/lib/beagle` |
-| 3 | `package.json` `tools:compile` | `bin/beagle-build` to bootstrap-compile `build-tools.bjs` | `bash "${BEAGLE_PIN_ROOT:-~/code/beagle-pin}/bin/beagle-build"` |
-| 4 | `tools/build-tools.bjs` + `tools/prep/overlay.bjs` | `bin/beagle-build` + vendor `core.js` | reads `BEAGLE_PIN_ROOT` env (default `~/code/beagle-pin`) |
+| 3 | `package.json` `tools:compile` | `bin/beagle-build` to bootstrap-compile `build-tools.bjs` | reads `BEAGLE_PIN_ROOT`, otherwise derives `~/code/beagle/pins/<full-object-id>` from `configs/beagle.ref` |
+| 4 | `tools/build-tools.bjs` + `tools/prep/overlay.bjs` | `bin/beagle-build` + vendor `core.js` | same resolver: CI override or the configured content-addressed pin |
 | 5 | CI (`build-*.yml`) | clone beagle @ pin, register collection, link runtime | `git clone tompassarelli/beagle` @ ref + `raco pkg install --link` + `ln -sfn … node_modules/beagle` |
 | 6 | `nix build` (`flake.nix`) | beagle is **not currently an input** | the nix `buildMozillaMach` consumes pre-overlaid `engine/`; beagle-build runs OUTSIDE nix during `bun run import`, so the nix build path never sees beagle directly |
 
@@ -56,8 +58,9 @@ providing `beagle-build` on PATH for `bun run import`, not about the
 `buildMozillaMach` derivation taking a beagle input. This substantially shrinks
 the migration: the nix-build derivation itself needs no change; the devshell does.
 
-Enforcement: **Gate M** (preflight.bjs:410) hard-fails if `~/code/beagle-pin`
-HEAD ≠ `configs/beagle.ref`. **Gate Q** (preflight.bjs:579) asserts the emitted
+Enforcement: **Gate M** hard-fails unless the full `HEAD` of
+`~/code/beagle/pins/<full-object-id>` exactly equals `configs/beagle.ref`.
+**Gate Q** asserts the emitted
 chrome's `$$bc` symbol references are a subset of the vendored `core.js` export
 surface (the emit↔runtime contract).
 
@@ -118,7 +121,7 @@ flake input resolves cleanly.
 3. Add `beaglePkg` to `devShells.default.packages` and `devShells.mach.packages`.
    This puts `beagle-build`, `beagle-check`, etc. on PATH for `bun run import`.
 4. In the devshell `shellHook`, export the two env vars the tooling reads, now
-   pointing at the **store path** instead of `~/code/beagle-pin`:
+   pointing at the **store path** instead of the configured local content pin:
    - `export BEAGLE_PIN_ROOT="${beaglePkg}"` — **(see Phase 4: tooling resolver
      must learn the store layout, OR we keep `BEAGLE_PIN_ROOT` pointed at a
      worktree and only add a separate `BEAGLE_BUILD`/`BEAGLE_CORE_JS`)**.
@@ -144,11 +147,10 @@ flake input resolves cleanly.
    - Minimal: keep `BEAGLE_PIN_ROOT` but make the resolver try both
      `<root>/beagle-lib/lib/beagle/core.js` (worktree) and
      `<root>/lib/beagle/lib/beagle/core.js` (store), first-existing wins.
-8. `package.json` `tools:compile`: replace the hardcoded
-   `"${BEAGLE_PIN_ROOT:-$HOME/code/beagle-pin}/bin/beagle-build"` with
-   `"${BEAGLE_BUILD:-${BEAGLE_PIN_ROOT:-$HOME/code/beagle-pin}/bin/beagle-build}"`
-   so the devshell's `BEAGLE_BUILD` (store path) takes precedence, falling back
-   to the worktree for non-nix users.
+8. `package.json` `tools:compile`: replace direct invocation of the derived
+   `~/code/beagle/pins/<full-object-id>/bin/beagle-build` with an explicit
+   `BEAGLE_BUILD` supplied by the devshell, so its store path takes precedence
+   while the content-addressed checkout remains available to non-nix users.
 
 ### Phase 5 — CI switches to the flake input (gjoa, unilateral)
 9. `.github/workflows/build-*.yml`: replace the 4 beagle steps (Install Racket /
@@ -169,7 +171,8 @@ flake input resolves cleanly.
     how `gjoa.json` stays the Firefox source-of-truth that `flake.nix` reads.
 
 ### Phase 7 — preflight Gate M / Q adapt (gjoa, unilateral)
-11. **Gate M** today asserts `~/code/beagle-pin` HEAD == `configs/beagle.ref`.
+11. **Gate M** now asserts the configured content-addressed checkout's full
+    `HEAD` exactly equals `configs/beagle.ref`.
     Post-migration the pin lives in `flake.lock`, so Gate M becomes: assert
     `flake.lock`'s `beagle` input `locked.rev` == `configs/beagle.ref` (a pure
     file-vs-file check, no worktree, no `git -C … rev-parse`). Simpler and more
@@ -181,12 +184,11 @@ flake input resolves cleanly.
     shim is required.
 
 ### Phase 8 — keep raco-link as a transition fallback, then remove
-13. During transition, the resolver's worktree fallback (Phase 4) means a dev
-    with `~/code/beagle-pin` still works even if the flake input is flaky. Once
-    the flake path is proven green in CI + a local `bun run import`, delete the
-    `~/code/beagle-pin` worktree dependency from Gate M, the resolvers, and the
-    docs. **Do NOT delete the fallback in the same PR that introduces the
-    input** — two PRs, so a regression is bisectable.
+13. During transition, the resolver's content-addressed checkout fallback
+    means a developer with the configured `~/code/beagle/pins/<full-object-id>`
+    still works if the flake input is flaky. Once the flake path is proven green
+    in CI + a local `bun run import`, remove that local-pin dependency from Gate
+    M, the resolvers, and the docs in a separate, bisectable change.
 
 ---
 
@@ -202,7 +204,7 @@ flake input resolves cleanly.
 | **Beagle URL drift** — a flake example or workflow stops using canonical `tompassarelli/beagle` | Low | fetches the wrong upstream | Flake input and CI pin one canonical URL by SHA. |
 | **`flake.lock` and `configs/beagle.ref` drift** | Medium | confusing double-pin | Phase 6 "pins agree" CI gate. |
 | **`--impure` nix build + beagle input interaction** — gjoa's `nix build` already needs `--impure` (reads `engine/` outside flake src). Adding an input doesn't change that. | Low | none | beagle input is pure (store path); `--impure` is unrelated (it's for `engine/`). No new coupling. |
-| **Non-nix contributors** (no nix, build via raco) | Low | broken for them | Phase 4 fallbacks keep `~/code/beagle-pin` + `raco link` working; document both paths. |
+| **Non-nix contributors** (no nix, build via raco) | Low | broken for them | Phase 4 fallback keeps the configured content-addressed checkout + `raco link` working; document both paths. |
 
 ---
 

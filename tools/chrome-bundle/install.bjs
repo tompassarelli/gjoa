@@ -19,7 +19,7 @@
 ;; owned install root), only root could create this symlink — end users
 ;; can't accidentally activate dev mode.
 (ns gjoa.tools.chrome-bundle.install
-  (:require [fs :refer [existsSync statSync]]
+  (:require [fs :refer [existsSync statSync readFileSync]]
             [fs/promises :refer [rm symlink cp]]
             [path :refer [join]]
             [child_process :refer [spawnSync]]))
@@ -62,10 +62,20 @@
   (join REPO-ROOT "engine" "browser" "components" "gjoa" "GjoaLoader.sys.mjs"))
 (def ENG-LOADER-STRAY :- String
   (join REPO-ROOT "engine" "browser" "components" "gjoa" "GjoaLoader.bjs"))
+(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
+(def BEAGLE-REF :- String
+  (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
+        ref (.find lines (fn [l :- String] :- Bool
+                           (and (> (.-length (.trim l)) 0)
+                                (not (.startsWith (.trim l) "#")))))]
+    (if ref
+      (.trim ref)
+      (throw (Error. "configs/beagle.ref has no Beagle object ID")))))
+(def BEAGLE-PIN-ROOT :- String
+  (or (.-BEAGLE_PIN_ROOT (.-env process))
+      (join (.-HOME (.-env process)) "code" "beagle" "pins" BEAGLE-REF)))
 (def BEAGLE-BUILD :- String
-  (join (or (.-BEAGLE_PIN_ROOT (.-env process))
-            (join (.-HOME (.-env process)) "code" "beagle-pin"))
-        "bin" "beagle-build"))
+  (join BEAGLE-PIN-ROOT "bin" "beagle-build"))
 
 ;; Recompile GjoaLoader.bjs → its .sys.mjs iff the source is newer (or output is
 ;; missing). Mirrors tools/prep/overlay.bjs' beagle-build invocation, incl. the

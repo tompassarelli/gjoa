@@ -1,11 +1,12 @@
 # Pinned beagle ref — the FROZEN beagle commit gjoa builds against, COMPILER AND
-# runtime. gjoa does NOT track live ~/code/beagle. A dedicated worktree at this ref
-# lives at ~/code/beagle-pin; the build resolves the beagle COMPILER from it — .envrc
-# sets PLTCOLLECTS -> .beagle-pin-collects/beagle -> the worktree, so racket uses the
-# pinned compiler, NOT the global raco link to live beagle — and core.js is vendored
-# from it. CI checks out ../beagle at this ref + raco-links it, so CI matches local.
-# Preflight Gate M enforces the worktree is at this ref. Bump DELIBERATELY (review the
-# beagle changelog): re-point the worktree, then re-import + re-vendor.
+# runtime. gjoa does NOT track live ~/code/beagle. This full object ID names an
+# immutable checkout at ~/code/beagle/pins/<full-object-id>, with a same-name .pin
+# sidecar naming Gjoa as its consumer. The build resolves the Beagle compiler from
+# that checkout: .envrc sets PLTCOLLECTS through .beagle-pin-collects/beagle, and
+# core.js is vendored from the same pin. CI checks out this object ID into its
+# BEAGLE_PIN_ROOT override, so CI matches local. Preflight Gate M enforces exact
+# full-HEAD equality. To advance, create the new detached content-addressed pin,
+# update this file, then re-import and re-vendor; never re-point an existing pin.
 # Canonical upstream: https://github.com/tompassarelli/beagle. This candidate is
 # the newest revision with both upstream tests (run 30034827041) and native
 # (run 30034828902) green; newer main was red when selected on 2026-07-27.

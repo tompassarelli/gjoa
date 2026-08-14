@@ -15,13 +15,25 @@
 (define-mode strict)
 (declare-extern [Bun process] Any)
 
-;; Pinned beagle worktree root: a DEDICATED checkout (default ~/code/beagle-pin)
-;; held at configs/beagle.ref, so the build never detaches the shared ../beagle
-;; another agent is actively working in. CI overrides BEAGLE_PIN_ROOT to point at
-;; its own fresh pinned checkout. Same resolver as tools/build-tools.bjs.
+;; Local builds derive the immutable content-addressed pin directly from the full
+;; object ID in configs/beagle.ref. CI overrides BEAGLE_PIN_ROOT with its fresh
+;; checkout of that same object. Never compile against the moving shared checkout.
+(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
+
+(defn pinned-ref [] :- String
+  (if (not (existsSync BEAGLE-REF-FILE))
+    (throw (Error. "configs/beagle.ref is missing"))
+    (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
+          ref (.find lines (fn [l :- String] :- Bool
+                             (and (> (.-length (.trim l)) 0)
+                                  (not (.startsWith (.trim l) "#")))))]
+      (if ref
+        (.trim ref)
+        (throw (Error. "configs/beagle.ref has no Beagle object ID"))))))
+
 (def BEAGLE-PIN-ROOT :- String
   (or (.-BEAGLE_PIN_ROOT (.-env process))
-      (resolve (.-HOME (.-env process)) "code" "beagle-pin")))
+      (resolve (.-HOME (.-env process)) "code" "beagle" "pins" (pinned-ref))))
 
 ;; beagle-build compiles the chrome loader (.bjs) to the .sys.mjs that jar.mn
 ;; packages into omni.ja. Same resolution as tools/build-tools.bjs. It's a bash
@@ -32,36 +44,26 @@
   (.replaceAll (resolve BEAGLE-PIN-ROOT "bin" "beagle-build") (.fromCharCode String 92) "/"))
 
 ;; ── Lockstep core.js vendoring ─────────────────────────────────────────────
-;; The chrome (.bjs) is compiled against the pinned beagle worktree and emits
+;; The chrome (.bjs) is compiled against the pinned Beagle checkout and emits
 ;; $$bc.<fn>(...) value-semantics runtime calls. Those resolve to the vendored
 ;; runtime we ship at resource:///modules/gjoa/beagle/core.js. If the vendored
 ;; copy drifts from the beagle it was compiled against, the emit calls a function
 ;; the runtime doesn't export → `$$bc.<fn> is not a function` at chrome load. So
-;; we DON'T hand-copy it: every import re-vendors the pinned worktree's core.js
+;; we DON'T hand-copy it: every import re-vendors the pinned checkout's core.js
 ;; verbatim, with a provenance header recording configs/beagle.ref. The pin is
 ;; held at that ref, so this always vendors the pinned runtime.
 (def BEAGLE-CORE-SRC :- String
   (resolve BEAGLE-PIN-ROOT "beagle-lib" "lib" "beagle" "core.js"))
 (def VENDORED-CORE-DST :- String
   (join SRC-DIR "browser" "components" "gjoa" "beagle" "core.js"))
-(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
-
-(defn pinned-ref [] :- String
-  (if (not (existsSync BEAGLE-REF-FILE))
-    "unknown"
-    (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
-          ref (.find lines (fn [l :- String] :- Bool
-                             (and (> (.-length (.trim l)) 0)
-                                  (not (.startsWith (.trim l) "#")))))]
-      (if ref (.slice (.trim ref) 0 12) "unknown"))))
 
 (defn vendor-core-js! [] :- Any
   (if (not (existsSync BEAGLE-CORE-SRC))
-    (throw (Error. (str "vendor-core-js!: " BEAGLE-CORE-SRC " not found — is the pinned beagle worktree (" BEAGLE-PIN-ROOT ") checked out?")))
+    (throw (Error. (str "vendor-core-js!: " BEAGLE-CORE-SRC " not found — is the Beagle content pin (" BEAGLE-PIN-ROOT ") present?")))
     (let [body (readFileSync BEAGLE-CORE-SRC "utf8")
-          ref (pinned-ref)
+          ref (.slice (pinned-ref) 0 12)
           header (str "// AUTO-VENDORED by tools/prep/overlay.bjs from "
-                      "<beagle-pin>/beagle-lib/lib/beagle/core.js (configs/beagle.ref = " ref ").\n"
+                      "$BEAGLE_PIN_ROOT/beagle-lib/lib/beagle/core.js (configs/beagle.ref = " ref ").\n"
                       "// DO NOT EDIT BY HAND — re-vendored on every `bun run import` so the\n"
                       "// $$bc value-semantics runtime always matches the beagle the chrome was\n"
                       "// compiled against. Bump configs/beagle.ref + re-import to change it.\n")

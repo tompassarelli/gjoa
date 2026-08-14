@@ -2,7 +2,7 @@
 ;; Compile all .bjs source files to JS in .beagle-out/ via beagle-build.
 ;; Skips macros.bjs (compile-time only) and test files.
 (ns gjoa.tools.chrome-bundle.compile
-  (:require [fs :refer [existsSync statSync]]
+  (:require [fs :refer [existsSync statSync readFileSync]]
             [fs/promises :refer [readdir mkdir]]
             [path :refer [join resolve relative]]))
 (define-mode strict)
@@ -16,13 +16,20 @@
 ;; macros.bjs is inlined at compile time, so a change to it invalidates EVERY
 ;; compiled file's cache (any file may expand its macros).
 (def MACROS-PATH :- String (join BJS-ROOT "macros.bjs"))
-;; Pinned beagle worktree (default ~/code/beagle-pin; CI overrides BEAGLE_PIN_ROOT)
-;; — NOT live ../beagle: the build must compile against the configs/beagle.ref pin,
-;; and the cwd-relative ../beagle path breaks in agent worktrees (resolves to a
-;; nonexistent sibling). Same resolver as tools/build-tools.bjs + prep/overlay.bjs.
+;; Local builds derive the immutable content-addressed pin directly from the full
+;; object ID in configs/beagle.ref. CI overrides BEAGLE_PIN_ROOT with its checkout.
+(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
+(def BEAGLE-REF :- String
+  (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
+        ref (.find lines (fn [l :- String] :- Bool
+                           (and (> (.-length (.trim l)) 0)
+                                (not (.startsWith (.trim l) "#")))))]
+    (if ref
+      (.trim ref)
+      (throw (Error. "configs/beagle.ref has no Beagle object ID")))))
 (def BEAGLE-PIN-ROOT :- String
   (or (.-BEAGLE_PIN_ROOT (.-env process))
-      (resolve (.-HOME (.-env process)) "code" "beagle-pin")))
+      (resolve (.-HOME (.-env process)) "code" "beagle" "pins" BEAGLE-REF)))
 ;; beagle-build is a bash script (no shebang support on Windows) — launched via
 ;; `bash` at the :cmd site; forward-slash the path so bash accepts it on Windows.
 ;; (String/fromCharCode 92) is a backslash; no-op on *nix.

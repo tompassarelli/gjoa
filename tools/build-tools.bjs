@@ -4,24 +4,32 @@
 ;; specifiers (./log.js, ../security/check.js) resolve on disk, no bundler.
 ;;
 ;; Bootstrap: package.json's `tools:compile` first compiles THIS file with
-;; the pinned beagle worktree's bin/beagle-build, then runs it to compile
+;; the pinned Beagle checkout's bin/beagle-build, then runs it to compile
 ;; everything else. mtime-cached — re-runs are near-instant when nothing changed.
 (ns gjoa.tools.build-tools
   (:require [fs/promises :refer [mkdir]]
-            [fs :refer [existsSync statSync readdirSync]]
+            [fs :refer [existsSync statSync readdirSync readFileSync]]
             [path :refer [join resolve relative]]))
 (define-mode strict)
 (declare-extern [process Bun] Any)
 
 (def REPO-ROOT :- String (.cwd process))
 (def OUT-ROOT :- String (join REPO-ROOT ".beagle-tools" "gjoa"))
-;; Pinned beagle worktree root: a DEDICATED checkout (default ~/code/beagle-pin)
-;; held at configs/beagle.ref, so the build never detaches the shared ../beagle
-;; another agent is actively working in. CI overrides BEAGLE_PIN_ROOT to point at
-;; its own fresh pinned checkout. Same resolver as tools/prep/overlay.bjs.
+;; Local builds derive the immutable content-addressed pin directly from the full
+;; object ID in configs/beagle.ref. CI overrides BEAGLE_PIN_ROOT with its fresh
+;; checkout of that same object. Never compile against the moving shared checkout.
+(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
+(def BEAGLE-REF :- String
+  (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
+        ref (.find lines (fn [l :- String] :- Bool
+                           (and (> (.-length (.trim l)) 0)
+                                (not (.startsWith (.trim l) "#")))))]
+    (if ref
+      (.trim ref)
+      (throw (Error. "configs/beagle.ref has no Beagle object ID")))))
 (def BEAGLE-PIN-ROOT :- String
   (or (.-BEAGLE_PIN_ROOT (.-env process))
-      (resolve (.-HOME (.-env process)) "code" "beagle-pin")))
+      (resolve (.-HOME (.-env process)) "code" "beagle" "pins" BEAGLE-REF)))
 ;; beagle-build is a `#!/usr/bin/env bash` script. Windows has no shebang support,
 ;; so it can't be exec'd directly there — it's launched via `bash` (Git Bash on the
 ;; runner) at every :cmd site below. Normalize the path to forward slashes so bash
