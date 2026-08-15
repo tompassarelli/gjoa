@@ -22,10 +22,10 @@
 | M | beagle compiler pinned (beagle-currency) | hard | churn |
 | N | knobs backed + reversible (knob-not-delete) | hard | churn |
 | O | no bare beagle/ import in shipped gjoa .sys.mjs | hard | churn |
-| P | patch hashes match recorded manifest (#104a) | hard | security |
+| P | patch hashes match recorded manifest | hard | security |
 | Q | $$bc runtime export-closure (emit ↔ core.js) | hard | _(undocumented)_ |
-| R | security mitigations intact (#121) | hard | security |
-| S | security-critical patches persist (#120) | hard | churn, security |
+| R | security mitigations intact | hard | security |
+| S | security-critical patches persist | hard | churn, security |
 | T | stewardship tapestry intact (docs ↔ machinery) | hard | _(undocumented)_ |
 | U | patch numbering coherent (domains contiguous) | warn | churn |
 | V | upstream provenance lock current | warn | churn |

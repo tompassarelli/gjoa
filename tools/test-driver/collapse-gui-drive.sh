@@ -3,7 +3,8 @@
 # app-id gjoa-render) with the dev chrome loader (current source), vertical
 # revamp mode expanded, drive collapse-gui-probe.py, tear down.
 set -u
-ROOT="/home/tom/code/gjoa"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
 BIN="$ROOT/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa"
 PROBE="$ROOT/tools/test-driver/collapse-gui-probe.py"
 PORT="${PORT:-3081}"

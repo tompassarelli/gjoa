@@ -47,7 +47,7 @@ Before committing to a Firefox bump, `bun run forecast [from] [to]` intersects t
 2. `git diff --name-only <from-tag> <to-tag>` against the upstream clone = the changed-file set.
 3. For each patch, intersect its `# touches:` files with the delta; report affected patches **ranked by seam tier** (review `native-src` first).
 
-Output is either `CLEAN — all patches apply unchanged` or the blast-radius list. A real point-release bump with a fully disjoint patch surface validated the clean path. This converts "will this bump hurt?" from a 45-min gamble into a sub-second read. (Precise per-symbol blast-radius ranking via the fram call graph is the deferred turtle; v1 ranks by tier, which needs no graph.)
+Output is either `CLEAN — all patches apply unchanged` or the blast-radius list, ranked by seam tier.
 
 ## Is the patch set coherently ordered? — `tools/prep/patch-order.bjs` (Gate U)
 
@@ -55,9 +55,9 @@ The patch *numbers* carry a latent theory: they ascend by **engine depth** — c
 
 - **file-overlap components** — patches sharing a touched file are the *only* hard ordering constraints. Alpha-apply already satisfies them, so the order is **apply-sound by construction**; batching is the open question.
 - **domain runs** — sorted by number, each subsystem should form one contiguous run. A domain appearing in two non-adjacent runs = a foreign patch wedged into another's block (a comprehension/rebase smell).
-- **minimal renumber** — the fix is a longest-increasing-subsequence over the canonical-order number sequence: the LIS is the largest already-correct run; its complement is the minimal set to move into free gap slots. (Worked example, since healed: the newtab patch once sat inside the dark-mode/engine block as `0011`; one move — `0011 → 0003`, into the chrome block — healed the split. The set is now contiguous: chrome `0001–0003` · third_party `0007` · toolkit `0008` · engine `0009–0014`.)
+- **minimal renumber** — a longest-increasing-subsequence over the canonical-order number sequence identifies the largest correctly ordered run; its complement is the minimal set to move into free gap slots. The current set is contiguous: chrome `0001–0003` · third_party `0007` · toolkit `0008` · engine `0009–0014`.
 
-**Gate U** (`preflight.bjs`, WARN) runs `patch-order check` and warns on a split domain — advisory, because numbering is batching, not correctness. `renumber --apply` executes the move (rename + rekey `configs/patch-hashes.json`, content-preserving); deferred when a build is in flight or the shared worktree is hot.
+**Gate U** (`preflight.bjs`, WARN) runs `patch-order check` and warns on a split domain — advisory, because numbering is batching, not correctness. `renumber --apply` executes the move by renaming the patch and rekeying `configs/patch-hashes.json` without changing patch content.
 
 ## Content-addressing the seam — `tools/prep/upstream-provenance.bjs` (Gate V)
 
@@ -74,17 +74,17 @@ This is strictly finer than the release-tag forecast: baseline-anchored, works a
 
 ## Release tag matches `gjoa.json` (Gate X)
 
-`release.yml`'s `validate` job rejects a pushed `vX.Y.Z` tag that disagrees with `gjoa.json`'s `displayVersion` — but only after the tag already left the machine (2026-08-07: `v0.4.5` pushed while `displayVersion` still said `0.4.4`, CI failed in 3s, no installers built). **Gate X** (`preflight.bjs`, HARD) reruns that same comparison locally whenever HEAD carries a version tag, so `bun run preflight` catches the drift before `git push origin vX.Y.Z`.
+Create an annotated `vX.Y.Z` tag only when `gjoa.json`'s `displayVersion` is `X.Y.Z`. Run `bun run preflight` on the tagged HEAD, then publish it with `safe-push --tag vX.Y.Z`. **Gate X** is a hard local check; `release.yml` validates the same invariant remotely.
 
 ### The galaxy-brain play — the blob OID is a coordinate in Mozilla's history
 
 Once a patch's baseline is a content OID instead of a version string, each layer reuses git's existing machinery for a compounding win:
 
-1. **Provable skip-set** (shipped) — most patches are untouched on any given bump; prove it and shrink the audit to the truly-affected set.
-2. **Hunk-anchor precision** (shipped) — per touched file, each patch hunk's baseline old-side line span is hashed at the FF tag (`configs/upstream-provenance.json` → `{oid, hunks:[{header,range,hash}]}`); a file whose whole-file OID moved is still provably apply-safe when every hunk's context is byte-identical (an edit *elsewhere* than where we cut no longer false-flags). The lock records the current file and hunk counts at the configured baseline.
-3. **Blame-locator** (shipped, file-level) — `provenance check <ref> --blame` runs `git log <baseline>..<ref> -- <file>` on the FF clone for every changed file, so a conflict stops being "this file changed" and becomes "Mozilla commit abc123 (bug …) touched it — here's why." Validation against a subsequent Firefox beta distinguished an actively refactored adblock carrier from mostly incidental dark-mode changes — a commit-level pre-rebase briefing, no build. (L2 sharpens it from file to anchor.)
-4. **3-way at the anchor** (shipped) — `provenance merge3 <ref>` replays our edits onto the bump with `git merge-file` (BASE = baseline-tag blob, OTHER = `<ref>` blob, OURS = `engine/<path>` the imported+patched source), tallying auto-mergeable vs needs-human and escalating to a human only on real conflict. Validation against that beta separated automatic merges from the adblock and dark-mode edits that needed human review.
-5. **Baked provenance identity + security cross-check** (shipped, local — the binary-bake is build-gated) — `aggregate-digest` is one sha256 over every locked blob OID + hunk hash → `configs/provenance-identity.json` (the supply-chain coordinate the build *would* stamp into the binary: built against *unmodified* Mozilla blobs). `check --security` cross-references each `# security:`-tagged patch's anchor → `configs/provenance-security-findings.json`; if upstream's blob at a mitigation's anchor changed, Mozilla may have fixed it themselves (drop the patch) or refactored around it (re-verify). Empty findings today = honest baseline (no `# security:` patches).
+1. **Provable skip-set** — prove which patches are untouched on a bump and restrict the audit to the affected set.
+2. **Hunk-anchor precision** — per touched file, hash each patch hunk's baseline old-side line span at the Firefox tag (`configs/upstream-provenance.json` → `{oid, hunks:[{header,range,hash}]}`). A changed whole-file OID remains apply-safe when every hunk's context is byte-identical. The lock records the current file and hunk counts at the configured baseline.
+3. **Blame-locator** — `provenance check <ref> --blame` runs `git log <baseline>..<ref> -- <file>` on the Firefox clone for every changed file and reports the commits touching each carrier.
+4. **3-way at the anchor** — `provenance merge3 <ref>` replays edits onto the bump with `git merge-file` (BASE = baseline-tag blob, OTHER = `<ref>` blob, OURS = `engine/<path>` the imported and patched source), separating automatic merges from conflicts that need review.
+5. **Provenance identity + security cross-check** — `aggregate-digest` hashes every locked blob OID and hunk hash into `configs/provenance-identity.json`. `check --security` records changed security-tagged anchors in `configs/provenance-security-findings.json` for re-verification.
 
 We are not building a hashing system — we are harvesting the one Mozilla already maintains. "Is this patch still valid?" becomes a lookup; "what changed and why?" becomes a graph walk.
 
@@ -94,9 +94,9 @@ Two layers protect the surface from *silent* loss when upstream moves:
 
 ### Gate L — surface contracts (`preflight.bjs:372`, `tools/prep/symbol-resolve.bjs`)
 
-A patch/overlay often **depends on** upstream symbols it references but does not patch — a Rust path, a generated style-struct accessor, a JS object property. `git apply` (Gate A) is blind to these: they're added tokens, not context, so an upstream MOVE/REMOVAL passes apply clean and then either dies 26 min into the compile (the `ComputedValueFlags` module move; the `background_image` field removal) or ships a **silent no-op** (FF152 deleting `AboutNewTab.newTabURL`).
+A patch or overlay often **depends on** upstream symbols it references but does not patch — a Rust path, a generated style-struct accessor, or a JS object property. `git apply` (Gate A) cannot validate added tokens, so a moved or removed dependency can pass patch application and then fail compilation or become a no-op.
 
-The fix: a patch declares its non-patched dependencies in a `# depends-on:` / `;; @gjoa-depends-on` block, and Gate L resolves each against the extracted `engine/` tree **before** the build. The contract vocabulary (`parse-depends-on`, symbol-resolve.bjs:193): `rust-path`, `rust-field`, `rust-method`, `cpp-symbol`/`-method`/`-field`/`-member`, `webidl-attr`, `js-prop`. Each resolver is cheap (rg/fs class, no build) and returns `resolved` / `not-found` (RED, hard fail) / `ambiguous` (cfg-gated/deep-glob/no-objdir → warn, **never** a false green). Five patches carry live `depends-on` contracts today — e.g. `0009` declares `rust-path crate::computed_value_flags::ComputedValueFlags`, the exact anchor whose module-move would otherwise blow up mid-compile.
+A patch declares its non-patched dependencies in a `# depends-on:` / `;; @gjoa-depends-on` block, and Gate L resolves each against a fully imported `engine/` tree **before** the build. The contract vocabulary (`parse-depends-on`, symbol-resolve.bjs:193): `rust-path`, `rust-field`, `rust-method`, `cpp-symbol`/`-method`/`-field`/`-member`, `webidl-attr`, `js-prop`. Each resolver is cheap (rg/fs class, no build) and returns `resolved` / `not-found` (RED, hard fail) / `ambiguous` (cfg-gated/deep-glob/no-objdir → warn, **never** a false green). Patch `0009` declares `rust-path crate::computed_value_flags::ComputedValueFlags` so the imported type must remain resolvable.
 
 This is the structural complement to the seam-cost scorer: cost tells you *which* native patch is fragile; Gate L tells you *the moment* its anchor actually moved.
 
@@ -106,7 +106,7 @@ A textual `.patch` is anchored to line numbers and surrounding context; when Moz
 
 ## Pinned toolchain — churn isolation on the authoring side
 
-Upstream churn isn't only Mozilla's. The `beagle` compiler and `fram` engine are dependencies that move too, and a compiler emit/runtime skew silently broke chrome four serial times. So gjoa **freezes** them:
+Upstream churn isn't only Mozilla's. Gjoa freezes the moving `beagle` compiler and `fram` engine dependencies:
 
 - `configs/beagle.ref` pins beagle — **compiler and runtime** — from canonical upstream `https://github.com/tompassarelli/beagle`. The immutable checkout at `~/code/beagle/pins/<full-object-id>` supplies the compiler via `PLTCOLLECTS`, and `core.js` is vendored from that same object. **Gate M** fails unless the checkout's full `HEAD` exactly equals the configured ID.
 
@@ -126,13 +126,13 @@ The thesis throughout: **minimize the surface we own, and make every remaining p
 
 Beyond the churn-specific levers above, preflight runs a band of build-integrity gates so an upstream-tracking or wiring break dies before a compile:
 
-- **Gate C** — no production-mode `TODO`/`future commit` no-op landmines (the dev-overlay-hides-stub class).
+- **Gate C** — no production-mode `TODO` or `future commit` no-op landmines.
 - **Gate D** — dependency floors satisfied (NSS overlay etc. vs nixpkgs).
 - **Gate F** — the nix daemon will accept the flake's settings (`sandbox = relaxed` for `__noChroot`).
 - **Gate G** — the flake `nix eval`s without errors (catches eval-time rejections pre-compile).
 - **Gate I** — chrome bundles align three ways (loader ↔ `jar.mn` ↔ `chrome-bake`).
 - **Gate N** — every knob is backed + reversible (debloat is a toggle, not a deletion — keeps divergence reversible).
-- **Gate O** — no bare `beagle/` import in a shipped `.sys.mjs` (the value-semantics chrome-break class).
+- **Gate O** — no bare `beagle/` import in a shipped `.sys.mjs`.
 
 (**Gate J** — scriptlet bundle integrity — is documented under Security; it pins the curated scriptlet resources to a SHA-256.)
 

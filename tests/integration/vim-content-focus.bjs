@@ -1,8 +1,7 @@
 #lang beagle/js
-;; Regression: the GjoaInput JSWindowActor must report editable focus on CONTENT-
-;; process pages (where chrome cannot read contentDocument), so vim yields to
-;; typing there. This is the path that the FF152-rejected data:-URL frame script
-;; used to (fail to) serve. A data: page loads in the content process, so its
+;; The GjoaInput JSWindowActor must report editable focus on content-process pages
+;; where chrome cannot read contentDocument, so vim yields to typing there. A
+;; data: page loads in the content process, so its
 ;; contentDocument is null from chrome — same-process-editable? returns false and
 ;; the ONLY signal is the actor's _gjoaEditable stamp. So this test isolates the
 ;; actor.

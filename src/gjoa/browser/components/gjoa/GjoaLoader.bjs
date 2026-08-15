@@ -350,7 +350,7 @@
     (catch (e Any)
       (console/error "gjoa-loader: registerWindowActor failed" e))))
 
-;; Registers the per-site dark-mode HYBRID actor. On the TOP document the child
+;; Registers the per-site dark-mode actor. On the TOP document the child
 ;; measures the rendered background after first paint and sets the per-document
 ;; colorInversionOverride for sites with no native dark theme. allFrames so it ALSO
 ;; runs in subframes — NOT to set a per-subframe override (colorInversionOverride is

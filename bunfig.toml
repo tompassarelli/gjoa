@@ -4,10 +4,8 @@
 # engine/ — that's 5GB of mozilla-central source containing thousands
 # of *.test.js files for Firefox internals none of which are ours.
 #
-# Previous version pinned discovery to `tests/`, which had the
-# side-effect of burying our per-module test files at
-# src/gjoa/chrome/src/{drawer,tabs}/*.test.ts. Replaced with explicit
-# ignore patterns so discovery covers both tests/ and src/gjoa/.
+# Explicit ignore patterns keep Firefox's tests out while preserving
+# discovery under both tests/ and src/gjoa/.
 
 [test]
 pathIgnorePatterns = [

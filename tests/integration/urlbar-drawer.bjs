@@ -1,65 +1,18 @@
 #lang beagle/js
-;; Urlbar-in-drawer regression lock (commit 264c94f, gjoa.uc.css).
+;; Urlbar-in-drawer geometry contract.
 ;;
 ;; The in-sidebar urlbar is CHROME, not content, so a Marionette chrome-context
 ;; executeScript can read its DOM rects directly — no content-context discard
 ;; (that only bites content pages; see contrast.bjs / darkmode-render.bjs). All
-;; three assertions run against the live chrome document, no network, DEFAULT
-;; lane.
+;; assertions run against the live chrome document without a network dependency.
 ;;
-;; Two regressions this guards (both from 264c94f reverting 5f57d8a / 29451f9):
-;;
-;;   #1 The Ctrl+L FLOATING palette must OVERLAY the page at spec width, and the
-;;      RESTING urlbar must stay contained in the drawer. Two halves of one
-;;      geometry contract, measured in one window:
-;;
-;;      RESTING (264c94f lock): the native urlbar is `position: absolute` with
-;;      #navigator-toolbox as its containing block, so the bad `width: 100%`
-;;      resolved against the toolbox and spanned the whole window. The fix
-;;      restores `width: var(--urlbar-width)` (JS-pinned by drawer/layout.bjs
-;;      sync-urlbar-width to sidebar inner width). ASSERT: width well under the
-;;      WINDOW width and ~= #sidebar-container inner width (minus 2·inset). NOT
-;;      against #navigator-toolbox — `expand` reparents the toolbox inside
-;;      #sidebar-container, so that width just is the drawer width.
-;;
-;;      FLOATING (owner spec): Ctrl+L lifts #urlbar into the top layer and
-;;      centers it over the CONTENT. An in-sidebar geometry rule that loses its
-;;      `:root:not([gjoa-urlbar-floating])` guard out-specifies the floating
-;;      rules and drags the palette back to the drawer slot, where
-;;      #gjoa-urlbar-toolbar's `overflow: hidden` cuts it off. ASSERT the three
-;;      properties that failure violates: the palette ESCAPES the
-;;      #sidebar-container box, its width is inside the owner's zen-sized band,
-;;      and its visual rect equals its layout rect. Plus the hint footer, which
-;;      must be present + visible while floating and ABSENT in the resting bar.
-;;
-;;   #2 EXPANDED dropdown panel must be OPAQUE (non-collapsed). On focus the
-;;      urlbar gets [breakout-extend]; the bad nova-only calc made
-;;      .urlbar-background's inset-block-start fall back to `auto`, collapsing the
-;;      panel to zero height -> the sidebar bled through. The fix uses
-;;      inset-block-start: calc(-1 * 8px), keeping inset-block-end:0 so the panel
-;;      stretches over input + results.
-;;      ASSERT: #urlbar[breakout-extend] > .urlbar-background rect height > 0
-;;      (tall enough to cover the input row), and its background-color is opaque.
-;;
-;;   #3 (29451f9 property) NO vertical jump: .urlbar-input-container's top (the
-;;      security icon + URL text row) is the same (within ~1px) at rest vs
-;;      [breakout-extend] — focusing the urlbar must not shift the text down.
-;;
-;;   #5 The palette is PROMOTION-INDEPENDENT: centred, zen-wide and hit-testable
-;;      with #urlbar forcibly out of the top layer, through every eviction path
-;;      (breakout blocker / raw hidePopover / uidensity change). See DEMOTE-AND-MEASURE.
-;;
-;;   #7 HORIZONTAL parity. Everything above measures the vertical drawer, so a
-;;      float bug that only shows in horizontal tabs — where the urlbar's slot is
-;;      a live flex item of the NAV-BAR ROW — shipped unseen. Same contract, all
-;;      three summon vectors (vim `o` event / Ctrl+L / left click).
-;;
-;;   #4 The resting-slot GHOST keeps the ENGINE CHIP. #gjoa-urlbar-ghost stands in
-;;      for the resting bar while the palette floats, so anything the resting bar
-;;      shows and the ghost doesn't reads as that element vanishing on Ctrl+L.
-;;      ASSERT in BOTH urlbar states (default + searchmode-with-text): the ghost
-;;      carries a box at the .searchmode-switcher's rect and a PAINTED replica at
-;;      the engine icon's rect, both within 2px of the pre-summon geometry.
+;; The resting urlbar remains drawer-contained and matches the sidebar's inner
+;; width. The floating palette overlays content at the configured width, stays
+;; centered and hit-testable, and owns the hint footer. Its expanded background
+;; remains opaque and full-height without shifting the input row. Those guarantees
+;; hold after top-layer eviction and in horizontal-tabs mode for every summon path.
+;; While the palette floats, the resting-slot ghost reproduces the search-engine
+;; chip and icon geometry.
 (ns gjoa.tests.integration.urlbar-drawer
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect expect-eq]]))
 
@@ -77,8 +30,7 @@
   if (sm && !sm.hasAttribute('sidebar-launcher-expanded')) {
     sm.setAttribute('sidebar-launcher-expanded', '');
   }
-  // gjoa forces nova OFF; assert the precondition the fix relies on so a future
-  // nova flip doesn't silently change which CSS path is exercised.
+  // This suite exercises Gjoa's non-Nova CSS path explicitly.
   const nova = Services.prefs.getBoolPref('browser.nova.enabled', false);
   return { hasToolbar: !!document.getElementById('gjoa-urlbar-toolbar'),
            hasUrlbar: !!document.getElementById('urlbar'),
@@ -229,8 +181,8 @@
 
 ;; Floating teardown is ASYNC (fade → transitionend → finish-teardown), so a test
 ;; that summoned the palette must not return while the ghost still holds the
-;; resting slot — it displaces the input row and fails the no-jump test (#3).
-;; #6 RESTING ANCHOR: the drawer boxes the float path can displace, plus the two
+;; resting slot because it displaces the input row. RESTING ANCHOR captures the
+;; drawer boxes the float path can displace, plus the two
 ;; inline vars teardown writes back — so a leak is attributed, not just observed.
 (def MEASURE-ANCHOR String "
   const id = x => document.getElementById(x);
@@ -325,7 +277,7 @@
 
 ;; finish-teardown deliberately takes #urlbar back OUT of the top layer, but the
 ;; drawer's steady resting state has it popover-promoted — and an in-flow urlbar
-;; lays its breakout-extend box out 8px lower, which fails #3. Capture/restore so
+;; lays its breakout-extend box out 8px lower. Capture and restore it so
 ;; summoning the palette here leaves the window as it was found.
 (def CAPTURE-POPOVER String "
   const u = document.getElementById('urlbar');
@@ -389,12 +341,9 @@
            "px — it is positioned by the sidebar subtree, not the ICB. "
            (JSON/stringify p)))))
 
-;; PROMOTION-INDEPENDENCE (2026-08-07). The palette used to be centred + painted
-;; over the content ONLY while #urlbar was a top-layer popover; every eviction path
-;; below dropped it back to the drawer's containing block and under the content deck
-;; (the "content-edge cut-off" the owner hit five times). The fix parks #urlbar in
-;; #gjoa-urlbar-stage, a direct child of documentElement, so neither property depends
-;; on the promotion any more. Each path evicts and measures IN THE SAME TASK: the
+;; PROMOTION INDEPENDENCE. #gjoa-urlbar-stage is a direct child of documentElement,
+;; so centering and paint order do not depend on top-layer promotion. Each path
+;; evicts and measures in the same task: the
 ;; watchdog's MutationObserver / `toggle` callbacks run at the microtask checkpoint
 ;; AFTER this script, so what comes back is the palette with NO healing applied.
 (def DEMOTE-AND-MEASURE String "
@@ -461,7 +410,7 @@
            (js/get (js/get d .hitLeft) .id) ", right→" (js/get (js/get d .hitRight) .id) "); the content deck "
            "is painting over the palette. " (JSON/stringify d)))))
 
-;; --- HORIZONTAL phases (#7) -------------------------------------------------
+;; --- HORIZONTAL phases ------------------------------------------------------
 ;; Everything above measures the VERTICAL drawer; the float machinery (ghost
 ;; capture, stage reparent, home-slot restore) is mode-agnostic code that in
 ;; horizontal tabs stages #urlbar out of the NAV-BAR ROW instead of the drawer.
@@ -483,7 +432,7 @@
 
 ;; The nav-bar row, widget by widget, plus the urlbar's own slot. `row` is what
 ;; must be byte-identical while the palette floats; `urlbar`/`parent` is what must
-;; come home. Rounded to whole px — sub-pixel jitter is not the regression.
+;; come home. Round to whole pixels because sub-pixel jitter is irrelevant.
 (def MEASURE-ROW String "
   const ids = ['nav-bar', 'nav-bar-customization-target', 'urlbar-container',
                'back-button', 'forward-button', 'stop-reload-button',
@@ -548,7 +497,7 @@
   return true;
 ")
 
-;; #8 ROW-HEIGHT LATCH. UrlbarInput#updateLayoutBreakoutDimensions latches
+;; ROW-HEIGHT LATCH. UrlbarInput#updateLayoutBreakoutDimensions latches
 ;; getBoundsWithoutFlushing(parentNode) into --urlbar-container-height two async hops
 ;; after it was scheduled; an orientation flip in between moves #urlbar-container
 ;; (an ANCESTOR — no connectedCallback, so nothing reschedules) and the pre-flip
@@ -584,7 +533,7 @@
   return true;
 ")
 
-;; The three drawer variants the owner runs. compact pins the drawer revealed —
+;; Cover all three drawer variants. Compact mode pins the drawer revealed because
 ;; a hover-hidden drawer has no resting box for the flip to displace.
 (def SET-DRAWER-MODE String "
   const [mode] = arguments;
@@ -621,7 +570,7 @@
 ")
 (def FRAMES-DONE String "return window.__gjoaFrames >= 6;")
 
-;; #9 BROWSER FULLSCREEN. #gjoa-urlbar-stage is a <toolbar> (so #urlbar.closest
+;; BROWSER FULLSCREEN. #gjoa-urlbar-stage is a <toolbar>, so #urlbar.closest
 ;; resolves and keeps #allowBreakout), and Firefox's fullscreen chrome CSS collapses
 ;; toolbars — the staged palette inherited that and painted nothing behind a visible
 ;; backdrop. Driven through the product's own F11 entry point.
@@ -656,10 +605,9 @@
   };
 ")
 
-;; #10 gjoa REMOVES [popover] to demote the bar out of the top layer, but that attr
-;; is Firefox's own markup and #updateLayoutBreakoutDimensions calls showPopover()
-;; unconditionally — which then threw NotSupportedError into the window, uncaught,
-;; skipping the rest of that frame's layout work.
+;; Gjoa removes [popover] while the bar is outside the top layer, but Firefox's
+;; #updateLayoutBreakoutDimensions calls showPopover() unconditionally. The shim
+;; must make that call safe and preserve the rest of the frame's layout work.
 (def POPOVER-DEMOTED-PROBE String "
   const u = document.getElementById('urlbar');
   const had = u.getAttribute('popover');
@@ -811,7 +759,7 @@
       (expect (<= off 8)
         (str tag "OFF-CENTRE by " (js/call off .toFixed 1) "px — anchored to the drawer "
              "slot, not centred over the content. " (JSON/stringify f))))
-    ;; (b) SPEC WIDTH: owner spec "zen-sized" — clamp(600px, 50vw, 820px) resolves
+    ;; (b) SPEC WIDTH: clamp(600px, 50vw, 820px) resolves
     ;; to 700px (half the window) at the 1400px window the test pins. The floor
     ;; and pins the current 700px target band.
     (expect (and (>= (js/get f .urlbarWidth) 660) (<= (js/get f .urlbarWidth) 760))
@@ -839,7 +787,7 @@
            "), so the painted box is narrower than its layout rect. "
            (JSON/stringify f)))))
 
-;; #6 INVARIANT: a float/dismiss cycle is a round trip — same anchors, same
+;; A float/dismiss cycle is a round trip: same anchors and same
 ;; pre-summon inline breakout vars.
 (defn assert-resting-anchor! [(a Any) (wrote Any) (rest0 Any) (mode String)] Any
   (let [tag (str "resting anchor after a " mode " dismiss: ")
@@ -914,7 +862,7 @@
            "Ctrl+L. ghost=" (JSON/stringify gh)))))
 
 (js/export (def tests Any
-  [(deftest "urlbar — Ctrl+L palette OVERLAYS the content at spec width; resting bar stays in the drawer (#1)" [mn]
+  [(deftest "urlbar — Ctrl+L palette OVERLAYS the content at spec width; resting bar stays in the drawer" [mn]
      (js/await (js/call mn .executeScript ENSURE-EXPANDED-DRAWER))
      (js/await (require-gjoa-css! mn))
      ;; Pin the window at 1400x900 so the width band below is a fixed number, not
@@ -951,12 +899,11 @@
        (expect (not (js/get r .hints))
          (str "#gjoa-urlbar-hints present in the RESTING drawer urlbar — the hint "
               "footer leaked out of the floating palette. " (JSON/stringify r)))
-       ;; The bug spanned the urlbar to the full window width. Containment:
-       ;; the urlbar must stay a drawer-sized box.
+       ;; The resting urlbar must stay a drawer-sized box.
        (expect (< (js/get r .urlbarWidth) (* (js/get r .windowWidth) 0.6))
          (str "resting urlbar not contained — width " (js/call (js/get r .urlbarWidth) .toFixed 1)
               "px is ~the window width " (js/call (js/get r .windowWidth) .toFixed 1) "px "
-              "(the width:100%-vs-#navigator-toolbox regression). " (JSON/stringify r)))
+              "instead of the drawer width. " (JSON/stringify r)))
        ;; And it must be ~ the drawer inner width (sidebar width − 2·inset), the
        ;; value sync-urlbar-width pins. Allow generous slack for sub-pixel / icon
        ;; reserve so this stays robust, not pixel-brittle.
@@ -1016,7 +963,7 @@
      (js/await (js/call mn .executeScript RESTORE-POPOVER [(js/get pop0 .manual) (js/get pop0 .open)]))
      (js/await (js/call mn .executeScript "window.resizeTo(arguments[0], arguments[1]); return true;" [(js/get orig .w) (js/get orig .h)]))))
 
-   (deftest "urlbar — expanded [breakout-extend] dropdown panel is OPAQUE (non-collapsed) (#2)" [mn]
+   (deftest "urlbar — expanded [breakout-extend] dropdown panel is OPAQUE (non-collapsed)" [mn]
      (js/await (js/call mn .executeScript ENSURE-EXPANDED-DRAWER))
      (js/await (require-gjoa-css! mn))
      ;; Measure the expanded panel, then restore the resting state BEFORE
@@ -1029,12 +976,11 @@
        (expect (not (js/get r .error)) (str "MEASURE-EXTENDED error: " (JSON/stringify r)))
        (expect (js/get r .breakoutExtend) "could not drive urlbar into [breakout-extend]")
        (expect (js/get r .hasBackground) ".urlbar-background not found under [breakout-extend]")
-       ;; The collapse bug zeroed the panel height. It must be non-zero AND
-       ;; tall enough to cover the input row (≥ the urlbar box height, minus
-       ;; tolerance — the panel is raised 8px above the box top via the fix).
+       ;; The panel must be non-zero and tall enough to cover the input row
+       ;; (≥ the urlbar box height, minus tolerance for its raised top edge).
        (expect (> (js/get r .bgHeight) 0)
-         (str ".urlbar-background collapsed to zero height (the nova-var fallback-to-auto "
-              "regression) — height=" (js/call (js/get r .bgHeight) .toFixed 1) "px. " (JSON/stringify r)))
+         (str ".urlbar-background collapsed to zero height — height="
+              (js/call (js/get r .bgHeight) .toFixed 1) "px. " (JSON/stringify r)))
        (expect (>= (js/get r .bgHeight) (- (js/get r .urlbarHeight) 2))
          (str ".urlbar-background too short to cover the input row — height "
               (js/call (js/get r .bgHeight) .toFixed 1) "px vs urlbar box " (js/call (js/get r .urlbarHeight) .toFixed 1)
@@ -1047,20 +993,20 @@
            (str ".urlbar-background is transparent — sidebar would bleed through. "
                 "background-color=" bg ". " (JSON/stringify r))))))
 
-   (deftest "urlbar — focusing the urlbar does NOT shift the input row down (no jump) (#3)" [mn]
+   (deftest "urlbar — focusing the urlbar does NOT shift the input row down" [mn]
      (js/await (js/call mn .executeScript ENSURE-EXPANDED-DRAWER))
      (js/await (require-gjoa-css! mn))
      (let [rest (chrome-eval MEASURE-RESTING)]
        (expect (not (js/get rest .error)) (str "MEASURE-RESTING error: " (JSON/stringify rest)))
        (expect (not= (js/get rest .inputContainerTop) nil) "no .urlbar-input-container at rest")
-       ;; Measure the extended row top, then restore resting BEFORE asserting
-       ;; (see #2 — keeps the test order-independent even on a thrown assertion).
+       ;; Measure the extended row top, then restore resting before asserting so
+       ;; the test remains order-independent after a thrown assertion.
        (let [ext (chrome-eval MEASURE-EXTENDED)
              _ (js/await (js/call mn .executeScript RESET-URLBAR))]
          (expect (not (js/get ext .error)) (str "MEASURE-EXTENDED error: " (JSON/stringify ext)))
          (expect (not= (js/get ext .inputContainerTop) nil) "no .urlbar-input-container under [breakout-extend]")
-         ;; The 29451f9 no-jump property: the security-icon + URL text row top
-         ;; must be pixel-identical (≤1px) at rest vs expanded.
+         ;; The security icon and URL text row must stay pixel-aligned between
+         ;; the resting and expanded states.
          (let [jump (Math/abs (- (Number (js/get ext .inputContainerTop)) (Number (js/get rest .inputContainerTop))))]
            (expect (<= jump 1.5)
              (str "input row JUMPED on focus by " (js/call jump .toFixed 2) "px "
@@ -1069,7 +1015,7 @@
                   ") — breathing-room padding leaked onto the input again. "
                   "rest=" (JSON/stringify rest) " ext=" (JSON/stringify ext)))))))
 
-   (deftest "urlbar — the resting ghost keeps the engine chip while the palette floats (#4)" [mn]
+   (deftest "urlbar — the resting ghost keeps the engine chip while the palette floats" [mn]
      (js/await (js/call mn .executeScript ENSURE-EXPANDED-DRAWER))
      (js/await (require-gjoa-css! mn))
      ;; finish-teardown takes #urlbar back out of the top layer; restore the
@@ -1102,8 +1048,8 @@
          (let [g1 (chrome-eval MEASURE-GHOST-BOXES)]
            (js/await (js/call mn .executeScript DISMISS-FLOATING))
            (js/await (await-true FLOATING-TORN-DOWN 2000))
-           ;; restore BEFORE asserting so a thrown assertion can't leave the next
-           ;; test in search mode (see #2/#3 for the same ordering).
+           ;; Restore before asserting so a thrown assertion cannot leave the
+           ;; next test in search mode.
            (js/await (js/call mn .executeScript EXIT-SEARCHMODE))
            (js/await (js/call mn .executeScript RESET-URLBAR))
            (js/await (js/call mn .executeScript RESTORE-POPOVER [(js/get pop0 .manual) (js/get pop0 .open)]))
@@ -1111,7 +1057,7 @@
              (str "search mode did not reach #urlbar: " (JSON/stringify c1)))
            (assert-ghost-chip! c1 g1 "searchmode with text")))))
 
-   (deftest "urlbar — the drawer's resting anchors survive every float/dismiss cycle (#6)" [mn]
+   (deftest "urlbar — the drawer's resting anchors survive every float/dismiss cycle" [mn]
      (js/await (js/call mn .executeScript ENSURE-EXPANDED-DRAWER))
      (js/await (require-gjoa-css! mn))
      (let [pop0 (js/await (js/call mn .executeScript CAPTURE-POPOVER))
@@ -1150,7 +1096,7 @@
        (js/await (js/call mn .executeScript RESET-URLBAR))
        (js/await (js/call mn .executeScript RESTORE-POPOVER [(js/get pop0 .manual) (js/get pop0 .open)]))))
 
-   (deftest "urlbar — HORIZONTAL: every summon vector floats centred, the nav-bar row holds, the urlbar comes home (#7)" [mn]
+   (deftest "urlbar — HORIZONTAL: every summon vector floats centred, the nav-bar row holds, the urlbar comes home" [mn]
      (js/await (js/call mn .executeScript ENSURE-HORIZONTAL))
      (js/await (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 5000))
      (js/await (require-gjoa-css! mn))
@@ -1221,8 +1167,8 @@
                  (str "horizontal (" vector "): the resting urlbar's " (aget RECT-EDGE i)
                       " is " (aget (js/get a .urlbar) i) ", was " (aget (js/get rest0 .urlbar) i)
                       ". " (JSON/stringify a))))
-             ;; drawer/compact promotes the resting bar in horizontal; teardown used to
-             ;; strip it, and an in-flow [breakout-extend] then lays out a row lower.
+             ;; Drawer and compact modes promote the horizontal resting bar; restore
+             ;; that state so an in-flow [breakout-extend] cannot shift the row.
              (expect-eq (js/get a .popoverAttr) (js/get rest0 .popoverAttr)
                (str "horizontal (" vector "): the resting [popover] promotion was not restored"))
              ;; one-way: a resting bar that WAS promoted must come back promoted. The
@@ -1235,7 +1181,7 @@
          (js/await (js/call mn .executeScript "window.resizeTo(arguments[0], arguments[1]); return true;" [(js/get orig .w) (js/get orig .h)]))
          (js/await (js/call mn .executeScript RESTORE-VERTICAL)))))
 
-   (deftest "urlbar — an orientation flip while the bar is click-expanded does not latch the row height (#8)" [mn]
+   (deftest "urlbar — an orientation flip while the bar is click-expanded does not latch the row height" [mn]
      ;; Every drawer variant the owner runs: the leak rides the reparent, which is
      ;; shared, but each variant pins the row height with different CSS, so only the
      ;; INLINE pair below tells the same story in all three.
@@ -1300,7 +1246,7 @@
      (js/await (js/call mn .executeScript SET-DRAWER-MODE ["vertical"]))
      (js/await (js/call mn .executeScript RESTORE-VERTICAL)))
 
-   (deftest "urlbar — the palette renders and takes focus in browser fullscreen (#9)" [mn]
+   (deftest "urlbar — the palette renders and takes focus in browser fullscreen" [mn]
      (js/await (js/call mn .executeScript ENSURE-EXPANDED-DRAWER))
      (js/await (require-gjoa-css! mn))
      (let [pop0 (js/await (js/call mn .executeScript CAPTURE-POPOVER))]
@@ -1341,7 +1287,7 @@
            (str "focus did not land in the urlbar input in fullscreen — it is on "
                 (js/get f .activeId) ", which a collapsed box cannot take. " (JSON/stringify f))))))
 
-   (deftest "urlbar — Firefox's unconditional showPopover() cannot throw at a gjoa-demoted bar (#10)" [mn]
+   (deftest "urlbar — Firefox's unconditional showPopover() cannot throw at a Gjoa-demoted bar" [mn]
      (js/await (js/call mn .executeScript ENSURE-EXPANDED-DRAWER))
      (js/await (require-gjoa-css! mn))
      (let [pop0 (js/await (js/call mn .executeScript CAPTURE-POPOVER))

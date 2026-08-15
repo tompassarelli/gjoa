@@ -1,11 +1,14 @@
 import os,sys,time,json,socket,subprocess,shutil,signal
-sys.path.insert(0,"/home/tom/code/gjoa/tools/test-driver")
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools" / "test-driver"))
 from importlib import import_module
 cs=import_module("chrome-shoot")
-OBJ="/home/tom/code/gjoa/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa"
+OBJ=str(ROOT / "engine" / "obj-x86_64-pc-linux-gnu" / "dist" / "bin" / "gjoa")
 GP=os.path.expanduser("~/.config/mozilla/gjoa/4859ptgk.default-default")
 RT="/tmp/hrt-rt";PROF="/tmp/hrt-prof";PORT=3262
-CSS="/home/tom/code/gjoa/src/gjoa/chrome/css/gjoa.uc.css"
+CSS=ROOT / "src" / "gjoa" / "chrome" / "css" / "gjoa.uc.css"
 for d in (RT,PROF): shutil.rmtree(d,ignore_errors=True); os.makedirs(d)
 os.chmod(RT,0o700)
 subprocess.run(["rsync","-a","--exclude=*.lock","--exclude=lock","--exclude=.parentlock",GP+"/",PROF+"/"],capture_output=True)
@@ -28,7 +31,7 @@ orig=open(CSS).read()
 open(CSS,"w").write(orig + "\n:root{--gjoa-hr-test:42}\n")
 # 2) recompile -> stamp changes
 print("recompiling (chrome:dist)...")
-subprocess.run(["bun","run","chrome:dist"],cwd="/home/tom/code/gjoa",capture_output=True)
+subprocess.run(["bun","run","chrome:dist"],cwd=ROOT,capture_output=True)
 # 3) poll the RUNNING browser for the new value (proves live hot-reload, no restart)
 applied=None
 t0=time.monotonic()
@@ -45,7 +48,7 @@ ex=json.loads(V(m.exec_chrome("const u=document.getElementById('urlbar');return 
 print("post-reload urlbar works: open floating=%s ghosts=%d -> exit floating=%s ghosts=%d w=%d"%(op['fl'],op['ghosts'],ex['fl'],ex['ghosts'],ex['w']))
 # 5) revert CSS
 open(CSS,"w").write(orig)
-subprocess.run(["bun","run","chrome:dist"],cwd="/home/tom/code/gjoa",capture_output=True)
+subprocess.run(["bun","run","chrome:dist"],cwd=ROOT,capture_output=True)
 m.quit()
 try: os.killpg(os.getpgid(p.pid),signal.SIGTERM)
 except Exception: pass

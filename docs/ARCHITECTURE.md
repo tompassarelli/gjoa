@@ -16,7 +16,7 @@ to run for your current state.
 A Firefox fork. We add UI behavior on top of stock Firefox by two
 mechanisms:
 
-1. **Chrome bundles** — TypeScript modules that load into Firefox's
+1. **Chrome bundles** — Beagle modules that compile to JavaScript loaded into Firefox's
    privileged chrome window at startup. This is where 99% of gjoa's
    custom behavior lives (tab tree, vim keymap, command palette,
    sidebar drawer).
@@ -35,7 +35,7 @@ Mechanism (1) iterates in seconds. Mechanism (2) costs a rebuild.
 ```mermaid
 flowchart TB
     subgraph "Source you edit (in this repo)"
-        TS["src/gjoa/chrome/src/*.ts<br>(tabs, drawer, vim, spaces, security)"]
+        BJS["src/gjoa/chrome/bjs/**/*.bjs<br>(tabs, drawer, vim, spaces, security)"]
         CSS["src/gjoa/chrome/css/*.uc.css"]
         OVERLAY["src/gjoa/browser/**/*.sys.mjs<br>(GjoaLoader + other Firefox overlays)"]
         PATCH["patches/*.patch<br>(mozilla-central diffs)"]
@@ -50,7 +50,7 @@ flowchart TB
         NIXOUT["result/bin/gjoa<br>(nix build output, /nix/store/...)"]
     end
 
-    TS -->|bun run chrome:dist| DIST
+    BJS -->|bun run chrome:dist| DIST
     CSS -->|bun run chrome:dist| DIST
     OVERLAY -->|bun run import| ENGINE
     PATCH -->|bun run import| ENGINE
@@ -74,7 +74,7 @@ in the running browser.
 
 | Edit type | What runs | Cost | Lane |
 |---|---|---|---|
-| `src/gjoa/chrome/src/**/*.ts` (TypeScript modules) | `gjoa sync` + restart browser | **~1 sec** | 1 |
+| `src/gjoa/chrome/bjs/**/*.bjs` (Beagle modules) | `gjoa sync` + restart browser | **~1 sec** | 1 |
 | `src/gjoa/chrome/css/*.uc.css` | `gjoa sync` + restart browser | **~1 sec** | 1 |
 | `src/gjoa/browser/**/*.sys.mjs` (Firefox `.sys.mjs` overlays) | `bun run import` + `./mach build faster` | **~30 sec** | 2 |
 | `patches/*.patch` (new or edited) | `bun run import` + `./mach build faster` | **~30 sec** | 2 |
@@ -89,8 +89,6 @@ in the running browser.
 **Lane 2** = re-zip omni.ja, sub-minute.
 **Lane 3** = full compile, half-hour to hour.
 
-You almost never need Lane 3 mid-week. Lane 3 is a Sunday batch.
-
 ---
 
 ## The decision tree — "what should I run?"
@@ -101,11 +99,11 @@ here's the tree for understanding.
 ```mermaid
 flowchart TD
     Q1{What did you<br>change?}
-    Q1 -->|TS/CSS in chrome/src| L1["gjoa sync<br>gjoa hotreload<br>(seconds)"]
+    Q1 -->|Beagle/CSS in chrome| L1["gjoa sync<br>gjoa hotreload<br>(seconds)"]
     Q1 -->|Firefox .sys.mjs or patch| Q2{Mach objdir<br>exists?<br>engine/obj-*/dist/}
-    Q1 -->|Version bump or<br>install-tree change| L3["WAIT FOR SUNDAY<br>then nix build"]
+    Q1 -->|Version bump or<br>install-tree change| L3["bun run import<br>then nix build"]
     Q2 -->|Yes| L2["bun run import<br>cd engine && ./mach build faster<br>gjoa hotreload<br>(~30 sec)"]
-    Q2 -->|No| L2cold["This is Lane 3 today.<br>First mach build cold = ~45 min.<br>Confirm with Claude before running."]
+    Q2 -->|No| L2cold["Run a full mach build first.<br>Cold build = ~45 min."]
 
     style L1 fill:#cfc
     style L2 fill:#ffc
@@ -122,13 +120,13 @@ The path for the most common type of edit (Lane 1):
 ```mermaid
 sequenceDiagram
     participant You
-    participant TS as src/gjoa/chrome/src/<br>tabs/index.ts
+    participant BJS as src/gjoa/chrome/bjs/<br>tabs/index.bjs
     participant Dist as dist/chrome/JS/<br>gjoa-tabs.uc.js
     participant Mach as engine/obj-*/dist/bin/<br>gjoa-dev/JS/<br>(symlink to dist/)
     participant Loader as GjoaLoader.sys.mjs<br>(at app startup)
     participant Win as Browser window
 
-    You->>TS: edit + save
+    You->>BJS: edit + save
     You->>Dist: gjoa sync (bun run chrome:dist)
     Note over Dist,Mach: chrome:install symlinked gjoa-dev/ → dist/<br>(one-time setup)
     Dist-->>Mach: (auto-propagates via symlink)
@@ -150,8 +148,7 @@ of in the writable `gjoa-dev/` overlay.
 **No.** This is the most common confusion. The clear answer:
 
 - `nixpkgs` ships its own `firefox-unwrapped` (and `firefox` wrapper).
-  That's *their* build of Mozilla source, using *their* version pin
-  (currently 151.0).
+  That's *their* build of Mozilla source, using *their* version pin.
 - **We do not consume that.** We feed our own customized
   mozilla-central tarball (pinned in `gjoa.json`) through
   `nixpkgs.buildMozillaMach`, which is a 750-line helper that knows
@@ -179,14 +176,15 @@ flowchart LR
 ```
 
 What we DO depend on from nixpkgs:
-- The build toolchain (clang 19, rust, sccache, mold) via the
-  `nix develop .#mach` shell.
+- The build toolchain (clang, rust, sccache, mold) activated by the repository
+  `.envrc` through direnv.
 - The shared system libraries (gtk3, mesa, libpulseaudio, etc.) that
   Firefox links against.
 - `buildMozillaMach` and `wrapFirefox` as helper functions.
 
 What we do NOT consume from nixpkgs:
-- nixpkgs's Mozilla source pin (they ship 151.0; we ship 151.0.1).
+- nixpkgs's Mozilla source pin (Gjoa's Firefox pin is
+  `gjoa.json`'s `firefox.version`, currently `153.0.3`).
 - nixpkgs's Firefox patches (we have our own `patches/`).
 - nixpkgs's branding (we override with `configs/branding/gjoa/`).
 
@@ -201,12 +199,12 @@ can see when they diverge.
 | `mach` | Mozilla's build orchestrator. Lives at `engine/mach`. Like `make` but Firefox-specific. |
 | `engine/` | The mozilla-central source tree on disk, with our overlays + patches applied. Gitignored. 5 GB. |
 | `objdir` | Mach's build output directory: `engine/obj-x86_64-pc-linux-gnu/`. Holds compiled C++/Rust + the final `gjoa-bin`. |
-| `chrome bundle` / `.uc.js` | A TypeScript file compiled to a UserScript-style `.uc.js` that the GjoaLoader loads into Firefox's privileged chrome window at startup. |
+| `chrome bundle` / `.uc.js` | JavaScript emitted from a Beagle module as a UserScript-style `.uc.js` that the GjoaLoader loads into Firefox's privileged chrome window at startup. |
 | `gjoa-dev/` | A subdirectory next to the mach binary holding dev-mode chrome bundles. Symlinked to `dist/chrome/` by `gjoa sync`. |
 | `chrome://gjoa/content/` | The "production mode" path — bundles baked into omni.ja, loaded via this URL scheme. |
 | `Lane 1 / 2 / 3` | Our taxonomy of rebuild cost. Lane 1 = no rebuild. Lane 2 = `mach build faster`. Lane 3 = full build. |
-| nix build | Full hermetic build via the flake. Distribution-grade, slow. Sunday only. |
-| `nix develop .#mach` | Drops into a shell with Firefox's full build toolchain so you can run `mach` directly. |
+| nix build | Full hermetic build via the flake. Distribution-grade and slower than Mach iteration. |
+| `.envrc` | Activates the `.#mach` flake environment through direnv so `mach` and the pinned Beagle compiler are available. |
 
 ---
 

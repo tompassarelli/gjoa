@@ -2,8 +2,7 @@
 
 One-screen reference for the commands you run all the time. For
 architecture, decision trees, and "why does it work this way", see
-[`ARCHITECTURE.md`](ARCHITECTURE.md). For rebuild discipline, see
-[`../CLAUDE.md`](../CLAUDE.md) Rule #0.
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Launch the browser
 
@@ -21,14 +20,15 @@ gjoa status
 ```
 
 Versions vs Mozilla/nixpkgs/Zen/LibreWolf, CVE count against your pin,
-build-state, rebuild budget, and the next recommended command. Fresh
-pulls, ~1–2 sec, no cache.
+build state, and the next recommended command. Fresh pulls, ~1–2 sec,
+no cache.
 
-## I edited a chrome TypeScript file (Lane 1, sub-second)
+## I edited chrome Beagle or CSS (Lane 1, sub-second)
 
 ```
-gjoa sync          # bundle src/gjoa/chrome/src/* → dist/chrome/{JS,CSS}/
-                   # then symlink into <mach-install>/gjoa-dev/
+gjoa sync          # compile src/gjoa/chrome/bjs/**/*.bjs → dist/chrome/JS/
+                   # stage src/gjoa/chrome/css/*.uc.css → dist/chrome/CSS/
+                   # then symlink dist/chrome/ into <mach-install>/gjoa-dev/
 gjoa hotreload     # restart the mach binary to pick up the new bundles
 ```
 
@@ -63,8 +63,6 @@ gjoa test:integration:nix           # same suite against result/bin/gjoa
 Run `bun run import` and `bun run preflight` first so the engine and patch surface
 are current before the compile.
 
-If approved:
-
 ```
 gjoa import                                 # ensure engine/ is fresh
 nix build .#gjoa --impure --cores 8 -j 1   # ~30-60 min cold
@@ -85,37 +83,33 @@ silently drop modules a fresh CI checkout bakes correctly.
 1. write `.github/release-notes/vX.Y.Z.md`. Seed the factual sections with
    `bun run release:notes vPREVIOUS HEAD`, then add a short user-facing summary
    and highlights. The tag gate refuses a release without this file.
-2. land + push the work:   `git push origin main`
+2. land the work from its lane: `safe-push --to main`
    (CI checks out fresh and runs `import` from scratch — none of the stale-engine
-   skip-traps a local build hits; the binary is built from the *pushed commit*.)
-3. tag + push the tag:     `git tag vX.Y.Z <commit> && git push origin vX.Y.Z`
-4. CI `release.yml` fans out to `build-{linux,macos,windows}.yml` on **free
+   skip-traps a local build hits; the binary is built from the landed commit.)
+3. create an annotated tag on that commit:
+   `git tag -a vX.Y.Z -m "gjoa vX.Y.Z" <commit>`
+4. publish the tag separately: `safe-push --tag vX.Y.Z`
+5. CI `release.yml` fans out to `build-{linux,macos,windows}.yml` on **free
    GitHub-hosted runners** by default (`ubuntu-24.04` / `macos-26`, Windows
    cross-compiled on Linux; `-j2`, ~1-2 h each) → assembles a **DRAFT** GitHub
    release with all six binaries and the versioned authored notes. (Blacksmith is a faster **paid** runner —
    opt-in per job via `fast: true`; it costs credits, so it is NOT the default.)
-5. review the draft + notes → **Publish**. CI never
+6. review the draft + notes → **Publish**. CI never
    auto-publishes — a human clicks Publish.
 
 Watch it: `gh run watch` · `gh run list --workflow=release.yml`.
 
-> **Postmortem 2026-06-23:** drove a 2-3 h local `nix build` to "produce v0.4.1"
-> when the release build is CI's job. Local build = **verify**; tag push =
-> **release**. (This decision tree exists so that conflation can't recur.)
-
 ## I want to bump the Firefox version
 
-That's a Lane 3 change to `gjoa.json`. Implies a Sunday rebuild.
-Workflow:
+That's a Lane 3 change to `gjoa.json`:
 
 ```
 bun run security:bump        # writes the latest stable to gjoa.json
 bun run import               # re-extracts the new tarball, applies patches
 # if any patch fails to apply → regen via `git diff` inside engine/
 # update its baseline-firefox header to the new version
+bun run preflight          # validate the imported source before building
 ```
-
-…then queue the actual rebuild for Sunday per Rule #0.
 
 ## I broke something and want to start over
 
@@ -134,7 +128,7 @@ bun run init      # downloads + re-imports from scratch (~10 min)
 
 ## Glossary, in one line each
 
-- **Lane 1** = chrome TS/CSS, no rebuild, seconds.
+- **Lane 1** = chrome Beagle/CSS, no rebuild, seconds.
 - **Lane 2** = `.sys.mjs` / patch / branding, `mach build faster`, ~30 s.
 - **Lane 3** = C++/Rust / version bump / configure flags, full rebuild, 30–60 min.
 - **mach** = Mozilla's build tool, lives at `engine/mach`. Used for Lane 2/3 iteration.

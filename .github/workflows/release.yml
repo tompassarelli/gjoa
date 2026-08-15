@@ -6,7 +6,9 @@ name: Release
 # attached, named gjoa-<version>-<platform>.<ext>. The draft is deliberate: a human
 # reviews the authored release notes and clicks Publish — CI never publishes on its own.
 #
-#   git tag v0.4.1 && git push origin v0.4.1
+#   safe-push --to main
+#   git tag -a vX.Y.Z -m "gjoa vX.Y.Z"
+#   safe-push --tag vX.Y.Z
 #
 # The three build-*.yml workflows are reused (workflow_call), so the build steps
 # stay defined in exactly one place.

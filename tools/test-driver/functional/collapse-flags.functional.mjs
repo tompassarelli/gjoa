@@ -1,19 +1,8 @@
-// Functional regression test for the "Collapse Layout" width bug (2026-07-18).
+// Functional contract for the "Collapse Layout" width decision.
 //
-// SYMPTOM: right-click sidebar button -> "Collapse Layout" left the sidebar at a
-// wide ~140px "half-compressed" strip with tab labels + close buttons still
-// visible, instead of the ~56px favicon rail it used to snap to.
-//
-// ROOT CAUSE: tabs/layout.js positionPanel decided the collapsed favicon-rail
-// (`gjoa-icons-only`) from whether #navigator-toolbox was still parented inside
-// #sidebar-container. But the toolbox is reparented in/out by a SEPARATE module
-// (drawer/layout collapse/expand) reacting to the SAME `sidebar-launcher-expanded`
-// attribute — and FF's launcher animation makes that reparent LAG. So positionPanel
-// routinely read toolbox-still-in and skipped icons-only, leaving labels + width.
-//
-// FIX / INVARIANT: the collapse decision now lives in the PURE `collapse_flags`
-// helper, keyed on the AUTHORITATIVE `sidebar-launcher-expanded` (launcher state)
-// plus compact/hover — never the racy toolbox parent. Invariant locked here:
+// The pure `collapse_flags` helper keys on the authoritative
+// `sidebar-launcher-expanded` state plus compact/hover, never on the asynchronously
+// reparented #navigator-toolbox. Invariant:
 //   launcher collapsed AND not a compact reveal  =>  iconsOnly (favicon rail).
 //
 //   bun run chrome:compile && bun tools/test-driver/functional/collapse-flags.functional.mjs
@@ -47,15 +36,15 @@ const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.log("FA
 // (launcherExpanded, compact, hover) -> {iconsOnly, sidebarCollapsed}
 const f = (le, c, h) => collapse_flags(le, c, h);
 
-// --- THE REGRESSION: plain collapse must give the favicon rail ---
-ok(f(false, false, false).iconsOnly === true,       "collapsed (launcher off) -> iconsOnly (favicon rail) [was the bug]");
+// --- plain collapse must give the favicon rail ---
+ok(f(false, false, false).iconsOnly === true,       "collapsed (launcher off) -> iconsOnly (favicon rail)");
 ok(f(false, false, false).sidebarCollapsed === true, "collapsed -> sidebarCollapsed stamped");
 
 // --- expanded must keep labels (never icons-only) ---
 ok(f(true, false, false).iconsOnly === false,        "expanded -> NOT iconsOnly (labels show)");
 ok(f(true, false, false).sidebarCollapsed === false, "expanded -> NOT sidebarCollapsed");
 
-// --- compact mode parity (unchanged by the fix) ---
+// --- compact mode parity ---
 ok(f(true, true, false).iconsOnly === false,         "compact hidden, launcher expanded -> NOT iconsOnly");
 ok(f(true, true, false).sidebarCollapsed === true,   "compact -> sidebarCollapsed (floating overlay layout)");
 ok(f(true, true, true).iconsOnly === false,          "compact REVEALED -> NOT iconsOnly (full labels on hover)");

@@ -13,13 +13,13 @@
 #     - rust-path crate::computed_value_flags::ComputedValueFlags
 #
 Engine-level dark mode: luminance-invert resolved absolute colors at
-style-resolution time (the performant successor to the compositor filter:invert).
+style-resolution time with no per-frame filter work.
 
 - specified/color.rs: invert_color_luminance() compresses lightness in OKLCH
   (perceptually uniform, the same space as the 0013 text retone) — NOT a full
   WCAG flip. The page's OKLCH L in [0,1] is mapped linearly onto a comfortable
-  band [floor, ceiling]: white (L=1) -> floor (a comfortable dark, ~#161616, NOT
-  black — the old target=1-luminance flip is what made content too dark) and
+  band [floor, ceiling]: white (L=1) -> floor (a comfortable dark, ~#161616, not
+  black) and
   black (L=0) -> ceiling (~#e4e4e4, NOT pure white). Only L moves; OKLCH chroma
   and hue are carried through untouched, and alpha is preserved. floor/ceiling are
   the live prefs gjoa.darkmode.invert.bgLightness / fgLightness (0-100 percent ==
@@ -38,14 +38,14 @@ style-resolution time (the performant successor to the compositor filter:invert)
   gjoa.darkmode.invert.{enabled,bgLightness,fgLightness} prefs (live toggle +
   live "Darkness" re-tone via RecascadeSubtree).
 
-The "engine" dark-mode mode (src/gjoa chrome) forces prefers-color-scheme:light
-then flips this flag, so sites render light and the engine inverts to dark.
+The `uniform` mode forces prefers-color-scheme:light, then flips this flag so
+every site renders through the controlled inversion band.
 
-Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
+Dark and system-resolved-dark use adaptive pre-paint inversion:
 - nsPresContext: mHybridDefaultInvert + ApplyHybridDefaultInvertIfThemeless().
-  In hybrid mode a top document starts UN-inverted, so its first cascade exposes
-  the page's AUTHORED background. PresShell::Initialize then reads that root
-  background (un-inverted = accurate) and, for a themeless page (light or
+  A top document starts un-inverted, so its first cascade exposes the page's
+  authored background. PresShell::Initialize then reads that root background
+  and, for a themeless page (light or
   transparent), flips the whole document to inverted BEFORE first paint — so it
   renders dark with no flash. A page that authored its own dark theme is left
   native. Gated on pref gjoa.darkmode.hybrid.default-invert.
@@ -163,7 +163,7 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
      NS_ENSURE_STATE(!mHaveShutDown);
    }
  
-+  // gjoa hybrid dark mode: the first (un-inverted) cascade has built the root
++  // gjoa dark mode: the first (un-inverted) cascade has built the root
 +  // frame, so its authored background is now readable. Flip a themeless document
 +  // to inverted (dark) before painting is unsuppressed, so it renders dark from
 +  // the first paint with no flash; native-dark pages are left untouched.
@@ -238,7 +238,7 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
 +    if (PrefSheetPrefs().mIsChrome) {
 +      return false;
 +    }
-+    // Per-document override set by the GjoaDarkmode actor (the per-site hybrid);
++    // Per-document override set by the GjoaDarkmode actor for adaptive dark mode;
 +    // "none" defers to the global pref.
 +    if (auto* bc = mDocument->GetBrowsingContext()) {
 +      auto ov = bc->Top()->ColorInversionOverride();
@@ -249,7 +249,7 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
 +        return false;
 +      }
 +    }
-+    // gjoa hybrid: a themeless top document is classified pre-paint by
++    // A themeless top document is classified pre-paint by
 +    // ApplyHybridDefaultInvertIfThemeless() (PresShell::Initialize), AFTER the
 +    // first un-inverted cascade exposes the page's AUTHORED colors. That sets
 +    // mHybridDefaultInvert and re-derives this flag; the bit is durable so later
@@ -287,10 +287,9 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
 +  }
 +}
 +
-+// gjoa hybrid: called from PresShell::Initialize after the FIRST (un-inverted)
-+// cascade has built the root frame, so the background we read here is the page's
-+// AUTHORED color, not an inverted one (in hybrid mode this document starts
-+// un-inverted; only ApplyHybridDefaultInvertIfThemeless flips it). If the page
++// Called from PresShell::Initialize after the first un-inverted cascade has
++// built the root frame, so the background read here is the page's authored
++// color. Only ApplyHybridDefaultInvertIfThemeless flips this document. If the page
 +// did NOT author a dark theme -- background is light or transparent (the UA white
 +// canvas shows through) -- flip the whole document to inverted pre-paint so it
 +// renders dark from the first paint with no flash. A native-dark page (authored
@@ -383,7 +382,7 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
 +  void UpdateColorInversion(bool aNotify = true);
  
   public:
-+  // gjoa hybrid dark mode: pre-paint, flip a themeless document to inverted
++  // Gjoa dark mode: pre-paint, flip a themeless document to inverted
 +  // (dark) after its first un-inverted cascade exposes the authored background.
 +  // Native-dark pages are left untouched. Called from PresShell::Initialize.
 +  void ApplyHybridDefaultInvertIfThemeless();
@@ -397,7 +396,7 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
    void EnsureTheme();
 +  // gjoa engine-level dark mode flag (content-only). See UpdateColorInversion.
 +  bool mColorInversion = false;
-+  // gjoa hybrid: a themeless document classified pre-paint by
++  // A themeless document classified pre-paint by
 +  // ApplyHybridDefaultInvertIfThemeless. Durable per-document input to
 +  // UpdateColorInversion so the flip survives later re-derives.
 +  bool mHybridDefaultInvert = false;
@@ -452,8 +451,7 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
 +/// gjoa engine-level dark mode: invert a color's lightness into a comfortable
 +/// dark band while preserving hue, chroma, and alpha. The compression is done in
 +/// OKLCH (perceptually uniform, the same space as the 0013 text retone), NOT a
-+/// full WCAG luminance flip — a flip maps white to BLACK, which is the
-+/// "too dark" defect. Here the page's OKLCH lightness L in [0, 1] is mapped
++/// full WCAG luminance flip. The page's OKLCH lightness L in [0, 1] is mapped
 +/// linearly onto [floor, ceiling]:
 +///     L_out = ceiling - L * (ceiling - floor)
 +/// so white (L=1) lands on `floor` (a comfortable dark, e.g. L~0.20 => ~#161616,
@@ -468,8 +466,8 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
 +    let l_in = oklch.c0().unwrap_or(0.0);
 +    let l_out = (ceiling - l_in * (ceiling - floor)).clamp(0.0, 1.0);
 +    // Shed chroma proportional to the lightness drop so the inverted (L,C,H) stays in
-+    // sRGB gamut. Without this, darkening a saturated color pushes (L,C) out of gamut and
-+    // the convert-back clamps it — skidding blue->purple and orange->mud (the HN banner).
++    // sRGB gamut. Darkening a saturated color otherwise pushes (L,C) out of gamut and
++    // the convert-back clamps it, shifting its hue.
 +    // Lightening keeps chroma (ratio capped at 1) so neutral dark text stays neutral.
 +    let c_in = oklch.c1().unwrap_or(0.0);
 +    // Brand preserve: a high-chroma color is a brand surface (orange banner, red logo,
@@ -477,14 +475,13 @@ Dark-mode-v2 Tier b (no flash-of-light in the per-site "hybrid" mode):
 +    if c_in > 0.08 {
 +        return color.clone();
 +    }
-+    // Neutral snap: a faint cast on a near-neutral color would invert to a tinted grey (a
-+    // "white" heading drifting gold); snap near-neutral to TRUE neutral so it stays clean.
++    // Snap near-neutral colors to true neutral so inversion does not amplify a faint cast.
 +    let c_eff = if c_in < 0.03 { 0.0 } else { c_in };
 +    let c_out = if l_in > 1e-4 { c_eff * (l_out / l_in).min(1.0) } else { c_eff };
 +    AbsoluteColor::new(ColorSpace::Oklch, l_out, c_out, oklch.c2(), oklch.alpha())
 +}
 +
-+/// gjoa dark mode: WCAG relative luminance (0..1) of a color, used to decide
++/// gjoa dark mode: WCAG relative luminance (0..1) of a color. This determines
 +/// whether inherited text under an image-backdrop hero is already light (preserve
 +/// it) or dark (let it invert to light) — so hero text always reads on the scrim.
 +fn color_relative_luminance(color: &AbsoluteColor) -> f32 {

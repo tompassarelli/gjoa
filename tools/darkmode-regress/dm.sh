@@ -7,11 +7,13 @@
 # render. (C++/Rust/pref/jar changes still need the real build; this is only for the
 # dark-mode actor + fixes JSON, which are the hot iteration path.)
 #
-# Usage:  nix develop .#mach -c bash tools/darkmode-regress/dm.sh [mode] [settle_ms] [tags|all]
+# Usage:  direnv exec . bash tools/darkmode-regress/dm.sh [mode] [settle_ms] [tags|all]
 #   dm.sh dark 4000 wikipedia cnn amazon
 #   dm.sh dark 5000 all
 set -u
-cd /home/tom/code/gjoa
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+cd "$REPO_ROOT"
 SRC=src/gjoa/toolkit/components/content-classifier
 ENG=engine/toolkit/components/content-classifier
 FILES=(GjoaDarkmodeParent.sys.mjs GjoaDarkmodeChild.sys.mjs darkmode-fixes.json)

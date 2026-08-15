@@ -4,7 +4,7 @@
 
 | Trigger | SLA |
 |---|---|
-| Mozilla ships a patch release (e.g. 151.0.1 → 151.0.2) | 7 days |
+| Mozilla ships a patch release (e.g. X.Y.1 → X.Y.2) | 7 days |
 | Mozilla ships a major release with MFSAs | 48 hours |
 | Any in-the-wild CVE against our pin | same-day |
 | Zero-day disclosed | immediate (security:bump + rebuild) |
@@ -16,7 +16,7 @@
 - `bun run security:bump` — writes latest stable into `gjoa.json`.
 - `bin/gjoa` launcher — refuses to launch a STALE/CRITICAL binary
   unless `GJOA_ALLOW_INSECURE=1` (one-off override).
-- In-process gate (`src/gjoa/chrome/src/security/index.ts`) — runs at
+- In-process gate (`src/gjoa/chrome/bjs/security/index.bjs`) — runs at
   chrome-window load, re-checks every 60 min. Quits on major-behind
   or in-the-wild; warns on patch-behind.
 
@@ -37,7 +37,7 @@ Some `patches/*.patch` are not feature work — they *are* a security
 mitigation (e.g. a backported upstream fix, or a gjoa-specific hardening
 of a Gecko sink). If such a patch silently stops applying on a Firefox
 bump, the vulnerability it closed **re-opens** in the next build, with no
-error to flag it. The persistence machinery (#120) makes that impossible
+error to flag it. The persistence machinery makes that impossible
 to ship by accident.
 
 ### Tag convention
@@ -58,7 +58,7 @@ A security-critical patch declares a `# security:` block in its header
 `tools/prep/patch-header.bjs check` rejects a `# security:` block that
 has no `id:` (it must be attributable to a finding).
 
-### The four rules
+### The three rules
 
 1. **A security-tagged patch that fails to apply is a hard build-stop.**
    preflight **Gate S** treats a non-apply of (or a non-apply that blocks)

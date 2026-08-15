@@ -58,12 +58,16 @@ nix build .#gjoa-quickbuild --impure
 Chrome JS and CSS iterate without a full Firefox rebuild:
 
 ```sh
-nix develop .#mach
+direnv allow
 cd engine && ./mach build
-# edit source...
+# edit src/gjoa/chrome/bjs/**/*.bjs or src/gjoa/chrome/css/*.uc.css
 gjoa sync
 gjoa hotreload
 ```
+
+The repository's `.envrc` activates the Mach toolchain and pinned Beagle
+compiler. `gjoa sync` emits Beagle modules under `dist/chrome/JS/` and stages
+the CSS under `dist/chrome/CSS/`.
 
 Before a full build, run the focused checks:
 

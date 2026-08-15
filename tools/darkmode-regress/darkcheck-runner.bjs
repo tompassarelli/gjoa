@@ -1,7 +1,7 @@
 #lang beagle/js
-;; DARKCHECK v1 — Channel A orchestrator (computed-style audit gate, ZERO model calls).
+;; DARKCHECK — Channel A orchestrator (computed-style audit gate, zero model calls).
 ;;
-;; TWO ARMS, reusing the proven regress rails (Marionette + chrome drawSnapshot):
+;; Two arms use Marionette + chrome drawSnapshot:
 ;;   Arm A (AUTHORED): spawn gjoa with dark-mode OFF and collect each site's authored
 ;;     colors — engine-off computed style IS the authored value (no transform), the
 ;;     reliable A7 native-dark discriminator + the A5/A8 authored reference.
@@ -13,7 +13,7 @@
 ;; [{x,y,w,h,tag}] (the dumb Channel-B seam), + rollup.json. Exit nonzero on any A-rule
 ;; FAIL (indeterminate/under-rendered pages are quarantined, never gate). No AI, pure APCA.
 ;;
-;; Usage: nix develop .#mach -c bun .beagle-tools/gjoa/tools/darkmode-regress/darkcheck-runner.js <gjoa-bin>
+;; Usage: direnv exec . bun .beagle-tools/gjoa/tools/darkmode-regress/darkcheck-runner.js <gjoa-bin>
 ;;   GJOA_DM_CORPUS=<corpus.json>  GJOA_DC_OUT=<dir>  GJOA_DC_PORT=<n≥3000, default 3838>
 (ns gjoa.tools.darkmode-regress.darkcheck-runner
   (:require [child_process :refer [spawn]]
@@ -180,15 +180,14 @@
         (doseq [pr perRule]
           (when (> (js/get pr .count) 0)
             (js/call console .log (str "  " (js/get pr .rule) " fails on " (js/get pr .count) " pages: " (js/call (js/get pr .failPages) .join " ")))))
-        ;; T5 (RULING 1.3): quarantine fraction published per mark/run (no-silent-caps)
+        ;; Publish the quarantine fraction for every run.
         (let [qfrac (/ (js/get quarantined .length) (max 1 (js/get results .length)))]
           (js/call fs .writeFileSync (js/call path .join outdir "rollup.json") (js/call JSON .stringify {:total (js/get results .length) :failedPages (js/get failedPages .length)
                              :quarantined (js/get quarantined .length) :quarantineFraction qfrac
                              :errored (js/get errored .length)
                              :perRule perRule :config cfg
                              :pages (js/call results .map (fn [(r Any)] Any
-                               ;; T4 (RULING 1.3): per-page match counts + percentiles (no-silent-caps)
-                               ;; RULING 1.1: per-page a1WarnCount + a1p10/a1p50 (improvement gradient)
+                               ;; Publish per-page match counts, warning counts, and percentiles.
                                (let [st (js/get r .stats)]
                                  {:slug (js/get r .slug) :url (js/get r .url) :tag (js/get r .tag) :expect (or (js/get r .expect) [])
                                   :status (or (js/get r .status) "err") :pass (if (js/get r .err) false (js/get r .pass))

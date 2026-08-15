@@ -1,12 +1,12 @@
 #lang beagle/js
 ;; Chrome-level dark mode — a Lane 1 module (no rebuild; hot-reloads via
-;; `gjoa sync`). No compositor work, no content-script injection. Two
+;; `gjoa sync`). No compositor work or content-script injection. Two
 ;; Gecko-native mechanisms:
 ;;   - forces content `prefers-color-scheme: dark` via the native pref
 ;;     `layout.css.prefers-color-scheme.content-override` (0 = dark, 2 = none),
 ;;     so sites with native dark CSS activate it — no agent stylesheet;
-;;   - a chrome CSS `filter: invert()` on the <browser> frame, for sites
-;;     without native dark support.
+;;   - engine-level color inversion for themeless pages or every page in
+;;     uniform mode.
 ;; Modes (pref gjoa.darkmode.mode): "dark" (DEFAULT — native-dark sites keep their own
 ;; theme, themeless pages engine-inverted into the Darkness band), "uniform" (force
 ;; every site to one controlled darkness), "light", "system" (follow the OS), and "off".
@@ -25,9 +25,9 @@
 (def PREF-FORCE-NATIVE String "gjoa.darkmode.user.force-native")
 (def PREF-FORCE-INVERT String "gjoa.darkmode.user.force-invert")
 (def PREF-SITE-OFF String "gjoa.darkmode.user.off")
-;; Engine pre-paint default-invert (hybrid mode only); read by nsPresContext so a
-;; themeless page renders dark from frame 1 (no flash), retracted pre-paint for
-;; sites that authored their own dark theme.
+;; Engine pre-paint default-invert for dark mode and system-resolved-dark; read
+;; by nsPresContext so a themeless page renders dark from frame 1 while sites
+;; with authored dark themes remain native.
 (def PREF-DEFAULT-INVERT String "gjoa.darkmode.hybrid.default-invert")
 ;; APCA contrast normalizer (GjoaDarkmode actor pass-3): re-tones any text that
 ;; renders below the readability floor against its REAL backdrop — the
@@ -55,7 +55,7 @@
 (defn set-invert! [(on Boolean)] Any
   (set-pref-bool! PREF-INVERT on))
 
-;; Toggle the engine pre-paint default-invert flag (hybrid mode only).
+;; Toggle the engine pre-paint themeless-page inversion flag.
 (defn set-default-invert! [(on Boolean)] Any
   (set-pref-bool! PREF-DEFAULT-INVERT on))
 
@@ -124,14 +124,14 @@
       :else
         (do (set-chrome-scheme! true) (set-content-override! 0) (set-invert! false) (set-default-invert! true) (set-rfp-colorscheme-exempt! true)))))
 
-;; Public toggle API (for a future toolbar button), exposed on window.
+;; Public toggle API exposed on window.
 (defn toggle [] Boolean
   (let [new-state (not (enabled?))]
     (set-pref-bool! PREF-ENABLED new-state)
     new-state))
 
-;; Cycle the four user-facing states: dark everywhere (default), uniform controlled
-;; dark, follow-OS system, off.
+;; Cycle the primary user-facing states: dark, light, and system. Uniform and
+;; off normalize to dark when cycling resumes.
 (defn cycle-mode [] String
   (let [cur (mode-)
         nxt (cond (= cur "dark")   "light"
@@ -141,22 +141,17 @@
     (set-pref-str! PREF-MODE nxt)
     nxt))
 
-;; Make on-by-default + system-driven the real defaults (default branch), so the
-;; GjoaDarkmode actor and the engine — which read these prefs directly — agree
-;; with the chrome. A user pref still overrides.
+;; Install on-by-default dark-mode defaults so the GjoaDarkmode actor, engine,
+;; and chrome agree. A user pref still overrides.
 (defn set-darkmode-defaults! [] Any
   (try
     (let [d (js/call (js/get Services .prefs) .getDefaultBranch "")]
       (js/call d .setBoolPref PREF-ENABLED true)
-      ;; DEFAULT = "dark" (unconditional force-dark). "system" was the default but it
-      ;; depends on system-dark? reading the OS theme, which on some setups (RFP spoof,
-      ;; or a wayland/niri portal that gecko doesn't pick up) reads LIGHT even on a
-      ;; dark OS → every site renders light. Dark never consults the OS, so it Just
-      ;; Works. Users who want OS-follow can still pick System explicitly.
+      ;; Dark is the unconditional default; system remains an explicit OS-following
+      ;; choice.
       (js/call d .setCharPref PREF-MODE "dark")
-      ;; Contrast normalizer ON v2 (2026-06-28): _correct -> neutral NEAR-WHITE (no muted-grey
-      ;; dimming) + #maybeNormalizeContrast re-runs at +3.2s for SPA-late text (canva hero).
-      ;; Bright + neutral + SPA-aware retone of dark-on-dark / low-contrast text.
+      ;; Keep low-contrast text bright and neutral, including text introduced by
+      ;; late SPA updates.
       (js/call d .setBoolPref PREF-NORMALIZE true))
     (catch (e Any)
       (console/error "gjoa-darkmode: set-darkmode-defaults! failed" e))))

@@ -12,16 +12,16 @@
 #     - toolkit/components/content-classifier/content_classifier_engine/src/lib.rs
 #     - toolkit/components/content-classifier/content_classifier_engine/Cargo.toml
 #
-Extend the upstream FF152 content-classifier component with native COSMETIC
-element-hiding (the gjoa adblock M2 feature).
+Extend the upstream content-classifier component with native cosmetic
+element-hiding.
 
 - Rust FFI: url_cosmetic_resources + hidden_class_id_selectors (+ fill_cstr_thinvec)
-- IDL: getUrlCosmeticResources + getHiddenClassIdSelectors (new uuid)
+- IDL: getUrlCosmeticResources + getHiddenClassIdSelectors
 - C++ engine wrappers + cross-engine union in the service
 - @mozilla.org/content-classifier-service;1 contract (GetSingleton) so JS can
   reach the MAIN_PROCESS_ONLY service
-- moz.build: register GjoaCosmetic{Parent,Child}.sys.mjs as EXTRA_JS_MODULES
-  (those NEW actor files ship as src/gjoa overlays, not in this patch)
+- moz.build: register the overlaid GjoaCosmetic{Parent,Child}.sys.mjs actors as
+  EXTRA_JS_MODULES
 
 --- a/Cargo.lock
 +++ b/Cargo.lock

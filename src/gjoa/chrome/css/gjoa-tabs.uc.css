@@ -76,10 +76,9 @@
 /* Icons-only mode (collapsed sidebar layout) */
 /* Icons-only sidebar (collapsed): force both the pinned and panel containers
  * to flex-column with explicit width so 24px children center reliably. The
- * min-width pushes the parent #sidebar-container wider than the bare 32px row, so
- * the strip has breathing room — this is what the old icon-grid CSS used to
- * give us via horizontal padding. :not([hidden]) so an empty pinned
- * container actually stays hidden when there are no pinned tabs. */
+ * min-width pushes the parent #sidebar-container wider than the bare 32px row,
+ * giving the strip horizontal breathing room. :not([hidden]) lets an empty pinned
+ * container stay hidden when there are no pinned tabs. */
 :is(#gjoa-pinned-container, #gjoa-tab-panel)[gjoa-icons-only]:not([hidden]) {
   display: flex !important;
   flex-direction: column !important;
@@ -703,7 +702,7 @@
 /* #endregion picker */
 
 
-/* #region single-row horizontal (#98)
+/* #region single-row horizontal
  *
  * Classic horizontal already flows the tab panel into the toolbar row. The
  * single-row variant adds two things, gated on gjoa.layout.horizontalSingleRow:

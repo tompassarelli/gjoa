@@ -1,13 +1,9 @@
 #lang beagle/js
-;; Phase 3 (fork-currency roadmap) — conflict forecast. BEFORE committing to a
-;; Firefox bump, intersect the upstream delta (files Mozilla changed between two
-;; releases) with the files gjoa's patches touch — so you know which patches are
-;; in the blast radius, ranked by seam tier, with NO download and NO build.
-;; Validated against the real 152.0 -> 152.0.1 bump (fully disjoint -> clean).
-;;   bun run forecast            # gjoa.json version -> latest stable
-;;   bun run forecast 152.0 152.0.1
-;; (Precise blast-radius RANKING via the fram call graph is the deferred turtle;
-;;  v1 ranks by seam tier, which needs no graph.)
+;; Before a Firefox bump, intersect the upstream release delta with the files
+;; Gjoa's patches touch. Report affected patches by seam tier without downloading
+;; or building Firefox.
+;;   bun run forecast                       # configured version -> latest stable
+;;   bun run forecast <from-version> <to-version>
 (ns gjoa.tools.prep.conflict-forecast
   (:require [fs :refer [readdirSync readFileSync]]
             [path :refer [join]]
@@ -18,7 +14,7 @@
 (def PATCHES-DIR String (join REPO "patches"))
 (def FF String (join (js/get (js/get process .env) .HOME) "code" "resources" "firefox"))
 
-;; version "152.0.1" -> mozilla release tag "FIREFOX_152_0_1_RELEASE".
+;; Convert a dotted Firefox version to its Mozilla release tag.
 ;; `from`/`to` flow from the network (latest-stable) and gjoa.json into a git
 ;; shell-out, so reject anything that isn't a plain Firefox version before it can
 ;; reach the shell (command-injection guard).

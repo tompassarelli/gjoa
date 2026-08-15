@@ -22,8 +22,8 @@
         #   2. Compare basePkgs.nss_latest.version against minNssVersion
         #   3. Apply the overlay only when basePkgs is strictly behind
         #
-        # This avoids the recursion you hit if you probe `prev.nss_latest`
-        # from inside the overlay closure (final↔prev fixed-point).
+        # The separate base import avoids probing `prev.nss_latest` inside
+        # the overlay fixed point.
         #
         # Src must be the nss-dev/nss GitHub tag, like nixpkgs' own nss: its
         # patches assume a root of coreconf/+lib/+cmd/, which the
@@ -38,9 +38,6 @@
         #          https://github.com/nss-dev/nss/archive/<tag>.tar.gz \
         #          | xargs nix hash convert --hash-algo sha256 --to sri
         #
-        # The block is dead weight (but harmless) once nixpkgs has
-        # permanently outpaced minNssVersion; safe to delete the
-        # let-bindings + the if-branch then.
         minNssVersion = "3.125";
         nssRev = "NSS_3_125_RTM";
         nssHash = "sha256-pIRoFJYsQZzI+hJcNzTX+WT91tfXDygWE0RrirfyBPc=";
@@ -85,11 +82,26 @@
           };
         });
 
-        # Single source of truth for the Firefox pin: gjoa.json. Bumping
-        # `bun run security:bump` writes here; flake.nix re-reads on next
-        # `nix build`. No more "I bumped gjoa.json but the build said 150."
+        # Single source of truth for the Firefox pin.
         gjoaConfig = builtins.fromJSON (builtins.readFile ./gjoa.json);
         firefoxVersion = gjoaConfig.firefox.version;
+
+        # engine/ is mutable, ignored state owned by the checkout. Direnv sets
+        # this before flake evaluation; a lane may instead point it at another
+        # prepared engine checkout.
+        engineRoot = builtins.getEnv "GJOA_ENGINE_ROOT";
+        engineSource =
+          if engineRoot == "" then
+            throw "GJOA_ENGINE_ROOT is unset; enter the checkout through direnv"
+          else
+            let enginePath = builtins.toPath engineRoot;
+            in if !builtins.pathExists enginePath then
+              throw "GJOA_ENGINE_ROOT does not exist: ${engineRoot}"
+            else
+              builtins.path {
+                name = "gjoa-source";
+                path = enginePath;
+              };
 
         # Delegate the actual Firefox compile to nixpkgs's `buildMozillaMach`
         # — ~750 lines of carefully-tuned Nix that handles every toolchain
@@ -123,19 +135,9 @@
             applicationName = "Gjoa";
             binaryName = "gjoa";
 
-            # Prepared source. Must run `bun run init` (downloads mozilla-central +
-            # applies overlays) before `nix build .#gjoa`.
-            #
-            # Reference engine/ as an absolute path because it's gitignored
-            # (5GB of mozilla-central source — too big to git-track). Pure
-            # flake evaluation can't read paths outside the flake source, so
-            # invoke with `--impure`. For a release build reproducible
-            # without --impure, we'd commit a tarball of the prepared source
-            # OR build engine/ as its own Nix derivation. Out of scope today.
-            src = builtins.path {
-              name = "gjoa-source";
-              path = "/home/tom/code/gjoa/engine";
-            };
+            # The prepared, checkout-owned engine requires impure evaluation
+            # because it is intentionally outside the tracked flake source.
+            src = engineSource;
 
             # buildMozillaMach defaults to extracting a tarball. Our src is
             # already-extracted source, so override unpack to a copy.
@@ -205,16 +207,8 @@
             # --disable-debug-symbols configure flag which leaves them on.
             enableDebugSymbols = false;
           })).overrideAttrs (old: {
-            # nixpkgs's buildMozillaMach applies a set of patches calibrated
-            # to whatever Firefox version nixpkgs currently ships (149 at
-            # time of writing). Two of those patches are macOS-SDK-version
-            # reverts that target lines in `build/moz.configure/toolchain.configure`
-            # which have already shifted in newer Firefox releases — they
-            # fail to apply, and the build bails.
-            #
-            # On Linux those macOS reverts are no-ops anyway, so we drop them
-            # and keep only the two version-stable nixpkgs build-system
-            # patches (`136-no-buildconfig.patch`, `133-env-var-for-system-dir.patch`).
+            # Keep only the version-stable Linux build-system patches. The
+            # nixpkgs macOS SDK patches do not apply to Gjoa's Firefox source.
             patches = pkgs.lib.filter (p:
               let n = baseNameOf (toString p);
               in n == "136-no-buildconfig.patch"
@@ -232,7 +226,7 @@
             CXXFLAGS = "-march=native -mtune=native -pipe";
             RUSTFLAGS = "-C target-cpu=native -C opt-level=3";
 
-            # CRITICAL — without this the CFLAGS above are a SILENT NO-OP.
+            # Without this the cc-wrapper strips the native CFLAGS above.
             # nixpkgs' stdenv/setup defaults `NIX_ENFORCE_NO_NATIVE=1`
             # (`${NIX_ENFORCE_NO_NATIVE-1}`, no colon → applies only when UNSET),
             # and the cc-wrapper strips -march=native/-mtune=native when that
@@ -240,9 +234,7 @@
             # -march=native because NIX_ENFORCE_NO_NATIVE is set"). Setting it
             # `false` renders an empty-but-SET env var, so stdenv's `-1` default
             # does NOT fire, mangleVarBool ORs 0, and the native flags pass
-            # through. Verified against clang-wrapper-21.1.8 utils.bash. This
-            # makes the binary CPU-specific (non-portable) — intended for a
-            # personal build; does not change the .drv hash.
+            # through. This makes the binary CPU-specific as intended.
             NIX_ENFORCE_NO_NATIVE = false;
 
           });
@@ -307,27 +299,8 @@
         packages.gjoa-quickbuild = gjoa-quickbuild;
         packages.gjoa-quickbuild-unwrapped = gjoa-quickbuild-unwrapped;
 
-        # ===================================================================
-        # Dev shells — split into two intentionally:
-        #
-        #   default — minimal. bun + python + git. Tiny closure (~50MB).
-        #             What direnv loads on `cd ~/code/gjoa`. Enough for
-        #             editing TS, running `bun test`, `bun run import`,
-        #             `bun run chrome:dist`. Should never trigger a
-        #             multi-GB substituter fetch on terminal spawn.
-        #
-        #   mach    — full Firefox build toolchain. Heavy (~3GB closure).
-        #             Enter explicitly with `nix develop .#mach` only when
-        #             you're about to `./mach build` / `./mach build faster`.
-        #
-        # Why split: previously, opening any terminal in the repo pulled in
-        # gtk3 + xorg.* + mesa + pulseaudio + cups + etc., which is the
-        # Firefox link/runtime closure. That's ~3GB of substituter fetches
-        # the first time, or whenever nixpkgs renames an attribute. The
-        # user's actual daily workflow (edit TS, run bun) doesn't need any
-        # of it. Splitting the shells gates the heavy fetch behind an
-        # explicit opt-in.
-        # ===================================================================
+        # The default shell carries repository tooling; .envrc selects the
+        # mach shell with the complete Firefox toolchain.
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             # Bun is the runtime for all tools/* (TS without node).
@@ -344,7 +317,7 @@
 
           shellHook = ''
             if [[ $- == *i* ]]; then
-              echo "gjoa devShell (minimal). For mach builds: nix develop .#mach"
+              echo "gjoa minimal development shell"
             fi
           '';
         };

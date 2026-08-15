@@ -1,19 +1,14 @@
 #lang beagle/js
-;; Per-site dark mode, tested through the real production path:
+;; Dark mode, tested through the real production path:
 ;; the GjoaDarkmode actor measures the rendered page background in the content
 ;; process and sets BrowsingContext.colorInversionOverride, which drives
 ;; nsPresContext::mColorInversion for THAT document. A themeless light page must
 ;; be inverted ("active"). The actor's content-process set is what propagates the
 ;; engine recompute, so we exercise the real actor — not a chrome-side override poke.
-;;
-;; The native-dark "keep" path (actor -> "inactive", no double-darken) is verified
-;; correct in isolation (the actor measures rgb(17,17,17) -> "inactive"), but a
-;; reliable cross-navigation test needs the Tier-b engine fix: today the override
-;; persists across a same-tab navigation, so a native-dark page entered from a
-;; themeless (inverted) one is measured AFTER inversion (circular). Tier b reads
-;; the authored bg pre-paint and dissolves that circularity; the "inactive"
-;; assertion lands there.
-(ns gjoa.tests.integration.darkmode-hybrid
+;; Dark and system-on-dark-OS pre-paint-invert themeless pages while keeping
+;; native-dark pages in their authored theme. Uniform behavior is covered by
+;; darkmode-invert.bjs.
+(ns gjoa.tests.integration.darkmode-modes
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect expect-eq NAV-JS]]))
 (declare-extern [Number] Any)
 
@@ -34,15 +29,15 @@
        " d.style.backgroundColor='rgb(255,255,255)'; d.style.color='rgb(0,0,0)';"
        " document.body.appendChild(d); return 'injected';"))
 
-;; Tier b: dark mode + the engine pre-paint default-invert. A themeless top doc is
+;; Dark mode + the engine pre-paint default-invert. A themeless top doc is
 ;; inverted by the ENGINE at construction (no actor round-trip); a native-dark
 ;; page is retracted pre-paint (PresShell::Initialize) and keeps its theme.
-(def DARK-B-JS String
+(def DARK-PREPAINT-JS String
   (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', true);"
        " Services.prefs.setStringPref('gjoa.darkmode.mode', 'dark');"
        " Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false);"
        " Services.prefs.setBoolPref('gjoa.darkmode.hybrid.default-invert', true);"
-       " return 'dark-b';"))
+       " return 'dark-prepaint';"))
 
 (def DARK-TOP String "http://127.0.0.1:8975/dark") ;; authored-dark (#111) fixture
 
@@ -82,28 +77,28 @@
      (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT-TOP 150 100) []))]
        (console/log (str "[darkmode] actor /light center-lum=" lum))
        (expect (< (Number lum) 80) (str "themeless-light should invert to dark; lum=" lum))))
-   ;; Tier b: the ENGINE default-invert darkens a themeless page at cascade time,
+   ;; Dark mode's ENGINE default-invert darkens a themeless page at cascade time,
    ;; without any actor round-trip. Inject a white box and assert it computes
    ;; black — proving (A) sets mColorInversion at construction.
-   (deftest "darkmode tier-b: engine default-invert darkens a themeless page (painted)" [mn ctx]
+   (deftest "darkmode: engine default-invert darkens a themeless page (painted)" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
-     (chrome-eval DARK-B-JS)
+     (chrome-eval DARK-PREPAINT-JS)
      (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT-TOP 150 100) []))]
-       (console/log (str "[darkmode] tier-b /light center-lum=" lum))
-       (expect (< (Number lum) 80) (str "themeless-light should invert to DARK under tier-b default-invert; lum=" lum))))
-   ;; Tier b: a native-dark page (authored #111) is left un-inverted pre-paint by
+       (console/log (str "[darkmode] dark /light center-lum=" lum))
+       (expect (< (Number lum) 80) (str "themeless-light should invert to DARK under dark-mode default-invert; lum=" lum))))
+   ;; A native-dark page (authored #111) is left un-inverted pre-paint by
    ;; PresShell::Initialize -> ApplyHybridDefaultInvertIfThemeless (it only flips
    ;; themeless pages), so it keeps its theme. After a settle (refiner could
    ;; otherwise re-invert), the root stays dark AND an injected white box stays
    ;; white (inversion is off for this doc).
-   (deftest "darkmode tier-b: native-dark page keeps its theme — white probe stays white (painted)" [mn ctx]
+   (deftest "darkmode: native-dark page keeps its theme — white probe stays white (painted)" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
-     (chrome-eval DARK-B-JS)
+     (chrome-eval DARK-PREPAINT-JS)
      ;; /dark bakes a white probe top-left (0,0,80,80). Native-dark is NOT inverted
      ;; pre-paint (PresShell::Initialize only flips themeless pages), so the white
      ;; probe STAYS WHITE; if inversion wrongly fired it would go black. Painted read.
      (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js DARK-TOP 40 40) []))]
-       (console/log (str "[darkmode] tier-b /dark white-probe-lum=" lum))
+       (console/log (str "[darkmode] dark /dark white-probe-lum=" lum))
        (expect (> (Number lum) 150) (str "native-dark must NOT invert: the white probe should stay WHITE; lum=" lum))))
    ;; Dark sets pre-paint default-invert unconditionally. System follows the OS.
    (deftest "darkmode: default-invert follows the selected appearance" [mn ctx]
@@ -120,15 +115,15 @@
      (js/await (await-true
                  "return Services.prefs.getBoolPref('gjoa.darkmode.hybrid.default-invert', false) === true;"
                  4000))
-     ;; "system": conventional follow-OS, default-invert OFF regardless of OS
+     ;; "system": resolve to light or dark behavior with the OS.
      (chrome-eval "Services.prefs.setStringPref('gjoa.darkmode.mode', 'system'); return 'system';")
-     (chrome-eval "Services.prefs.setIntPref('ui.systemUsesDarkTheme', 1); return 'os-dark';")
-     (js/await (await-true
-                 "return Services.prefs.getBoolPref('gjoa.darkmode.hybrid.default-invert', false) === false;"
-                 4000))
      (chrome-eval "Services.prefs.setIntPref('ui.systemUsesDarkTheme', 0); return 'os-light';")
      (js/await (await-true
                  "return Services.prefs.getBoolPref('gjoa.darkmode.hybrid.default-invert', false) === false;"
+                 4000))
+     (chrome-eval "Services.prefs.setIntPref('ui.systemUsesDarkTheme', 1); return 'os-dark';")
+     (js/await (await-true
+                 "return Services.prefs.getBoolPref('gjoa.darkmode.hybrid.default-invert', false) === true;"
                  4000)))
    ;; #49: an explicit per-site override (here a user.off entry for the fixture
    ;; host; the curated registry mirror works identically) is applied SYNCHRONOUSLY
@@ -173,7 +168,7 @@
    ;; /light page; force-native overrides -> it STAYS light. Painted, chrome-side.
    (deftest "darkmode override: user.force-native keeps a themeless-light page light (painted)" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
-     (chrome-eval DARK-B-JS)
+     (chrome-eval DARK-PREPAINT-JS)
      (chrome-eval "Services.prefs.setCharPref('gjoa.darkmode.user.force-native', '127.0.0.1'); return 'fn';")
      (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT-TOP 150 100) []))]
        (console/log (str "[dm-override] force-native /light center-lum=" lum))
@@ -185,7 +180,7 @@
    ;; the keep -> #111 page bg inverts to a light center. Painted, chrome-side.
    (deftest "darkmode override: user.force-invert inverts a native-dark page (painted)" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
-     (chrome-eval DARK-B-JS)
+     (chrome-eval DARK-PREPAINT-JS)
      (chrome-eval "Services.prefs.setCharPref('gjoa.darkmode.user.force-invert', '127.0.0.1'); return 'fi';")
      (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js DARK-TOP 150 100) []))]
        (console/log (str "[dm-override] force-invert /dark center-lum=" lum))

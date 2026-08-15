@@ -1,13 +1,6 @@
 #lang beagle/js
-;; `gjoa preflight` — the gate that runs before any nix build is allowed.
-;;
-;; Per CLAUDE.md Rule #0: Claude may not propose a rebuild without
-;; showing this script's output. Gates are MECHANICAL. New failure
-;; modes get added here, not to a mental checklist that gets skipped.
-;;
-;; Exits 0 if every gate passes, 1 if any gate fails. Gate F (daemon
-;; settings) and Gate G (nix eval) are the two that would have caught
-;; the 2026-05-26 failure.
+;; `gjoa preflight` — the mechanical gate before a nix or full-mach build.
+;; Exits 0 if every gate passes and 1 if any gate fails.
 (ns gjoa.tools.scripts.preflight
   (:require [fs :refer [existsSync readFileSync readdirSync]]
             [child_process :refer [execSync]]
@@ -16,9 +9,7 @@
             [gjoa.tools.prep.symbol-resolve :refer [check-contract]]))
 (declare-extern [process JSON RegExp Object Set Array String] Any)
 
-;; The old .ts used `resolve(import.meta.dir, "..", "..")` to climb from
-;; tools/scripts/ to the repo root. There is no import.meta in beagle, and
-;; these tools run via `bun run` from the repo root, so cwd IS the repo root.
+;; Package scripts invoke this tool from the repository root.
 (def REPO-ROOT String (js/call process .cwd))
 (def ENGINE-DIR String (join REPO-ROOT "engine"))
 (def FLAKE String (join REPO-ROOT "flake.nix"))
@@ -81,15 +72,9 @@
             (fail "A" "patches apply clean on fresh source" "tarball extract failed" (js/call (js/get extract .out) .slice 0 400))
             (do
               (sh (str "cd " tmp " && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m baseline") {:timeout 60000})
-              ;; Apply patches CUMULATIVELY in patch order — each on the result of
-              ;; all prior — matching `bun run import`'s real apply order. The old
-              ;; per-patch `git apply --check` against the pristine tarball
-              ;; false-positives when a later patch depends on lines an EARLIER one
-              ;; added (the 0014-on-0013 case): in isolation 0014's context is
-              ;; absent, so it "fails", though the real sequenced apply succeeds.
-              ;; Here we mutate `tmp` in place (real `git apply`, no --check) so each
-              ;; patch sees its predecessors' output. On the FIRST failure we stop —
-              ;; subsequent patches build on the failed tree and would cascade.
+              ;; Apply patches cumulatively in the same order as `bun run import`.
+              ;; Mutate `tmp` so each patch sees its predecessors, and stop on the
+              ;; first failed apply because later patches depend on that tree.
               (let [patches (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [p] Any (js/call p .endsWith ".patch"))) .sort)
                     failed []
                     drifted []
@@ -191,9 +176,8 @@
           (let [nixpkgsNss (js/call (js/call (js/call (js/get probe .out) .trim) .split "\n") .pop)]
             (pass "D" "dep floors satisfied"
               (str "minNssVersion=" minNss ", nixpkgs nss_latest=" nixpkgsNss " → overlay "
-                   ;; Original did a naive JS string `>=`; beagle's `>=` is
-                   ;; numeric, so replicate lexicographic comparison via
-                   ;; localeCompare (>= 0 means nixpkgsNss >= minNss).
+                   ;; Beagle's `>=` is numeric, so use localeCompare for versions
+                   ;; (>= 0 means nixpkgsNss >= minNss).
                    (if (>= (js/call (String nixpkgsNss) .localeCompare (String minNss)) 0) "auto-disabled" "ACTIVE (will fetch Mozilla tarball)")))))))))
 
 ;; ── Gate F: nix daemon will accept flake settings ─────────────────────────
@@ -236,7 +220,7 @@
         (warn "G" "nix flake evaluates without errors"
           "nix eval timed out — not a real eval failure; re-run with a clean tree or longer timeout")
         (fail "G" "nix flake evaluates without errors"
-          "evaluation failed — would have died during build"
+          "evaluation failed — build cannot proceed"
           (js/call (js/call (js/call (js/call (js/get r .out) .split "\n") .filter (fn [l] Any (js/call (js/call l .toLowerCase) .includes "error"))) .slice 0 5) .join "\n      ")))
       (pass "G" "nix flake evaluates without errors" (str "derivation resolves to " (js/call (js/call (js/call (js/call (js/get r .out) .trim) .split "\n") .pop) .slice -50))))))
 
@@ -279,7 +263,7 @@
 ;; scriptlet-resources.json is base64-encoded JS run via evalInSandbox on the
 ;; privileged side of the content classifier; a swapped/tampered bundle injects
 ;; attacker JS into pages. Assert it still matches the digest recorded in
-;; scriptlet-resources.PROVENANCE.md (security finding F10).
+;; scriptlet-resources.PROVENANCE.md.
 (defn gateJ [] Any
   (let [script (join REPO-ROOT "tools" "prep" "verify-scriptlet-resources.sh")]
     (if (not (existsSync script))
@@ -292,17 +276,14 @@
             "if you refreshed the bundle from a pinned uBO commit, update the SHA-256 in verify-scriptlet-resources.sh AND scriptlet-resources.PROVENANCE.md"))))))
 
 ;; ── Gate K: engine/ reflects current source (import-currency) ───────────────
-;; The compile input is engine/ (gitignored), which only mirrors src/gjoa/ +
-;; patches/ + the import tooling AFTER `bun run import`. Every stale-engine
-;; catastrophe — e.g. the 2026-06-14 build that compiled a 3-week-old tree, ran
-;; green, and silently dropped every recent change — is this gate's failure
-;; mode. `import` stamps engine/.gjoa-import-stamp at completion; if any source
-;; tree is newer than that stamp, engine/ is stale and must be re-imported.
+;; The compile input is engine/ (gitignored), which mirrors src/gjoa/ + patches/
+;; only after `bun run import`. Import stamps engine/.gjoa-import-stamp; a newer
+;; source file means engine/ must be re-imported before building.
 (def IMPORT-STAMP String (join ENGINE-DIR ".gjoa-import-stamp"))
 (defn gateK [] Any
   (if (not (existsSync IMPORT-STAMP))
     (fail "K" "engine/ reflects current source (import-currency)"
-      "no engine/.gjoa-import-stamp — engine/ is unimported (or predates this gate)"
+      "no engine/.gjoa-import-stamp — engine/ is unimported"
       "run `bun run import` to (re)build engine/ from src/gjoa/ + patches/")
     (let [stamp-r (sh (str "stat -c %Y '" IMPORT-STAMP "'") {})
           newest-r (sh "find src/gjoa patches tools/prep -type f -printf '%T@\\n' 2>/dev/null | sort -rn | head -1" {})
@@ -365,7 +346,7 @@
     (cond
       ;; FAIL-CLOSED: a dep that moved (not-found), one the resolver can't evaluate
       ;; (unsupported kind), or one the parser dropped (declared>evaluated) blocks the build.
-      ;; Green Gate L now means "every DECLARED anchor RESOLVED", not "the few we parsed did".
+      ;; Green means every declared anchor resolved.
       (> (+ (+ (js/get not-found .length) (js/get unsupported .length)) (js/get dropped .length)) 0)
       (fail "L" "surface contracts (declared upstream deps resolve)"
         (str (+ (+ (js/get not-found .length) (js/get unsupported .length)) (js/get dropped .length)) " declared dependency(ies) unresolved or unevaluated (" (js/get resolved .length) " resolved)")
@@ -493,9 +474,8 @@
 ;; beagle's value-semantics emit injects `import * as $$bc from 'beagle/core.js'`.
 ;; Firefox's chrome ES loader cannot resolve a bare specifier; it must be rewritten
 ;; to resource:///modules/gjoa/beagle/ at compile (tools/prep/overlay.bjs sets
-;; BEAGLE_JS_RUNTIME_PREFIX). Today only GjoaLoader compiles with the prefix — a
-;; future .bjs-authored .sys.mjs would silently ship the bare import and kill ALL
-;; gjoa chrome (the 2026-06-21 break). Fail fast, BEFORE the multi-hour build.
+;; BEAGLE_JS_RUNTIME_PREFIX). Every .bjs-authored .sys.mjs must use that prefix
+;; or Firefox cannot load the module. Fail before the multi-hour build.
 (defn gateO [] Any
   (let [gjoaDir (join REPO-ROOT "engine" "browser" "components" "gjoa")]
     (if (not (existsSync gjoaDir))
@@ -511,20 +491,15 @@
             (str "unresolvable bare `import from 'beagle/...'` in: " (js/call hits .replaceAll "\n" ", "))
             "compile that .bjs with BEAGLE_JS_RUNTIME_PREFIX=resource:///modules/gjoa/beagle/ (tools/prep/overlay.bjs) + vendor the runtime"))))))
 
-;; ── Gate P: patch-hash drift (#104a) ───────────────────────────────────────
-;; configs/patch-hashes.json records the EXPECTED SHA-256 of every patches/*.patch
-;; (a tracked, reviewed trust anchor). Gate P recomputes each patch's digest and
-;; HARD-FAILS on any mismatch, any patch missing from the manifest, or any manifest
-;; entry whose patch was deleted — so a patch can't change (or appear/vanish) without
-;; a corresponding, review-gated manifest update. This is the per-patch, drift-gating
-;; record; DISTINCT from the aggregate `gjoa.build.engine-patch-hash` that
-;; tools/prep/fingerprint.bjs bakes into the binary for provenance.
+;; ── Gate P: patch-hash drift ───────────────────────────────────────────────
+;; configs/patch-hashes.json records the expected SHA-256 of every patch. Gate P
+;; rejects changed, unrecorded, and deleted patch entries.
 (def PATCH-HASHES-FILE String (join REPO-ROOT "configs" "patch-hashes.json"))
 (defn sha256-file [(path String)] String
   (js/call (js/call (createHash "sha256") .update (readFileSync path)) .digest "hex"))
 (defn gateP [] Any
   (if (not (existsSync PATCH-HASHES-FILE))
-    (fail "P" "patch hashes match recorded manifest (#104a)"
+    (fail "P" "patch hashes match recorded manifest"
       "no configs/patch-hashes.json — patch drift is unguarded"
       "create configs/patch-hashes.json with {\"algorithm\":\"sha256\",\"patches\":{<file>:<sha256>}} for every patches/*.patch")
     (let [manifest (js/call JSON .parse (readFileSync PATCH-HASHES-FILE "utf8"))
@@ -544,7 +519,7 @@
       (let [stale (js/call (js/call Object .keys recorded) .filter (fn [(k String)] Bool (= (js/call patches .indexOf k) -1)))]
         (cond
           (or (> (js/get mismatched .length) 0) (> (js/get missing .length) 0) (> (js/get stale .length) 0))
-          (fail "P" "patch hashes match recorded manifest (#104a)"
+          (fail "P" "patch hashes match recorded manifest"
             (str (js/get mismatched .length) " drifted, " (js/get missing .length) " unrecorded, " (js/get stale .length) " stale entry(ies)")
             (str "a patch changed without updating its recorded hash — review the diff, then regenerate the manifest:\n"
                  "      cd patches && for f in $(ls *.patch | sort); do echo \"$f $(sha256sum \"$f\" | cut -d' ' -f1)\"; done\n"
@@ -552,7 +527,7 @@
                  "    unrecorded: " (js/call missing .join ", ") "\n"
                  "    stale:      " (js/call stale .join ", ")))
           :else
-          (pass "P" "patch hashes match recorded manifest (#104a)"
+          (pass "P" "patch hashes match recorded manifest"
             (str (js/get patches .length) "/" (js/get patches .length) " patch hashes match configs/patch-hashes.json")))))))
 
 ;; ── Gate Q: $$bc runtime export-closure (emit ↔ vendored core.js) ──────────
@@ -560,13 +535,9 @@
 ;; references the value-semantics runtime ($$bc) two ways:
 ;;   (a) namespace property access `$$bc.X`        — in the .uc.js bundles
 ;;       (window.$$bc is the ESM namespace import set up by GjoaLoader), and
-;;   (b) ESM NAMED imports `import { X as $$bc$… } from '…/beagle/core.js'`
-;;       — in the .sys.mjs (GjoaLoader). THIS form is what broke 2026-06-21:
-;;       the pin's bin/beagle-build emitted `import { equivV … }` but the pin's
-;;       runtime lacked that export — a named-import of a missing export is a
-;;       module-load SyntaxError that kills GjoaLoader.sys.mjs at import and the
-;;       whole gjoa chrome never initializes. A gate that greps only `$$bc.X`
-;;       would MISS this — so we parse BOTH forms.
+;;   (b) ESM named imports `import { X as $$bc$… } from '…/beagle/core.js'`
+;;       — in .sys.mjs files. A missing named export is a module-load SyntaxError,
+;;       so the gate parses both reference forms.
 ;; Assertion: for every emitted gjoa chrome file, the set of beagle-runtime
 ;; symbols it references must be a SUBSET of the vendored core.js export surface.
 ;; Any `file: symbol` not exported is a hard fail.
@@ -643,9 +614,8 @@
       ;; are bare refs that resolve ONLY because the bundler (build.bjs
       ;; rewrite-core-import) emits a per-file `const $$bc$L = $$bc.<export>;`
       ;; prelude from beagle's stripped core.js import. Export-closure (above)
-      ;; cannot catch a MISSING prelude — a referenced `$$bc$L` with no decl just
-      ;; ReferenceErrors at load (the 2026-06-22 break). So assert every local a
-      ;; bundle references is also DECLARED in that same bundle.
+      ;; cannot catch a missing prelude. Assert that every local a bundle references
+      ;; is declared in that same bundle; otherwise loading raises ReferenceError.
       (doseq [f bundle-files]
         (when (existsSync f)
           (let [src (readFileSync f "utf8")
@@ -672,23 +642,16 @@
           (str (js/get files .length) " emitted file(s) scanned; all $$bc refs (namespace + named-import) ⊆ "
                (js/get surface .size) " core.js exports")))))))
 
-;; ── Gate R: security mitigations intact (#121) ──────────────────────────────
-;; configs/security-mitigations.json is a per-mitigation regression manifest: for
-;; each shipped security mitigation it records the source `file` + `mustMatch`
-;; regexes that must still hit it (the belt/cap/pref is still PRESENT), and — for a
-;; regex-validator mitigation like the cosmetic selector filter — an `extractRegex`
-;; plus `mustReject`/`mustAccept` selector cases. A mitigation can silently ROT (the
-;; belt deleted, the `*/` guard dropped, the default-off pref flipped) without any
-;; build error; Gate R makes that deletion RED here, BEFORE a 2–3h compile. We cannot
-;; IMPORT GjoaCosmeticChild.sys.mjs (it `extends JSWindowActorChild`, undefined off a
-;; chrome window), so we EXTRACT the UNSAFE_SELECTOR regex literal from the source
-;; text and re-test it directly. Design twin of Gate P (patch-hash drift): a tracked
-;; manifest is the trust anchor, the gate enforces it.
+;; ── Gate R: security mitigations intact ──────────────────────────────────────
+;; configs/security-mitigations.json records each mitigation's source file,
+;; required source patterns, and optional validator reject/accept cases.
+;; GjoaCosmeticChild.sys.mjs cannot be imported outside a chrome window, so the
+;; gate extracts its validator regex from source and tests that regex directly.
 (def MITIGATIONS-FILE String (join REPO-ROOT "configs" "security-mitigations.json"))
 (defn gateR [] Any
   (if (not (existsSync MITIGATIONS-FILE))
-    (fail "R" "security mitigations intact (#121)"
-      "no configs/security-mitigations.json — shipped mitigations are unguarded against silent rot"
+    (fail "R" "security mitigations intact"
+      "no configs/security-mitigations.json — security mitigation checks are unavailable"
       "create configs/security-mitigations.json with {\"mitigations\":{<id>:{file,mustMatch,[extractRegex,mustReject,mustAccept]}}}")
     (let [manifest (js/call JSON .parse (readFileSync MITIGATIONS-FILE "utf8"))
           mits (or (js/get manifest .mitigations) {})
@@ -699,12 +662,12 @@
               rel (js/get e .file)
               path (join REPO-ROOT rel)]
           (if (not (existsSync path))
-            (js/call problems .push (str id ": source file " rel " is GONE (mitigation deleted?)"))
+            (js/call problems .push (str id ": source file " rel " is missing"))
             (let [src (readFileSync path "utf8")]
               ;; (1) every mustMatch regex must still hit the source.
               (doseq [rx (or (js/get e .mustMatch) [])]
                 (when (not (js/call (js/new RegExp rx "m") .test src))
-                  (js/call problems .push (str id ": mustMatch /" rx "/ no longer present in " rel " — the mitigation was edited/removed"))))
+                  (js/call problems .push (str id ": required pattern /" rx "/ is absent from " rel))))
               ;; (2) extract the validator regex literal from source text + re-test
               ;; it against the reject/accept corpus (cannot import the actor).
               (let [ex (js/get e .extractRegex)]
@@ -730,20 +693,16 @@
                               (when (js/call re .test s)
                                 (js/call problems .push (str id ": mustAccept " (js/call JSON .stringify s) " is now WRONGLY rejected by " (js/get ex .name) " — over-broad, real rules dropped")))))))))))))))
       (if (> (js/get problems .length) 0)
-        (fail "R" "security mitigations intact (#121)"
+        (fail "R" "security mitigations intact"
           (str (js/get problems .length) " mitigation check(s) failed across " (js/get ids .length) " entry(ies)")
-          (str "a shipped security mitigation rotted — restore it, or (if intentionally changed) update configs/security-mitigations.json:\n    "
+          (str "security mitigation source does not match the manifest — restore it or update configs/security-mitigations.json:\n    "
                (js/call problems .join "\n    ")))
-        (pass "R" "security mitigations intact (#121)"
+        (pass "R" "security mitigations intact"
           (str (js/get ids .length) " mitigation(s) intact (mustMatch + extracted-regex reject/accept all hold)"))))))
 
-;; ── Gate S: security-critical patches persist (#120) ────────────────────────
-;; A patch whose header carries a `# security:` block mitigates a recorded finding;
-;; it must NOT silently stop applying (the vuln re-opens) and every upstream anchor
-;; it `depends-on` must still resolve. Unlike Gate A/L (warn/drift), here a non-apply
-;; is a HARD fail and an unresolved anchor is fail-CLOSED — security regressions never
-;; ship as a yellow warning. Reuses Gate A's cumulative-apply probe + Gate L's
-;; check-contract. VACUOUSLY GREEN today: zero patches carry a `security:` block.
+;; ── Gate S: security-critical patches persist ────────────────────────────────
+;; A patch whose header carries a `# security:` block must apply and every upstream
+;; anchor it `depends-on` must resolve. Non-apply and unresolved anchors fail closed.
 (defn patch-security-block? [(text String)] Bool
   ;; `# security:` (with optional indent) anywhere in the header region.
   (js/call (js/new RegExp "^#\\s*security:\\s*$" "m") .test text))
@@ -752,7 +711,7 @@
         sec-patches (js/call patches .filter (fn [(p String)] Bool
                                        (patch-security-block? (readFileSync (join PATCHES-DIR p) "utf8"))))]
     (if (= (js/get sec-patches .length) 0)
-      (pass "S" "security-critical patches persist (#120)"
+      (pass "S" "security-critical patches persist"
         "no `security:`-tagged patches (vacuously green; gate arms automatically when one is added)")
       ;; Build a fresh extract once, apply patches cumulatively in order; record the
       ;; apply result of each security-tagged patch, and resolve its declared anchors.
@@ -760,14 +719,14 @@
             gjoa (js/call JSON .parse (readFileSync GJOA-JSON "utf8"))
             tarball (str cache "/firefox-" (js/get (js/get gjoa .firefox) .version) ".source.tar.xz")]
         (if (not (existsSync tarball))
-          (fail "S" "security-critical patches persist (#120)"
+          (fail "S" "security-critical patches persist"
             (str (js/get sec-patches .length) " security-tagged patch(es) but the source tarball is not cached at " tarball " — cannot prove they apply (fail-closed)")
             "run `bun run download` to populate the cache, then re-run preflight")
           (let [tmp "/tmp/gjoa-preflight-sec-engine"]
             (sh (str "rm -rf " tmp " && mkdir -p " tmp) {})
             (let [extract (sh (str "tar -xJf " tarball " -C " tmp " --strip-components=1") {:timeout 180000})]
               (if (not (js/get extract .ok))
-                (fail "S" "security-critical patches persist (#120)" "tarball extract failed (fail-closed)" (js/call (js/get extract .out) .slice 0 400))
+                (fail "S" "security-critical patches persist" "tarball extract failed (fail-closed)" (js/call (js/get extract .out) .slice 0 400))
                 (do
                   (sh (str "cd " tmp " && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m baseline") {:timeout 60000})
                   (let [failed []
@@ -792,18 +751,17 @@
                         (when (= (js/get cr .verdict) "not-found")
                           (js/call unresolved .push (str p ": " (js/get cr .kind) " `" (js/get cr .symbol) "` — " (js/get cr .detail))))))
                     (if (or (> (js/get failed .length) 0) (> (js/get unresolved .length) 0))
-                      (fail "S" "security-critical patches persist (#120)"
+                      (fail "S" "security-critical patches persist"
                         (str (js/get sec-patches .length) " security-tagged patch(es): "
                              (js/get failed .length) " apply-failure(s), " (js/get unresolved .length) " unresolved anchor(s) — HARD STOP (a security mitigation regressed)")
                         (str "a security-critical patch no longer applies or its upstream anchor moved — regenerate it BEFORE building; do not ship the regression:\n"
                              "    apply:    " (js/call failed .join "\n              ") "\n"
                              "    anchors:  " (js/call unresolved .join "\n              ")))
-                      (pass "S" "security-critical patches persist (#120)"
+                      (pass "S" "security-critical patches persist"
                         (str (js/get sec-patches .length) " security-tagged patch(es) apply cleanly + all declared anchors resolve")))))))))))))
 
-;; Gate T — stewardship tapestry: every gate/file/script the docs/stewardship/
-;; docs name resolves, and the generated topology.md is current. The manifesto's
-;; "if a name here stops resolving, that is a bug" made mechanical; fails closed.
+;; Gate T — every gate/file/script named by docs/stewardship resolves, and the
+;; generated topology.md is current.
 (defn gateT [] Any
   (try
     (let [out (js/call (execSync "bun tools/stewardship/topology.mjs check 2>&1") .toString)]
@@ -813,7 +771,7 @@
             (js/call (if (js/get e .stdout) (js/call (js/get e .stdout) .toString) (or (js/get e .message) "check failed")) .trim)
             "a docs/stewardship/ ref dangled or topology.md is stale — `bun tools/stewardship/topology.mjs gen`, then commit"))))
 
-;; Gate U — patch numbering coherence (#128): every subsystem domain occupies a
+;; Gate U — patch numbering coherence: every subsystem domain occupies a
 ;; contiguous numeric block (no foreign patch wedged into another domain's run).
 ;; Advisory (WARN, not a build stop) — alpha-apply order is sound regardless; a
 ;; split domain is a batching/comprehension smell with a known minimal renumber.
@@ -838,14 +796,9 @@
       (warn "V" "upstream provenance lock current"
             (js/call (if (js/get e .stdout) (js/call (js/get e .stdout) .toString) (or (js/get e .message) "stale lock — re-run `provenance lock`")) .trim)))))
 
-;; Gate W — dark-mode contrast backstop ships ON (#129). The APCA normalizer is
-;; the no-black-on-black backstop (drawSnapshot real pixels → APCA Lc per text →
-;; re-tone below the readable floor). It shipped DISABLED for months — 8 user
-;; reports of unreadable dark mode, empirically 7/9 text elements black-on-black
-;; with it off, 7→0 with it on. Assert the shipped default is true so the
-;; legibility floor can't silently regress. HARD: shipping it off is a real
-;; user-facing defect, not a style choice. (The suite already measures the
-;; shipped config, so a green contrast run now equals the browser users run.)
+;; Gate W — dark-mode contrast backstop ships on. The APCA normalizer re-tones
+;; text below the readable floor. Assert the shipped default so the suite measures
+;; the configuration users receive.
 (defn gateW [] Any
   (let [f (join PREF-DIR "dark-mode-prefs.bjs")]
     (if (not (existsSync f))
@@ -855,7 +808,7 @@
           (pass "W" "dark-mode contrast backstop ships ON" "gjoa.darkmode.normalize.enabled defaults true (APCA no-black-on-black backstop active)")
           (fail "W" "dark-mode contrast backstop ships ON"
                 "gjoa.darkmode.normalize.enabled is not defaulted true in dark-mode-prefs.bjs"
-                "the APCA backstop fixes the recurring unreadable-dark-mode reports — restore the `true` default; if disabling deliberately, update Gate W with the rationale"))))))
+                "restore the `true` default; if disabling deliberately, update Gate W with the new constraint"))))))
 
 ;; Gate X — mirrors release.yml's tag-vs-displayVersion check locally, before push.
 ;; Only fires when HEAD carries a v* tag; untagged commits have nothing to compare.
@@ -873,12 +826,12 @@
               (pass "X" "release tag matches gjoa.json displayVersion" (str "HEAD tag `" tag "` matches displayVersion " configVersion))
               (fail "X" "release tag matches gjoa.json displayVersion"
                     (str "HEAD tag `" tag "` (" tagVersion ") does not match gjoa.json displayVersion " configVersion)
-                    (str "bump gjoa.json displayVersion to " tagVersion " (or delete/retag) before `git push origin " tag "` — this is what CI's release.yml validate job would reject")))))))))
+                    (str "bump gjoa.json displayVersion to " tagVersion " (or delete/retag) before `safe-push --tag " tag "`")))))))))
 
 ;; ── Run + render ──────────────────────────────────────────────────────────
 (defn main! [] Any
   (console/log (bold "gjoa preflight"))
-  (console/log (dim "Mandatory gate before any nix or full-mach build (CLAUDE.md Rule #0)."))
+  (console/log (dim "Mandatory gate before any nix or full-mach build."))
   (console/log "")
 
   (let [gates [["A" gateA!] ["B" gateB] ["C" gateC] ["D" gateD]
@@ -906,15 +859,13 @@
     (if (= failed 0)
       (do
         (console/log (str (green (bold "PREFLIGHT GREEN")) (dim (str "  — " (js/get results .length) "/" (js/get results .length) " gates passed"))))
-        (console/log (dim "Safe to propose a rebuild. Show this output in the proposal."))
+        (console/log (dim "All pre-build gates passed."))
         (js/call process .exit 0))
       (do
         (console/log (str (red (bold "PREFLIGHT FAILED")) (dim (str "  — " failed "/" (js/get results .length) " gates failed"))))
         (console/log (red "Do NOT kick off a build until every gate is green."))
         (js/call process .exit 1)))))
 
-;; The .ts guarded on `import.meta.main`; there is no import.meta in beagle, and
-;; Errors abort with exit 1, matching the original `.catch` handler. Guarded so
-;; the CLI runs only when invoked directly, never on import.
+;; Run the CLI only when invoked directly, never on import.
 (when (js/get (js/import-meta) .main)
   (js/call (main!) .catch (fn [e] Any (console/error e) (js/call process .exit 1))))

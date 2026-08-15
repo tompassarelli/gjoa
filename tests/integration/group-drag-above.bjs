@@ -1,10 +1,9 @@
 #lang beagle/js
-;; Regression: a tab positioned ABOVE a group, dropped INTO the group, must land
+;; A tab positioned above a group, dropped into the group, must land
 ;; BELOW the group (indented child) — not stay above it. The empty-group case is
 ;; the trap: the group is not a Firefox tab, so moveTabTo leaves the dropped
-;; tab's index unchanged and fires no TabMove to reposition its row, which used
-;; to strand the child ABOVE its parent. drag.bjs now repositions the row
-;; explicitly for the tab-into-group case.
+;; tab's index unchanged and fires no TabMove to reposition its row. The drop
+;; handler must position the child explicitly.
 (ns gjoa.tests.integration.group-drag-above
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect]]))
 
@@ -268,11 +267,9 @@
 
      (chrome-eval CLEANUP-PINNED))
 
-   ;; The owner's gesture: drop an unpinned tab onto a tab the pinned section is
-   ;; SHOWING. Precondition is the one a live session reaches — a tab pinned then
-   ;; unpinned — because unpin used to leave the row behind in the pinned
-   ;; container, and a drop onto that stranded row is not a cross-container move,
-   ;; so it silently reordered instead of pinning.
+   ;; Drop an unpinned tab onto a pinned tab while the pinned section is visible.
+   ;; The source is first pinned and unpinned so the test exercises the live
+   ;; container transition before requiring the drop to pin it again.
    (deftest "drag: dropping an unpinned tab onto a pinned tab pins it" [mn]
      (js/await (ensure-sidebar-expanded mn))
      (chrome-eval CLEANUP-PINNED)

@@ -6,8 +6,8 @@
 // editable element is focused in IT; the parent aggregates across frames and
 // stamps the live state onto the top <browser> element as `_gjoaEditable`, which
 // chrome (tabs/content-focus.bjs `contentInputFocused`) reads SYNCHRONOUSLY at
-// every keydown. This is the reliable transport that the rejected `data:` frame
-// script used to (fail to) provide.
+// every keydown. The actor transport covers content-process and cross-origin
+// frames that chrome cannot inspect directly.
 //
 // Aggregation: a page can focus an input inside a (same- or cross-origin) iframe,
 // where the top document's activeElement is just the <iframe>. With allFrames the

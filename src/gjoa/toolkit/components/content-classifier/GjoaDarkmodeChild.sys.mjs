@@ -2,12 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-// Content half of the gjoa per-site dark-mode HYBRID actor (top documents only).
+// Content half of the Gjoa per-site dark-mode actor (top documents only).
 //
-// In hybrid mode the engine (gjoa.darkmode.hybrid.default-invert) classifies the
-// document pre-paint: a themeless page is flipped to inverted (dark) before first
-// paint, a page that authored its own dark theme is left native — so there is no
-// flash-of-light. This actor does two things on top of that:
+// In `dark` mode, and `system` mode while the OS is dark, the engine's internal
+// gjoa.darkmode.hybrid.default-invert coordinate classifies each document before
+// paint: themeless pages are inverted and authored dark themes remain native.
+// `uniform` mode instead forces every page through inversion. This actor adds:
 //
 //   document-start (DOMWindowCreated): ask the parent for an EXPLICIT curated
 //     decision (fix registry / user per-site pref) and apply its override + css
@@ -53,7 +53,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       // subframe's inversion from bc->Top()'s override (nsPresContext
       // UpdateColorInversion). So on a NATIVE-DARK top — whose actor pins
       // Top()=inactive to hold its own dark theme — that inactive value force-
-      // suppresses every subframe's own hybrid invert: a cross-origin white
+      // suppresses every subframe's own default inversion: a cross-origin white
       // widget (OneTrust consent, Google One Tap, chat/ad iframes) then stays
       // glaring white (measured). We can't give the subframe an engine invert,
       // so darken it in CSS. GATED on the engine NOT already inverting this
@@ -75,10 +75,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       }
       return;
     }
-    // Master gate: when dark mode is fully disabled the actor does NOTHING — no
-    // per-page colorInversionOverride write, no curated-override IPC, no refiner.
-    // (It used to run on every page regardless: wasted work when the feature is
-    // off, and the unconditional BC write detached automation's content handle.)
+    // Master gate: when dark mode is fully disabled the actor does nothing — no
+    // per-page colorInversionOverride write, curated-override IPC, or refiner.
     if (!Services.prefs.getBoolPref("gjoa.darkmode.enabled", true)) {
       return;
     }
@@ -393,9 +391,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     // dark", so the engine's tier-0 skips it and the decision defers to "none" — the
     // page never inverts and its white header/cards glare over the backdrop while the
     // body text stays dark (pvk.ca false-native-dark). Read it HERE, BEFORE
-    // #forceOpaqueRoot paints an opaque root over the authored transparency (the
-    // wave-3 note: "#forceOpaqueRoot corrupts the computed-bg read it feeds" — the
-    // ordering bug). Cache the first authored read so a later re-measure (post
+    // #forceOpaqueRoot paints an opaque root over the authored transparency.
+    // Cache the first authored read so a later re-measure (post
     // opaque-root) can't flip it. A page the engine IS inverting reads opaque
     // (inverted colors serialize oklch) so this is 0-alpha only on the un-inverted
     // transparent-root case — exactly the class the decision misses.
@@ -466,10 +463,9 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       win.requestAnimationFrame(() =>
         win.requestAnimationFrame(() => this.#forceOpaqueRoot(win, doc)));
     }
-    // Dim large bright media + darken light panels on ANY inverted doc (each self-gates on
-    // real inversion) — the engine's own default-invert leaves resp.override empty, so these
-    // can't hang off "active". Before, #dimLargeMedia only ran on force-inverted pages, so an
-    // engine-default-inverted page (microsoft) kept its bright bg-image hero at full light.
+    // Run the media and panel passes on every inverted document. The engine's
+    // default inversion leaves resp.override empty, so these cannot depend on
+    // an explicit "active" response.
     win.requestAnimationFrame(() =>
       win.requestAnimationFrame(() => {
         this.#dimLargeMedia(win, doc);
@@ -478,13 +474,12 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         this.#liftDarkLogos(win, doc);
         this.#darkScrollbars(win, doc);
         this.#rescueBlendedPhotos(win, doc);
-        // COVERAGE (cluster B): the three background passes above are
+        // The three background passes above are
         // viewport-clipped and fire only on load-time timers (all at scrollY=0),
         // so a light section revealed by SCROLLING keeps the engine's bright
         // output (stripe cards, azure page-bg, cloud.google carousel). Install one
         // debounced scroll-STOP listener that re-runs the same idempotent passes so
-        // now-visible rows get the darkening the fold got. Mirrors #normalizeContrast's
-        // wave6 W-H hook.
+        // newly visible rows receive the same treatment as the initial viewport.
         this.#hookBgScrollRescan(win, doc);
       }));
     // Pass-2 polish (pref-gated, default off): the refiner has settled the
@@ -627,12 +622,10 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     this.#revertInlinePaint();
   }
 
-  // Undo every inline style + marker the inverted-state passes authored. Called when a doc
-  // settles INACTIVE (native dark theme, engine inversion retracted): #darkenLightPanels wrote
-  // inline background-colors authored to be re-inverted by the engine; with inversion gone they
-  // paint literal light (the owner-reported YouTube player-control pills + Volume tooltip). Restore
-  // each element's prior inline value (or remove ours), and clear the dim/logo marker attributes
-  // whose sheets are already gone. Resets the pass state so a later re-invert re-runs clean.
+  // Undo every inline style and marker authored for the inverted state. When a
+  // document settles inactive, #darkenLightPanels' colors would otherwise paint
+  // literally. Restore each prior inline value, clear markers whose sheets are
+  // gone, and reset pass state so a later inversion starts cleanly.
   #revertInlinePaint() {
     for (const rec of this._panelInline || []) {
       try {
@@ -707,9 +700,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
               continue;
             }
             const r = el.getBoundingClientRect();
-            // ~2-viewport below-fold buffer (was r.top > H): a scroll-STOP re-scan
-            // (#hookBgScrollRescan) sees now-visible heroes at small r.top; the buffer
-            // pre-dims just-below-fold media to blunt the brightness flash on scroll.
+            // Scan about two viewports below the fold so the scroll-stop rescan
+            // pre-dims media shortly before it becomes visible.
             if (r.width * r.height < MIN_AREA || r.top > H * 2 || r.bottom < 0 || r.left > W) {
               continue;
             }
@@ -723,14 +715,9 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
               try { bg = win.getComputedStyle(el).backgroundImage || ""; } catch (e) {}
               isMedia = /url\(/i.test(bg);
             }
-            // Replaced media (<img>/<video>/<canvas>) is a PHOTO — leave it UNTOUCHED, as
-            // Dark Reader does. Dimming photos grays the whole page (target's "gray veil"
-            // regression); inverting makes a negative. Only tone a large bg-image DIV the
-            // engine cannot invert (a raster bg the engine exempts). ALWAYS dim (brightness
-            // down), NEVER invert: a bg-image is just as likely a PHOTO (sciencedirect's hero
-            // photo bled through as a colour-negative under the old wide→invert path) as a
-            // graphic banner, and we can't cheaply tell them apart — dimming is the only
-            // operation that is correct for both.
+            // Leave replaced media (<img>/<video>/<canvas>) untouched. Only tone a
+            // large raster background the engine exempts. Background images may be
+            // photographs or graphics, so dim them; never invert them.
             if (isMedia && !isReplaced) {
               el.setAttribute("data-gjoa-dim", "dim");
               n++;
@@ -771,8 +758,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // animatedmachines' white <header>, nasa's white <body>/section bands. It glares
   // on the dark page and loses to Dark Reader, which darkens everything.
   //
-  // A7 protects INTENTIONAL light accents on native-dark sites (the YouTube control
-  // pills the owner flagged), so this stays deliberately TIGHT: only LARGE, roughly
+  // Preserve intentional light accents on native-dark sites. This stays deliberately
+  // tight: only LARGE, roughly
   // FULL-WIDTH, OPAQUE, NEAR-WHITE (L>0.75) solid bands — never the small light
   // pills/controls A7 guards, never a bg-image (that is #dimLargeMedia's job). The
   // band's bg-color is overridden to the page's OWN dark surface (child-safe: an
@@ -865,8 +852,8 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         if (!c) {
           continue;
         }
-        // Regression-critical gate (unit-tested: stray-band-gate.functional.mjs).
-        // Deliberately TIGHT so proper native-dark themes' small light accents /
+        // This gate is unit-tested in stray-band-gate.functional.mjs and is
+        // deliberately tight so native-dark themes' small light accents and
         // dark surfaces are NEVER darkened — only a large, roughly full-width,
         // opaque, near-white band qualifies.
         if (!GjoaDarkmodeChild.isStrayLightBand(r.width / (W || 1), r.width * r.height, bgAlpha(bg), lum(c))) {
@@ -938,10 +925,9 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // qualify (opaque), light logos never qualify (light pixels), icons cost one
   // 24x24 rasterize each (capped). Cross-origin images without CORS taint the
   // canvas and are skipped (verdict null, cached).
-  // wave-A scrollbar-strip fix. Force dark scrollbars on any inverted doc. Firefox honors
-  // the standard `scrollbar-color: <thumb> <track>`; an unthemed overflow container
-  // otherwise paints a glaring light scrollbar/track on the dark canvas (odin-lang sidebar
-  // strip, drmaciver code-block track, cloudflare/hub-docker right-edge strips).
+  // Force dark scrollbars on any inverted document. Firefox honors
+  // the standard `scrollbar-color: <thumb> <track>`; an unthemed overflow
+  // container otherwise paints a light scrollbar and track on the dark canvas.
   // `::-webkit-scrollbar` is ignored by Gecko, so `scrollbar-color` is the whole fix. One
   // idempotent id'd <style>; gated on real inversion (a native-dark site keeps its own).
   // True when the PAINTED page root is dark — a probe-INDEPENDENT "is this a dark page"
@@ -1077,12 +1063,10 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     } catch (e) {}
   }
 
-  // wave-A photo-blend rescue (A4). A bg-image PHOTO composited with its background-color
-  // via a non-normal blend-mode (tonsky avatar: background-blend-mode:multiply over a
-  // yellow bg) is destroyed once the engine inverts that bg-color to dark olive —
-  // multiply(photo, olive) → uniform near-black, face gone. Neutralise the blend so the
-  // opaque photo paints over the (now dark) bg-color and survives. Gated on page-darkness,
-  // NOT #inversionActive (oklch-broken, the wall #dimLargeMedia hits). Rare pattern → tiny blast.
+  // A background photograph with a non-normal blend mode can collapse toward
+  // black after its background color is inverted. Neutralize the blend so the
+  // opaque photo paints over the darkened background. Gate on painted page
+  // darkness because #inversionActive is unreliable with OKLCH serialization.
   #rescueBlendedPhotos(win, doc) {
     try {
       if (!doc || !doc.body || !this.#docIsDark(win, doc)) {
@@ -1269,12 +1253,12 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     } catch (e) {}
   }
 
-  // The uniform luminance inversion leaves MID-TONE backgrounds mid-tone (a 0.5 grey
-  // inverts to ~0.55), so large panels/headers/cards read as light blocks on the dark page
-  // (target's salmon header, walmart's light-blue tiles). Force big opaque mid/light-bg
-  // blocks down to the dark floor, KEEPING hue/chroma (brand: a salmon header -> dark red,
+  // Uniform luminance inversion leaves mid-tone backgrounds mid-tone, so large
+  // panels, headers, and cards can remain light blocks on the dark page. Force
+  // large opaque mid/light blocks down to the dark floor while keeping hue and
+  // chroma (for example, a salmon header becomes dark red,
   // not neutral black). One delayed re-pass catches lazy/late panels.
-  // Scroll-coverage hook (cluster B) for the three below-the-fold background passes
+  // Scroll coverage for the three below-the-fold background passes
   // (#dimLargeMedia / #darkenLightPanels / #darkenStrayLightBands). Those scans are
   // viewport-clipped and only re-run on fixed load-time timers, ALL evaluated at
   // scrollY=0 — so a light panel/band/hero-image revealed only by scrolling keeps
@@ -1283,7 +1267,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // each pass is idempotent (data-gjoa-panel / -dim / -stray tags skip already-done
   // elements) so a re-scan only pays for newly-revealed rows and can never re-tag or
   // oscillate. Threshold-gated (<200px delta = no new rows) + debounced so it never
-  // costs a scroll frame. Mirrors #normalizeContrast's wave6 W-H scroll hook.
+  // costs a scroll frame. #normalizeContrast uses the same coverage pattern.
   #hookBgScrollRescan(win, doc) {
     try {
       if (this._bgScrollHooked) {
@@ -1377,13 +1361,10 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       };
       const apply = () => {
         const inv = engineInverting();
-        // A7 native-dark passthrough. When the engine is NOT inverting this doc (its own dark theme,
-        // or a retracted probe), gjoa authors NOTHING — rendered ≡ authored. First SELF-HEAL: if a
-        // previously-tagged panel now carries a LIGHT inline bg, it was authored via the involution
-        // during a transient inverting window that has since settled (an SPA flipping to native-dark)
-        // and now paints literal light — the owner's YouTube control pills. Revert + untag it. THEN
-        // bail without authoring anything new: the panel darkener fires ONLY on an engine-INVERTED
-        // page (the A8/B1/B2 residue class), never a native-dark one (A7).
+        // When the engine is not inverting this document, rendered paint must equal
+        // authored paint. If a tagged panel now has a light inline background from
+        // a transient inverting window, revert and untag it before returning. The
+        // panel darkener authors only on engine-inverted pages.
         if (!inv && this._panelInline && this._panelInline.length) {
           const keep = [];
           for (const rec of this._panelInline) {
@@ -1507,7 +1488,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
           // authoring engine(x) paints engine(engine(x)) = x; patch 0009). An exempted panel stays
           // dark on the first write. RECORD the prior inline value FIRST: this is inline authoring, so
           // on a doc that later settles INACTIVE (native dark) it must be reverted (#revertInlinePaint)
-          // or it persists as literal light paint — the YouTube player-control pills the owner reported.
+          // or it persists as literal light paint.
           try {
             const prev = el.style.getPropertyValue("background-color");
             const prio = el.style.getPropertyPriority("background-color");
@@ -1657,21 +1638,10 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       // capture phase: img load events don't bubble.
       doc.addEventListener("load", onLoad, true);
     }
-    // TOP-VIEW TIMING / coverage (wave6 W-H). The element walk above is viewport-clipped
-    // (#normalizeContrast skips r.top >= innerHeight) and the PARENT's drawSnapshot only
-    // covers the viewport, so ONLY above-the-fold text is ever measured + corrected. The
-    // correction (W-G's hue-preserving _solveAccent) therefore lands on the fold's links
-    // but never on the ones below it — which keep the engine's role-blind band output. A
-    // page renders TWO link palettes: the top-shot's corrected accents and the mid-shot's
-    // un-corrected engine tones (owner fault #6 — wikipedia article links: top 146,184,255,
-    // scrolled 101,154,255). The defect is COVERAGE, not colour: re-run the SAME idempotent
-    // normalize when new content scrolls into view, so every region gets the identical
-    // decision the fold got. Debounced on scroll-STOP (not a per-event pass) and passive, so
-    // it never costs a scroll frame; the parent snapshots the CURRENT viewport, so a pass at
-    // scrollY>0 reads the now-visible rows' real backdrops. Idempotent — a link already
-    // clearing the accent floor yields no corrective, so re-entering a region can't oscillate
-    // (no restyle beyond the first correction of each newly-revealed row). Threshold gates out
-    // sub-row jitter / horizontal scroll that reveal no new text.
+    // The element walk and parent snapshot cover only the current viewport. Re-run
+    // the same idempotent normalization when new content scrolls into view so each
+    // region gets the same decision. The passive scroll-stop debounce avoids work
+    // during a frame, and the movement threshold ignores sub-row jitter.
     if (!this._scrollHooked) {
       this._scrollHooked = true;
       this._scrollNormLastY = 0;
@@ -1698,7 +1668,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
   // Parse a COMPUTED color string to sRGB [r,g,b] (0..255), or null. Handles BOTH
   // serializations Gecko emits: rgb()/rgba() and oklch(). Engine inversion
   // produces OKLCH values, so both forms are part of the current input contract.
-  // Regression-critical gate for #darkenStrayLightBands: does a candidate element
+  // Gate for #darkenStrayLightBands: does a candidate element
   // qualify as a stray light BAND worth darkening on a native-dark page? Kept pure
   // + static so its truth table is unit-tested (stray-band-gate.functional.mjs).
   // TIGHT by design — only a LARGE (>=120k px²), roughly FULL-WIDTH (>=55% viewport),
@@ -1752,7 +1722,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     if (!doc || !doc.body) {
       return;
     }
-    const _t0 = win.performance.now();   // #137: normalizer phase timing
+    const _t0 = win.performance.now(); // normalizer phase timing
     const parse = s => GjoaDarkmodeChild.parseComputedColor(s);
     const W = win.innerWidth,
       H = win.innerHeight;
@@ -1775,8 +1745,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     // parent computed for the MID-region node lands on the wrong element and the mid link
     // silently keeps the engine tone — the top-view/mid-view split survives the re-pass. A
     // monotonic per-pass base makes every tag globally unique, so each corrective maps to the
-    // exact node the parent judged. (The old same-region staggered re-passes only dodged this
-    // by re-tagging the same nodes in the same order — cn 69 always meant one node.)
+    // exact node the parent judged.
     const cnBase = (this._normPassSeq = (this._normPassSeq | 0) + 1) * 1000000;
     let cn = 0;
     const sel =
@@ -1807,14 +1776,14 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       el.setAttribute("data-gjoa-cn", cnBase + cn);
       // Link-role: a hyperlink whose authored hue the engine's involution may have
       // washed below the parent's chroma gate — the parent re-saturates it by role
-      // even at low painted chroma, so the blue link affordance survives (wave-A A6).
+      // even at low painted chroma, so the link affordance survives.
       const link = el.tagName === "A" && el.hasAttribute("href");
       // Nearest opaque-ish ancestor background — a SNAPSHOT-INDEPENDENT bg signal. The
       // parent's viewport drawSnapshot can sample the dark page backdrop behind a
       // late/fixed overlay (a cookie-consent pill not yet composited) and miss the
       // preserved-white button bg, leaving a white label on it in one pass but not the
-      // other (the white-pill top/mid race). This lets the parent re-solve the pairing
-      // deterministically from the element's OWN bg (wave-A white-pill).
+      // other. This lets the parent re-solve the pairing deterministically from
+      // the element's own background.
       let ownBg = null;
       for (let a = el, hops = 0; a && hops < 6; a = a.parentElement, hops++) {
         const raw = win.getComputedStyle(a).backgroundColor || "";
@@ -1843,7 +1812,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
       });
       cn++;
     }
-    const _tWalk = win.performance.now();   // #137: end of DOM walk
+    const _tWalk = win.performance.now(); // end of DOM walk
     if (!els.length) {
       return;
     }
@@ -1853,7 +1822,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     } catch (e) {
       return;
     }
-    const _tQuery = win.performance.now();   // #137: end of sendQuery round-trip
+    const _tQuery = win.performance.now(); // end of sendQuery round-trip
     const correctives = (resp && resp.correctives) || [];
     // Replicate the engine's luminance inversion (patch 0009 — an involution) so we
     // can pre-invert per element.
@@ -1894,7 +1863,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
     // Completion signal — lets a harness wait event-driven (not a fixed timer) for
     // the async normalize round-trip to finish before measuring contrast.
     try {
-      const _tEnd = win.performance.now();   // #137: total + per-phase timing
+      const _tEnd = win.performance.now(); // total and per-phase timing
       doc.documentElement.setAttribute(
         "data-gjoa-normalized",
         String(correctives.length)
@@ -1907,7 +1876,7 @@ export class GjoaDarkmodeChild extends JSWindowActorChild {
         "data-gjoa-normalize-detail",
         `els=${els.length} walk=${Math.round(_tWalk - _t0)} query=${Math.round(_tQuery - _tWalk)} apply=${Math.round(_tEnd - _tQuery)}`
       );
-      // #137: a harness-readable channel that survives the content-handle detach the
+      // A harness-readable channel that survives the content-handle detach the
       // colorInversionOverride write causes (which makes the DOM-attr read flaky under
       // Marionette — the same wall that blocks the content-context contrast harness).
       // Pref-gated, zero overhead off. Format is tab-delimited for trivial parsing.

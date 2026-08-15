@@ -683,7 +683,7 @@
           (when (js/get vs .which-key-el)
             (js/set! (js/get vs .which-key-el) .hidden true)))
 
-        ;; --- link hints (#130 P4) -------------------------------------------------
+        ;; --- link hints -----------------------------------------------------------
         ;; The page DOM lives in the content process; the GjoaInput actor's content
         ;; half does the labeling/activation, chrome owns the keymap. 'f'/'F' open a
         ;; session; while :link-hints-active, the global keydown routes each char to
@@ -727,7 +727,7 @@
                              (fn [_e] Any (js/set! vs .link-hints-active false)))
                       (catch (_e Any) (js/set! vs .link-hints-active false)))))))))
 
-        ;; --- visual / caret mode (#130 P6) ----------------------------------------
+        ;; --- visual / caret mode --------------------------------------------------
         ;; 'v' seeds a caret + enters visual mode; hjkl/w/b extend the page selection
         ;; (the actor calls Selection.modify), y yanks (execCommand copy), ESC clears.
         start-visual (fn [] Any
@@ -1257,16 +1257,11 @@
                       (js/set! label .textContent original)
                       (attr! label "contenteditable" "plaintext-only")
                       (js/call (js/get label .classList) .add "gjoa-renaming")
-                      ;; RENAME GUARD (2026-07-20): mark rename active so the two
-                      ;; capture-phase vim keydown handlers bail for the WHOLE duration.
-                      ;; They gate on document.activeElement being editable, but focusing
-                      ;; an HTML contenteditable span INSIDE the XUL panel leaves
-                      ;; document.activeElement reading as the panel at handler-entry for a
-                      ;; frame — so the "printable key while panel-focused → leave panel to
-                      ;; content" path fired on the first letter, yanked focus to the page,
-                      ;; and tore the rename down (owner: "rename activates but I can't type").
-                      ;; A state flag is immune to that focus-read race. Enter/Escape are
-                      ;; still handled by the label's own keydown below.
+                      ;; Hold an explicit rename state for the capture-phase Vim handlers.
+                      ;; Focusing an HTML contenteditable inside the XUL panel can leave
+                      ;; document.activeElement reporting the panel at handler entry, so
+                      ;; focus alone cannot distinguish typing from a panel shortcut.
+                      ;; Enter and Escape remain owned by the label's keydown handler.
                       (js/set! vs .renaming true)
                       (js/call (js/get label .style) .removeProperty "overflow")
                       (js/call (js/get label .style) .removeProperty "text-overflow")
@@ -1614,7 +1609,7 @@
                        (js/call .getActor "GjoaInput") (js/call .sendAsyncMessage "GjoaInput:ScrollStart" {:dy -1}))
                      (catch (_e Any) nil)))
             (= id "summonSidebar")
-              ;; #127: SUMMON — brief reveal, meant for a quick peek; the sidebar
+              ;; SUMMON — brief reveal, meant for a quick peek; the sidebar
               ;; dismisses itself after enter→leave. Mode-aware: in COMPACT mode
               ;; it pins/unpins the overlay reveal; in STATIC mode it tucks the
               ;; sidebar back into compact. (Behavior unchanged by the rename —
@@ -1638,7 +1633,7 @@
             (= id "help")          (toggle-which-key)
             (= id "linkHints")       (start-link-hints false)
             (= id "linkHintsNewTab") (start-link-hints true)
-            ;; #130 P5: in-page find delegates to Firefox's native findbar — battle-
+            ;; In-page find delegates to Firefox's native findbar — battle-
             ;; tested highlight/scroll/wrap, n/N repeat. '/' opens it; n/N find-again.
             (= id "find")
               (try (js/call (js/call gBrowser .getFindBar) .then
@@ -1703,11 +1698,9 @@
         handle-normal-key (fn [e] Bool
           (when (and (not= (js/get e .key) "J") (not= (js/get e .key) "K"))
             (js/set! vs .selection-anchor nil))
-          ;; Place the vim cursor on the selected tab BEFORE any action runs. The
-          ;; Alt+hjkl move branches (fold / outdent / reorder) and friends guard
-          ;; on (.-cursor state), so a fresh tab selection followed by Alt+h would
-          ;; silently no-op. This used to live only in the bare-key :else arm,
-          ;; which is why Alt-moves did nothing until you first pressed j/k/h/l.
+          ;; Place the Vim cursor on the selected tab before any action runs.
+          ;; Alt+hjkl move branches require cursor state even when no earlier
+          ;; navigation key initialized it.
           (when (and (not (js/get state .cursor)) (js/call "jklhG/rnNx" .includes (js/get e .key)))
             (let [row (js/call row-of .get (js/get gBrowser .selectedTab))]
               (when row (set-cursor row))))

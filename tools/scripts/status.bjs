@@ -71,7 +71,7 @@
             (yellow "point behind")))))))
 
 ;; -- Oracles -----------------------------------------------------------------
-;; Oracles shape (was a TS interface; carried as documentation here):
+;; Oracles shape:
 ;;   mozillaLatest mozillaEsr mozillaNightly mozillaBeta
 ;;   nixpkgsFirefox nixpkgsFirefoxEsr zen librewolf
 ;;   advisoryCount inTheWildCount errors
@@ -119,8 +119,9 @@
       (if (not librewolfPkgbuild) (js/call errors .push "LibreWolf version probe failed"))
 
       ;; nixpkgs current Firefox -- uses the same nixpkgs the flake locks to.
-      (let [nixpkgsFirefox (nixEvalRaw "(import (builtins.getFlake \"git+file:///home/tom/code/gjoa\").inputs.nixpkgs { system = \"x86_64-linux\"; }).firefox-unwrapped.version")
-            nixpkgsFirefoxEsr (nixEvalRaw "(import (builtins.getFlake \"git+file:///home/tom/code/gjoa\").inputs.nixpkgs { system = \"x86_64-linux\"; }).firefox-esr-unwrapped.version")
+      (let [flakeExpr (str "(builtins.getFlake \"git+file://" REPO-ROOT "\")")
+            nixpkgsFirefox (nixEvalRaw (str "(import " flakeExpr ".inputs.nixpkgs { system = \"x86_64-linux\"; }).firefox-unwrapped.version"))
+            nixpkgsFirefoxEsr (nixEvalRaw (str "(import " flakeExpr ".inputs.nixpkgs { system = \"x86_64-linux\"; }).firefox-esr-unwrapped.version"))
             ;; Parse Zen's pinned version out of surfer.json.
             zen (if zenSurfer
                   (try
@@ -281,7 +282,7 @@
           (row "dev-mode overlay" (if hasDevOverlay (green "✓") (dim "·  gjoa-dev/ not symlinked yet")))
 
           (section "WORKING TREE")
-          (console/log (str "  " (dim "Lane 1: chrome TS/CSS -- `gjoa sync` + restart, ~1s, no rebuild")))
+          (console/log (str "  " (dim "Lane 1: chrome Beagle/CSS -- `gjoa sync` + restart, ~1s, no rebuild")))
           (console/log (str "  " (dim "Lane 2: Firefox .sys.mjs / patches / branding -- `bun run import && ./mach build faster`, ~30s")))
           (console/log (str "  " (dim "Lane 3: gjoa.json (version) / flake.nix / C++/Rust -- full mach or nix build, 30-60 min")))
           (console/log "")
@@ -301,7 +302,7 @@
               (if (not hasMach)
                 (do
                   (js/call rec .push (yellow "Lane 2 changes pending but no mach binary."))
-                  (js/call rec .push (str "  nix develop .#mach  &&  cd engine && ./mach build   " (dim "(~30-60 min cold)"))))
+                  (js/call rec .push (str "  direnv exec . bash -c 'cd engine && ./mach build'   " (dim "(~30-60 min cold)"))))
                 (do
                   (js/call rec .push (yellow "Lane 2 changes pending."))
                   (js/call rec .push "  bun run import  &&  (cd engine && ./mach build faster)  &&  gjoa hotreload")))

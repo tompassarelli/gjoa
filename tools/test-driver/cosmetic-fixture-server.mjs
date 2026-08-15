@@ -12,12 +12,12 @@ const HTML = `<!doctype html>
   <div class="gjoa-keep" id="keep">KEEP ME</div>
 </body></html>`;
 
-// Dark-mode hybrid fixtures. "/light" is a real THEMELESS-LIGHT site: it hardcodes
-// a white background and ignores prefers-color-scheme, so hybrid mode must invert
-// it. "/dark" is a NATIVE-DARK site (authored dark root/body) that hybrid must
-// keep. (The plain "/" page authors no background at all, so under hybrid's forced
-// prefers-color-scheme:dark it renders with the UA dark canvas — already dark, not
-// a themeless-light case — so it is NOT used for the invert assertion.)
+// Dark-mode fixtures. "/light" is a real THEMELESS-LIGHT site: it hardcodes
+// a white background and ignores prefers-color-scheme, so dark mode must invert
+// it. "/dark" is a NATIVE-DARK site (authored dark root/body) that dark mode must
+// keep. (The plain "/" page authors no background at all, so under dark mode's
+// forced prefers-color-scheme:dark it renders with the UA dark canvas — already
+// dark, not a themeless-light case — so it is NOT used for the invert assertion.)
 const HTML_LIGHT = `<!doctype html>
 <html style="background:#fff"><head><meta charset="utf-8"><title>gjoa light fixture</title>
 <style>html,body{background:#fff;color:#111}</style></head>

@@ -15,11 +15,10 @@
 #
 # Prerequisites:
 #   - A mach-capable source tree (engine/ directory).
-#   - LLVM toolchain in PATH (auto-detected from nix dev shell).
+#   - LLVM toolchain in PATH (provided by the `.envrc` mach environment).
 #   - Enough disk for an instrumented build (~2x normal).
 #
-# NOTE: This is a Lane 3 operation — requires explicit user permission
-#       and should only run during the Sunday build window per CLAUDE.md.
+# NOTE: This is a Lane 3 operation and requires explicit user permission.
 
 set -euo pipefail
 
@@ -48,7 +47,7 @@ find_llvm_profdata() {
 
 LLVM_PROFDATA=$(find_llvm_profdata)
 if [[ -z "$LLVM_PROFDATA" ]]; then
-  echo "ERROR: llvm-profdata not found. Ensure LLVM is in PATH (nix dev shell)." >&2
+  echo "ERROR: llvm-profdata not found. Ensure direnv has loaded the repository .envrc." >&2
   exit 1
 fi
 echo "Using llvm-profdata: $LLVM_PROFDATA"

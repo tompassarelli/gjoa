@@ -7,7 +7,9 @@
 # Usage:  fastgallery.sh [mode] [settle_ms] [tag ...|all]
 #   fastgallery.sh dark 4000 wikipedia cnn amazon     # iterate 3 sites
 #   fastgallery.sh dark 6000 all                        # full corpus
-cd /home/tom/code/gjoa
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
+cd "$ROOT"
 MODE="${1:-dark}"; SETTLE="${2:-4000}"; shift 2 2>/dev/null || shift $# 2>/dev/null
 OUT=/tmp/gallery; mkdir -p "$OUT"
 MAXPAR="${FASTGAL_PAR:-6}"

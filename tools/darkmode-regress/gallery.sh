@@ -2,7 +2,9 @@
 # Render a diverse real-site corpus in a given gjoa dark-mode mode (real Xvfb window),
 # score each with scorer.js, emit a graded table + thumbnails. Runs INSIDE Xvfb + .#mach.
 # Usage (inside the wrapper):  bash gallery.sh <mode>     (default: dark)
-cd /home/tom/code/gjoa
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
+cd "$ROOT"
 BIN=engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa
 MODE="${1:-dark}"
 OUT=/tmp/gallery; mkdir -p "$OUT"

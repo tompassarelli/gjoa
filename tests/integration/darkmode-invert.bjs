@@ -56,7 +56,8 @@
 (js/export (def tests Any
   [(deftest "darkmode P0: engine inverts a themeless-light page (painted, chrome-side)" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
-     ;; GLOBAL-pref engine path only: hybrid actor off, invert on; set BEFORE nav.
+     ;; Uniform's global inversion engine path only: document actor off, invert on;
+     ;; set before navigation.
      (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'on';"))
      (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT) []))]
        (console/log (str "[DM-P0] invert-ON /light center-lum=" lum))

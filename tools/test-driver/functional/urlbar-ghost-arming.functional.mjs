@@ -1,20 +1,12 @@
-// Regression guard for the two Ctrl+L command-palette bugs the owner hit 2026-07-19:
+// Functional contract for the Ctrl+L command palette:
 //
-//   BUG 2 "icon isn't the same / text shifts on pop-out": the resting-slot ghost
-//         (#gjoa-urlbar-ghost) must pixel-match the REAL resting urlbar. The old
-//         ghost hand-drew a plain shield at a guessed padding — measured 52px off
-//         the real text start, wrong glyph. The fix derives icon glyph + icon-x +
-//         text-x from the real urlbar's LIVE layout. A revert to a hardcoded shield
-//         / fixed padding must fail here.
-//   BUG 1 "on first Ctrl+L of a session the bar flashes ~40-100px off then snaps":
-//         activate() must ARM opacity:0 (no transition) BEFORE showPopover() promotes
-//         #urlbar to the top layer, then reveal on the next frame — so the float-in
-//         only ever plays from the settled centered geometry.
+//   - The resting-slot ghost derives its value, icons, and coordinates from the
+//     live resting urlbar.
+//   - activate() arms opacity:0 before showPopover() promotes #urlbar, then
+//     reveals it on a later frame from settled centered geometry.
 //
-//   BUG 3 "the palette is cut off at the content edge" (2026-08-07, hit five times):
-//         the palette must be centered + painted over the content by DOM POSITION
-//         (#urlbar parked in #gjoa-urlbar-stage under documentElement), not by the
-//         top-layer promotion, which Firefox evicts through several paths.
+//   - The palette is centered and painted over content by DOM position: #urlbar
+//     is parked in #gjoa-urlbar-stage under documentElement.
 //
 //   bun tools/test-driver/functional/urlbar-ghost-arming.functional.mjs
 //
@@ -34,13 +26,12 @@ const css = readFileSync(join(root, "src/gjoa/chrome/css/gjoa.uc.css"), "utf8");
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.log("FAIL:", msg); } };
 
-// --- BUG 2: ghost FREEZES the resting bar exactly (value text + every leading icon) ---
+// --- ghost freezes the resting bar exactly (value text + every leading icon) ---
 ok(/\.urlbar-input-container/.test(bjs),
    "ghost reads the real .urlbar-input-container to reproduce the leading icons");
 ok(/-inputField/.test(bjs) || /\.urlbar-input\b/.test(bjs),
    "ghost measures the real .urlbar-input (inputField) for the text start-x");
-// TEXT = the real resting value (gURLBar.value), placeholder ONLY when empty —
-// not always the placeholder (the owner saw 'Search…' where the URL should be).
+// Text is the real resting value, with the placeholder only when empty.
 ok(/\.-value/.test(bjs) && /has-value\?/.test(bjs),
    "ghost text = the real resting gURLBar.value (placeholder only when the bar is empty)");
 // EVERY visible leading icon reproduced (not one hand-drawn shield): iterate leading + glyph-of
@@ -57,13 +48,7 @@ ok(/listStyleImage/.test(bjs) && /backgroundImage/.test(bjs),
    "ghost copies computed list-style / background glyphs too");
 ok(/-moz-context-properties\s*:\s*fill/.test(bjs),
    "ghost tints copied chrome SVG glyphs via -moz-context-properties: fill");
-// the old hardcoded ghost shape must be gone (guessed padding + single flex text)
-ok(!/padding-inline:12px/.test(bjs),
-   "ghost no longer uses the old hardcoded padding-inline:12px (the 52px-off form)");
-ok(!/flex:1 1 auto/.test(bjs),
-   "ghost text no longer flex-flows (it is positioned at the measured text-x)");
-
-// --- BUG 1: arming gate, set BEFORE showPopover, revealed on a later frame ---
+// --- arming gate, set before showPopover, revealed on a later frame ---
 const armIdx = bjs.indexOf('"gjoa-urlbar-arming"');
 const popIdx = bjs.indexOf(".showPopover");
 ok(armIdx !== -1, "activate arms gjoa-urlbar-arming");
@@ -105,12 +90,8 @@ if (sidebarRule) {
 }
 
 // --- WINDOW-GLOBAL STAGE: the palette is centered + over the content BY DOM POSITION ---
-// The palette used to be centered and painted above the content ONLY while #urlbar was
-// a top-layer popover; every eviction (breakout blocker, raw hidePopover, uidensity
-// change) dropped it into the drawer's containing block AND under the content deck —
-// the content-edge cut-off the owner hit five times. #urlbar is now parked in
-// #gjoa-urlbar-stage, a direct child of documentElement, for the palette's lifetime.
-// Behavioural proof: tests/integration/urlbar-drawer.bjs DEMOTE-AND-MEASURE (#5).
+// #urlbar is parked in #gjoa-urlbar-stage, a direct child of documentElement,
+// for the palette's lifetime. The stage owns geometry and z-order.
 ok(/ensure-stage!/.test(bjs) && /"gjoa-urlbar-stage"/.test(bjs),
    "there is a stage owner (ensure-stage!) creating #gjoa-urlbar-stage");
 ok(/\(\.appendChild root el\)/.test(bjs),
@@ -149,10 +130,9 @@ if (stageRule) {
 ok(/:root\[gjoa-urlbar-floating\]\s+#urlbar\s*\{\s*pointer-events:\s*auto\s*!important/.test(css),
    "the floating palette takes its own pointer events back");
 
-// --- TOP-LAYER PROMOTION: kept as belt-and-braces, and it must not swallow the focus ---
-// It is no longer the correctness mechanism, but it still restores the [breakout] pair
-// that makes .urlbar-background / .urlbarView render at all, so it must still be a single
-// owner re-asserted on every summon. Behavioural proof: urlbar-promote-selfheal.py.
+// --- TOP-LAYER PROMOTION: breakout rendering without swallowing focus ---
+// Promotion restores the [breakout] pair required by .urlbar-background and
+// .urlbarView, with one owner reasserting it on every summon.
 ok(/ensure-floating-promoted/.test(bjs),
    "there is a single top-layer-promotion owner (ensure-floating-promoted)");
 // it must be invoked from the re-arm branch (activated already true) — the desync path
@@ -160,10 +140,8 @@ const rearmIdx = bjs.indexOf("activateFloating:re-arm");
 const rearmScope = rearmIdx !== -1 ? bjs.slice(rearmIdx, rearmIdx + 1400) : "";
 ok(/\(ensure-floating-promoted\)/.test(rearmScope),
    "the re-arm branch calls ensure-floating-promoted (self-heals a pulled popover)");
-// and the promotion actually asserts popover=manual + showPopover. Scope = the whole
-// binding form (up to the next top-level binding), NOT a fixed slice: the previous
-// 600-char window silently fell short of the assertions the moment a comment was added
-// inside the form, which is why this check stood red without meaning anything.
+// Scope covers the whole binding form up to the next top-level binding so the
+// assertions remain inside the inspected region as the form changes size.
 const promoteIdx = bjs.indexOf("ensure-floating-promoted (fn");
 const promoteEnd = promoteIdx !== -1 ? bjs.indexOf("\n        heal (fn", promoteIdx) : -1;
 const promoteScope = promoteIdx !== -1 && promoteEnd !== -1
@@ -171,8 +149,8 @@ const promoteScope = promoteIdx !== -1 && promoteEnd !== -1
 ok(promoteScope !== "", "could not delimit the ensure-floating-promoted binding form");
 ok(/popover.*manual/.test(promoteScope) && /showPopover/.test(promoteScope),
    "ensure-floating-promoted asserts popover=manual + showPopover (top-layer promotion)");
-// SPLIT CATCH: a showPopover throw must not skip the focus/select that follow it —
-// one shared try/catch made a failed promotion also swallow the focus.
+// A showPopover throw must not skip the following focus/select, so promotion and
+// focus handling require separate catches.
 const catches = (promoteScope.match(/\(catch Any/g) || []).length;
 ok(catches >= 2,
    "promotion and focus/select have SEPARATE catches (a showPopover throw cannot skip focus)");

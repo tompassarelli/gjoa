@@ -171,9 +171,8 @@
        (expect (= before 0) "rescue counter did not reset")
        (js/await (js/call mn .performActions (click-actions (js/get pt .x) (js/get pt .y))))
        (await-true "return document.activeElement === gURLBar.inputField; /* click landed */" 2000)
-       ;; A thief exactly like the one that shipped: the tab panel grabbing the
-       ;; keyboard while the user's activation was aimed at the urlbar. The
-       ;; guard re-applies on a frame, so wait FRAMES, never a clock.
+       ;; Model the tab panel grabbing the keyboard while the user's activation
+       ;; targets the urlbar. The guard re-applies on a frame, so wait for frames.
        (chrome-eval "
           window.__gjoaFrames = 0;
           const tick = () => { window.__gjoaFrames++;
@@ -232,9 +231,8 @@
                 "focus is on " (js/get st .active)))
          (expect (= (js/get st .rescues) 0) "the guard counted a hand-off to content as a rescue"))))
 
-   ;; The I2 failure: a startup routine focuses the content browser after the user's
-   ;; activation landed. It reads exactly like the hand-off above at the destination
-   ;; and nothing like it at the gesture — no mousedown — so it must be rescued.
+   ;; A startup routine can focus the content browser after the user's activation
+   ;; lands. With no mousedown gesture, the tripwire must rescue that focus.
    (deftest "tripwire re-applies an activation a content-focus steal took, with no gesture" [mn]
      (await-true "return !!window.gjoaFocusGuard;" 5000)
      (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")
@@ -266,9 +264,8 @@
            "focus stayed in the input but the tripwire never counted the rescue"))))
 
    ;; The backdrop makes content unclickable while the palette is up, so a
-   ;; content-focus landing there is a startup round trip, never the user leaving —
-   ;; the guard used to read `activeElement.localName === 'browser'` as a deliberate
-   ;; departure and drop the caret out of an open address palette.
+   ;; content-focus landing there is a startup round trip, never the user leaving.
+   ;; The guard must keep the caret in the open address palette.
    (deftest "tripwire keeps the caret when content steals it from an OPEN palette" [mn]
      (await-true "return !!window.gjoaFocusGuard;" 5000)
      (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")

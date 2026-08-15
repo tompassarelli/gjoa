@@ -2,10 +2,12 @@
 # Dark-mode visual verification — launch gjoa headless, render each fixture with
 # the engine inversion + island/scrim active, and save a PNG. `-screenshot`
 # renders and EXITS (no long-lived browser, no teardown problem). Run inside the
-# mach devShell so the binary finds its runtime libs:
-#   nix develop .#mach -c bash tools/test-driver/dm-shoot.sh
+# `.envrc` mach environment so the binary finds its runtime libs:
+#   direnv exec . bash tools/test-driver/dm-shoot.sh
 set -u
-cd /home/tom/code/gjoa
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+cd "$REPO_ROOT"
 BIN=engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa
 OUT=/tmp/dm-shots
 mkdir -p "$OUT"
@@ -17,9 +19,8 @@ SRV=$!
 sleep 3
 echo "server http: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8976/mit-news 2>/dev/null)"
 
-# Pure-engine path: actor OFF, engine global invert ON, force light so there IS
-# something to invert. This exercises #57 island detection + #58 suppress-inversion
-# + #59 scrim directly.
+# Pure-engine path: actor off, engine global invert on, and forced light content.
+# This exercises island detection, inversion suppression, and the scrim directly.
 PREFS='user_pref("gjoa.darkmode.enabled", false);
 user_pref("gjoa.darkmode.invert.enabled", true);
 user_pref("layout.css.prefers-color-scheme.content-override", 1);

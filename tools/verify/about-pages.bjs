@@ -11,7 +11,7 @@
 ;; executeScript runs in the JS+DOM layer, NOT the compositor, so this works in
 ;; a display-less environment where `--screenshot` can't map a framebuffer.
 ;;
-;; Usage:  bun about-pages.js <path-to-gjoa-bin>   (run inside `nix develop .#mach`)
+;; Usage: direnv exec . bun about-pages.js <path-to-gjoa-bin>
 (ns gjoa.tools.verify.about-pages
   (:require [child_process :refer [spawn]]
             [fs :as fs]

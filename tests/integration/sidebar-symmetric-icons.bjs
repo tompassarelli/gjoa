@@ -1,15 +1,14 @@
 #lang beagle/js
 ;; Verify the gjoa sidebar's top/bottom icon Y-deltas are symmetric.
 ;;
-;; Goal (2026-05-27 user spec): the ICONS of the bottom sidebar buttons
+;; The icons of the bottom sidebar buttons
 ;; must sit the same visual distance from #sidebar-container's BOTTOM edge as
 ;; the TOP nav-bar button icons sit from #sidebar-container's TOP edge.
 ;;
 ;; "Icons" means the actual rendered glyph (img/svg/.toolbarbutton-icon),
-;; NOT the toolbarbutton/moz-button container — containers have their
-;; own padding which used to silently throw the measurement off.
+;; not the toolbarbutton/moz-button container, whose padding is excluded.
 ;;
-;; The runtime adjuster lives in src/drawer/layout.ts::syncSymmetricFooter.
+;; The runtime adjuster lives in drawer/layout.bjs `sync-symmetric-footer`.
 ;; It writes --gjoa-symmetric-footer; CSS consumes that as padding-bottom
 ;; on `#sidebar-container > sidebar-main`.
 (ns gjoa.tests.integration.sidebar-symmetric-icons
@@ -118,9 +117,7 @@
            (let [topGap (- (js/get (js/get r .topIcon) .top) (js/get (js/get r .sidebar) .top))
                  bottomGap (- (js/get (js/get r .sidebar) .bottom) (js/get (js/get r .bottomIcon) .bottom))
                  ;; src/drawer/layout.ts targets `bottomGap = topGap + BOTTOM_OFFSET`
-                 ;; (default 4px). Bottom icons sit further from edge than top icons —
-                 ;; user 2026-05-28 preference: keep top tight to the top edge, give
-                 ;; the bottom row a little extra breathing room.
+                 ;; (default 4px). Bottom icons sit slightly farther from the edge.
                  BOTTOM-OFFSET 4
                  delta (Math/abs (- bottomGap (+ topGap BOTTOM-OFFSET)))]
              (expect (<= delta TOLERANCE-PX)
@@ -131,9 +128,7 @@
                     "topIcon: " (JSON/stringify (js/get r .topIcon)) "\n"
                     "bottomIcon: " (JSON/stringify (js/get r .bottomIcon)) "\n"
                     "sidebar: " (JSON/stringify (js/get r .sidebar))))
-             ;; Guard against negative / zero-gap regression (icons jammed
-             ;; outside the sidebar). The actual target gap is small (~6-12px)
-             ;; per 2026-05-28 user spec: tight to the top edge, not "spacious".
+             ;; Keep the top gap positive and tight rather than spacious.
              (expect (>= topGap 2)
                (str "Icons too close to top edge: topGap=" (js/call topGap .toFixed 1) "px (expected ≥2)."))))))]))
 

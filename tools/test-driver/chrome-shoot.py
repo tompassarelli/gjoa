@@ -12,7 +12,7 @@ Usage:
         [--settle-ms 3500] [--eval "<chrome JS to run first>"] [--probe]
 
 --probe dumps a small chrome diagnostic (icons present, gjoa state, JS errors)
-to stderr — used to assert structure independent of pixel fidelity, since the
+to stderr for structure checks independent of pixel fidelity, since the
 headless SWGL compositor can swap R/B channels (colors unreliable, layout fine).
 """
 import argparse, base64, json, socket, sys, time

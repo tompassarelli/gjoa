@@ -1,13 +1,9 @@
 #lang beagle/js
 ;; Integration tests for the horizontal<->vertical tab-mode state machine.
 ;;
-;; These exist because a mode toggle used to PERMANENTLY corrupt tree state:
-;; positionPanel's collapse-inactive-trees pass wrote `collapsed=true` into the
-;; PERSISTED tree record of every non-active tree (space-blind), and a save
-;; round-tripped it — so flipping modes silently collapsed your trees, across
-;; all spaces, forever. The fix routes layout collapse through a transient
-;; `layoutCollapsed` flag (never persisted, cleared in vertical) and scopes it
-;; to the active space.
+;; Mode changes must preserve each tree's persisted `collapsed` state. Layout-only
+;; collapse uses transient `layoutCollapsed`, clears it in vertical mode, and is
+;; scoped to the active space.
 ;;
 ;; Invariants asserted across single, repeated, and interleaved toggles:
 ;;   - the user's persisted `collapsed` is NEVER mutated by a mode flip

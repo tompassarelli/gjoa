@@ -1,13 +1,9 @@
 #lang beagle/js
-;; Sidebar collapse-width regression lock (commit 833c5b9, drawer/layout.bjs).
+;; Sidebar collapse-width contract for drawer/layout.bjs.
 ;;
-;; THE BUG: collapsing the sidebar used to shrink it toward favicon width but it
-;; STAYED WIDE — drawer/layout.bjs `expand` pins an inline `width:NNNpx` on
-;; #sidebar-container (the persisted `gjoa.sidebar.width`), and that inline style
-;; OVERRODE the native icon-strip width once collapsed, so the strip never
-;; narrowed and tab labels kept showing. THE FIX: `collapse` now
-;; `removeProperty('width')` so the strip reverts to its favicon width, and
-;; `expand` re-applies the persisted width so re-expanding restores it.
+;; `expand` pins the persisted `gjoa.sidebar.width` as an inline width on
+;; #sidebar-container. `collapse` must remove that inline property so the strip
+;; reaches favicon width, and a later `expand` must restore the persisted width.
 ;;
 ;; This is runtime DOM/layout behavior (computed width across a collapse/expand
 ;; cycle + presence of an inline width style), not a statically-checkable string,
@@ -59,9 +55,8 @@
   return true;
 ")
 
-;; Snapshot #sidebar-container's measured width AND its inline width style. The inline
-;; style is the actual bug surface — a non-empty `style.width` is what pinned the
-;; strip wide when collapsed.
+;; Snapshot #sidebar-container's measured width and inline width style. A
+;; collapsed strip must have no inline `style.width`.
 (def MEASURE-SIDEBAR String "
   const sm = document.getElementById('sidebar-container');
   if (!sm) return { error: 'no #sidebar-container' };
@@ -139,8 +134,8 @@
        ;; GUARD against a vacuous pass on a dead-chrome binary: if GjoaLoader
        ;; never ran, #gjoa-urlbar-toolbar / window.gjoaTest are absent and the
        ;; drawer's expand/collapse never wires up — the attribute toggle would
-       ;; then be a no-op and a "narrow" assertion could pass on native FF
-       ;; defaults rather than on our fix. Fail loudly + specifically.
+       ;; then be a no-op and a "narrow" assertion could pass on native Firefox
+       ;; defaults rather than Gjoa's collapse path. Fail loudly and specifically.
        (expect (js/get pre .hasSidebarMain) "no #sidebar-container — not a gjoa chrome window")
        (expect (and (js/get pre .hasToolbar) (js/get pre .hasGjoaTest))
          (str "gjoa drawer chrome did not initialize (#gjoa-urlbar-toolbar / "
@@ -164,14 +159,13 @@
               (JSON/stringify exp)))
        (expect (js/get exp .hasInlineWidth)
          (str "expand() did not pin an inline width on #sidebar-container — the "
-              "expand-restore half of the fix is gone (collapse would have nothing "
+              "expanded-width contract is missing (collapse would have nothing "
               "to clear). " (JSON/stringify exp))))
 
-     ;; --- COLLAPSE: the regression surface ---
+     ;; --- COLLAPSE CONTRACT ---
      (js/await (js/call mn .executeScript DRIVE-COLLAPSE))
      ;; Await the real collapsed DOM state: BOTH the strip narrowed to favicon
-     ;; width AND no inline width style remains. The OLD bug failed both — the
-     ;; inline width:320px pinned the measured width wide. < 80px = favicon strip.
+     ;; width AND no inline width style remains. < 80px = favicon strip.
      (js/await (await-true
                  (str "const sm = document.getElementById('sidebar-container');"
                       "if (!sm || sm.hasAttribute('sidebar-launcher-expanded')) return false;"
@@ -183,17 +177,17 @@
        (expect (not (js/get col .expandedAttr))
          (str "sidebar still has [sidebar-launcher-expanded] after collapse — measured "
               "the wrong state. " (JSON/stringify col)))
-       ;; THE FIX, part 1: no inline width style survives the collapse.
+       ;; No inline width style survives the collapse.
        (expect (not (js/get col .hasInlineWidth))
          (str "collapsed #sidebar-container STILL has an inline width style ('"
               (js/get col .inlineWidth) "') — collapse() did not removeProperty('width'); "
-              "this inline width pins the strip wide (the regression). "
+              "this inline width pins the strip wide. "
               (JSON/stringify col)))
-       ;; THE FIX, part 2: the actual measured width is the narrow favicon strip.
+       ;; The measured width is the narrow favicon strip.
        (expect (< (Number (js/get col .width)) 80)
          (str "collapsed sidebar did not narrow to the favicon strip — width "
-              (js/call (Number (js/get col .width)) .toFixed 1) "px (expected < 80px). The persisted "
-              "inline width kept it wide (the bug). " (JSON/stringify col))))
+              (js/call (Number (js/get col .width)) .toFixed 1) "px (expected < 80px). "
+              (JSON/stringify col))))
 
      ;; --- RAIL RHYTHM (#B6): collapsed-rail vertical spacing ---
      (chrome-eval "
@@ -252,7 +246,7 @@
          (expect (and (js/get re .hasInlineWidth) (> (Number (js/get re .width)) 200))
            (str "re-expand did not restore the persisted width — width "
                 (js/call (Number (js/get re .width)) .toFixed 1) "px, inline '" (js/get re .inlineWidth)
-                "' (expected wide + inline 320px). The expand-restore half regressed. "
+                "' (expected wide + inline 320px). "
                 (JSON/stringify re))))
        (let [exp-footer (chrome-eval MEASURE-FOOTER-BTN)]
          (expect (not= (js/get exp-footer .footerBtnHeight) (js/get rhythm .footerBtnHeight))

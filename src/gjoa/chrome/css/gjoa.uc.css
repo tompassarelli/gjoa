@@ -24,8 +24,8 @@
  *      transparent (alpha 0). The `var(...)` expression resolves
  *      successfully — so our `light-dark()` fallback never fires — and
  *      KWin / Hyprland / Sway blur composites the desktop through.
- *   2. Sidebar revamp + verticalTabs is a known regression magnet for
- *      this exact symptom (Bugzilla 1971487, 2006091, 1860392).
+ *   2. Sidebar revamp + verticalTabs can otherwise expose that transparent
+ *      system surface directly.
  *
  * Two escape hatches:
  *   - `gjoa.theme.useSystem = true` in about:config → use Firefox's
@@ -38,8 +38,8 @@
  * defends against ancestor color-scheme inversion.
  */
 
-/* #148: hide chrome until layout has been applied once on a narrow launch — kills
- * the boot vertical→horizontal flash. Hide #browser (not :root) so the window frame
+/* Hide chrome until layout has been applied on a narrow launch to prevent a
+ * vertical→horizontal boot flash. Hide #browser (not :root) so the window frame
  * paints immediately; visibility:hidden reserves geometry so positionPanel's
  * getBoundingClientRect still measures. Cleared in tabs/index after positionPanel. */
 :root[gjoa-booting] #browser { visibility: hidden !important; }
@@ -319,9 +319,9 @@
   padding-bottom: 0 !important;
 }
 
-/* COLLAPSED mode (sidebar narrow, inner buttons stacked vertically): let
- * wrapper grow to fit content. Locking it at 60px + overflow:hidden was
- * clipping all-but-one button (2026-05-27 regression). No symmetric
+/* COLLAPSED mode (sidebar narrow, inner buttons stacked vertically): let the
+ * wrapper grow to fit every control; a fixed height plus hidden overflow clips
+ * the stack. No symmetric
  * trick needed here — vertical stack already extends near the bottom. */
 #sidebar-container:not([sidebar-launcher-expanded]) > sidebar-main {
   flex: 0 0 auto !important;
@@ -373,7 +373,7 @@
  * "Customize Sidebar" panel (SidebarController.show("viewCustomizeSidebar"))
  * as well as history/bookmarks. It must read as a FLOATING CARD in the slot
  * next to the drawer — [drawer][gap][#sidebar-box][gap][page] — never stacked
- * below / flush against the window edge (the #145 symptom). Card rounding +
+ * below or flush against the window edge. Card rounding +
  * shadow already come from FF's `#sidebar` revamp rule; here we own only the
  * insets, all of them the ONE uniform --gjoa-card-gap. */
 @media -moz-pref("sidebar.verticalTabs") {
@@ -386,8 +386,8 @@
 /* STATIC drawer in the floating-card layout: #browser already lays the row out
  * with `gap: --gjoa-card-gap` + `padding: --gjoa-card-gap` (region below), so
  * [drawer][gap][#sidebar-box][gap][page] falls out for free — DON'T add an
- * inline margin here or the drawer↔panel gap doubles (the reported
- * "oversized gap"). Only the block insets above are needed (FF zeroes the top padding). */
+ * inline margin here or the drawer↔panel gap doubles. Only the block insets
+ * above are needed (Firefox zeroes the top padding). */
 
 /* COMPACT drawer (position:fixed → out of #browser flow) OR floating-cards OFF:
  * no flex gap sits between the drawer and #sidebar-box, so the panel would butt
@@ -432,11 +432,8 @@
 #nav-bar {
   border: none !important;
   margin: 6px 0 !important;
-  /* FF152's `.browser-toolbar` only applies `--toolbar-bgcolor` under
-   * `@media not -moz-pref("sidebar.verticalTabs")` (browser-shared.css). gjoa
-   * uses vertical tabs, so the nav-bar lost that rule and fell back to a
-   * transparent/neutral-gray window background. Paint it with the gjoa surface
-   * explicitly so it matches the toolbox + sidebar. */
+  /* Firefox applies `--toolbar-bgcolor` only outside vertical-tabs mode. Paint
+   * the nav-bar explicitly so it matches the toolbox and sidebar. */
   background-color: var(--gjoa-surface-0) !important;
 }
 
@@ -530,11 +527,9 @@
 #nav-bar > .content-analysis-indicator {
   display: none !important;
 }
-/* Hide opinionated widgets unconditionally — regardless of which slot
- * CustomizableUI placed them in. The user's stated preference (2026-05-28):
- * extensions sits immediately adjacent to sidebar-toggle in the right
- * group, no clutter between them. Anything below is reachable via the
- * hamburger menu or :ex commands. */
+/* Hide opinionated widgets regardless of their CustomizableUI slot. Keep
+ * extensions immediately adjacent to sidebar-toggle in the right group;
+ * everything below remains reachable via the hamburger menu or :ex commands. */
 #firefox-view-button,
 #alltabs-button,
 #downloads-button,
@@ -655,7 +650,7 @@
   height: 0 !important;
 }
 
-/* --- FLIPPED nav-bar (#146): mirror the whole row -----------------------
+/* --- FLIPPED nav-bar: mirror the whole row ------------------------------
  * When the sidebar is moved to the RIGHT, FF stamps `sidebar-positionend`
  * on #sidebar-container. The toolbar must mirror horizontally so the
  * sidebar-toggle sits on the OUTER (sidebar) edge and hamburger/ext on the
@@ -776,7 +771,7 @@
   margin-inline: 0 !important;
 }
 
-/* #150 FLIP DIRECTION: when the sidebar is flipped to the RIGHT
+/* When the sidebar is flipped to the RIGHT
  * (`sidebar-positionend` on the shadow host), the page is to the LEFT of the
  * drawer, so the default rightward growth above heads toward the OFF-SCREEN
  * window edge and clips. The box stays anchored at its resting LEFT edge and is
@@ -798,8 +793,7 @@
 }
 
 /* Telegraph clickability: on hover (before focus) pre-apply the focus border
- * colour so the resting pill signals "click me". Colour-only, zero layout
- * impact (no #108 risk). */
+ * colour so the resting pill signals "click me". This changes no geometry. */
 #urlbar:hover:not([focused]) {
   --toolbar-field-border-color: var(--toolbar-field-focus-border-color) !important;
 }
@@ -870,7 +864,7 @@ Preserve these (security warnings):
  * "open in new tab" path). Mouse-click activation is deliberately NOT covered
  * here — the in-sidebar breakout-extend at-click-point behavior is preserved. */
 
-/* OWNER SPEC: zen-sized, ~half the window (700px at 1400px). The outer min()
+/* Keep the palette near half the window width (700px at 1400px). The outer min()
  * keeps the card-gap inset on windows too narrow for the 600px floor. Every
  * width property below repeats the expression — Firefox's UrlbarInput sizing JS
  * overrides any one of them it finds unset. */
@@ -941,13 +935,10 @@ Preserve these (security warnings):
   overflow: visible !important;
 }
 
-/* #150b FIRST-PAINT ARMING (2026-07-19): activate() sets `gjoa-urlbar-arming` on
- * :root BEFORE showPopover() promotes #urlbar to the top layer, then clears it on
- * the next animation frame. While armed the bar is opacity:0 with NO animation, so
- * the one cold frame where the popover paints at its pre-promotion position (the
- * "flashes ~40-100px off on the first Ctrl+L of a session") is never visible; the
- * float-in animation then runs only from the settled centered geometry. The extra
- * [gjoa-urlbar-arming] attr out-specifies the float-in rule above. */
+/* activate() sets `gjoa-urlbar-arming` before promoting #urlbar to the top
+ * layer and clears it on the next animation frame. Hide the armed bar without
+ * animation so float-in begins only after the centered geometry settles. The
+ * extra attribute out-specifies the float-in rule above. */
 :root[gjoa-urlbar-floating][gjoa-urlbar-arming] #urlbar {
   opacity: 0 !important;
   animation: none !important;
@@ -1036,20 +1027,15 @@ Preserve these (security warnings):
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5) !important;
 }
 
-/* #149 ATOMIC TEARDOWN: deactivate sets `gjoa-urlbar-teardown` on :root, which
+/* ATOMIC TEARDOWN: deactivate sets `gjoa-urlbar-teardown` on :root, which
  * FADES the floating bar (and its backdrop) out — PURE opacity 1->0 — and the JS
  * restores the resting geometry only AFTER the fade completes (setTimeout matched
  * to the duration). So the inline-restore reflow back to the in-sidebar urlbar
  * happens entirely behind the now-invisible box: the intermediate "small inline
  * search box flashing in the sidebar" frame is never painted, AND the dismiss
- * reads as a smooth close.
- *
- * NO SCALE on teardown (regression fix 2026-07-18): scaling the floating #urlbar
- * also scales its child .urlbarView-results — a tall panel of suggestion text.
- * Sub-pixel scale re-rasterizes all that text every frame, so the whole result
- * list went BLURRY mid-dismiss (the "artifact degradation" the owner saw). A
- * text panel cross-fades cleanly on opacity alone; drop the scale entirely.
- * Must out-specify the float-in animation + box-shadow rules above. */
+ * reads as a smooth close. Teardown must remain opacity-only: scaling #urlbar
+ * also re-rasterizes its suggestion text on every frame. This selector must
+ * out-specify the float-in animation and box-shadow rules above. */
 :root[gjoa-urlbar-floating][gjoa-urlbar-teardown] #urlbar {
   opacity: 0 !important;
   animation: none !important;
@@ -1070,46 +1056,20 @@ Preserve these (security warnings):
   }
 }
 
-/* #150 GEOMETRY SNAP (2026-07-19): the ghost look-alike holds the resting slot the
- * whole time the palette floats; on finish-teardown the REAL #urlbar must revert to
- * that slot in ONE frame so the ghost→real swap is seamless. Without this, dropping
- * `gjoa-urlbar-floating` lets #urlbar's width/position animate back through the
- * breakout-extend WIDTH transition — a visible retraction of the bar through the tab
- * row while opacity restores to 1 (the "deformity after Enter" caught by the
- * cage-headless frame monitor: cap-enter/f-023→f-024). Kill every transition/animation
- * on the urlbar for the single restore frame so the revert is instant + matches the
- * ghost exactly. JS sets `gjoa-urlbar-snap`, then clears it on the next rAF. */
+/* GEOMETRY SNAP: the ghost holds the resting slot while the palette floats.
+ * During finish-teardown the real #urlbar must return to that slot in one frame
+ * without running the breakout width transition. JS sets `gjoa-urlbar-snap`
+ * for that restore frame and clears it on the next rAF. */
 :root[gjoa-urlbar-snap] #urlbar,
 :root[gjoa-urlbar-snap] #urlbar * {
   transition: none !important;
   animation: none !important;
 }
 
-/* Breathing room at the panel top so the input doesn't butt against (and look
- * clipped by) the rounded command-palette edge — the FF152 urlbar restyle left
- * the input flush. Applies in both the floating and in-toolbar expanded popouts.
- *
- * REGRESSION FIX (#1): this breathing room used to be `padding-block-start: 8px`
- * on `#urlbar` itself, which pushed the whole `.urlbar-input-container` (security
- * icon + URL text) DOWN 8px on expand — the input jumped on focus because the
- * resting urlbar has no such padding. Instead grow the *background panel* upward
- * by pulling ITS top edge up 8px, leaving the input row untouched: the icon+text
- * row lands at the identical vertical position at rest and in breakout-extend.
- *
- * REGRESSION FIX (#2): the previous attempt raised the top via
- *   inset-block-start: calc(var(--urlbar-background-inset)
- *                           + var(--urlbar-input-container-top) - 8px)
- * but those two vars are defined ONLY inside the `@media browser.nova.enabled`
- * block (urlbar-searchbar.css) — and gjoa forces nova OFF (GjoaLoader). With
- * both vars undefined the calc is invalid at computed-value time, so
- * `inset-block-start` fell back to its initial `auto`. Combined with native's
- * `.urlbar-background { inset: 0 }` that left top:auto / bottom:0 on an empty,
- * height-less abs-positioned panel → it collapsed to zero height. The opaque
- * panel (the ONLY background behind the input AND the transparent
- * `.urlbarView` results, in non-nova) vanished, so the dropdown showed through
- * to the sidebar.
- *
- * In non-nova the visible panel is `.urlbar-background` itself, stretched by
+/* Give the panel top breathing room without moving the input row. Raise only
+ * `.urlbar-background`; padding on #urlbar would move the security icon and URL
+ * text. Do not depend on Nova-only inset variables because Gjoa disables Nova.
+ * In non-Nova the visible panel is `.urlbar-background` itself, stretched by
  * `inset: 0` to the urlbar's box (which grows tall via `[breakout-extend]
  * { height: auto }`, covering input + results). To open 8px of breathing room
  * ABOVE the input without moving it OR collapsing the panel, raise ONLY the
@@ -1279,8 +1239,8 @@ Preserve these (security warnings):
   }
 }
 
-/* Visible when hovered (gjoa-has-hover set by JS) OR PINNED open (gjoa-pinned, set by
- * the `e` key in compact mode, #127) — lands at the inset resting spot either way. */
+/* Visible when hovered (`gjoa-has-hover`) or pinned open (`gjoa-pinned`, set by
+ * the `e` key in compact mode); either state lands at the inset resting spot. */
 #sidebar-container[data-gjoa-compact][gjoa-has-hover],
 #sidebar-container[data-gjoa-compact][gjoa-pinned] {
   transform: translateX(0) !important;
@@ -1469,14 +1429,14 @@ Preserve these (security warnings):
   #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #sidebar-splitter,
   #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #ai-window-splitter[collapsed],
   #browser:has(> #sidebar-container:not([data-gjoa-compact]):not([hidden])) > #ai-window-box[collapsed] {
-    /* #sidebar-splitter joins the list (#145): when the Customize / history /
+    /* When the Customize, history, or
      * bookmarks panel (#sidebar-box) is open, this splitter sits between it and
      * the content card and would otherwise eat gap+splitter+gap there too. */
     display: none !important;
   }
 
   /* FILL the content card: the web content must reach all four inner edges of
-   * the content card. FF152's sidebar-revamp content-area.css insets the page
+   * the content card. Firefox's sidebar-revamp content-area.css insets the page
    * with its OWN outline + box-shadow + a partial (start-corner-only) radius on
    * .browserContainer, which both squares the card's top corners and leaves
    * left/right slack inside the card. Neutralize all of it and let every nested

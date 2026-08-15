@@ -2,10 +2,13 @@
 # Reproduce the janky teardown state: after a NON-escape dismiss (backdrop/deactivate),
 # is the urlbar left FOCUSED + breakout-extend + popover-open (expanded top-sites at slot)?
 import os, sys, time, json, socket, subprocess, shutil, signal
-sys.path.insert(0, "/home/tom/code/gjoa/tools/test-driver")
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools" / "test-driver"))
 from importlib import import_module
 cs = import_module("chrome-shoot")
-OBJ="/home/tom/code/gjoa/engine/obj-x86_64-pc-linux-gnu/dist/bin/gjoa"
+OBJ=str(ROOT / "engine" / "obj-x86_64-pc-linux-gnu" / "dist" / "bin" / "gjoa")
 GPROF=os.path.expanduser("~/.config/mozilla/gjoa/4859ptgk.default-default")
 RT="/tmp/tdr-rt"; PROF="/tmp/tdr-prof"; PORT=3253
 for d in (RT,PROF): shutil.rmtree(d,ignore_errors=True); os.makedirs(d)

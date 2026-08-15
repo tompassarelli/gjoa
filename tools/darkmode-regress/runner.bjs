@@ -10,7 +10,7 @@
 ;; low-contrast FAIL. Writes per-site PNG + report.json; exits nonzero on any fail.
 ;; No AI, no lazy timers — event-driven + pure contrast math, re-runnable.
 ;;
-;; Usage:  bun runner.js <path-to-built-gjoa-bin>   (inside `nix develop .#mach`)
+;; Usage: direnv exec . bun runner.js <path-to-built-gjoa-bin>
 (ns gjoa.tools.darkmode-regress.runner
   (:require [child_process :refer [spawn]]
             [fs :as fs]
@@ -173,7 +173,8 @@
           refresh-js (js/call fs .readFileSync "tools/darkmode-regress/refresh.js" "utf8")
           normalize? (= (get (js/get process .env) "GJOA_DM_NORMALIZE") "1")
           ;; pre-invert correctives so the engine's color-inversion renders the
-          ;; intended target (engine/hybrid modes invert content colors).
+          ;; intended target (the inverting dark and uniform paths transform
+          ;; content colors).
           preinvert? (= (get (js/get process .env) "GJOA_DM_PREINVERT") "1")
           outdir "dist/darkmode-regress"
           _mk (js/call fs .mkdirSync outdir {:recursive true})

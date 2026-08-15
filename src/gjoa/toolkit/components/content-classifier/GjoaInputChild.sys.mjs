@@ -46,8 +46,8 @@ function isEditableElement(el) {
   if (tag === "textarea" || tag === "select") {
     return true;
   }
-  // contentEditable is boolean only on HTMLElement; undefined on SVG/MathML —
-  // the typeof guard is the SVG-safety Tridactyl added the hard way.
+  // contentEditable is boolean only on HTMLElement and undefined on SVG/MathML,
+  // so the type guard is required before reading it.
   if (typeof el.isContentEditable === "boolean" && el.isContentEditable) {
     return true;
   }
@@ -98,7 +98,7 @@ function isEditingContext(doc) {
   return isEditableElement(deepActiveElement(doc));
 }
 
-// --- link hints (#130 P4) -----------------------------------------------------
+// --- link hints ---------------------------------------------------------------
 // A keyboard interface to every clickable on the page: press 'f', type the short
 // label that appears over the target, it activates. Same fork advantage as the
 // editable detector — gjoa labels what an extension's content script also could,
@@ -271,7 +271,7 @@ export class GjoaInputChild extends JSWindowActorChild {
   constructor() {
     super();
     this._editable = null; // last reported, for dedupe
-    // Smooth-scroll state (ported verbatim from the old frame script).
+    // Smooth-scroll state.
     this._scrollDir = 0;
     this._velocity = 0;
     this._pos = 0;
@@ -279,7 +279,7 @@ export class GjoaInputChild extends JSWindowActorChild {
     this._scrollFrame = this._scrollFrame.bind(this);
     // Link-hint session: {map: Map<label,{el,tag}>, container, typed, newTab} | null.
     // Vim ('f'/'F') drives it from chrome via sendQuery; this content half owns the
-    // DOM work (collect targets, render labels, filter on keystroke, activate). #130.
+    // DOM work: collect targets, render labels, filter keystrokes, and activate.
     this._hints = null;
   }
 
@@ -369,7 +369,7 @@ export class GjoaInputChild extends JSWindowActorChild {
     }
   }
 
-  // --- link hints (#130 P4) -----------------------------------------------------
+  // --- link hints ---------------------------------------------------------------
   #clearHints() {
     if (this._hints && this._hints.container) {
       try {
@@ -490,7 +490,7 @@ export class GjoaInputChild extends JSWindowActorChild {
     return { state: "active" };
   }
 
-  // --- visual / caret mode (#130 P6) --------------------------------------------
+  // --- visual / caret mode ------------------------------------------------------
   // 'v' seeds a caret at the first visible text and enters visual mode; hjkl/w/b
   // EXTEND the selection (a visible highlight — a pure invisible caret is useless
   // headless and without caret-browsing), 'y' yanks it, ESC clears. The Selection

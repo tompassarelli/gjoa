@@ -1,20 +1,19 @@
 # nix dev options
 
 Short reference: when to use mach vs nix, and the impurity tradeoffs.
-For the full story see the 2026-05-27 postmortem at the top of
-[`../CLAUDE.md`](../CLAUDE.md).
 
 ## TL;DR
 
-- **Daily dev = mach.** `nix develop .#mach` then `cd engine && ./mach build [faster]`. Writable install at `engine/obj-*/dist/bin/`. Chrome JS hot-reloads via `gjoa-dev/`.
+- **Daily dev = mach.** Run `direnv allow` once at the repository root; `.envrc` activates `.#mach`. Then use `cd engine && ./mach build [faster]`. The writable install lives at `engine/obj-*/dist/bin/`, and chrome JS hot-reloads via `gjoa-dev/`.
 - **Nix = distribution only.** `nix build .#gjoa --impure`. Read-only install at `/nix/store/...`. Sealed `omni.ja`. No iteration.
-- **If chrome JS/CSS/layout is broken: use mach.** Nix gives you an immutable binary you cannot fix without another nix rebuild — exactly the cycle Rule #0 is trying to prevent.
+- **If chrome JS/CSS/layout is broken: use mach.** Nix gives you an immutable binary that requires another nix build for every change.
 
 ## What triggers a nix rebuild
 
 | Change | Triggers full nix? |
 |---|---|
-| `src/gjoa/chrome/src/*.ts` (chrome bundles) | No — Lane 1 via `gjoa sync` |
+| `src/gjoa/chrome/bjs/**/*.bjs` (Beagle chrome modules) | No — Lane 1 via `gjoa sync` |
+| `src/gjoa/chrome/css/*.uc.css` | No — Lane 1 via `gjoa sync` |
 | `src/gjoa/browser/**/*.sys.mjs` overlay | Yes (source tree → engine/) |
 | `patches/*.patch` | Yes |
 | `gjoa.json` version pin | Yes (fresh tarball + full build) |
@@ -30,7 +29,7 @@ Mach handles all of the above incrementally once the objdir exists.
 2. **`__noChroot = true`** — disables sandbox for the derivation, lets
    sccache write to a persistent host path. Requires
    `sandbox = relaxed` in nix.conf at the daemon level. Not currently
-   wired; cost 2 builds on 2026-05-26.
+   wired.
 3. **`__impure = true`** — full impurity, no input hashing. Don't use;
    no win over `__noChroot` and breaks output-path stability.
 4. **`sandbox = false` globally** — system-wide. Too broad.
@@ -39,14 +38,5 @@ Mach handles all of the above incrementally once the objdir exists.
 6. **`programs.ccache` NixOS module** — alternative to sccache, system-
    wide. Worth it only if you build many nix C/C++ projects.
 
-## Re-enabling sccache later
-
-If you want sccache persistence across nix builds, two prereqs:
-
-1. `sandbox = relaxed` in your nixos-config nix-settings module.
-2. Re-add the `__noChroot = true` + `SCCACHE_DIR` block to the
-   `overrideAttrs` in `flake.nix` (was removed 2026-05-26; the dead
-   code block is in git history if you want to restore it).
-
-Until then, every nix build is cold. Mach iteration via `gjoa sync` is
-unaffected and remains sub-second.
+Mach iteration via `gjoa sync` remains the fast path regardless of Nix cache
+configuration.
