@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(here, "../../../.beagle-out/tabs/layout.js"), "utf8");
+const src = readFileSync(join(here, "../../../.beagle-out/gjoa/tabs/layout.js"), "utf8");
 
 // Brace-balanced extraction: collapse_flags returns a nested object literal, so a
 // naive /\{[^}]*\}/ would stop at the object's first `}` — walk the braces instead.

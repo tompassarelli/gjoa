@@ -26,24 +26,23 @@
   (:require [fs/promises :refer [readdir readFile writeFile]]
             [path :refer [join]]
             [gjoa.tools.prep.paths :refer [PATCHES-DIR REPO-ROOT]]))
-(define-mode strict)
-(declare-extern [process] Any)
+(declare-extern [process undefined] Any)
 
-(def HEADER-TAG :- String "# gjoa-patch:")
+(def HEADER-TAG String "# gjoa-patch:")
 
 ;; PatchInfo shape: {:filename :text :hasHeader :declaredBaseline :touches}
 
 ;; Extract diff-touched paths from a patch body. Looks for
 ;; `diff --git a/<path> b/<path>` lines (git-format) and falls back to
 ;; `--- a/<path>` (plain unified diff).
-(defn extractTouches [text :- String] :- Any
-  (let [out (Set.)]
-    (doseq [m (.matchAll text (RegExp. "^diff --git a/(\\S+)\\s+b/\\S+$" "gm"))]
-      (.add out (aget m 1)))
-    (when (= (.-size out) 0)
-      (doseq [m (.matchAll text (RegExp. "^---\\s+a/(\\S+)$" "gm"))]
-        (.add out (aget m 1))))
-    (Array.from out)))
+(defn extractTouches [(text String)] Any
+  (let [out (js/new Set)]
+    (doseq [m (js/call text .matchAll (js/new RegExp "^diff --git a/(\\S+)\\s+b/\\S+$" "gm"))]
+      (js/call out .add (aget m 1)))
+    (when (= (js/get out .size) 0)
+      (doseq [m (js/call text .matchAll (js/new RegExp "^---\\s+a/(\\S+)$" "gm"))]
+        (js/call out .add (aget m 1))))
+    (Array/from out)))
 
 ;; DEP-3-style provenance (Debian patch convention): a patch that Mozilla has
 ;; ABSORBED upstream carries `applied-upstream: <ref>` and should be DROPPED
@@ -60,119 +59,117 @@
 ;;   #   mitigates: <one-line what it blocks>
 ;;   #   persist: true
 ;; Returns nil if absent. Gate S arms on presence; check-all requires `id:`.
-(js/export (defn parseSecurity [text :- String] :- Any
-  (if (not (.test (RegExp. "^#\\s*security:\\s*$" "m") text))
+(js/export (defn parseSecurity [(text String)] Any
+  (if (not (js/call (js/new RegExp "^#\\s*security:\\s*$" "m") .test text))
     nil
-    (let [im (.exec (RegExp. "^#\\s*id:\\s*(\\S+)\\s*$" "m") text)
-          mm (.exec (RegExp. "^#\\s*mitigates:\\s*(.+?)\\s*$" "m") text)
-          pm (.exec (RegExp. "^#\\s*persist:\\s*(\\S+)\\s*$" "m") text)
+    (let [im (js/call (js/new RegExp "^#\\s*id:\\s*(\\S+)\\s*$" "m") .exec text)
+          mm (js/call (js/new RegExp "^#\\s*mitigates:\\s*(.+?)\\s*$" "m") .exec text)
+          pm (js/call (js/new RegExp "^#\\s*persist:\\s*(\\S+)\\s*$" "m") .exec text)
           refs []]
       ;; Collect each `#     - <ref>` line that follows the `#   refs:` marker, up to
       ;; the next non-list `#   key:` field or the diff body. Bounded scan over lines;
       ;; `in-refs` is threaded through the loop (no mutable cell).
-      (let [lines (.split text "\n")
-            n (.-length lines)]
+      (let [lines (js/call text .split "\n")
+            n (js/get lines .length)]
         (loop [i 0 in-refs false]
           (when (< i n)
             (let [l (aget lines i)]
               (cond
-                (.test (RegExp. "^#\\s*refs:\\s*$") l) (recur (+ i 1) true)
-                (and in-refs (.test (RegExp. "^#\\s*-\\s+\\S") l))
-                (do (.push refs (.trim (.replace l (RegExp. "^#\\s*-\\s+") ""))) (recur (+ i 1) in-refs))
+                (js/call (js/new RegExp "^#\\s*refs:\\s*$") .test l) (recur (+ i 1) true)
+                (and in-refs (js/call (js/new RegExp "^#\\s*-\\s+\\S") .test l))
+                (do (js/call refs .push (js/call (js/call l .replace (js/new RegExp "^#\\s*-\\s+") "") .trim)) (recur (+ i 1) in-refs))
                 ;; another `#   key:` (not a list item) or a non-comment line ends the list.
-                (or (.test (RegExp. "^#\\s*[A-Za-z][\\w-]*:") l) (not (.startsWith l "#")))
+                (or (js/call (js/new RegExp "^#\\s*[A-Za-z][\\w-]*:") .test l) (not (js/call l .startsWith "#")))
                 (recur (+ i 1) false)
                 :else (recur (+ i 1) in-refs))))))
       {:id (if im (aget im 1) nil)
        :refs refs
        :mitigates (if mm (aget mm 1) nil)
-       :persist (if pm (= (.toLowerCase (aget pm 1)) "true") false)}))))
+       :persist (if pm (= (js/call (aget pm 1) .toLowerCase) "true") false)}))))
 
-(defn parseHeader [text :- String] :- Any
-  (if (not (.startsWith text HEADER-TAG))
+(defn parseHeader [(text String)] Any
+  (if (not (js/call text .startsWith HEADER-TAG))
     ;; Header may be preceded by nothing, but must be at the very top of the file.
     {:hasHeader false :declaredBaseline nil :appliedUpstream nil :forwarded nil :security nil}
-    (let [bm (.exec (RegExp. "^#\\s*baseline-firefox:\\s*(\\S+)\\s*$" "m") text)
-          am (.exec (RegExp. "^#\\s*applied-upstream:\\s*(\\S+)\\s*$" "m") text)
-          fm (.exec (RegExp. "^#\\s*forwarded:\\s*(\\S+)\\s*$" "m") text)]
+    (let [bm (js/call (js/new RegExp "^#\\s*baseline-firefox:\\s*(\\S+)\\s*$" "m") .exec text)
+          am (js/call (js/new RegExp "^#\\s*applied-upstream:\\s*(\\S+)\\s*$" "m") .exec text)
+          fm (js/call (js/new RegExp "^#\\s*forwarded:\\s*(\\S+)\\s*$" "m") .exec text)]
       {:hasHeader true
        :declaredBaseline (if bm (aget bm 1) nil)
        :appliedUpstream (if am (aget am 1) nil)
        :forwarded (if fm (aget fm 1) nil)
        :security (parseSecurity text)})))
 
-(defn formatHeader [baseline :- String touches :- Any] :- String
-  (let [lines (.concat [HEADER-TAG
+(defn formatHeader [(baseline String) (touches Any)] String
+  (let [lines (js/call [HEADER-TAG
                         (str "#   baseline-firefox: " baseline)
-                        "#   touches:"]
-                       (.map touches (fn [p] (str "#     - " p)))
-                       ["#" ""])]
-    (.join lines "\n")))
+                        "#   touches:"] .concat (js/call touches .map (fn [p] Any (str "#     - " p))) ["#" ""])]
+    (js/call lines .join "\n")))
 
-(defn loadPatch [filename :- String] :- Any
+(defn loadPatch [(filename String)] Any
   (let [text (js/await (readFile (join PATCHES-DIR filename) "utf8"))
         parsed (parseHeader text)
         touches (extractTouches text)]
     {:filename filename
      :text text
-     :hasHeader (.-hasHeader parsed)
-     :declaredBaseline (.-declaredBaseline parsed)
-     :appliedUpstream (.-appliedUpstream parsed)
-     :forwarded (.-forwarded parsed)
-     :security (.-security parsed)
+     :hasHeader (js/get parsed .hasHeader)
+     :declaredBaseline (js/get parsed .declaredBaseline)
+     :appliedUpstream (js/get parsed .appliedUpstream)
+     :forwarded (js/get parsed .forwarded)
+     :security (js/get parsed .security)
      :touches touches}))
 
-(defn listPatches [] :- Any
+(defn listPatches [] Any
   (let [entries (js/await (readdir PATCHES-DIR))]
-    (.sort (.filter entries (fn [n] (.endsWith n ".patch"))))))
+    (js/call (js/call entries .filter (fn [n] Any (js/call n .endsWith ".patch"))) .sort)))
 
-(defn loadCurrentBaseline [] :- String
+(defn loadCurrentBaseline [] String
   (let [raw (js/await (readFile (join REPO-ROOT "gjoa.json") "utf8"))
-        cfg (JSON/parse raw)]
-    (.-version (.-firefox cfg))))
+        cfg (js/call JSON .parse raw)]
+    (js/get (js/get cfg .firefox) .version)))
 
 ;; Public verb: warn on any patch without a header or with a baseline
 ;; that differs from gjoa.json.firefox.version. Returns the count of
 ;; problems found (0 = clean). Non-fatal: prints to stderr; caller
 ;; decides whether to bail.
-(js/export (defn check-all [] :- Any
+(js/export (defn check-all [] Any
   (let [current (js/await (loadCurrentBaseline))
         names (js/await (listPatches))]
     (loop [i 0 problems 0]
-      (if (>= i (.-length names))
+      (if (>= i (js/get names .length))
         problems
         (let [n (aget names i)
               p (js/await (loadPatch n))]
           (cond
-            (not (.-hasHeader p))
+            (not (js/get p .hasHeader))
             (do
               (console/error (str "[patch-header] " n ": MISSING header — run `bun tools/prep/patch-header.ts retrofit` after regenerating against " current))
               (recur (+ i 1) (+ problems 1)))
 
-            (not (.-declaredBaseline p))
+            (not (js/get p .declaredBaseline))
             (do
               (console/error (str "[patch-header] " n ": header present but `baseline-firefox` not parseable"))
               (recur (+ i 1) (+ problems 1)))
 
-            (.-appliedUpstream p)
+            (js/get p .appliedUpstream)
             (do
-              (console/error (str "[patch-header] " n ": applied-upstream (" (.-appliedUpstream p) ") — Mozilla absorbed this change; DROP this patch (rm patches/" n ") to avoid carrying redundant divergence-debt"))
+              (console/error (str "[patch-header] " n ": applied-upstream (" (js/get p .appliedUpstream) ") — Mozilla absorbed this change; DROP this patch (rm patches/" n ") to avoid carrying redundant divergence-debt"))
               (recur (+ i 1) (+ problems 1)))
 
             ;; A `# security:` block MUST carry an `id:` — it keys the finding in
             ;; configs/security-mitigations.json
             ;; and is what preflight Gate S / the disclosure generator group on. An
             ;; id-less security block is unattributable; HARD problem.
-            (and (.-security p) (not (.-id (.-security p))))
+            (and (js/get p .security) (not (js/get (js/get p .security) .id)))
             (do
               (console/error (str "[patch-header] " n ": `# security:` block has no `id:` — add `#   id: <finding-id>` matching configs/security-mitigations.json"))
               (recur (+ i 1) (+ problems 1)))
 
-            (not= (.-declaredBaseline p) current)
+            (not= (js/get p .declaredBaseline) current)
             (do
               ;; Not necessarily a problem — patches accumulate across versions.
               ;; Flag at INFO level so the user sees the drift.
-              (console/error (str "[patch-header] " n ": baseline " (.-declaredBaseline p) " ≠ gjoa.json " current " (informational; regenerate when this patch fails to apply)"))
+              (console/error (str "[patch-header] " n ": baseline " (js/get p .declaredBaseline) " ≠ gjoa.json " current " (informational; regenerate when this patch fails to apply)"))
               (recur (+ i 1) problems))
 
             :else
@@ -182,31 +179,31 @@
 ;; current gjoa.json firefox.version as the baseline label. Only run
 ;; AFTER you've just regenerated the patch against the current source,
 ;; otherwise the baseline label will lie.
-(js/export (defn retrofit-all [] :- Any
+(js/export (defn retrofit-all [] Any
   (let [current (js/await (loadCurrentBaseline))
         names (js/await (listPatches))]
     (loop [i 0 changed 0]
-      (if (>= i (.-length names))
+      (if (>= i (js/get names .length))
         (do
           (console/error (str "[patch-header] done. " changed " patch(es) updated."))
-          js/undefined)
+          undefined)
         (let [n (aget names i)
               p (js/await (loadPatch n))]
-          (if (.-hasHeader p)
+          (if (js/get p .hasHeader)
             (recur (+ i 1) changed)
-            (let [header (formatHeader current (.-touches p))
-                  wrote (js/await (writeFile (join PATCHES-DIR n) (str header (.-text p)) "utf8"))
-                  logged (console/error (str "[patch-header] " n ": added header (baseline=" current ", touches=" (.-length (.-touches p)) ")"))]
+            (let [header (formatHeader current (js/get p .touches))
+                  wrote (js/await (writeFile (join PATCHES-DIR n) (str header (js/get p .text)) "utf8"))
+                  logged (console/error (str "[patch-header] " n ": added header (baseline=" current ", touches=" (js/get (js/get p .touches) .length) ")"))]
               (recur (+ i 1) (+ changed 1))))))))))
 
 ;; CLI entrypoint. The .ts used `import.meta.main`; under bun the compiled
 ;; module is invoked directly, so dispatch on process.argv.
-(defn main! [] :- Any
-  (let [cmd (aget (.-argv process) 2)]
+(defn main! [] Any
+  (let [cmd (aget (js/get process .argv) 2)]
     (cond
       (= cmd "check")
       (let [problems (js/await (check-all))]
-        (.exit process (if (= problems 0) 0 2)))
+        (js/call process .exit (if (= problems 0) 0 2)))
 
       (= cmd "retrofit")
       (js/await (retrofit-all))
@@ -214,7 +211,7 @@
       :else
       (do
         (console/error "Usage: bun tools/prep/patch-header.ts <check|retrofit>")
-        (.exit process 1)))))
+        (js/call process .exit 1)))))
 
 ;; CLI dispatch runs only when invoked directly, never on import.
-(when (.-main (js/import-meta)) (main!))
+(when (js/get (js/import-meta) .main) (main!))

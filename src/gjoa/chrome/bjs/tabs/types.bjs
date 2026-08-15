@@ -1,3 +1,2 @@
 #lang beagle/js
 (ns gjoa.tabs.types)
-(define-mode strict)

@@ -8,13 +8,12 @@
   (:require [fs/promises :refer [readFile mkdir writeFile]]
             [path :refer [join]]
             [gjoa.tools.chrome-bundle.build-config :refer [entries]]))
-(define-mode strict)
 
 (declare-extern [process] Any)
 
 ;; tools run via `bun run` from repo root; import.meta.dir is repo-relative.
-(def REPO-ROOT :- String (.cwd process))
-(def OUT-DIR :- String (join REPO-ROOT "dist" "chrome" "JS"))
+(def REPO-ROOT String (js/call process .cwd))
+(def OUT-DIR String (join REPO-ROOT "dist" "chrome" "JS"))
 
 ;; A loadSubScript bundle (.uc.js) is NOT an ESM context — it can't run
 ;; `import`. beagle emits the value-semantics runtime as
@@ -27,60 +26,50 @@
 ;; using value-`=` throws `ReferenceError: $$bc$equiv is not defined` at load
 ;; (the 2026-06-22 break). A plain `<export>` (no `as`) binds `<export>` itself.
 ;; Preflight Gate Q asserts every bundle local has its prelude binding.
-(defn rewrite-core-import [clause :- String] :- String
-  (let [binds (.filter
-                (.map (.split clause ",")
-                      (fn [c :- String] :- String
-                        (let [t (.trim c)]
-                          (if (= (.-length t) 0)
+(defn rewrite-core-import [(clause String)] String
+  (let [binds (js/call (js/call (js/call clause .split ",") .map (fn [(c String)] String
+                        (let [t (js/call c .trim)]
+                          (if (= (js/get t .length) 0)
                             ""
-                            (let [parts (.split t (RegExp. "\\s+as\\s+"))
-                                  exp (.trim (aget parts 0))
-                                  loc (if (> (.-length parts) 1) (.trim (aget parts 1)) exp)]
-                              (str loc " = $$bc." exp))))))
-                (fn [s :- String] :- Bool (> (.-length s) 0)))]
-    (if (= (.-length binds) 0)
+                            (let [parts (js/call t .split (js/new RegExp "\\s+as\\s+"))
+                                  exp (js/call (aget parts 0) .trim)
+                                  loc (if (> (js/get parts .length) 1) (js/call (aget parts 1) .trim) exp)]
+                              (str loc " = $$bc." exp)))))) .filter (fn [(s String)] Bool (> (js/get s .length) 0)))]
+    (if (= (js/get binds .length) 0)
       ""
-      (str "const " (.join binds ", ") ";"))))
+      (str "const " (js/call binds .join ", ") ";"))))
 
-(defn process-file [code :- String] :- Any
+(defn process-file [(code String)] Any
   (let [exports []
         processed
-        (.join
-          (.map
-            (.filter
-              (.split code "\n")
-              (fn [line]
-                (cond
+        (js/call (js/call (js/call (js/call code .split "\n") .filter (fn [line] Any (cond
                   ;; KEEP beagle/core.js runtime imports — the map below rewrites
                   ;; them to a `window.$$bc`-backed const prelude (see above).
-                  (.test (RegExp. "from\\s+['\"][^'\"]*beagle/core\\.js['\"]") line) true
-                  (and (.test (RegExp. "^import\\s+") line)
-                       (.test (RegExp. "from\\s+['\"]") line)) false
-                  (.test (RegExp. "^import\\(") line) false
-                  :else true)))
-            (fn [line]
-              (let [core-match (.match line (RegExp. "^import\\s*\\{([^}]*)\\}\\s*from\\s*['\"][^'\"]*beagle/core\\.js['\"]"))]
+                  (js/call (js/new RegExp "from\\s+['\"][^'\"]*beagle/core\\.js['\"]") .test line) true
+                  (and (js/call (js/new RegExp "^import\\s+") .test line)
+                       (js/call (js/new RegExp "from\\s+['\"]") .test line)) false
+                  (js/call (js/new RegExp "^import\\(") .test line) false
+                  :else true))) .map (fn [line] Any (let [core-match (js/call line .match (js/new RegExp "^import\\s*\\{([^}]*)\\}\\s*from\\s*['\"][^'\"]*beagle/core\\.js['\"]"))]
                 (if core-match
                   (rewrite-core-import (aget core-match 1))
-                  (let [fn-match (.match line (RegExp. "^export\\s+function\\s+(\\w+)"))]
+                  (let [fn-match (js/call line .match (js/new RegExp "^export\\s+function\\s+(\\w+)"))]
                     (if fn-match
                       (do
-                        (.push exports (aget fn-match 1))
-                        (.replace line (RegExp. "^export\\s+function\\s+(\\w+)") "$1 = function"))
-                      (let [decl-match (.match line (RegExp. "^export\\s+(?:const|let|var)\\s+(\\w+)"))]
+                        (js/call exports .push (aget fn-match 1))
+                        (js/call line .replace (js/new RegExp "^export\\s+function\\s+(\\w+)") "$1 = function"))
+                      (let [decl-match (js/call line .match (js/new RegExp "^export\\s+(?:const|let|var)\\s+(\\w+)"))]
                         (if decl-match
                           (do
-                            (.push exports (aget decl-match 1))
-                            (.replace line (RegExp. "^export\\s+(?:const|let|var)\\s+") ""))
-                          line)))))))) "\n")]
+                            (js/call exports .push (aget decl-match 1))
+                            (js/call line .replace (js/new RegExp "^export\\s+(?:const|let|var)\\s+") ""))
+                          line)))))))) .join "\n")]
     {:code processed :exports exports}))
 
-(defn build-one [entry :- Entry] :- Any
+(defn build-one [(entry Entry)] Any
   (let [all-exports []
         blocks []
-        files (.-files entry)
-        n (.-length files)
+        files (js/get entry .files)
+        n (js/get files .length)
         failed
         (js/await
           (loop [i 0]
@@ -93,33 +82,33 @@
                       (try
                         (let [raw (js/await (readFile abs-path "utf-8"))
                               result (process-file raw)
-                              code (.-code result)
-                              exports (.-exports result)]
+                              code (js/get result .code)
+                              exports (js/get result .exports)]
                           (doseq [e exports]
-                            (.push all-exports e))
-                          (.push blocks (str "{\n" code "\n}"))
+                            (js/call all-exports .push e))
+                          (js/call blocks .push (str "{\n" code "\n}"))
                           false)
-                        (catch Any err
-                          (console/error (str "✗ " file ": " (.-message err)))
+                        (catch (err Any)
+                          (console/error (str "✗ " file ": " (js/get err .message)))
                           true)))]
                 (if fail
                   true
                   (recur (+ i 1)))))))]
     (if failed
       false
-      (let [unique (Array/from (Set. all-exports))
-            var-decl (if (> (.-length unique) 0)
-                       (str "var " (.join unique ", ") ";\n\n")
+      (let [unique (js/call Array .from (js/new Set all-exports))
+            var-decl (if (> (js/get unique .length) 0)
+                       (str "var " (js/call unique .join ", ") ";\n\n")
                        "")
-            body (.join blocks "\n\n")
+            body (js/call blocks .join "\n\n")
             iife (str "(function() {\n\"use strict\";\n" var-decl body "\n})();")
-            output (str (.-banner entry) "\n\n" iife)
-            out-path (join OUT-DIR (.-out entry))]
+            output (str (js/get entry .banner) "\n\n" iife)
+            out-path (join OUT-DIR (js/get entry .out))]
         (js/await (writeFile out-path output))
-        (console/log (str "✓ " out-path "  (" (.-length body) " bytes)"))
+        (console/log (str "✓ " out-path "  (" (js/get body .length) " bytes)"))
         true))))
 
 (js/await (mkdir OUT-DIR {:recursive true}))
-(def results :- Any (js/await (Promise/all (.map entries build-one))))
-(when (.some results (fn [ok] (not ok)))
-  (.exit process 1))
+(def results Any (js/await (js/call Promise .all (js/call entries .map build-one))))
+(when (js/call results .some (fn [ok] Any (not ok)))
+  (js/call process .exit 1))

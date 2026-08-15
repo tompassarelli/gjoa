@@ -5,7 +5,6 @@
 ;; Asserts visual left-to-right ordering AND a visible gap between groups.
 (ns gjoa.tests.integration.nav-bar-layout
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect await-true wait-for]]))
-(define-mode strict)
 
 ;; `IntegrationTest` from ../../tools/test-driver/runner is a type-only
 ;; import in the original — used purely for annotation, no runtime value.
@@ -16,7 +15,7 @@
 ;; stays one string literal.
 
 ;; One ordered left-to-right walk over an id sequence (not pairwise checks); `id|altId` picks whichever is visible.
-(def orderCheckFn :- String "
+(def orderCheckFn String "
   function checkOrder(ids) {
     const rects = [];
     for (const spec of ids) {
@@ -44,13 +43,13 @@
 ")
 
 ;; EXPANDED/vertical order per gjoa.uc.css `#sidebar-container #nav-bar` (owner spec v3).
-(def verticalOrderIds :- String
+(def verticalOrderIds String
   (str orderCheckFn
     "return checkOrder(['PanelUI-button', 'unified-extensions-button', "
     "'gjoa-sidebar-button|sidebar-button', 'back-button', 'forward-button', 'stop-reload-button']);"))
 
 ;; COMPACT/horizontal order per gjoa.uc.css unscoped block (owner spec v3).
-(def horizontalOrderIds :- String
+(def horizontalOrderIds String
   (str orderCheckFn
     "return checkOrder(['back-button', 'forward-button', 'stop-reload-button', 'urlbar-container', "
     "'gjoa-sidebar-button|sidebar-button', 'unified-extensions-button', 'PanelUI-button']);"))
@@ -60,7 +59,7 @@
 ;; #urlbar-container — and toolbarbuttons.css gives those `flex: 80 80; max-width:
 ;; 112px` inside #nav-bar. Inject the same element to put the row under the same
 ;; pressure, measure, and remove it in the same script so nothing can leak.
-(def springPressureCheck :- String
+(def springPressureCheck String
   (str orderCheckFn "
   const target = document.getElementById('nav-bar-customization-target');
   const uc = document.getElementById('urlbar-container');
@@ -82,7 +81,7 @@
   return out;
 "))
 
-(def allIconYCheck :- String "
+(def allIconYCheck String "
   // Collect every visible icon in nav-bar (any depth — including inside
   // customization-target). Report each by id+ancestry+top-position so a
   // failure can pinpoint the misaligned widget.
@@ -108,20 +107,19 @@
 ;; The horizontal row must keep ONE rhythm: the two gaps flanking #urlbar-container
 ;; (indices 3,4 of the horizontal id walk) stay near the tightest icon-cluster gap.
 ;; Slack covers the urlbar's own margin-inline; a regrown spring is ~112px.
-(defn assert-even-rhythm! [r :- Any phase :- String] :- Any
-  (let [rects (.-rects r)
-        gap (fn [i] (- (.-left (aget rects i)) (.-right (aget rects (- i 1)))))
-        max-tight (.reduce [(gap 1) (gap 2) (gap 5) (gap 6)]
-                    (fn [a b] (Math/max a b)) 0)
+(defn assert-even-rhythm! [(r Any) (phase String)] Any
+  (let [rects (js/get r .rects)
+        gap (fn [i] Any (- (js/get (aget rects i) .left) (js/get (aget rects (- i 1)) .right)))
+        max-tight (js/call [(gap 1) (gap 2) (gap 5) (gap 6)] .reduce (fn [a b] Any (Math/max a b)) 0)
         ceiling (+ max-tight 15)]
     (doseq [i [3 4]]
       (expect (<= (gap i) ceiling)
-        (str "nav-bar (" phase "): gap before " (.-id (aget rects i)) " is " (gap i)
+        (str "nav-bar (" phase "): gap before " (js/get (aget rects i) .id) " is " (gap i)
              "px vs a " ceiling "px ceiling (tightest-cluster max " max-tight
              "px + 15) — a toolbarspring around #urlbar-container is uncapped. "
              (JSON/stringify r))))))
 
-(def tests :- Any
+(def tests Any
   [(deftest "nav-bar — gjoa-sidebar-button (if present) lives in nav-bar, immediately right of extensions" [mn]
      (let [r (chrome-eval "
         const navBar = document.getElementById(\"nav-bar\");
@@ -145,83 +143,83 @@
        ;; If gjoa-sidebar-button doesn't exist on this profile (no native
        ;; #sidebar-button to swap), this assertion is moot — skip (the body
        ;; only runs when gjoaBtn is present; otherwise the test passes).
-       (when (.-gjoaBtn r)
-         (expect (.-inNavBar (.-gjoaBtn r))
+       (when (js/get r .gjoaBtn)
+         (expect (js/get (js/get r .gjoaBtn) .inNavBar)
            (str "#gjoa-sidebar-button must live inside the #nav-bar subtree, found under \""
-                (.-parentId (.-gjoaBtn r)) "\". "
+                (js/get (js/get r .gjoaBtn) .parentId) "\". "
                 "(install! in src/gjoa/chrome/bjs/drawer/sidebar-button.bjs didn't run)"))
          ;; install! inserts after #stop-reload-button (a customization-target
          ;; grandchild); the direct #nav-bar child slot is the no-refresh fallback.
-         (expect (or (= (.-parentId (.-gjoaBtn r)) "nav-bar-customization-target")
-                     (= (.-parentId (.-gjoaBtn r)) "nav-bar"))
+         (expect (or (= (js/get (js/get r .gjoaBtn) .parentId) "nav-bar-customization-target")
+                     (= (js/get (js/get r .gjoaBtn) .parentId) "nav-bar"))
            (str "#gjoa-sidebar-button parent must be #nav-bar-customization-target "
-                "(or #nav-bar in the no-refresh fallback), got \"" (.-parentId (.-gjoaBtn r)) "\"."))
+                "(or #nav-bar in the no-refresh fallback), got \"" (js/get (js/get r .gjoaBtn) .parentId) "\"."))
          ;; v3: sidebar-toggle joins the LEFT cluster right after extensions
          ;; (order -2, extensions -3), falling back to hugging the hamburger
          ;; when extensions is absent.
-         (let [anchor (if (.-ext r) (.-ext r) (.-panelUI r))
-               anchor-name (if (.-ext r) "unified-extensions-button" "PanelUI-button")
-               gap (- (.-left (.-gjoaBtn r)) (.-right anchor))]
+         (let [anchor (if (js/get r .ext) (js/get r .ext) (js/get r .panelUI))
+               anchor-name (if (js/get r .ext) "unified-extensions-button" "PanelUI-button")
+               gap (- (js/get (js/get r .gjoaBtn) .left) (js/get anchor .right))]
            (expect (not (or (< gap -2) (> gap 50)))
              (str "#gjoa-sidebar-button not adjacent to #" anchor-name ": "
-                  anchor-name ".right=" (.-right anchor) " gjoaBtn.left=" (.-left (.-gjoaBtn r)) " gap=" gap "px "
+                  anchor-name ".right=" (js/get anchor .right) " gjoaBtn.left=" (js/get (js/get r .gjoaBtn) .left) " gap=" gap "px "
                   "(expected -2 to 50px)."))))))
 
    (deftest "nav-bar — all visible top-row icons share the same vertical CENTER (±2px)" [mn]
      (let [r (chrome-eval allIconYCheck)]
-       (expect (not (.-error r)) (.-error r))
+       (expect (not (js/get r .error)) (js/get r .error))
        ;; need ≥2 icons to compare; otherwise the body is skipped and the
        ;; test passes (the original early-returned here).
-       (when (and (.-hits r) (>= (.-length (.-hits r)) 2))
+       (when (and (js/get r .hits) (>= (js/get (js/get r .hits) .length) 2))
          ;; Use center-Y, not top-Y. Icons can have different intrinsic sizes
          ;; (hamburger 16px vs back-button 32px) but visually align by CENTER.
          ;; Reference: PanelUI-button (or PanelUI-menu-button) — the hamburger.
-         (let [center (fn [h] (/ (+ (.-top h) (.-bottom h)) 2))
-               ref (or (.find (.-hits r) (fn [h] (or (= (.-id h) "PanelUI-button") (= (.-id h) "PanelUI-menu-button"))))
-                       (aget (.-hits r) 0))
+         (let [center (fn [h] Any (/ (+ (js/get h .top) (js/get h .bottom)) 2))
+               ref (or (js/call (js/get r .hits) .find (fn [h] Any (or (= (js/get h .id) "PanelUI-button") (= (js/get h .id) "PanelUI-menu-button"))))
+                       (aget (js/get r .hits) 0))
                refC (center ref)
                TOL 2]
-           (doseq [h (.-hits r)]
+           (doseq [h (js/get r .hits)]
              (let [c (center h)]
                (expect (not (> (Math/abs (- c refC)) TOL))
-                 (str "Top-row icon center misaligned: id=\"" (.-id h) "\" center=" (.toFixed c 1) " "
-                      "vs ref=\"" (.-id ref) "\" center=" (.toFixed refC 1) " "
-                      "(diff=" (.toFixed (- c refC) 1) "px, tolerance ±" TOL ").\n"
-                      "All hits: " (JSON/stringify (.-hits r) nil 2)))))))))
+                 (str "Top-row icon center misaligned: id=\"" (js/get h .id) "\" center=" (js/call c .toFixed 1) " "
+                      "vs ref=\"" (js/get ref .id) "\" center=" (js/call refC .toFixed 1) " "
+                      "(diff=" (js/call (- c refC) .toFixed 1) "px, tolerance ±" TOL ").\n"
+                      "All hits: " (JSON/stringify (js/get r .hits) nil 2)))))))))
 
    (deftest "nav-bar — full owner-spec icon order, fresh vertical init: hamburger,ext,sidebar,gap,back,forward,refresh" [mn]
      ;; RESET-JS sets sidebar.verticalTabs=true + clears dynamicOrientation before every test — this IS the fresh-vertical state; pin it explicitly for readability.
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
      (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r (chrome-eval verticalOrderIds)]
-       (expect (.-ok r) (.-msg r))))
+       (expect (js/get r .ok) (js/get r .msg))))
 
    (deftest "nav-bar — full icon order, fresh horizontal init: back,forward,refresh,urlbar,sidebar,ext,hamburger" [mn]
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
      (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r (chrome-eval horizontalOrderIds)]
-       (expect (.-ok r) (.-msg r))
+       (expect (js/get r .ok) (js/get r .msg))
        (assert-even-rhythm! r "default profile"))
      ;; Same row with the native springs present in a customized profile:
      ;; uncapped they take ~112px each and split the row into two loud gaps.
      (let [sp (chrome-eval springPressureCheck)]
-       (when (not (.-skip sp))
-         (expect (.-ok sp) (str "with toolbarsprings injected: " (.-msg sp)))
+       (when (not (js/get sp .skip))
+         (expect (js/get sp .ok) (str "with toolbarsprings injected: " (js/get sp .msg)))
          (assert-even-rhythm! sp "toolbarsprings injected"))))
 
    (deftest "nav-bar — full icon order survives live vertical<->horizontal flips" [mn]
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
      (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r1 (chrome-eval verticalOrderIds)]
-       (expect (.-ok r1) (str "before flip: " (.-msg r1))))
+       (expect (js/get r1 .ok) (str "before flip: " (js/get r1 .msg))))
      (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
      (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r2 (chrome-eval horizontalOrderIds)]
-       (expect (.-ok r2) (str "after vertical->horizontal flip: " (.-msg r2))))
+       (expect (js/get r2 .ok) (str "after vertical->horizontal flip: " (js/get r2 .msg))))
      (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
      (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r3 (chrome-eval verticalOrderIds)]
-       (expect (.-ok r3) (str "after horizontal->vertical flip: " (.-msg r3))))
+       (expect (js/get r3 .ok) (str "after horizontal->vertical flip: " (js/get r3 .msg))))
      ;; restore defaults so we don't pollute later tests (#102)
      (chrome-eval "Services.prefs.clearUserPref('gjoa.layout.dynamicOrientation'); return true;"))])
 

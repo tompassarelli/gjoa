@@ -1,74 +1,74 @@
 #lang beagle/js
 (ns gjoa.drawer.banner
-  (:require [gjoa.macros :refer [by-id xul-new xul-id attr! on! off! has?]]))
-(define-mode strict)
+  (:require [gjoa.macros :refer [by-id xul-new xul-id attr! on! off! has?]]
+            [gjoa.tabs.log :refer [create-logger!]]))
 
 (declare-extern [document gBrowser] Any)
 
-(def SHOW-DELAY-MS :- Int 2000)
+(def SHOW-DELAY-MS Int 2000)
 
-(js/export (defn make-banner! [] :- Any
+(js/export (defn make-banner! [] Any
   (let [log (create-logger! "drawer/banner")
         identity-box (by-id "identity-box")]
     (if (not identity-box)
       (do (log "init:no-identity-box")
-          {:destroy (fn [] nil)})
+          {:destroy (fn [] Any nil)})
       (let [state {:timer nil :banner nil}
 
-            show (fn []
-              (when (not (.-banner state))
+            show (fn [] Any
+              (when (not (js/get state .banner))
                 (let [el (xul-id "hbox" "gjoa-insecure-banner")]
                   (attr! el "align" "center")
                   (attr! el "pack" "center")
-                  (set! (.-textContent el) "Gjoa - HTTP Alert: Not Secure")
+                  (js/set! el .textContent "Gjoa - HTTP Alert: Not Secure")
                   (let [browser-el (by-id "browser")]
-                    (if (and browser-el (.-parentNode browser-el))
+                    (if (and browser-el (js/get browser-el .parentNode))
                       (do
-                        (.insertBefore (.-parentNode browser-el) el browser-el)
-                        (set! (.-banner state) el)
+                        (js/call (js/get browser-el .parentNode) .insertBefore el browser-el)
+                        (js/set! state .banner el)
                         (log "show"))
                       (log "show:no-browser-parent"))))))
 
-            hide (fn []
-              (when (.-timer state)
-                (js/clearTimeout (.-timer state))
-                (set! (.-timer state) nil))
-              (when (.-banner state)
-                (.remove (.-banner state))
-                (set! (.-banner state) nil)
+            hide (fn [] Any
+              (when (js/get state .timer)
+                (js/clearTimeout (js/get state .timer))
+                (js/set! state .timer nil))
+              (when (js/get state .banner)
+                (js/call (js/get state .banner) .remove)
+                (js/set! state .banner nil)
                 (log "hide")))
 
-            check! (fn []
-              (let [browser (.-selectedBrowser gBrowser)
+            check! (fn [] Any
+              (let [browser (js/get gBrowser .selectedBrowser)
                     uri (if (and browser
-                                 (.-currentURI browser)
-                                 (.-spec (.-currentURI browser)))
-                          (.-spec (.-currentURI browser))
+                                 (js/get browser .currentURI)
+                                 (js/get (js/get browser .currentURI) .spec))
+                          (js/get (js/get browser .currentURI) .spec)
                           "")
-                    is-internal (or (.startsWith uri "about:")
-                                    (.startsWith uri "chrome:"))
-                    is-customizing (has? (.-documentElement document)
+                    is-internal (or (js/call uri .startsWith "about:")
+                                    (js/call uri .startsWith "chrome:"))
+                    is-customizing (has? (js/get document .documentElement)
                                                   "customizing")
-                    is-insecure (and (.contains (.-classList identity-box)
+                    is-insecure (and (js/call (js/get identity-box .classList) .contains
                                                "notSecure")
                                      (not is-internal)
                                      (not is-customizing))]
                 (if (and is-insecure
-                         (not (.-timer state))
-                         (not (.-banner state)))
-                  (set! (.-timer state)
+                         (not (js/get state .timer))
+                         (not (js/get state .banner)))
+                  (js/set! state .timer
                         (js/setTimeout show SHOW-DELAY-MS))
                   (when (not is-insecure)
                     (hide)))))
 
-            class-observer (MutationObserver. check!)
+            class-observer (js/new MutationObserver check!)
             opts {:attributes true}]
 
-        (set! (.-attributeFilter opts) ["class"])
-        (.observe class-observer identity-box opts)
-        (on! (.-tabContainer gBrowser) "TabSelect" check!)
+        (js/set! opts .attributeFilter ["class"])
+        (js/call class-observer .observe identity-box opts)
+        (on! (js/get gBrowser .tabContainer) "TabSelect" check!)
 
-        {:destroy (fn []
-          (.disconnect class-observer)
-          (off! (.-tabContainer gBrowser) "TabSelect" check!)
+        {:destroy (fn [] Any
+          (js/call class-observer .disconnect)
+          (off! (js/get gBrowser .tabContainer) "TabSelect" check!)
           (hide))})))))

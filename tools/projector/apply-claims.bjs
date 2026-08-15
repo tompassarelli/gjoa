@@ -9,33 +9,32 @@
             [path :refer [join resolve sep]]
             [gjoa.tools.projector.claims :refer [json->doc replay]]
             [gjoa.tools.projector.set-body :refer [parses?]]))
-(define-mode strict)
 (declare-extern [process console] Any)
 
-(defn main! [] :- Any
-  (let [artifact-path (aget (.-argv process) 2)
-        engine-dir (aget (.-argv process) 3)
+(defn main! [] Any
+  (let [artifact-path (aget (js/get process .argv) 2)
+        engine-dir (aget (js/get process .argv) 3)
         doc (json->doc (readFileSync artifact-path "utf8"))
-        file (.-file doc)
-        edits (.-edits doc)
+        file (js/get doc .file)
+        edits (js/get doc .edits)
         target (join engine-dir file)]
     ;; the artifact's :file is replayed onto disk; reject any path that escapes
     ;; engine-dir (absolute or `..`) before reading/writing it (path traversal).
-    (when (or (.includes file "..")
-              (not (.startsWith (resolve target) (str (resolve engine-dir) sep))))
+    (when (or (js/call file .includes "..")
+              (not (js/call (resolve target) .startsWith (str (resolve engine-dir) sep))))
       (console/error (str "  claim-doc :file escapes engine-dir, refusing: " file))
-      (.exit process 1))
+      (js/call process .exit 1))
     (let [src (readFileSync target "utf8")
           r (replay edits src)]
-      (if (and (.-ok r) (parses? (.-src r)))
+      (if (and (js/get r .ok) (parses? (js/get r .src)))
         (do
-          (writeFileSync target (.-src r))
-          (console/error (str "  claim-doc replay OK -> " file " (" (.-length edits) " set-body edit(s))"))
-          (.exit process 0))
+          (writeFileSync target (js/get r .src))
+          (console/error (str "  claim-doc replay OK -> " file " (" (js/get edits .length) " set-body edit(s))"))
+          (js/call process .exit 0))
         (do
           (console/error (str "  claim-doc replay FAILED: "
-                              (if (.-ok r) "rendered result does not parse" (.-reason r))))
-          (.exit process 1))))))
+                              (if (js/get r .ok) "rendered result does not parse" (js/get r .reason))))
+          (js/call process .exit 1))))))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (main!))

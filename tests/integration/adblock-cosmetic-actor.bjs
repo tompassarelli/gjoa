@@ -16,13 +16,12 @@
 ;;     bun .beagle-tools/gjoa/tools/test-driver/runner.js --grep "adblock M2 actor"
 (ns gjoa.tests.integration.adblock-cosmetic-actor
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect NAV-JS]]))
-(define-mode strict)
 
-(def TOP :- String "http://127.0.0.1:8975/")
+(def TOP String "http://127.0.0.1:8975/")
 
 ;; Synchronous chrome setup: feed two generic class rules, enable blocking,
 ;; clear the allow-list.
-(def SETUP-JS :- String
+(def SETUP-JS String
   (str "\n"
        "  const svc = Cc['@mozilla.org/content-classifier-service;1']\n"
        "    .getService(Ci.nsIContentClassifierService);\n"
@@ -35,22 +34,22 @@
        "  Services.prefs.setCharPref('gjoa.contentblock.user.allow-hosts', '');\n"
        "  return 'setup-ok';\n"))
 
-(def STATIC-HIDDEN :- String
+(def STATIC-HIDDEN String
   "const s=document.getElementById('static'); return !!(s && getComputedStyle(s).display === 'none');")
-(def KEEP-VISIBLE :- String
+(def KEEP-VISIBLE String
   "const k=document.getElementById('keep'); return !!(k && getComputedStyle(k).display !== 'none');")
-(def INJECT-DYN :- String
+(def INJECT-DYN String
   "const d=document.createElement('div'); d.className='gjoa-probe-dynamic'; d.id='dyn'; d.textContent='x'; document.body.appendChild(d); return 'ok';")
-(def DYN-HIDDEN :- String
+(def DYN-HIDDEN String
   "const d=document.getElementById('dyn'); return !!(d && getComputedStyle(d).display === 'none');")
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "adblock M2 actor: at-load + dynamic elements hidden, control kept" [mn ctx]
-     (js/await (.setContext mn "chrome"))
+     (js/await (js/call mn .setContext "chrome"))
      (chrome-eval SETUP-JS)
-     (let [navOk (js/await (.executeAsyncScript mn NAV-JS [TOP]))]
+     (let [navOk (js/await (js/call mn .executeAsyncScript NAV-JS [TOP]))]
        (expect navOk (str "local fixture " TOP " did not load — is cosmetic-fixture-server.mjs running on :8975?"))
-       (js/await (.setContext mn "content"))
+       (js/await (js/call mn .setContext "content"))
        ;; await-true returns nil on success and throws (timeout) on failure.
        ;; INITIAL path: the at-load .gjoa-probe-static must get hidden.
        (await-true STATIC-HIDDEN 8000)

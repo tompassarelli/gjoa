@@ -1,34 +1,33 @@
 #lang beagle/js
 (ns gjoa.firefox.window
   (:require [gjoa.macros :refer [by-id]]))
-(define-mode strict)
 
-(declare-extern [gBrowserInit Services ChromeUtils] Any)
+(declare-extern [gBrowserInit Services ChromeUtils undefined] Any)
 
-(js/export (def ids :- Any
-  {:sidebar-main        (fn [] (by-id "sidebar-container"))
-   :navigator-toolbox   (fn [] (by-id "navigator-toolbox"))
-   :urlbar              (fn [] (by-id "urlbar"))
-   :urlbar-container    (fn [] (by-id "urlbar-container"))
-   :nav-bar             (fn [] (by-id "nav-bar"))
-   :tabs-toolbar        (fn [] (by-id "TabsToolbar"))
-   :tabs-toolbar-target (fn [] (by-id "TabsToolbar-customization-target"))
-   :tabbrowser-tabs     (fn [] (by-id "tabbrowser-tabs"))
-   :main-popup-set      (fn [] (by-id "mainPopupSet"))
-   :unified-extensions-button (fn [] (by-id "unified-extensions-button"))
-   :sidebar-button      (fn [] (by-id "sidebar-button"))}))
+(js/export (def ids Any
+  {:sidebar-main        (fn [] Any (by-id "sidebar-container"))
+   :navigator-toolbox   (fn [] Any (by-id "navigator-toolbox"))
+   :urlbar              (fn [] Any (by-id "urlbar"))
+   :urlbar-container    (fn [] Any (by-id "urlbar-container"))
+   :nav-bar             (fn [] Any (by-id "nav-bar"))
+   :tabs-toolbar        (fn [] Any (by-id "TabsToolbar"))
+   :tabs-toolbar-target (fn [] Any (by-id "TabsToolbar-customization-target"))
+   :tabbrowser-tabs     (fn [] Any (by-id "tabbrowser-tabs"))
+   :main-popup-set      (fn [] Any (by-id "mainPopupSet"))
+   :unified-extensions-button (fn [] Any (by-id "unified-extensions-button"))
+   :sidebar-button      (fn [] Any (by-id "sidebar-button"))}))
 
-(js/export (defn delayed-startup-finished [] :- Boolean
-  (.-delayedStartupFinished gBrowserInit)))
+(js/export (defn delayed-startup-finished [] Boolean
+  (js/get gBrowserInit .delayedStartupFinished)))
 
-(def state :- Any {:cached-principal js/undefined})
+(def state Any {:cached-principal undefined})
 
-(js/export (defn system-principal! [] :- Any
-  (if (= (.-cached-principal state) js/undefined)
-    (let [p (.getSystemPrincipal (.-scriptSecurityManager Services))]
-      (set! (.-cached-principal state) p)
+(js/export (defn system-principal! [] Any
+  (if (= (js/get state .cached-principal) undefined)
+    (let [p (js/call (js/get Services .scriptSecurityManager) .getSystemPrincipal)]
+      (js/set! state .cached-principal p)
       p)
-    (.-cached-principal state))))
+    (js/get state .cached-principal))))
 
-(js/export (defn import-esm [url :- String] :- Any
-  (.importESModule ChromeUtils url)))
+(js/export (defn import-esm [(url String)] Any
+  (js/call ChromeUtils .importESModule url)))

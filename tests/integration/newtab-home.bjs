@@ -7,13 +7,12 @@
 ;; chain from chrome (deterministic; no navigation/render timing).
 (ns gjoa.tests.integration.newtab-home
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect-eq]]))
-(define-mode strict)
 
-(def NEWTAB-URL :- String "chrome://gjoa-newtab/content/newtab.html")
+(def NEWTAB-URL String "chrome://gjoa-newtab/content/newtab.html")
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "newtab: the gjoa new-tab page is the home page too" [mn ctx]
-     (js/await (.setContext mn "chrome"))
+     (js/await (js/call mn .setContext "chrome"))
      ;; GjoaLoader.set-defaults pointed the home page at about:newtab ...
      (let [home (chrome-eval
                   "return Services.prefs.getDefaultBranch('').getCharPref('browser.startup.homepage', '');")]

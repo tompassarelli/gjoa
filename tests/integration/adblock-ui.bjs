@@ -4,13 +4,11 @@
 ;; protection.enabled gate (the validated blocking switch). No restart needed.
 (ns gjoa.tests.integration.adblock-ui
   (:require [gjoa.tests.dsl :refer [deftest expect expect-eq]]))
-(define-mode strict)
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "adblock M1: blocking module + global toggle flips the engine gate" [mn ctx]
-     (js/await (.setContext mn "chrome"))
-     (let [r (js/await (.executeScript mn
-               (str "\n"
+     (js/await (js/call mn .setContext "chrome"))
+     (let [r (js/await (js/call mn .executeScript (str "\n"
                     "  const w = Services.wm.getMostRecentWindow('navigator:browser');\n"
                     "  const gb = w.gjoaBlocking;\n"
                     "  const item = w.document.getElementById('gjoa-toggle-blocking');\n"
@@ -23,9 +21,9 @@
                     "  return JSON.stringify({ hasApi: !!gb, hasItem: !!item, before, after, restored });\n")))
            d (JSON/parse r)]
        (console/log (str "\n[M1-UI] " r " (menu item is install!-gated on a native sidebar-button, absent headless — verified in the bundle instead)"))
-       (expect (.-hasApi d) "window.gjoaBlocking missing — the gjoa-blocking chrome module did not load")
-       (expect-eq (.-before d) true "protection.enabled not ON before toggle")
-       (expect-eq (.-after d) false "toggle did not turn the engine gate OFF — global toggle broken")
-       (expect-eq (.-restored d) true "second toggle did not restore the gate")))]))
+       (expect (js/get d .hasApi) "window.gjoaBlocking missing — the gjoa-blocking chrome module did not load")
+       (expect-eq (js/get d .before) true "protection.enabled not ON before toggle")
+       (expect-eq (js/get d .after) false "toggle did not turn the engine gate OFF — global toggle broken")
+       (expect-eq (js/get d .restored) true "second toggle did not restore the gate")))]))
 
 (js/export-default tests)

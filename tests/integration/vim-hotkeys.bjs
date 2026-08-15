@@ -11,9 +11,8 @@
 ;; PerformActions) on a neutral page and asserts the hotkeys open their pickers.
 (ns gjoa.tests.integration.vim-hotkeys
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for]]))
-(define-mode strict)
 
-(def setup-js :- String
+(def setup-js String
   "
   // Neutral content page; focus the gjoa panel (chrome, allowed by the handler).
   const tab = gBrowser.addTab('about:blank', {
@@ -27,22 +26,22 @@
   return !!panel;
 ")
 
-(def pickerOpen-js :- String
+(def pickerOpen-js String
   "return !!document.querySelector('[class*=picker], [id*=picker], .gjoa-search-input');")
 
-(def closePicker-js :- String
+(def closePicker-js String
   "try { document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})); } catch(e){} return 1;")
 
-(defn key-action [ch :- String] :- Any
+(defn key-action [(ch String)] Any
   [{:type "key" :id "kbd"
     :actions [{:type "keyDown" :value ch} {:type "keyUp" :value ch}]}])
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "vim 't' (tabs) fires with leader off" [mn]
      (await-true "return !!window.gjoaTest && !!document.getElementById(\"gjoa-tab-panel\");" 10000)
      (expect (chrome-eval setup-js) "no #gjoa-tab-panel to focus")
      (chrome-eval closePicker-js)
-     (js/await (.performActions mn (key-action "t")))
+     (js/await (js/call mn .performActions (key-action "t")))
      (await-true pickerOpen-js 4000)
      (expect (chrome-eval pickerOpen-js) "real 't' did not open the tabs picker (leader_key regression)"))
 
@@ -50,7 +49,7 @@
      (await-true "return !!window.gjoaTest && !!document.getElementById(\"gjoa-tab-panel\");" 10000)
      (chrome-eval setup-js)
      (chrome-eval closePicker-js)
-     (js/await (.performActions mn (key-action ":")))
+     (js/await (js/call mn .performActions (key-action ":")))
      (await-true pickerOpen-js 4000)
      (expect (chrome-eval pickerOpen-js) "real ':' did not open the ex-command picker (leader_key regression)"))]))
 

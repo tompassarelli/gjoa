@@ -24,27 +24,26 @@
             [path :refer [join]]
             [gjoa.tools.prep.patch-header :refer [parseSecurity]]
             [gjoa.tools.prep.paths :refer [REPO-ROOT PATCHES-DIR]]))
-(define-mode strict)
 (declare-extern [process JSON RegExp Error] Any)
 
-(def DISCLOSURE-PATH :- String (join REPO-ROOT "configs" "security-patches.json"))
+(def DISCLOSURE-PATH String (join REPO-ROOT "configs" "security-patches.json"))
 
-(defn sha256-file [p :- String] :- String
-  (.digest (.update (createHash "sha256") (readFileSync p)) "hex"))
+(defn sha256-file [(p String)] String
+  (js/call (js/call (createHash "sha256") .update (readFileSync p)) .digest "hex"))
 
-(defn sh-ok [cmd :- String] :- Bool
+(defn sh-ok [(cmd String)] Bool
   (try (do (execSync cmd {:encoding "utf8" :stdio ["ignore" "pipe" "pipe"] :timeout 180000}) true)
-    (catch Error _e false)))
+    (catch (_e Error) false)))
 
-(defn list-patches [] :- Any
-  (.sort (.filter (readdirSync PATCHES-DIR) (fn [p :- String] :- Bool (.endsWith p ".patch")))))
+(defn list-patches [] Any
+  (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .sort))
 
 ;; Cumulative-apply probe (mirrors Gate A): apply ALL patches in order against a
 ;; fresh extract, returning a map filename->applied?. "unknown" if no cached tarball.
-(defn apply-status-map [patches :- Any] :- Any
-  (let [cache (str (.-HOME (.-env process)) "/.cache/gjoa/sources")
-        gjoa (JSON/parse (readFileSync (join REPO-ROOT "gjoa.json") "utf8"))
-        tarball (str cache "/firefox-" (.-version (.-firefox gjoa)) ".source.tar.xz")
+(defn apply-status-map [(patches Any)] Any
+  (let [cache (str (js/get (js/get process .env) .HOME) "/.cache/gjoa/sources")
+        gjoa (js/call JSON .parse (readFileSync (join REPO-ROOT "gjoa.json") "utf8"))
+        tarball (str cache "/firefox-" (js/get (js/get gjoa .firefox) .version) ".source.tar.xz")
         out {}]
     (if (not (existsSync tarball))
       (do (doseq [p patches] (aset out p "unknown (no cached source)")) out)
@@ -56,7 +55,7 @@
             (sh-ok (str "cd " tmp " && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m baseline"))
             ;; thread `stopped` through the loop (no mutable cell) — once a patch
             ;; fails, every later one is "blocked" since it'd build on a failed tree.
-            (let [n (.-length patches)]
+            (let [n (js/get patches .length)]
               (loop [i 0 stopped false]
                 (when (< i n)
                   (let [p (aget patches i)]
@@ -67,7 +66,7 @@
                         (recur (+ i 1) (or stopped (not ok))))))))
               out)))))))
 
-(js/export (defn build-disclosure [] :- Any
+(js/export (defn build-disclosure [] Any
   (let [patches (list-patches)
         statuses (apply-status-map patches)
         entries []]
@@ -75,25 +74,25 @@
       (let [text (readFileSync (join PATCHES-DIR p) "utf8")
             sec (parseSecurity text)]
         (when sec
-          (.push entries {:id (or (.-id sec) nil)
-                          :refs (or (.-refs sec) [])
-                          :mitigates (or (.-mitigates sec) nil)
-                          :persist (.-persist sec)
+          (js/call entries .push {:id (or (js/get sec .id) nil)
+                          :refs (or (js/get sec .refs) [])
+                          :mitigates (or (js/get sec .mitigates) nil)
+                          :persist (js/get sec .persist)
                           :file (str "patches/" p)
                           :sha256 (sha256-file (join PATCHES-DIR p))
                           :applyStatus (or (aget statuses p) "unknown")}))))
     {:$schema "gjoa security-patch disclosure (generated — do not edit by hand)"
-     :note (if (= (.-length entries) 0)
+     :note (if (= (js/get entries .length) 0)
              "No security-tagged patches. This empty list is the correct current state; a `# security:` block on any patches/*.patch will appear here automatically (regenerate via `bun run security:patch-disclosure`). A dropped entry shows as a tracked-file diff."
              "Generated from patches/*.patch `# security:` headers by tools/security/patch-disclosure.bjs. Do not edit by hand — regenerate via `bun run security:patch-disclosure`.")
      :generator "tools/security/patch-disclosure.bjs"
      :patches entries})))
 
-(defn main! [] :- Any
+(defn main! [] Any
   (let [disclosure (build-disclosure)]
-    (writeFileSync DISCLOSURE-PATH (str (JSON/stringify disclosure nil 2) "\n"))
+    (writeFileSync DISCLOSURE-PATH (str (js/call JSON .stringify disclosure nil 2) "\n"))
     (console/error (str "[patch-disclosure] wrote " DISCLOSURE-PATH " ("
-                        (.-length (.-patches disclosure)) " security-tagged patch(es))"))))
+                        (js/get (js/get disclosure .patches) .length) " security-tagged patch(es))"))))
 
 ;; CLI dispatch runs only when invoked directly, never on import.
-(when (.-main (js/import-meta)) (main!))
+(when (js/get (js/import-meta) .main) (main!))

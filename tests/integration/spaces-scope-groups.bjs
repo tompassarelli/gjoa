@@ -6,10 +6,9 @@
 ;; in rows.ts:updateVisibility). User reported groups bleeding across spaces.
 (ns gjoa.tests.integration.spaces-scope-groups
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect expect-eq wait-for]]))
-(define-mode strict)
 
-(defn clean-spaces [mn :- Any] :- Any
-  (js/await (.executeScript mn "
+(defn clean-spaces [(mn Any)] Any
+  (js/await (js/call mn .executeScript "
     const main = window.Spaces.list().find(s => s.name === \"Main\") || window.Spaces.list()[0];
     window.Spaces.setActive(main.id);
     for (const s of [...window.Spaces.list()]) {
@@ -22,7 +21,7 @@
   "))
   nil)
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "spaces-scope-groups — group created in Space A is hidden when Space B is active" [mn]
      (await-true "return !!window.Spaces && !!window.gjoaTest;" 1500)
      (js/await (clean-spaces mn))
@@ -115,9 +114,9 @@
         }
         return { entries, projId: proj.id };
       ")
-           proj-entry (.find (:entries env) (fn [e] (= (.-name e) "Project-A")))]
+           proj-entry (js/call (:entries env) .find (fn [e] Any (= (js/get e .name) "Project-A")))]
        (expect proj-entry "Project-A group not found in DOM")
-       (expect-eq (.-spaceId proj-entry) (:projId env)
-                  (str "Project-A.spaceId=" (.-spaceId proj-entry) " doesn't match Project.id=" (:projId env) " — would not persist correctly across restart"))))]))
+       (expect-eq (js/get proj-entry .spaceId) (:projId env)
+                  (str "Project-A.spaceId=" (js/get proj-entry .spaceId) " doesn't match Project.id=" (:projId env) " — would not persist correctly across restart"))))]))
 
 (js/export-default tests)

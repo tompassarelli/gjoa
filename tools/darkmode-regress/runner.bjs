@@ -16,35 +16,33 @@
             [fs :as fs]
             [os :as os]
             [path :as path]
-            [gjoa.tools.test-driver.marionette :refer [connect-marionette]]))
-(define-mode strict)
+            [gjoa.tools.test-driver.marionette :refer [connect-marionette!]]))
 (declare-extern [process console JSON Promise Error setTimeout Object URL Date parseInt Math] Any)
 
 ;; content-context: wait two requestAnimationFrames (the next painted frame).
-(def RAF-JS :- String
+(def RAF-JS String
   "const d=arguments[arguments.length-1];requestAnimationFrame(()=>requestAnimationFrame(()=>d(true)));")
 
 ;; content-context: wait (event-driven, rAF-poll) until the in-engine actor signals
 ;; it finished its async normalize pass (data-gjoa-normalized on <html>), so we
 ;; measure the FINAL normalized contrast — not a fixed timer, with a 6s backstop.
-(defn make-profile! [] :- String
-  (let [dir (.mkdtempSync fs (.join path (.tmpdir os) "gjoa-dmregress-"))
-        mode (or (get (.-env process) "GJOA_DM_MODE") "dark")
+(defn make-profile! [] String
+  (let [dir (js/call fs .mkdtempSync (js/call path .join (js/call os .tmpdir) "gjoa-dmregress-"))
+        mode (or (get (js/get process .env) "GJOA_DM_MODE") "dark")
         enabled (if (= mode "off") "false" "true")
         ;; Default ON — matches the SHIPPED config (gjoa.darkmode.normalize.enabled
         ;; now defaults true). The gate must measure what users actually run; set
         ;; GJOA_DM_NORMALIZE_PREF=0 to measure the raw engine (pre-backstop).
-        normpref (if (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "0") "false" "true")
+        normpref (if (= (get (js/get process .env) "GJOA_DM_NORMALIZE_PREF") "0") "false" "true")
         ;; GJOA_DM_NOVA=1 turns FF152's nova content-card inset ON, to reproduce the
         ;; "content not full width + wallpaper margin" report and prove the cause.
-        nova (or (get (.-env process) "GJOA_DM_NOVA") "false")
+        nova (or (get (js/get process .env) "GJOA_DM_NOVA") "false")
         ;; #137: when VERIFYING the in-engine normalizer (NORMALIZE_PREF=1), force
         ;; every page active + engine invert + force a light source color-scheme, so
         ;; the contrast-normalize backstop definitely runs and stamps
         ;; data-gjoa-normalize-ms on each fixture (else already-dark pages skip it).
-        verify (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "1")]
-    (.writeFileSync fs (.join path dir "prefs.js")
-      (str "user_pref(\"marionette.port\", 2828);\n"
+        verify (= (get (js/get process .env) "GJOA_DM_NORMALIZE_PREF") "1")]
+    (js/call fs .writeFileSync (js/call path .join dir "prefs.js") (str "user_pref(\"marionette.port\", 2828);\n"
            "user_pref(\"marionette.enabled\", true);\n"
            "user_pref(\"gjoa.darkmode.enabled\", " enabled ");\n"
            "user_pref(\"gjoa.darkmode.mode\", \"" mode "\");\n"
@@ -61,13 +59,13 @@
              "")))
     dir))
 
-(defn host-of [url :- String] :- String
-  (try (.-hostname (URL. url)) (catch Error e "site")))
+(defn host-of [(url String)] String
+  (try (js/get (js/new URL url) .hostname) (catch (e Error) "site")))
 
 ;; A real awaited delay — used only to let the child flush its final dump line
 ;; before the runner reads the captured stdout. #137.
-(defn sleep! [ms :- Any] :- Any
-  (Promise. (fn [res :- Any _rej :- Any] :- Any (setTimeout res ms))))
+(defn sleep! [(ms Any)] Any
+  (js/new Promise (fn [(res Any) (_rej Any)] Any (setTimeout res ms))))
 
 ;; #137: parse the child's captured stdout for the pref-gated GJOA_NORMALIZE_MS lines
 ;; (tab-delimited: tag url ms=N els=N walk=N query=N apply=N) → timing tuples. PURE (no
@@ -75,171 +73,169 @@
 ;; finishes flushing to disk. This is the robust normalizer-perf channel — it survives
 ;; the colorInversionOverride write that detaches the Marionette content handle (the
 ;; same wall that blocks a content-context DOM-attr read).
-(defn parse-normalizer-timings [dumplog :- String] :- Any
-  (let [text (try (.readFileSync fs dumplog "utf8") (catch Error e ""))
+(defn parse-normalizer-timings [(dumplog String)] Any
+  (let [text (try (js/call fs .readFileSync dumplog "utf8") (catch (e Error) ""))
         timings []]
-    (doseq [ln (.split text "\n")]
-      (when (.startsWith ln "GJOA_NORMALIZE_MS")
-        (let [p (.split ln "\t")]
-          (when (>= (.-length p) 3)
-            (.push timings {:url (aget p 1)
-                            :ms (parseInt (.replace (aget p 2) "ms=" "") 10)
-                            :detail (.join (.slice p 3) " ")})))))
+    (doseq [ln (js/call text .split "\n")]
+      (when (js/call ln .startsWith "GJOA_NORMALIZE_MS")
+        (let [p (js/call ln .split "\t")]
+          (when (>= (js/get p .length) 3)
+            (js/call timings .push {:url (aget p 1)
+                            :ms (parseInt (js/call (aget p 2) .replace "ms=" "") 10)
+                            :detail (js/call (js/call p .slice 3) .join " ")})))))
     timings))
 
-(defn safe-shot [client :- Any] :- Any
-  (try (js/await (.takeScreenshot client)) (catch Error e nil)))
+(defn safe-shot [(client Any)] Any
+  (try (js/await (js/call client .takeScreenshot)) (catch (e Error) nil)))
 
 ;; A nav that times out (slow ad/tracker tail) still left a rendered DOM behind —
 ;; pageLoadStrategy "eager" returns at DOMContentLoaded, and the rAF settle paints
 ;; the above-the-fold text we measure. So a timeout must NOT abort the site: swallow
 ;; it and let rects/snap measure what actually painted. Returns the error msg (for
 ;; the report) or nil.
-(defn safe-nav! [client :- Any url :- String] :- Any
-  (try (js/await (.navigate client url)) nil (catch Error e (or (.-message e) (str e)))))
+(defn safe-nav! [(client Any) (url String)] Any
+  (try (js/await (js/call client .navigate url)) nil (catch (e Error) (or (js/get e .message) (str e)))))
 
 ;; Normalize pass: apply the corrective text colors (content) then re-snapshot +
 ;; re-measure (chrome). Returns the RESIDUAL fail count — or pre-fails unchanged when
 ;; not normalizing / nothing to apply. This is what validates the correction math:
 ;; pre-fails should drop toward 0 after correctives land.
-(defn normalize-pass! [client :- Any meta :- Any threshold :- Any refresh-js :- String
-                       snap-js :- String apply-js :- String normalize? :- Any
-                       correctives :- Any pre-fails :- Any] :- Any
-  (if (or (not normalize?) (= (.-length correctives) 0))
+(defn normalize-pass! [(client Any) (meta Any) (threshold Any) (refresh-js String)
+                       (snap-js String) (apply-js String) (normalize? Any)
+                       (correctives Any) (pre-fails Any)] Any
+  (if (or (not normalize?) (= (js/get correctives .length) 0))
     pre-fails
-    (let [_c (js/await (.setContext client "content"))
-          _ap (js/await (.executeScript client apply-js [correctives]))
-          _raf (js/await (.executeAsyncScript client RAF-JS []))
+    (let [_c (js/await (js/call client .setContext "content"))
+          _ap (js/await (js/call client .executeScript apply-js [correctives]))
+          _raf (js/await (js/call client .executeAsyncScript RAF-JS []))
           ;; RE-READ the current computed colors of the SAME tagged elements (no
           ;; re-tag, so cn stays stable on dynamic pages) — the apply + the engine's
           ;; re-inversion of it changed each fg, so measure against fresh foregrounds.
-          fresh (js/await (.executeScript client refresh-js []))
-          _c2 (js/await (.setContext client "chrome"))
-          res2 (js/await (.executeAsyncScript client snap-js [fresh threshold false]))]
-      (when (and (get (.-env process) "GJOA_DM_DEBUG") (> (or (.-total res2) 0) 0))
-        (.error console (str "  residual " (.-total res2) ": "
-                             (JSON/stringify (.slice (or (.-fails res2) []) 0 6)))))
-      (or (.-total res2) 0))))
+          fresh (js/await (js/call client .executeScript refresh-js []))
+          _c2 (js/await (js/call client .setContext "chrome"))
+          res2 (js/await (js/call client .executeAsyncScript snap-js [fresh threshold false]))]
+      (when (and (get (js/get process .env) "GJOA_DM_DEBUG") (> (or (js/get res2 .total) 0) 0))
+        (js/call console .error (str "  residual " (js/get res2 .total) ": "
+                             (js/call JSON .stringify (js/call (or (js/get res2 .fails) []) .slice 0 6)))))
+      (or (js/get res2 .total) 0))))
 
 ;; Navigate + measure one site. Per-site try so one bad site can't kill the run.
-(defn process-site! [client :- Any url :- String threshold :- Any
-                     rects-js :- String refresh-js :- String snap-js :- String apply-js :- String
-                     normalize? :- Any preinvert? :- Any outdir :- String] :- Any
+(defn process-site! [(client Any) (url String) (threshold Any)
+                     (rects-js String) (refresh-js String) (snap-js String) (apply-js String)
+                     (normalize? Any) (preinvert? Any) (outdir String)] Any
   (let [host (host-of url)]
     (try
       ;; content context FIRST — WebDriver:Navigate + the DOM scripts are
       ;; content-only; the previous site left us in chrome (drawSnapshot).
-      (let [_c0 (js/await (.setContext client "content"))
+      (let [_c0 (js/await (js/call client .setContext "content"))
             navwarn (js/await (safe-nav! client url))
-            _raf (js/await (.executeAsyncScript client RAF-JS []))
+            _raf (js/await (js/call client .executeAsyncScript RAF-JS []))
             ;; #137: the in-engine normalizer's per-pass timing is NOT read from the DOM
             ;; here — the colorInversionOverride write detaches the Marionette content
             ;; handle (the same wall that blocks the content-context contrast harness). It
             ;; is emitted to stdout via dump() and collected from the child's captured log
             ;; after the run (collect-normalizer-timings!).
-            meta (js/await (.executeScript client rects-js []))
-            _c2 (js/await (.setContext client "chrome"))
-            res (js/await (.executeAsyncScript client snap-js [meta threshold normalize? preinvert?]))
-            pre-fails (or (.-total res) 0)
-            correctives (or (.-correctives res) [])
+            meta (js/await (js/call client .executeScript rects-js []))
+            _c2 (js/await (js/call client .setContext "chrome"))
+            res (js/await (js/call client .executeAsyncScript snap-js [meta threshold normalize? preinvert?]))
+            pre-fails (or (js/get res .total) 0)
+            correctives (or (js/get res .correctives) [])
             post-fails (js/await (normalize-pass! client meta threshold refresh-js snap-js apply-js
                                                   normalize? correctives pre-fails))
             shot (js/await (safe-shot client))]
-        (when shot (.writeFileSync fs (.join path outdir (str host ".png")) shot {:encoding "base64"}))
-        {:url url :host host :checked (or (.-checked res) 0) :fails pre-fails
-         :postFails post-fails :applied (.-length correctives)
+        (when shot (js/call fs .writeFileSync (js/call path .join outdir (str host ".png")) shot {:encoding "base64"}))
+        {:url url :host host :checked (or (js/get res .checked) 0) :fails pre-fails
+         :postFails post-fails :applied (js/get correctives .length)
          ;; two-sided band: marks above the halation ceiling (over-contrast), the
          ;; upper-edge metric the floor-only gate is blind to (docs/darkmode-v2.md).
-         :halation (or (.-halationCount res) 0)
+         :halation (or (js/get res .halationCount) 0)
          ;; PAINTED text below the floor — the metric that actually reflects M3
          ;; (the paint-time text solve; computed el.fg is M3-blind). Post-M3 this
          ;; should trend to ~0; it's the real legibility gate.
-         :painted (or (.-paintedFailCount res) 0)
-         :worst (or (.-fails res) []) :err (or (.-err res) nil) :navwarn navwarn})
-      (catch Error e
-        {:url url :host host :checked 0 :fails 0 :postFails 0 :applied 0 :worst [] :err (or (.-message e) (str e))}))))
+         :painted (or (js/get res .paintedFailCount) 0)
+         :worst (or (js/get res .fails) []) :err (or (js/get res .err) nil) :navwarn navwarn})
+      (catch (e Error)
+        {:url url :host host :checked 0 :fails 0 :postFails 0 :applied 0 :worst [] :err (or (js/get e .message) (str e))}))))
 
-(defn run! [] :- Any
-  (let [bin (or (aget (.-argv process) 2) (get (.-env process) "GJOA_BIN"))]
-    (when (not bin) (.error console "usage: runner <gjoa-bin>") (.exit process 2))
-    (let [corpus (JSON/parse (.readFileSync fs (or (get (.-env process) "GJOA_DM_CORPUS")
+(defn run! [] Any
+  (let [bin (or (aget (js/get process .argv) 2) (get (js/get process .env) "GJOA_BIN"))]
+    (when (not bin) (js/call console .error "usage: runner <gjoa-bin>") (js/call process .exit 2))
+    (let [corpus (js/call JSON .parse (js/call fs .readFileSync (or (get (js/get process .env) "GJOA_DM_CORPUS")
                                                    "tools/darkmode-regress/corpus.json") "utf8"))
-          threshold (or (.-threshold corpus) 45)
-          sites (.-sites corpus)
-          rects-js (.readFileSync fs "tools/darkmode-regress/rects.js" "utf8")
+          threshold (or (js/get corpus .threshold) 45)
+          sites (js/get corpus .sites)
+          rects-js (js/call fs .readFileSync "tools/darkmode-regress/rects.js" "utf8")
           ;; the canonical color math is prepended so snap.js's functions (apca,
           ;; correct, Ys, invertLum, OKLab) are in scope in the injected script.
-          colormath-js (.readFileSync fs "tools/darkmode-regress/colormath.cjs" "utf8")
-          snap-js (str colormath-js "\n" (.readFileSync fs "tools/darkmode-regress/snap.js" "utf8"))
-          apply-js (.readFileSync fs "tools/darkmode-regress/apply-correctives.js" "utf8")
-          refresh-js (.readFileSync fs "tools/darkmode-regress/refresh.js" "utf8")
-          normalize? (= (get (.-env process) "GJOA_DM_NORMALIZE") "1")
+          colormath-js (js/call fs .readFileSync "tools/darkmode-regress/colormath.cjs" "utf8")
+          snap-js (str colormath-js "\n" (js/call fs .readFileSync "tools/darkmode-regress/snap.js" "utf8"))
+          apply-js (js/call fs .readFileSync "tools/darkmode-regress/apply-correctives.js" "utf8")
+          refresh-js (js/call fs .readFileSync "tools/darkmode-regress/refresh.js" "utf8")
+          normalize? (= (get (js/get process .env) "GJOA_DM_NORMALIZE") "1")
           ;; pre-invert correctives so the engine's color-inversion renders the
           ;; intended target (engine/hybrid modes invert content colors).
-          preinvert? (= (get (.-env process) "GJOA_DM_PREINVERT") "1")
+          preinvert? (= (get (js/get process .env) "GJOA_DM_PREINVERT") "1")
           outdir "dist/darkmode-regress"
-          _mk (.mkdirSync fs outdir {:recursive true})
+          _mk (js/call fs .mkdirSync outdir {:recursive true})
           profile (make-profile!)
           ;; #137: capture the child's stdout so the pref-gated GJOA_NORMALIZE_MS dump
           ;; lines survive (the robust normalizer-timing channel — vs the detach-flaky
           ;; content read). Parsed after the run by collect-normalizer-timings!.
-          dumplog (.join path outdir "normalize-dump.log")
-          logfd (.openSync fs dumplog "w")
+          dumplog (js/call path .join outdir "normalize-dump.log")
+          logfd (js/call fs .openSync dumplog "w")
           child (spawn bin
                        ["--profile" profile "--marionette" "--no-remote"
                         "--remote-allow-system-access" "--headless"]
                        {:stdio ["ignore" logfd "ignore"]
-                        :env (.assign Object {} (.-env process)
-                               {"GJOA_ALLOW_INSECURE" "1" "MOZ_HEADLESS" "1"})})
-          client (js/await (connect-marionette {:connectTimeoutMs 60000}))
+                        :env (js/call Object .assign {} (js/get process .env) {"GJOA_ALLOW_INSECURE" "1" "MOZ_HEADLESS" "1"})})
+          client (js/await (connect-marionette! {:connectTimeoutMs 60000}))
           ;; "eager" → Navigate resolves at DOMContentLoaded (DOM painted) rather
           ;; than the full load event, which heavy news/ad sites never reach inside
           ;; any sane bound. pageLoad here is just a backstop; safe-nav! measures a
           ;; partial page if even that trips.
-          _ses (js/await (.newSession client {:pageLoadStrategy "eager"}))
-          _to (js/await (.setTimeouts client {:pageLoad 30000 :script 30000}))
+          _ses (js/await (js/call client .newSession {:pageLoadStrategy "eager"}))
+          _to (js/await (js/call client .setTimeouts {:pageLoad 30000 :script 30000}))
           results []]
       (doseq [site sites]
-        (let [r (js/await (process-site! client (.-url site) threshold rects-js refresh-js snap-js
+        (let [r (js/await (process-site! client (js/get site .url) threshold rects-js refresh-js snap-js
                                          apply-js normalize? preinvert? outdir))
-              eff (if normalize? (.-postFails r) (.-fails r))]
-          (.push results r)
-          (.log console (str (if (.-err r) "ERR  " (if (= eff 0) "PASS " "FAIL "))
-                             (.-host r) "  "
-                             (if (.-err r) (.-err r)
+              eff (if normalize? (js/get r .postFails) (js/get r .fails))]
+          (js/call results .push r)
+          (js/call console .log (str (if (js/get r .err) "ERR  " (if (= eff 0) "PASS " "FAIL "))
+                             (js/get r .host) "  "
+                             (if (js/get r .err) (js/get r .err)
                                (if normalize?
-                                 (str "(" (.-checked r) " els, " (.-fails r) "->" (.-postFails r)
-                                      " after " (.-applied r) " fixes)")
-                                 (str "(" (.-checked r) " text els, " (.-fails r) " low-contrast)")))))))
-      (let [fail-of (fn [r :- Any] :- Any (if normalize? (.-postFails r) (.-fails r)))
-            failed (.filter results (fn [r :- Any] :- Bool (> (fail-of r) 0)))
-            errored (.filter results (fn [r :- Any] :- Bool (.-err r)))]
-        (.log console (str "\n=== " (.-length failed) "/" (.-length results)
+                                 (str "(" (js/get r .checked) " els, " (js/get r .fails) "->" (js/get r .postFails)
+                                      " after " (js/get r .applied) " fixes)")
+                                 (str "(" (js/get r .checked) " text els, " (js/get r .fails) " low-contrast)")))))))
+      (let [fail-of (fn [(r Any)] Any (if normalize? (js/get r .postFails) (js/get r .fails)))
+            failed (js/call results .filter (fn [(r Any)] Bool (> (fail-of r) 0)))
+            errored (js/call results .filter (fn [(r Any)] Bool (js/get r .err)))]
+        (js/call console .log (str "\n=== " (js/get failed .length) "/" (js/get results .length)
                            " sites with low-contrast text"
                            (if normalize? " (AFTER normalization)" "")
-                           "  (" (.-length errored) " errored) ==="))
+                           "  (" (js/get errored .length) " errored) ==="))
         ;; #137: stop the child GRACEFULLY first so it flushes its captured stdout to the
         ;; dump log on shutdown, then collect the normalizer per-pass timings — poll-retry
         ;; the parse since the OS writeback of the flushed buffer can lag a second or two.
-        (js/await (.quit client ["eAttemptQuit"]))
-        (.disconnect client)
-        (when child (.kill child))
-        (let [verify? (= (get (.-env process) "GJOA_DM_NORMALIZE_PREF") "1")
+        (js/await (js/call client .quit ["eAttemptQuit"]))
+        (js/call client .disconnect)
+        (when child (js/call child .kill))
+        (let [verify? (= (get (js/get process .env) "GJOA_DM_NORMALIZE_PREF") "1")
               _settle (when verify? (js/await (sleep! 800)))
               t1 (if verify? (parse-normalizer-timings dumplog) [])
-              _settle2 (when (and verify? (= (.-length t1) 0)) (js/await (sleep! 2500)))
-              norm-timings (if (and verify? (= (.-length t1) 0)) (parse-normalizer-timings dumplog) t1)]
-          (when (> (.-length norm-timings) 0)
-            (let [mss (.map norm-timings (fn [t :- Any] :- Any (.-ms t)))
-                  tot (.reduce mss (fn [a :- Any b :- Any] :- Any (+ a b)) 0)]
-              (.log console (str "normalizer: " (.-length norm-timings) " passes measured, "
-                                 "mean " (.round Math (/ tot (.-length norm-timings))) "ms"))))
-          (.writeFileSync fs (.join path outdir "report.json")
-            (JSON/stringify {:threshold threshold :normalize normalize? :results results
+              _settle2 (when (and verify? (= (js/get t1 .length) 0)) (js/await (sleep! 2500)))
+              norm-timings (if (and verify? (= (js/get t1 .length) 0)) (parse-normalizer-timings dumplog) t1)]
+          (when (> (js/get norm-timings .length) 0)
+            (let [mss (js/call norm-timings .map (fn [(t Any)] Any (js/get t .ms)))
+                  tot (js/call mss .reduce (fn [(a Any) (b Any)] Any (+ a b)) 0)]
+              (js/call console .log (str "normalizer: " (js/get norm-timings .length) " passes measured, "
+                                 "mean " (js/call Math .round (/ tot (js/get norm-timings .length))) "ms"))))
+          (js/call fs .writeFileSync (js/call path .join outdir "report.json") (js/call JSON .stringify {:threshold threshold :normalize normalize? :results results
                              :normalizeTimings norm-timings} nil 2))
-          (.log console (str "report: " outdir "/report.json  + per-site PNGs in " outdir "/"))
-          (.exit process (if (> (.-length failed) 0) 1 0)))))))
+          (js/call console .log (str "report: " outdir "/report.json  + per-site PNGs in " outdir "/"))
+          (js/call process .exit (if (> (js/get failed .length) 0) 1 0)))))))
 
-(.catch (run!) (fn [e :- Any] :- Any
-                 (.error console (str "regress failed: " (or (.-stack e) e)))
-                 (.exit process 1)))
+(js/call (run!) .catch (fn [(e Any)] Any
+                 (js/call console .error (str "regress failed: " (or (js/get e .stack) e)))
+                 (js/call process .exit 1)))

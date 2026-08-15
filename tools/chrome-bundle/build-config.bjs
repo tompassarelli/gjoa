@@ -1,35 +1,32 @@
 #lang beagle/js
 (ns gjoa.tools.chrome-bundle.build-config)
-(define-mode strict)
 
-(defrecord Entry [out :- String
-                  files :- (Vec String)
-                  banner :- String])
+(defrecord Entry [(out String)
+                  (files (Vec String))
+                  (banner String)])
 
-(def B :- String ".beagle-out")
+(def B String ".beagle-out/gjoa")
 
 ;; ->Entry is the positional record constructor (out files banner). At
 ;; beagle 77df8a9 a bare keyword-map literal infers as (Map Keyword Any),
 ;; not the declared (Vec Entry) — construct Entry records explicitly so the
 ;; element type is exact and the consumer (build.bjs) keeps its typed entry.
-(js/export (def entries :- (Vec Entry)
+(js/export (def entries (Vec Entry)
   [(->Entry "gjoa-hello.uc.js"
             [(str B "/hello/index.js")]
-            (.join ["// ==UserScript=="
+            (js/call ["// ==UserScript=="
                     "// @name           Gjoa Hello"
                     "// @description    Confirms the chrome loader is working"
                     "// @include        main"
                     "// @onlyonce"
-                    "// ==/UserScript=="]
-                   "\n"))
+                    "// ==/UserScript=="] .join "\n"))
    (->Entry "gjoa-security.uc.js"
             [(str B "/security/index.js")]
-            (.join ["// ==UserScript=="
+            (js/call ["// ==UserScript=="
                     "// @name           Gjoa Security Gate"
                     "// @description    Refuses to keep running if Firefox pin is stale"
                     "// @include        main"
-                    "// ==/UserScript=="]
-                   "\n"))
+                    "// ==/UserScript=="] .join "\n"))
    (->Entry "gjoa-drawer.uc.js"
             [(str B "/tabs/log.js")
              (str B "/drawer/timing.js")
@@ -42,12 +39,11 @@
              (str B "/drawer/omni-icon.js")
              (str B "/drawer/urlbar.js")
              (str B "/drawer/index.js")]
-            (.join ["// ==UserScript=="
+            (js/call ["// ==UserScript=="
                     "// @name           Gjoa Drawer"
                     "// @description    Manages sidebar layout, compact mode, and toolbar positioning"
                     "// @include        main"
-                    "// ==/UserScript=="]
-                   "\n"))
+                    "// ==/UserScript=="] .join "\n"))
    (->Entry "gjoa-tabs.uc.js"
             [(str B "/tabs/log.js")
              (str B "/tabs/types.js")
@@ -82,33 +78,29 @@
              (str B "/tabs/content-focus.js")
              (str B "/tabs/vim.js")
              (str B "/tabs/index.js")]
-            (.join ["// ==UserScript=="
+            (js/call ["// ==UserScript=="
                     "// @name           Gjoa Tabs"
                     "// @description    Tree-style tab panel with vim keybindings"
                     "// @include        main"
-                    "// ==/UserScript=="]
-                   "\n"))
+                    "// ==/UserScript=="] .join "\n"))
    (->Entry "gjoa-dark-mode.uc.js"
             [(str B "/dark-mode/index.js")]
-            (.join ["// ==UserScript=="
+            (js/call ["// ==UserScript=="
                     "// @name           Gjoa Dark Mode"
                     "// @description    Chrome-level dark mode: native color-scheme override + engine inversion"
                     "// @include        main"
-                    "// ==/UserScript=="]
-                   "\n"))
+                    "// ==/UserScript=="] .join "\n"))
    (->Entry "gjoa-blocking.uc.js"
             [(str B "/blocking/index.js")]
-            (.join ["// ==UserScript=="
+            (js/call ["// ==UserScript=="
                     "// @name           Gjoa Blocking"
                     "// @description    Native ad/tracker blocking: engine enable/disable + per-site allow-list"
                     "// @include        main"
-                    "// ==/UserScript=="]
-                   "\n"))
+                    "// ==/UserScript=="] .join "\n"))
    (->Entry "gjoa-theme.uc.js"
             [(str B "/theme/index.js")]
-            (.join ["// ==UserScript=="
+            (js/call ["// ==UserScript=="
                     "// @name           Gjoa Theme"
                     "// @description    Chrome-theme variant selector: stamps :root[gjoa-theme] from gjoa.theme.variant (base16 token-set swap)"
                     "// @include        main"
-                    "// ==/UserScript=="]
-                   "\n"))]))
+                    "// ==/UserScript=="] .join "\n"))]))

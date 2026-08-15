@@ -13,12 +13,11 @@
 ;; they vanish at emit and are typed `Any` here.
 (ns gjoa.tests.integration.session-restore
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for]]))
-(define-mode strict)
 ;; Note: document/window/Spaces/Services/gBrowser appear only inside the
 ;; marionette script STRINGS below — they execute in the remote browser
 ;; chrome scope, never as beagle code here — so they need no externs.
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "Session-like — opening 5 tabs in a row, every one renders as a visible sidebar row" [mn]
      (await-true "return !!document.getElementById(\"gjoa-tab-panel\");" 2000)
      ;; Clear any non-Main spaces so visibility filter never hides legit tabs.
@@ -65,10 +64,10 @@
           hiddenSamples,
         };
       ")]
-         (expect (not (< (.-visible counts) (+ before 5)))
+         (expect (not (< (js/get counts .visible) (+ before 5)))
                  (str "expected " (+ before 5) " visible rows, got "
-                      (.-visible counts) " visible / " (.-total counts) " total. "
-                      "hidden samples: " (JSON/stringify (.-hiddenSamples counts)))))))
+                      (js/get counts .visible) " visible / " (js/get counts .total) " total. "
+                      "hidden samples: " (JSON/stringify (js/get counts .hiddenSamples)))))))
 
    (deftest "Session-like — panel construction is bulletproof: even with pre-set spaces state, panel exists and has rows for every tab" [mn]
      ;; This pokes at the user's actual failure shape: profile state

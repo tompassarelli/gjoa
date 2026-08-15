@@ -5,9 +5,8 @@
 ;; key ('q') to the tabs picker, and unbind a default ('t').
 (ns gjoa.tests.integration.vim-rebind
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for sleep]]))
-(define-mode strict)
 
-(def setup-js :- String
+(def setup-js String
   "
   const tab = gBrowser.addTab('about:blank', {
     triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
@@ -19,7 +18,7 @@
   return 1;
 ")
 
-(def cleanup-js :- String
+(def cleanup-js String
   "Services.prefs.clearUserPref('gjoa.keys.bindings'); return 1;")
 
 ;; A picker is OPEN only if #gjoa-picker exists AND is not hidden — close hides it
@@ -27,20 +26,20 @@
 ;; plain querySelector('[class*=picker]') existence check false-positives on a
 ;; CLOSED (or leaked-from-a-prior-test) picker, breaking every negative assertion.
 ;; The vim '/' search input is genuinely removed on close, so existence is fine there.
-(def pickerOpen-js :- String
+(def pickerOpen-js String
   "const p=document.getElementById('gjoa-picker'); return !!((p && !p.hidden) || document.querySelector('.gjoa-search-input'));")
 
 ;; Close reliably: dispatch Escape (proper dismiss + active-reset if the handler is
 ;; reachable) AND force the closed visual state, so a leaked/hidden picker can't
 ;; survive into a negative assertion regardless of where the picker listens.
-(def closePicker-js :- String
+(def closePicker-js String
   "try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));}catch(e){} try{const p=document.getElementById('gjoa-picker'); if(p) p.hidden=true; const s=document.querySelector('.gjoa-search-input'); if(s) s.remove();}catch(e){} return 1;")
 
-(defn key-action [ch :- String] :- Any
+(defn key-action [(ch String)] Any
   [{:type "key" :id "kbd"
     :actions [{:type "keyDown" :value ch} {:type "keyUp" :value ch}]}])
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "vim keymap: gjoa.keys.bindings remaps + unbinds keys live" [mn]
      (await-true "return !!document.querySelector(\"#gjoa-tab-panel\");" 10000)
      ;; setup-js needs the vim keymap live (gBrowser + the dispatch that reads
@@ -52,7 +51,7 @@
      (await-true "return Services.prefs.getStringPref('gjoa.keys.bindings','') === JSON.stringify({ q: 'tabsPicker', t: null }) && gBrowser.selectedBrowser.currentURI.spec === 'about:blank';")
      (chrome-eval closePicker-js)
      ;; --- 't' is UNBOUND (opens nothing → no mid-test close needed) ---
-     (js/await (.performActions mn (key-action "t")))
+     (js/await (js/call mn .performActions (key-action "t")))
      ;; NEGATIVE assertion: nothing should open, so there's no positive state to
      ;; await — a fixed settle is the only way to give a (wrongly-bound) picker
      ;; time to appear before we assert it did NOT.
@@ -60,7 +59,7 @@
      (expect (not (chrome-eval pickerOpen-js))
        "unbound key 't' still opened the tabs picker (override null not honored)")
      ;; --- 'q' is REBOUND to the tabs picker (opens at the end) ---
-     (js/await (.performActions mn (key-action "q")))
+     (js/await (js/call mn .performActions (key-action "q")))
      (await-true pickerOpen-js 4000)
      (expect (chrome-eval pickerOpen-js)
        "rebound key 'q'->tabsPicker did not open the picker (override remap not honored)")

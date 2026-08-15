@@ -1,7 +1,7 @@
 #lang beagle/js
 ;; Build the chrome distribution at dist/. Composes:
 ;;
-;;   1. compile beagle:  src/gjoa/chrome/bjs/**/*.bjs → .beagle-out/**/*.js
+;;   1. compile beagle:  src/gjoa/chrome/bjs/**/*.bjs → .beagle-out/gjoa/**/*.js
 ;;   2. bundle JS:       .beagle-out/ → dist/chrome/JS/*.uc.js (IIFE concat)
 ;;   3. stage CSS:       src/gjoa/chrome/css/* → dist/chrome/CSS/
 ;;
@@ -16,31 +16,30 @@
   (:require [fs :refer [existsSync readFileSync readdirSync writeFileSync]]
             [fs/promises :refer [mkdir copyFile readdir rm]]
             [path :refer [join]]))
-(define-mode strict)
 (declare-extern [process Bun] Any)
 
 ;; REPO_ROOT was resolve(import.meta.dir, "..", ".."); tools run via `bun run`
 ;; from repo root, so import.meta.dir has no beagle equivalent — use cwd.
-(def REPO-ROOT :- String (.cwd process))
-(def SRC-CHROME :- String (join REPO-ROOT "src" "gjoa" "chrome"))
-(def DIST :- String (join REPO-ROOT "dist"))
-(def DIST-CHROME :- String (join DIST "chrome"))
+(def REPO-ROOT String (js/call process .cwd))
+(def SRC-CHROME String (join REPO-ROOT "src" "gjoa" "chrome"))
+(def DIST String (join REPO-ROOT "dist"))
+(def DIST-CHROME String (join DIST "chrome"))
 
 ;; Spawn the COMPILED sibling tools (tools:compile populates .beagle-tools/
 ;; before this runs). bun can't execute .bjs directly, so point at the .js.
-(def TOOLS-DIR :- String (join REPO-ROOT ".beagle-tools" "gjoa" "tools" "chrome-bundle"))
+(def TOOLS-DIR String (join REPO-ROOT ".beagle-tools" "gjoa" "tools" "chrome-bundle"))
 
-(defn step [name :- String fn :- Any] :- Any
+(defn step [(name String) (fn Any)] Any
   (let [_ (console/log (str "→ " name))]
     (js/await (fn))))
 
-(defn copy-dir [src :- String dst :- String] :- Any
+(defn copy-dir [(src String) (dst String)] Any
   (let [_ (js/await (mkdir dst {:recursive true}))
         names (js/await (readdir src))]
     (doseq [name names]
       (js/await (copyFile (join src name) (join dst name))))))
 
-(defn main! [] :- Any
+(defn main! [] Any
   (do
     (when (existsSync DIST)
       (js/await (rm DIST {:recursive true})))
@@ -48,46 +47,42 @@
 
     (js/await
       (step "compiling beagle sources"
-        (fn []
-          (let [proc (.spawn Bun {:cmd ["bun" (join TOOLS-DIR "compile.js")]
+        (fn [] Any (let [proc (js/call Bun .spawn {:cmd ["bun" (join TOOLS-DIR "compile.js")]
                                   :cwd REPO-ROOT
                                   :stdout "inherit"
                                   :stderr "inherit"})
-                code (js/await (.-exited proc))]
+                code (js/await (js/get proc .exited))]
             (when (not= code 0)
-              (throw (Error. (str "beagle compile failed (exit " code ")"))))))))
+              (throw (js/new Error (str "beagle compile failed (exit " code ")"))))))))
 
     (js/await
       (step "bundling chrome JS"
-        (fn []
-          (let [proc (.spawn Bun {:cmd ["bun" (join TOOLS-DIR "build.js")]
+        (fn [] Any (let [proc (js/call Bun .spawn {:cmd ["bun" (join TOOLS-DIR "build.js")]
                                   :cwd REPO-ROOT
                                   :stdout "inherit"
                                   :stderr "inherit"})
-                code (js/await (.-exited proc))]
+                code (js/await (js/get proc .exited))]
             (when (not= code 0)
-              (throw (Error. (str "chrome bundle failed (exit " code ")"))))))))
+              (throw (js/new Error (str "chrome bundle failed (exit " code ")"))))))))
 
     (js/await
       (step "staging chrome/CSS"
-        (fn []
-          (js/await (copy-dir (join SRC-CHROME "css") (join DIST-CHROME "CSS"))))))
+        (fn [] Any (js/await (copy-dir (join SRC-CHROME "css") (join DIST-CHROME "CSS"))))))
 
     ;; Content STAMP over every bundled JS+CSS file — the dev loader watches this
     ;; file and hot-reloads the running chrome the instant it changes, so a running
     ;; browser can never hold a stale bundle (owner: "never stale by construction").
     (js/await
       (step "writing bundle stamp"
-        (fn []
-          (let [Hasher (.-CryptoHasher Bun)
-                hasher (Hasher. "sha256")]
+        (fn [] Any (let [Hasher (js/get Bun .CryptoHasher)
+                hasher (js/new Hasher "sha256")]
             (doseq [sub ["JS" "CSS"]]
               (let [dir (join DIST-CHROME sub)
-                    names (.sort (readdirSync dir))]
+                    names (js/call (readdirSync dir) .sort)]
                 (doseq [name names]
-                  (.update hasher name)
-                  (.update hasher (readFileSync (join dir name))))))
-            (writeFileSync (join DIST-CHROME ".bundle-stamp") (.digest hasher "hex"))))))
+                  (js/call hasher .update name)
+                  (js/call hasher .update (readFileSync (join dir name))))))
+            (writeFileSync (join DIST-CHROME ".bundle-stamp") (js/call hasher .digest "hex"))))))
 
     (console/log "\n✓ chrome distribution ready at dist/")
     (console/log "  install: bun run chrome:install")))

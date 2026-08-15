@@ -4,10 +4,9 @@
 ;; and exercises the full keypress → vim dispatcher → spaces manager chain.
 (ns gjoa.tests.integration.spaces-vim
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect expect-eq expect-includes wait-for]]))
-(define-mode strict)
 
 ;; Reset all non-default spaces between subtests so each one starts clean.
-(defn reset-spaces [mn :- Any] :- Any
+(defn reset-spaces [(mn Any)] Any
   (chrome-eval
     "
     const main = window.Spaces.list().find(s => s.name === \"Main\")
@@ -18,7 +17,7 @@
     }
   "))
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "Spaces+vim — :space new <name> creates and switches via runExCommand" [mn]
      (await-true "return !!window.gjoaTest && !!window.gjoaTest.vim && !!window.Spaces;" 1500)
      (js/await (reset-spaces mn))
@@ -31,11 +30,11 @@
           names: window.Spaces.list().map(s => s.name),
         };
       ")]
-       (expect-eq (.-count state) 2
-                  (str "expected 2 spaces, got " (.-count state) ": " (JSON/stringify state)))
-       (expect-eq (.-activeName state) "Work"
-                  (str "expected active=Work, got " (.-activeName state) ": " (JSON/stringify state)))
-       (expect-includes (.-names state) "Work"
+       (expect-eq (js/get state .count) 2
+                  (str "expected 2 spaces, got " (js/get state .count) ": " (JSON/stringify state)))
+       (expect-eq (js/get state .activeName) "Work"
+                  (str "expected active=Work, got " (js/get state .activeName) ": " (JSON/stringify state)))
+       (expect-includes (js/get state .names) "Work"
                         (str "Work not in list: " (JSON/stringify state)))))
 
    (deftest "Spaces+vim — :space rename mutates the active space's name" [mn]
@@ -69,10 +68,10 @@
                        "
         return { count: window.Spaces.list().length, activeName: window.Spaces.active().name };
       ")]
-       (expect-eq (.-count after-del) 1
-                  (str "expected 1 after delete, got " (.-count after-del)))
-       (expect-eq (.-activeName after-del) "Main"
-                  (str "expected active=Main, got " (.-activeName after-del))))
+       (expect-eq (js/get after-del .count) 1
+                  (str "expected 1 after delete, got " (js/get after-del .count)))
+       (expect-eq (js/get after-del .activeName) "Main"
+                  (str "expected active=Main, got " (js/get after-del .activeName))))
      ;; Refuse-to-delete-Main: should be a no-op.
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"space delete\");")
      (let [final (chrome-eval "return window.Spaces.list().length;")]

@@ -1,3 +1,2 @@
 #lang beagle/js
 (ns gjoa.spaces.types)
-(define-mode strict)

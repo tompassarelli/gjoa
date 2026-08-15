@@ -3,68 +3,67 @@
   (:require [gjoa.tools.prep.branding :refer [branding!]]
             [gjoa.tools.prep.chrome-bake :refer [chrome-bake]]
             [gjoa.tools.prep.fingerprint :refer [fingerprint!]]
-            [gjoa.tools.prep.locales :refer [locales]]
+            [gjoa.tools.prep.locales :refer [locales!]]
             [gjoa.tools.prep.mozconfig :refer [mozconfig!]]
             [gjoa.tools.prep.overlay :refer [overlay-src!]]
             [gjoa.tools.prep.patches :refer [patches]]
             [gjoa.tools.prep.sh :refer [sh]]
             [gjoa.tools.prep.log :refer [log]]
             [fs :refer [writeFileSync existsSync]]))
-(define-mode strict)
 
 ;; Regenerate the about:sovereignty manifest from a FRESH egress audit so its proof
 ;; line matches the bytes being built (no stale-by-omission). Guarded: runs only if
 ;; the egress tool is compiled here (the maintainer's tree, where releases are cut);
 ;; on a checkout without it, the committed manifest ships and the page honestly flags
 ;; any commit mismatch. Runs before overlay so the fresh manifest is what gets baked.
-(defn regen-sovereignty-manifest! [] :- Any
+(defn regen-sovereignty-manifest! [] Any
   (let [tool ".beagle-tools/gjoa/tools/sovereignty/egress-scan.js"]
     (if (not (existsSync tool))
-      (.info log "sovereignty: egress tool not present — keeping committed manifest")
+      (js/call log .info "sovereignty: egress tool not present — keeping committed manifest")
       (do
-        (.step log "phase 0 — regenerating about:sovereignty egress manifest")
+        (js/call log .step "phase 0 — regenerating about:sovereignty egress manifest")
         (sh (str "bun " tool " manifest") {:quiet true})
-        (.ok log "sovereignty: manifest regenerated for this build")))))
+        (js/call log .ok "sovereignty: manifest regenerated for this build")))))
 
 ;; Regenerate configs/security-patches.json — the disclosure artifact (#120),
 ;; derived from patch `# security:` headers so it can't lie (a dropped entry shows
 ;; as a tracked-file diff). Same guard/placement as the sovereignty manifest: runs
 ;; only where the tool is compiled (the maintainer's tree). Empty list is correct
 ;; while zero patches carry a `security:` block.
-(defn regen-patch-disclosure! [] :- Any
+(defn regen-patch-disclosure! [] Any
   (let [tool ".beagle-tools/gjoa/tools/security/patch-disclosure.js"]
     (if (not (existsSync tool))
-      (.info log "security: patch-disclosure tool not present — keeping committed configs/security-patches.json")
+      (js/call log .info "security: patch-disclosure tool not present — keeping committed configs/security-patches.json")
       (do
-        (.step log "phase 0 — regenerating configs/security-patches.json (security-patch disclosure)")
+        (js/call log .step "phase 0 — regenerating configs/security-patches.json (security-patch disclosure)")
         (sh (str "bun " tool) {:quiet true})
-        (.ok log "security: patch-disclosure regenerated for this build")))))
+        (js/call log .ok "security: patch-disclosure regenerated for this build")))))
 
 ;; Seven sequential phases. Each is idempotent, so re-running `bun run import`
 ;; after editing src/gjoa/ or gjoa.json picks up the changes correctly.
-(js/export (defn import-sources [] :- Any
+(js/export (defn import-sources! [] Any
   (js/await (regen-sovereignty-manifest!))
   (js/await (regen-patch-disclosure!))
 
-  (.step log "phase 1/7 — overlaying src/gjoa/")
+  (js/call log .step "phase 1/7 — overlaying src/gjoa/")
   (js/await (overlay-src!))
 
-  (.step log "phase 2/7 — applying patches/")
+  (js/call log .step "phase 2/7 — applying patches/")
   (js/await (patches))
 
-  (.step log "phase 3/7 — baking chrome bundles into engine/")
+  (js/call log .step "phase 3/7 — baking chrome bundles into engine/")
   (js/await (chrome-bake))
 
-  (.step log "phase 4/7 — generating branding")
+  (js/call log .step "phase 4/7 — generating branding")
   (js/await (branding!))
 
-  (.step log "phase 5/7 — rewriting locale Firefox-isms")
-  (js/await (locales))
+  (js/call log .step "phase 5/7 — rewriting locale Firefox-isms")
+  (js/await (locales!))
 
-  (.step log "phase 6/7 — generating engine/mozconfig")
+  (js/call log .step "phase 6/7 — generating engine/mozconfig")
   (js/await (mozconfig!))
 
-  (.step log "phase 7/7 — generating build fingerprint")
+  (js/call log .step "phase 7/7 — generating build fingerprint")
   (js/await (fingerprint!))
 
   ;; Stamp import completion (written LAST so its mtime is the true completion
@@ -73,4 +72,4 @@
   ;; but forgot to re-import, so engine/ (the actual compile input) is stale.
   (writeFileSync "engine/.gjoa-import-stamp" "gjoa engine import stamp\n")
 
-  (.ok log "import complete")))
+  (js/call log .ok "import complete")))

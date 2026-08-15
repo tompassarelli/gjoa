@@ -6,7 +6,6 @@
 ;; don't survive the beagle→js emit, so the packaged pref file carries only the
 ;; pref() statements; the rationale lives here in source.
 (ns gjoa.defaults.pref.dark-mode)
-(define-mode strict)
 (declare-extern [pref] Any)
 
 ;; Master toggle: enables/disables dark mode entirely. ON by default — gjoa is a

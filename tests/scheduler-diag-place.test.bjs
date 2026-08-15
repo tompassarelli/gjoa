@@ -15,34 +15,33 @@
 (ns gjoa.tests.scheduler-diag-place
   (:require [fs :refer [existsSync readFileSync]]
             [path :refer [join]]))
-(define-mode strict)
 (declare-extern [describe expect test process RegExp] Any)
 
-(def REPO :- String (.cwd process))
-(def SCHEDULER :- String
+(def REPO String (js/call process .cwd))
+(def SCHEDULER String
   (join REPO "src" "gjoa" "chrome" "bjs" "platform" "scheduler.bjs"))
 
-(defn has? [s :- String pat :- String] :- Any (.test (RegExp. pat) s))
+(defn has? [(s String) (pat String)] Any (js/call (js/new RegExp pat) .test s))
 
 (describe "scheduler diag() place-safety (E009 019f79cd)"
-  (fn []
+  (fn [] Any
     (test "source exists"
-      (fn []
-        (.toBe (expect (existsSync SCHEDULER)) true)))
+      (fn [] Any
+        (js/call (expect (existsSync SCHEDULER)) .toBe true)))
 
     ;; The regression itself: set! must never target an (aget ...) non-place.
     (test "diag no longer assigns through (set! (aget ...))"
-      (fn []
+      (fn [] Any
         (let [src (readFileSync SCHEDULER "utf8")]
-          (.toBe (expect (has? src "\\(set!\\s*\\(aget")) false))))
+          (js/call (expect (has? src "\\(set!\\s*\\(aget")) .toBe false))))
 
     ;; The canonical replacement: functional reduce/assoc over DOMAIN-ORDER,
     ;; still defaulting a domain's pending reasons to [] when untouched —
     ;; preserves the dynamic domain-keys + pending-array semantics diag()
     ;; callers (gjoa.platform.index diag) depend on.
     (test "diag rebuilds pending map via reduce/assoc over DOMAIN-ORDER"
-      (fn []
+      (fn [] Any
         (let [src (readFileSync SCHEDULER "utf8")]
-          (.toBe (expect (has? src "reduce[\\s\\S]{0,80}assoc")) true)
-          (.toBe (expect (has? src "\\(or \\(\\.get pending domain\\) \\[\\]\\)")) true)
-          (.toBe (expect (has? src "DOMAIN-ORDER")) true))))))
+          (js/call (expect (has? src "reduce[\\s\\S]{0,80}assoc")) .toBe true)
+          (js/call (expect (has? src "\\(or \\(\\.get pending domain\\) \\[\\]\\)")) .toBe true)
+          (js/call (expect (has? src "DOMAIN-ORDER")) .toBe true))))))

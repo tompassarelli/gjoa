@@ -36,15 +36,14 @@
   (:require [gjoa.tests.dsl :refer [deftest expect sleep NAV-JS await-true wait-for]]
             [gjoa.tools.test-driver.contrast-score :refer [evaluate-box score-page]]
             [gjoa.tools.test-driver.contrast-sample :refer [decode-png sample-backdrop sample-foreground]]))
-(define-mode strict)
 
-(def BASE :- String "http://127.0.0.1:8976/")
+(def BASE String "http://127.0.0.1:8976/")
 
 ;; Recorded contrast floors. 0 = record-only (always green, logs the score).
 ;; After the first binary run these become real floors via #63's measure step;
 ;; known-failing fixtures get a floor just below today's value so they can't
 ;; regress and visibly rise when the engine fix lands.
-(def BASELINES :- Any
+(def BASELINES Any
   {"mit-news" 0
    "hacker-news" 0
    "youtube" 0
@@ -57,7 +56,7 @@
 
 ;; Production dark-mode config (the default): master toggle on, dark mode (the
 ;; GjoaDarkmode actor inverts themeless-light docs per-document).
-(def PREFS-JS :- String
+(def PREFS-JS String
   (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', true);"
        " Services.prefs.setCharPref('gjoa.darkmode.mode', 'dark');"
        " return 'on';"))
@@ -65,7 +64,7 @@
 ;; darkmode OFF — for the rect-enumeration pass. Content getComputedStyle works
 ;; pre-inversion, and page LAYOUT is inversion-invariant so the rects stay valid
 ;; for the inverted snapshot.
-(def DARK-OFF-JS :- String
+(def DARK-OFF-JS String
   (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false);"
        " Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false);"
        " return 'off';"))
@@ -75,7 +74,7 @@
 ;; needs a content WebDriver handle that engine inversion detaches ("discarded"). PNG
 ;; keeps the payload compact (raw full-page RGBA is too big to serialize back) and
 ;; feeds the EXISTING decode-png unchanged.
-(defn snapshot-png-js [w :- Any h :- Any] :- String
+(defn snapshot-png-js [(w Any) (h Any)] String
   (str "const done = arguments[arguments.length-1];"
        "(async () => { try {"
        "  const win = Services.wm.getMostRecentWindow('navigator:browser');"
@@ -93,7 +92,7 @@
 ;; Content-side enumeration: every visible text run -> page-relative box + its
 ;; post-inversion computed color + size/weight. Range.getClientRects (not the
 ;; element box) so we measure the text itself, not its padding. Capped at 400.
-(def ENUMERATE-JS :- String
+(def ENUMERATE-JS String
   (str "\n"
        "  const W = document.documentElement, boxes = [];\n"
        "  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);\n"
@@ -115,55 +114,54 @@
        "  return JSON.stringify({ boxes, pageWidth: W.scrollWidth, pageHeight: W.scrollHeight, dpr: window.devicePixelRatio });\n"))
 
 ;; Run the full measure flow for one fixture and assert its baseline floor.
-(defn check-fixture [mn :- Any name :- String] :- Any
+(defn check-fixture [(mn Any) (name String)] Any
   (let [url (str BASE name)]
     ;; PASS 1 — darkmode OFF: navigate + enumerate text rects in CONTENT (works
     ;; pre-inversion). Layout is inversion-invariant, so these page-relative rects
     ;; stay valid for the inverted snapshot below.
-    (js/await (.setContext mn "chrome"))
-    (js/await (.executeScript mn DARK-OFF-JS))
-    (js/await (.executeAsyncScript mn NAV-JS [url]))
+    (js/await (js/call mn .setContext "chrome"))
+    (js/await (js/call mn .executeScript DARK-OFF-JS))
+    (js/await (js/call mn .executeAsyncScript NAV-JS [url]))
     (js/await (sleep 500))
-    (js/await (.setContext mn "content"))
+    (js/await (js/call mn .setContext "content"))
     ;; await-true POLLS (wait-for catches errors + retries at 20ms) past the transient
     ;; post-navigation "Browsing context has been discarded" until the content doc is
     ;; ready; a one-shot executeScript here fails on that transient. Then enumerate.
     (await-true "return document.readyState === 'complete';" 8000)
-    (let [meta (JSON/parse (js/await (.executeScript mn ENUMERATE-JS)))]
+    (let [meta (JSON/parse (js/await (js/call mn .executeScript ENUMERATE-JS)))]
       ;; PASS 2 — enable production dark mode + re-navigate so the page
       ;; re-cascades INVERTED, then read the PAINTED result chrome-side (the metric
       ;; is now painted contrast — exactly what M3 guarantees).
-      (js/await (.setContext mn "chrome"))
-      (js/await (.executeScript mn PREFS-JS))
-      (js/await (.executeAsyncScript mn NAV-JS [url]))
+      (js/await (js/call mn .setContext "chrome"))
+      (js/await (js/call mn .executeScript PREFS-JS))
+      (js/await (js/call mn .executeAsyncScript NAV-JS [url]))
       (js/await (sleep 800))
-      (let [page-w (.-pageWidth meta)
-            shot (js/await (.executeAsyncScript mn (snapshot-png-js page-w (.-pageHeight meta)) []))
-            _ (when (.startsWith shot "ERR:") (expect false (str name " drawSnapshot capture failed: " shot)))
+      (let [page-w (js/get meta .pageWidth)
+            shot (js/await (js/call mn .executeAsyncScript (snapshot-png-js page-w (js/get meta .pageHeight)) []))
+            _ (when (js/call shot .startsWith "ERR:") (expect false (str name " drawSnapshot capture failed: " shot)))
             png (decode-png shot)
             scale (if (> page-w 0) (/ (:width png) page-w) 1)
-            boxes (.-boxes meta)
-            results (.map boxes
-                      (fn [b :- Any] :- Any
-                        (let [rect {:x (.-x b) :y (.-y b) :w (.-w b) :h (.-h b)}
+            boxes (js/get meta .boxes)
+            results (js/call boxes .map (fn [(b Any)] Any
+                        (let [rect {:x (js/get b .x) :y (js/get b .y) :w (js/get b .w) :h (js/get b .h)}
                               bg (sample-backdrop png rect scale)
                               ;; PAINTED glyph (M3-aware), not the computed CSS color.
                               fg (sample-foreground png rect scale)]
-                          (evaluate-box fg bg (.-fontSize b) (.-bold b) (.-text b)))))
+                          (evaluate-box fg bg (js/get b .fontSize) (js/get b .bold) (js/get b .text)))))
             score (score-page results)
             ratio (:passRatio score)
             baseline (or (get BASELINES name) 0)]
-        (console/log (str "\n[contrast] " name ": passRatio=" (.toFixed ratio 3)
+        (console/log (str "\n[contrast] " name ": passRatio=" (js/call ratio .toFixed 3)
                            " (" (:passes score) "/" (:total score) ") minRatio="
-                           (.toFixed (:minRatio score) 2) " baseline=" baseline))
+                           (js/call (:minRatio score) .toFixed 2) " baseline=" baseline))
         (doseq [w (:worst5 score)]
           (when (not (:pass w))
-            (console/log (str "    FAIL box ratio=" (.toFixed (:ratio w) 2)
+            (console/log (str "    FAIL box ratio=" (js/call (:ratio w) .toFixed 2)
                                " need=" (:thr w) " \"" (:text w) "\""))))
         (expect (>= ratio baseline)
-                (str name " contrast regressed: passRatio " (.toFixed ratio 3) " < baseline " baseline))))))
+                (str name " contrast regressed: passRatio " (js/call ratio .toFixed 3) " < baseline " baseline))))))
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "contrast: mit-news (image-hero — the failing baseline)" [mn ctx] (js/await (check-fixture mn "mit-news")))
    (deftest "contrast: hacker-news (white/orange bars)" [mn ctx] (js/await (check-fixture mn "hacker-news")))
    (deftest "contrast: youtube (rounded image cards)" [mn ctx] (js/await (check-fixture mn "youtube")))

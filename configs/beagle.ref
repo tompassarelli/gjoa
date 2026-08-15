@@ -7,7 +7,5 @@
 # BEAGLE_PIN_ROOT override, so CI matches local. Preflight Gate M enforces exact
 # full-HEAD equality. To advance, create the new detached content-addressed pin,
 # update this file, then re-import and re-vendor; never re-point an existing pin.
-# Canonical upstream: https://github.com/tompassarelli/beagle. This candidate is
-# the newest revision with both upstream tests (run 30034827041) and native
-# (run 30034828902) green; newer main was red when selected on 2026-07-27.
-3e942ba213f9ee5444e02046a4c1fbd8d3e0dd91
+# Canonical upstream: https://github.com/tompassarelli/beagle.
+987a2d15477670ddb51fd44b50487b52ae9c6343

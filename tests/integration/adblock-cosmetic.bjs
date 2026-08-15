@@ -10,14 +10,13 @@
 ;;     bun .beagle-tools/gjoa/tools/test-driver/runner.js --grep "adblock M2"
 (ns gjoa.tests.integration.adblock-cosmetic
   (:require [gjoa.tests.dsl :refer [deftest expect expect-eq]]))
-(define-mode strict)
 
 ;; Generic class + generic id + a domain-specific element-hide rule. Generic
 ;; rules surface via getHiddenClassIdSelectors (class/id-triggered); the
 ;; domain-specific rule surfaces via getUrlCosmeticResources for that host.
-(def LIST :- String "##.gjoa-probe\nexample.com##.sponsored\n###gjoa-id-probe\n")
+(def LIST String "##.gjoa-probe\nexample.com##.sponsored\n###gjoa-id-probe\n")
 
-(def EVAL-JS :- String
+(def EVAL-JS String
   (str "\n"
        "  const svc = Cc['@mozilla.org/content-classifier-service;1']\n"
        "    .getService(Ci.nsIContentClassifierService);\n"
@@ -38,19 +37,19 @@
        "    generichide: !!gh.value,\n"
        "  });\n"))
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "adblock M2: cosmetic selectors flow through the native service" [mn ctx]
-     (js/await (.setContext mn "chrome"))
-     (let [r (js/await (.executeScript mn EVAL-JS))
+     (js/await (js/call mn .setContext "chrome"))
+     (let [r (js/await (js/call mn .executeScript EVAL-JS))
            d (JSON/parse r)]
        (console/log (str "\n[M2-COSMETIC] " r))
-       (expect (.includes (.-generic d) ".gjoa-probe")
+       (expect (js/call (js/get d .generic) .includes ".gjoa-probe")
                "generic class rule ##.gjoa-probe did not come back from getHiddenClassIdSelectors")
-       (expect (.includes (.-generic d) "#gjoa-id-probe")
+       (expect (js/call (js/get d .generic) .includes "#gjoa-id-probe")
                "generic id rule ###gjoa-id-probe did not come back from getHiddenClassIdSelectors")
-       (expect (.includes (.-specific d) ".sponsored")
+       (expect (js/call (js/get d .specific) .includes ".sponsored")
                "domain rule example.com##.sponsored did not come back from getUrlCosmeticResources")
-       (expect-eq (.-generichide d) false
+       (expect-eq (js/get d .generichide) false
                   "generichide should be false for example.com (no $generichide exception in the list)")))]))
 
 (js/export-default tests)

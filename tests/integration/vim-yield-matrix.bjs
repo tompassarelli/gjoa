@@ -15,12 +15,11 @@
 ;; _gjoaEditable read from chrome after the actor's focusin→parent round-trip.
 (ns gjoa.tests.integration.vim-yield-matrix
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for sleep]]))
-(define-mode strict)
 
-(def FX :- String "position:fixed;left:0;top:0") ;; render the target so it can focus
+(def FX String "position:fixed;left:0;top:0") ;; render the target so it can focus
 
 ;; {:name :html :editable}. Inputs use autofocus; divs/shadow/iframe focus inline.
-(def CASES :- Any
+(def CASES Any
   [{:name "input-text"      :html (str "<input type=text autofocus style='" FX "'>")           :editable true}
    {:name "input-search"    :html (str "<input type=search autofocus style='" FX "'>")         :editable true}
    {:name "input-email"     :html (str "<input type=email autofocus style='" FX "'>")          :editable true}
@@ -59,10 +58,10 @@
    {:name "div-tabindex"    :html (str "<div tabindex=0 id=t style='" FX "'>d</div><script>onload=()=>t.focus()</script>")     :editable false}
    {:name "nothing-focused" :html "<p>plain text, no focus target</p>"                                                         :editable false}])
 
-(def editable-js :- String "return gBrowser.selectedBrowser._gjoaEditable === true;")
-(def on-data-js :- String "return gBrowser.selectedBrowser.currentURI.spec.indexOf('data:')===0;")
+(def editable-js String "return gBrowser.selectedBrowser._gjoaEditable === true;")
+(def on-data-js String "return gBrowser.selectedBrowser.currentURI.spec.indexOf('data:')===0;")
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "vim yield matrix: editable contexts yield, everything else stays live" [mn]
      (await-true "return !!(window.gjoaTest && window.gjoaTest.vim && document.getElementById('gjoa-tab-panel'));" 10000)
      ;; run EVERY case, collect mismatches, assert once — so one run shows the whole
@@ -71,15 +70,15 @@
        (doseq [c CASES]
          ;; fresh tab per case → fresh _gjoaEditableFrames set (vim-content-focus path)
          (chrome-eval (str "var t=gBrowser.addTab('data:text/html,'+encodeURIComponent('<!DOCTYPE html><body style=\"height:2000px\">'+"
-                           (JSON/stringify (.-html c))
+                           (JSON/stringify (js/get c .html))
                            "+'</body>'),{triggeringPrincipal:Services.scriptSecurityManager.getSystemPrincipal()});gBrowser.selectedTab=t;return 1;"))
          (await-true on-data-js 8000)
          (js/await (sleep 1200))
          (let [verdict (chrome-eval editable-js)]
-           (when (not= verdict (.-editable c))
-             (.push fails (str (.-name c) " (want " (.-editable c) ", got " verdict ")")))))
-       (expect (= 0 (.-length fails))
-         (str "vim activated at the wrong time for " (.-length fails)
-              " context(s): " (.join fails "; ")))))]))
+           (when (not= verdict (js/get c .editable))
+             (js/call fails .push (str (js/get c .name) " (want " (js/get c .editable) ", got " verdict ")")))))
+       (expect (= 0 (js/get fails .length))
+         (str "vim activated at the wrong time for " (js/get fails .length)
+              " context(s): " (js/call fails .join "; ")))))]))
 
 (js/export-default tests)

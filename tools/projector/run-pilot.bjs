@@ -8,20 +8,19 @@
             [fs :refer [readFileSync]]
             [path :refer [join dirname]]
             [gjoa.tools.prep.sh :refer [sh]]))
-(define-mode strict)
 (declare-extern [process console JSON Error] Any)
 
-(def REPO :- String (.cwd process))
-(def REL :- String "browser/components/newtab/AboutNewTabRedirector.sys.mjs")
-(def FF-SRC :- String (join (.-HOME (.-env process)) "code" "reference" "firefox"))
-(def TMP :- String "/tmp/gjoa-pilot")
+(def REPO String (js/call process .cwd))
+(def REL String "browser/components/newtab/AboutNewTabRedirector.sys.mjs")
+(def FF-SRC String (join (js/get (js/get process .env) .HOME) "code" "resources" "firefox"))
+(def TMP String "/tmp/gjoa-pilot")
 
-(defn ff-version [] :- String
-  (.-version (.-firefox (.parse JSON (readFileSync (join REPO "gjoa.json") "utf8")))))
+(defn ff-version [] String
+  (js/get (js/get (js/call JSON .parse (readFileSync (join REPO "gjoa.json") "utf8")) .firefox) .version))
 
-(defn main! [] :- Any
+(defn main! [] Any
   (let [v (ff-version)
-        tag (str "FIREFOX_" (.replaceAll v "." "_") "_RELEASE")
+        tag (str "FIREFOX_" (js/call v .replaceAll "." "_") "_RELEASE")
         dir (join TMP (dirname REL))]
     ;; pristine = the pinned upstream file at its release tag; patched = pristine + 0011.
     (sh (str "rm -rf " TMP " && mkdir -p " dir) nil)
@@ -35,5 +34,5 @@
                    " " (join TMP "pristine.mjs") " " (join TMP "patched.mjs") " " (join TMP "0003.claims.json"))
               {:stdio "inherit"})))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (main!))

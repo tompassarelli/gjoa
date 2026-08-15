@@ -4,185 +4,183 @@
             [gjoa.tabs.log :refer [create-logger!]]
             [gjoa.tabs.constants :refer [PIN-ATTR SPACE-ATTR]]
             [gjoa.tabs.state :refer [tree-of state]]))
-(define-mode strict)
 
-(declare-extern [gBrowser ChromeUtils String Number SessionStore] Any)
+(declare-extern [gBrowser ChromeUtils String Number SessionStore undefined] Any)
 
-(def log :- Any (create-logger! "tabs"))
+(def log Any (create-logger! "tabs"))
 
 ;; beagle `=` is STRUCTURAL: the panel, the pinned container, the spacer and the
 ;; row children all have ZERO own enumerable keys, so they compare EQUAL. Any
 ;; guard asking "is this node THAT node" must use identity or it is dead code.
-(js/export (defn same-node? [a :- Any b :- Any] :- Any
+(js/export (defn same-node? [(a Any) (b Any)] Any
   (bool (Object/is a b))))
 
 ;; SessionStore resolution — may not exist at import time
-(js/export (def SS :- Any
+(js/export (def SS Any
   (let [try-global (try
                      (if (not= (js/typeof SessionStore) "undefined")
                        SessionStore
                        nil)
-                     (catch Any _e nil))]
+                     (catch (_e Any) nil))]
     (or try-global
         (try
-          (.-SessionStore
-            (.importESModule ChromeUtils
-              "resource:///modules/sessionstore/SessionStore.sys.mjs"))
-          (catch Any e
+          (js/get (js/call ChromeUtils .importESModule
+              "resource:///modules/sessionstore/SessionStore.sys.mjs") .SessionStore)
+          (catch (e Any)
             (console/error "gjoa-tabs: SessionStore unavailable" e)
             nil))))))
 
 ;; mutable flag for pin-attr registration
-(def pin-reg :- Any {:done false})
+(def pin-reg Any {:done false})
 
-(js/export (defn try-register-pin-attr! [] :- Any
-  (when (and (not (.-done pin-reg)) SS (.-persistTabAttribute SS))
+(js/export (defn try-register-pin-attr! [] Any
+  (when (and (not (js/get pin-reg .done)) SS (js/get SS .persistTabAttribute))
     (try
-      (.persistTabAttribute SS PIN-ATTR)
+      (js/call SS .persistTabAttribute PIN-ATTR)
       ;; Persist the per-tab space assignment too, so a restored tab carries its
       ;; space across session restore (see spaces/manager spaceOf fallback).
-      (.persistTabAttribute SS SPACE-ATTR)
-      (set! (.-done pin-reg) true)
-      (catch Any e
+      (js/call SS .persistTabAttribute SPACE-ATTR)
+      (js/set! pin-reg .done true)
+      (catch (e Any)
         (console/error "gjoa-tabs: persistTabAttribute failed" e))))))
 
-(js/export (defn pin-tab-id [tab :- Any id :- Any] :- Any
+(js/export (defn pin-tab-id [(tab Any) (id Any)] Any
   (try
     (attr! tab PIN-ATTR (String id))
-    (catch Any _e nil))))
+    (catch (_e Any) nil))))
 
-(js/export (defn read-pinned-id [tab :- Any] :- Int
+(js/export (defn read-pinned-id [(tab Any)] Int
   (try
-    (let [raw (and (.-getAttribute tab) (.getAttribute tab PIN-ATTR))]
+    (let [raw (and (js/get tab .getAttribute) (js/call tab .getAttribute PIN-ATTR))]
       (or (and raw (Number raw)) 0))
-    (catch Any _e 0))))
+    (catch (_e Any) 0))))
 
-(js/export (defn tree-data! [tab :- Any] :- Any
-  (if (.has tree-of tab)
-    (.get tree-of tab)
+(js/export (defn tree-data! [(tab Any)] Any
+  (if (js/call tree-of .has tab)
+    (js/call tree-of .get tab)
     (let [pinned-id (read-pinned-id tab)
           id (if pinned-id
                (do
-                 (when (>= pinned-id (.-nextTabId state))
-                   (set! (.-nextTabId state) (+ pinned-id 1)))
+                 (when (>= pinned-id (js/get state .nextTabId))
+                   (js/set! state .nextTabId (+ pinned-id 1)))
                  (log "treeData:pinnedId"
                       {:id pinned-id
-                       :label (.-label tab)
-                       :nextTabId (.-nextTabId state)})
+                       :label (js/get tab .label)
+                       :nextTabId (js/get state .nextTabId)})
                  pinned-id)
-               (let [fresh (.-nextTabId state)]
-                 (set! (.-nextTabId state) (+ (.-nextTabId state) 1))
+               (let [fresh (js/get state .nextTabId)]
+                 (js/set! state .nextTabId (+ (js/get state .nextTabId) 1))
                  (pin-tab-id tab fresh)
                  (log "treeData:fresh"
                       {:id fresh
-                       :label (.-label tab)
-                       :nextTabId (.-nextTabId state)})
+                       :label (js/get tab .label)
+                       :nextTabId (js/get state .nextTabId)})
                  fresh))]
-      (.set tree-of tab
+      (js/call tree-of .set tab
             {:id id :parentId nil :name nil :state nil :collapsed false})
-      (.get tree-of tab)))))
+      (js/call tree-of .get tab)))))
 
-(js/export (defn tab-by-id [id :- Any] :- Any
-  (if (or (= id nil) (= id js/undefined)
+(js/export (defn tab-by-id [(id Any)] Any
+  (if (or (= id nil) (= id undefined)
           (not= (js/typeof id) "number") (not id))
     nil
-    (.find (tabs!)
-           #(let [td (.get tree-of %)]
-              (and td (= (.-id td) id)))))))
+    (js/call (tabs!) .find
+           (fn [%1] Any (let [td (js/call tree-of .get %1)]
+              (and td (= (js/get td .id) id))))))))
 
-(js/export (defn group-by-id [id :- Any] :- Any
+(js/export (defn group-by-id [(id Any)] Any
   (when id
-    (.find (all-rows)
-           #(let [g (.-_group %)]
-              (and g (= (.-id g) id)))))))
+    (js/call (all-rows) .find
+           (fn [%1] Any (let [g (js/get %1 ._group)]
+              (and g (= (js/get g .id) id))))))))
 
-(js/export (defn parent-of-tab [tab :- Any] :- Any
-  (tab-by-id (.-parentId (tree-data! tab)))))
+(js/export (defn parent-of-tab! [(tab Any)] Any
+  (tab-by-id (js/get (tree-data! tab) .parentId))))
 
-(js/export (defn level-of [tab :- Any] :- Int
-  (let [seen (Set.)]
+(js/export (defn level-of! [(tab Any)] Int
+  (let [seen (js/new Set)]
     (loop [t tab lv 0]
-      (if (or (nil? t) (.has seen t))
+      (if (or (nil? t) (js/call seen .has t))
         lv
         (do
-          (.add seen t)
-          (let [pid (.-parentId (tree-data! t))]
+          (js/call seen .add t)
+          (let [pid (js/get (tree-data! t) .parentId)]
             (cond
-              (or (= pid nil) (= pid js/undefined)) lv
+              (or (= pid nil) (= pid undefined)) lv
               (= (js/typeof pid) "string")
                 (let [group (group-by-id pid)]
-                  (if (nil? (some-> group .-_group))
+                  (if (nil? (some-> group (js/get ._group)))
                     lv
-                    (+ lv 1 (or (.-level (.-_group group)) 0))))
+                    (+ lv 1 (or (js/get (js/get group ._group) .level) 0))))
               :else
                 (let [p (tab-by-id pid)]
                   (if (nil? p) lv (recur p (+ lv 1))))))))))))
 
-(js/export (defn level-of-row [row :- Any] :- Int
+(js/export (defn level-of-row! [(row Any)] Int
   (cond
     (nil? row) 0
-    (.-_group row) (or (.-level (.-_group row)) 0)
-    (.-_tab row) (level-of (.-_tab row))
+    (js/get row ._group) (or (js/get (js/get row ._group) .level) 0)
+    (js/get row ._tab) (level-of! (js/get row ._tab))
     :else 0)))
 
-(js/export (defn data-of! [row :- Any] :- Any
+(js/export (defn data-of! [(row Any)] Any
   (cond
-    (.-_group row) (.-_group row)
-    (.-_tab row) (tree-data! (.-_tab row))
+    (js/get row ._group) (js/get row ._group)
+    (js/get row ._tab) (tree-data! (js/get row ._tab))
     :else nil)))
 
-(js/export (defn all-tabs [] :- (Vec Any)
+(js/export (defn all-tabs [] (Vec Any)
   (tabs!)))
 
-(js/export (defn all-rows [] :- (Vec Any)
-  (let [pinned (if (.-pinnedContainer state)
-                 (Array/from (qa (.-pinnedContainer state) ".gjoa-tab-row"))
+(js/export (defn all-rows [] (Vec Any)
+  (let [pinned (if (js/get state .pinnedContainer)
+                 (Array/from (qa (js/get state .pinnedContainer) ".gjoa-tab-row"))
                  [])
-        tree-rows (if (.-panel state)
-                    (Array/from (qa (.-panel state)
+        tree-rows (if (js/get state .panel)
+                    (Array/from (qa (js/get state .panel)
                                   ".gjoa-tab-row, .gjoa-group-row"))
                     [])]
-    (.concat pinned tree-rows))))
+    (js/call pinned .concat tree-rows))))
 
-(js/export (defn has-children [row :- Any] :- Bool
-  (let [next (.-nextElementSibling row)]
-    (if (or (not next) (= next (.-spacer state)))
+(js/export (defn has-children! [(row Any)] Bool
+  (let [next (js/get row .nextElementSibling)]
+    (if (or (not next) (= next (js/get state .spacer)))
       false
-      (> (level-of-row next) (level-of-row row))))))
+      (> (level-of-row! next) (level-of-row! row))))))
 
-(js/export (defn subtree-rows [row :- Any] :- (Vec Any)
+(js/export (defn subtree-rows! [(row Any)] (Vec Any)
   (if (not row)
     []
-    (let [lv (level-of-row row)
+    (let [lv (level-of-row! row)
           out [row]]
       (loop [cur (aget out 0)]
-        (let [nxt (.-nextElementSibling cur)]
-          (when (and nxt (not= nxt (.-spacer state))
-                     (> (level-of-row nxt) lv))
-            (.push out nxt)
+        (let [nxt (js/get cur .nextElementSibling)]
+          (when (and nxt (not= nxt (js/get state .spacer))
+                     (> (level-of-row! nxt) lv))
+            (js/call out .push nxt)
             (recur nxt))))
       out))))
 
-(js/export (defn is-horizontal [] :- Bool
-  (bool (and (.-panel state) (has? (.-panel state) "gjoa-horizontal")))))
+(js/export (defn is-horizontal [] Bool
+  (bool (and (js/get state .panel) (has? (js/get state .panel) "gjoa-horizontal")))))
 
-(js/export (defn tab-url [tab :- Any] :- String
+(js/export (defn tab-url [(tab Any)] String
   ;; (or … "") coalesces every nilable branch (some-> spec, session url) to ""
   ;; so the declared String return is provably non-nil under beagle 77df8a9.
   (if (nil? tab) ""
-    (let [spec (some-> tab .-linkedBrowser .-currentURI .-spec)]
+    (let [spec (some-> tab (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec))]
       (if (and spec (not= spec "about:blank")) (or spec "")
         (or (when SS
               (try
-                (let [raw (.getTabState SS tab)]
+                (let [raw (js/call SS .getTabState tab)]
                   (when raw
                     (let [ts (JSON/parse raw)
-                          entries (.-entries ts)]
-                      (when (and (Array/isArray entries) (.-length entries))
-                        (let [idx (Math/max 0 (Math/min (- (.-length entries) 1)
-                                                        (- (or (.-index ts) 1) 1)))]
-                          (some-> entries (aget idx) .-url))))))
-                (catch Any e
+                          entries (js/get ts .entries)]
+                      (when (and (Array/isArray entries) (js/get entries .length))
+                        (let [idx (Math/max 0 (Math/min (- (js/get entries .length) 1)
+                                                        (- (or (js/get ts .index) 1) 1)))]
+                          (some-> entries (aget idx) (js/get .url)))))))
+                (catch (e Any)
                   (console/error "gjoa-tabs: getTabState failed" e)
                   nil)))
             spec ""))))))

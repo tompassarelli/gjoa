@@ -13,86 +13,85 @@
 ;; is what a {:full true} screenshot is captured in.
 (ns gjoa.tools.test-driver.contrast-sample
   (:require [pngjs :refer [PNG]]))
-(define-mode strict)
 (declare-extern [Buffer] Any)
 
 ;; base64 PNG (Marionette TakeScreenshot) -> {:width :height :data}. data is an
 ;; RGBA byte buffer, row-major, 4 bytes/pixel.
-(js/export (defn decode-png [b64 :- String] :- Any
-  (let [buf (.from Buffer b64 "base64")
-        png (.read (.-sync PNG) buf)]
-    {:width (.-width png) :height (.-height png) :data (.-data png)})))
+(js/export (defn decode-png [(b64 String)] Any
+  (let [buf (js/call Buffer .from b64 "base64")
+        png (js/call (js/get PNG .sync) .read buf)]
+    {:width (js/get png .width) :height (js/get png .height) :data (js/get png .data)})))
 
 ;; Read one RGBA pixel.
-(defn pixel-at [data :- Any width :- Any px :- Any py :- Any] :- Any
+(defn pixel-at [(data Any) (width Any) (px Any) (py Any)] Any
   (let [i (* (+ (* py width) px) 4)]
     {:r (aget data i) :g (aget data (+ i 1)) :b (aget data (+ i 2)) :a (aget data (+ i 3))}))
 
 ;; Fast (non-gamma) luminance — only used to ORDER samples for the median, so the
 ;; sRGB transfer is irrelevant here (relative order is preserved).
-(defn lum-quick [p :- Any] :- Any
+(defn lum-quick [(p Any)] Any
   (+ (* 0.2126 (:r p)) (* 0.7152 (:g p)) (* 0.0722 (:b p))))
 
 ;; Median backdrop color behind a text box. rect = {:x :y :w :h} in page CSS px.
 ;; Returns {:r :g :b :a} in 0..255 (a always 255 — screenshots are opaque).
-(js/export (defn sample-backdrop [png :- Any rect :- Any scale :- Any] :- Any
+(js/export (defn sample-backdrop [(png Any) (rect Any) (scale Any)] Any
   (let [w (:width png)
         h (:height png)
         data (:data png)
-        x0 (Math/max 0 (Math/floor (* (:x rect) scale)))
-        y0 (Math/max 0 (Math/floor (* (:y rect) scale)))
-        x1 (Math/min (- w 1) (Math/floor (* (+ (:x rect) (:w rect)) scale)))
-        y1 (Math/min (- h 1) (Math/floor (* (+ (:y rect) (:h rect)) scale)))
+        x0 (js/call Math .max 0 (js/call Math .floor (* (:x rect) scale)))
+        y0 (js/call Math .max 0 (js/call Math .floor (* (:y rect) scale)))
+        x1 (js/call Math .min (- w 1) (js/call Math .floor (* (+ (:x rect) (:w rect)) scale)))
+        y1 (js/call Math .min (- h 1) (js/call Math .floor (* (+ (:y rect) (:h rect)) scale)))
         cols 7
         rows 3
         total (* cols rows)
-        pts (Array.)]
+        pts (js/new Array)]
     (loop [k 0]
       (when (< k total)
-        (let [r (Math/floor (/ k cols))
+        (let [r (js/call Math .floor (/ k cols))
               c (- k (* r cols))
-              px (Math/round (+ x0 (* (/ (+ c 0.5) cols) (- x1 x0))))
-              py (Math/round (+ y0 (* (/ (+ r 0.5) rows) (- y1 y0))))]
+              px (js/call Math .round (+ x0 (* (/ (+ c 0.5) cols) (- x1 x0))))
+              py (js/call Math .round (+ y0 (* (/ (+ r 0.5) rows) (- y1 y0))))]
           (when (and (>= px 0) (< px w) (>= py 0) (< py h))
-            (.push pts (pixel-at data w px py))))
+            (js/call pts .push (pixel-at data w px py))))
         (recur (+ k 1))))
-    (let [n (.-length pts)]
+    (let [n (js/get pts .length)]
       (if (= n 0)
         {:r 255 :g 255 :b 255 :a 255}
-        (let [sorted (.sort pts (fn [a :- Any b :- Any] :- Any (- (lum-quick a) (lum-quick b))))]
-          (aget sorted (Math/floor (/ n 2)))))))))
+        (let [sorted (js/call pts .sort (fn [(a Any) (b Any)] Any (- (lum-quick a) (lum-quick b))))]
+          (aget sorted (js/call Math .floor (/ n 2)))))))))
 
 ;; The PAINTED glyph color = the luminance extreme furthest from the median
 ;; backdrop. Required to validate M3 (the paint-time text re-solve): the computed
 ;; CSS color is the 0009-inverted value, which M3 does NOT change, so a gate that
 ;; reads computed color is M3-blind. Glyph strokes are sparse, so sample DENSER
 ;; than the backdrop grid; noisy on very small text (a known limitation).
-(js/export (defn sample-foreground [png :- Any rect :- Any scale :- Any] :- Any
+(js/export (defn sample-foreground [(png Any) (rect Any) (scale Any)] Any
   (let [w (:width png)
         h (:height png)
         data (:data png)
-        x0 (Math/max 0 (Math/floor (* (:x rect) scale)))
-        y0 (Math/max 0 (Math/floor (* (:y rect) scale)))
-        x1 (Math/min (- w 1) (Math/floor (* (+ (:x rect) (:w rect)) scale)))
-        y1 (Math/min (- h 1) (Math/floor (* (+ (:y rect) (:h rect)) scale)))
+        x0 (js/call Math .max 0 (js/call Math .floor (* (:x rect) scale)))
+        y0 (js/call Math .max 0 (js/call Math .floor (* (:y rect) scale)))
+        x1 (js/call Math .min (- w 1) (js/call Math .floor (* (+ (:x rect) (:w rect)) scale)))
+        y1 (js/call Math .min (- h 1) (js/call Math .floor (* (+ (:y rect) (:h rect)) scale)))
         cols 16
         rows 6
         total (* cols rows)
-        pts (Array.)]
+        pts (js/new Array)]
     (loop [k 0]
       (when (< k total)
-        (let [r (Math/floor (/ k cols))
+        (let [r (js/call Math .floor (/ k cols))
               c (- k (* r cols))
-              px (Math/round (+ x0 (* (/ (+ c 0.5) cols) (- x1 x0))))
-              py (Math/round (+ y0 (* (/ (+ r 0.5) rows) (- y1 y0))))]
+              px (js/call Math .round (+ x0 (* (/ (+ c 0.5) cols) (- x1 x0))))
+              py (js/call Math .round (+ y0 (* (/ (+ r 0.5) rows) (- y1 y0))))]
           (when (and (>= px 0) (< px w) (>= py 0) (< py h))
-            (.push pts (pixel-at data w px py))))
+            (js/call pts .push (pixel-at data w px py))))
         (recur (+ k 1))))
-    (let [n (.-length pts)]
+    (let [n (js/get pts .length)]
       (if (= n 0)
         {:r 0 :g 0 :b 0 :a 255}
-        (let [sorted (.sort pts (fn [a :- Any b :- Any] :- Any (- (lum-quick a) (lum-quick b))))
-              med (lum-quick (aget sorted (Math/floor (/ n 2))))
-              lo (aget sorted (Math/floor (* n 0.05)))
-              hi (aget sorted (Math/min (- n 1) (Math/floor (* n 0.95))))]
+        (let [sorted (js/call pts .sort (fn [(a Any) (b Any)] Any (- (lum-quick a) (lum-quick b))))
+              med (lum-quick (aget sorted (js/call Math .floor (/ n 2))))
+              lo (aget sorted (js/call Math .floor (* n 0.05)))
+              hi (aget sorted (js/call Math .min (- n 1) (js/call Math .floor (* n 0.95))))]
           (if (>= (- (lum-quick hi) med) (- med (lum-quick lo))) hi lo)))))))

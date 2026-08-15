@@ -1,10 +1,9 @@
 #lang beagle/js
 (ns gjoa.platform.window
   (:require [gjoa.platform.window-tabs :refer [make-window-tabs!]]))
-(define-mode strict)
 
 (declare-extern [crypto] Any)
 
-(js/export (defn make-gjoa-window! [scheduler] :- Any
-  (let [window-id (.randomUUID crypto)]
+(js/export (defn make-gjoa-window! [scheduler] Any
+  (let [window-id (js/call crypto .randomUUID)]
     {:windowId window-id :tabs (make-window-tabs! scheduler)})))

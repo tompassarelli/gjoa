@@ -15,37 +15,36 @@
             [child_process :refer [execSync]]
             [path :refer [join]]
             [gjoa.tools.prep.paths :refer [REPO-ROOT ENGINE-DIR]]))
-(define-mode strict)
 ;; `process` comes through the paths.bjs import; `RegExp.`/`Error.` constructors
 ;; don't need the extern declared, so neither is listed here.
-(declare-extern [AbortSignal] Any)
+(declare-extern [AbortSignal String] Any)
 
 ;; REPO-ROOT / ENGINE-DIR come from tools/prep/paths.bjs.
-(def MACH-BIN :- String (join ENGINE-DIR "obj-x86_64-pc-linux-gnu" "dist" "bin" "gjoa-bin"))
-(def MACH-DEV-OVERLAY :- String (join ENGINE-DIR "obj-x86_64-pc-linux-gnu" "dist" "bin" "gjoa-dev"))
-(def NIX-RESULT :- String (join REPO-ROOT "result" "bin" "gjoa"))
-(def DIST-CHROME :- String (join REPO-ROOT "dist" "chrome"))
-(def GJOA-JSON :- String (join REPO-ROOT "gjoa.json"))
+(def MACH-BIN String (join ENGINE-DIR "obj-x86_64-pc-linux-gnu" "dist" "bin" "gjoa-bin"))
+(def MACH-DEV-OVERLAY String (join ENGINE-DIR "obj-x86_64-pc-linux-gnu" "dist" "bin" "gjoa-dev"))
+(def NIX-RESULT String (join REPO-ROOT "result" "bin" "gjoa"))
+(def DIST-CHROME String (join REPO-ROOT "dist" "chrome"))
+(def GJOA-JSON String (join REPO-ROOT "gjoa.json"))
 
 ;; -- ANSI helpers ------------------------------------------------------------
-(def tty :- Any (.-isTTY (.-stdout process)))
-(defn c [s :- Any code :- String] :- Any
+(def tty Any (js/get (js/get process .stdout) .isTTY))
+(defn c [(s Any) (code String)] Any
   (if tty (str "[" code "m" s "[0m") s))
-(defn dim [s :- Any] :- Any (c s "2"))
-(defn bold [s :- Any] :- Any (c s "1"))
-(defn green [s :- Any] :- Any (c s "32"))
-(defn yellow [s :- Any] :- Any (c s "33"))
-(defn red [s :- Any] :- Any (c s "31"))
-(defn cyan [s :- Any] :- Any (c s "36"))
-(defn magenta [s :- Any] :- Any (c s "35"))
+(defn dim [(s Any)] Any (c s "2"))
+(defn bold [(s Any)] Any (c s "1"))
+(defn green [(s Any)] Any (c s "32"))
+(defn yellow [(s Any)] Any (c s "33"))
+(defn red [(s Any)] Any (c s "31"))
+(defn cyan [(s Any)] Any (c s "36"))
+(defn magenta [(s Any)] Any (c s "35"))
 
 ;; -- Version helpers ---------------------------------------------------------
-(defn parseVer [v :- String] :- Any
-  (let [cleaned (.trim (.replace (.replace v (RegExp. "esr$" "i") "") (RegExp. "[a-z].*$") ""))
-        p (.map (.split cleaned ".") (fn [x] (or (parseInt x 10) 0)))]
+(defn parseVer [(v String)] Any
+  (let [cleaned (js/call (js/call (js/call v .replace (js/new RegExp "esr$" "i") "") .replace (js/new RegExp "[a-z].*$") "") .trim)
+        p (js/call (js/call cleaned .split ".") .map (fn [x] Any (or (parseInt x 10) 0)))]
     [(or (aget p 0) 0) (or (aget p 1) 0) (or (aget p 2) 0)]))
 
-(defn cmpVer [a :- Any b :- Any] :- Any
+(defn cmpVer [(a Any) (b Any)] Any
   (loop [i 0]
     (if (>= i 3)
       0
@@ -53,7 +52,7 @@
         (if (< (aget a i) (aget b i)) -1 1)
         (recur (+ i 1))))))
 
-(defn delta [a :- Any b :- Any] :- Any
+(defn delta [(a Any) (b Any)] Any
   (if (or (not a) (not b))
     (dim "—")
     (let [aT (parseVer a)
@@ -77,34 +76,33 @@
 ;;   nixpkgsFirefox nixpkgsFirefoxEsr zen librewolf
 ;;   advisoryCount inTheWildCount errors
 
-(defn fetchJson [url :- String timeoutMs :- Any] :- Any
+(defn fetchJson [(url String) (timeoutMs Any)] Any
   (try
-    (let [r (js/await (fetch url {:signal (.timeout AbortSignal timeoutMs)}))]
-      (if (not (.-ok r))
+    (let [r (js/await (fetch url {:signal (js/call AbortSignal .timeout timeoutMs)}))]
+      (if (not (js/get r .ok))
         nil
-        (js/await (.json r))))
-    (catch Any e nil)))
+        (js/await (js/call r .json))))
+    (catch (e Any) nil)))
 
-(defn fetchText [url :- String timeoutMs :- Any] :- Any
+(defn fetchText [(url String) (timeoutMs Any)] Any
   (try
-    (let [r (js/await (fetch url {:signal (.timeout AbortSignal timeoutMs)}))]
-      (if (not (.-ok r))
+    (let [r (js/await (fetch url {:signal (js/call AbortSignal .timeout timeoutMs)}))]
+      (if (not (js/get r .ok))
         nil
-        (js/await (.text r))))
-    (catch Any e nil)))
+        (js/await (js/call r .text))))
+    (catch (e Any) nil)))
 
-(defn nixEvalRaw [expr :- String] :- Any
+(defn nixEvalRaw [(expr String)] Any
   (try
     (let [out (execSync (str "nix eval --impure --raw --expr '" expr "' 2>/dev/null")
                         {:timeout 10000 :encoding "utf8"})]
-      (or (.trim out) nil))
-    (catch Any e nil)))
+      (or (js/call out .trim) nil))
+    (catch (e Any) nil)))
 
-(defn loadOracles! [pinned :- String] :- Any
+(defn loadOracles! [(pinned String)] Any
   (let [errors []]
     ;; Run all the network probes in parallel.
-    (let [probes (js/await (Promise/all
-                   [(fetchJson "https://product-details.mozilla.org/1.0/firefox_versions.json" 5000)
+    (let [probes (js/await (js/call Promise .all [(fetchJson "https://product-details.mozilla.org/1.0/firefox_versions.json" 5000)
                     (fetchText "https://www.mozilla.org/en-US/security/known-vulnerabilities/firefox/" 5000)
                     ;; Zen pins Firefox in surfer.json on the dev branch (their main branch
                     ;; doesn't have this file -- releases get merged from dev).
@@ -115,10 +113,10 @@
           zenSurfer (aget probes 2)
           librewolfPkgbuild (aget probes 3)]
 
-      (if (not moz) (.push errors "Mozilla product-details unreachable"))
-      (if (not advHtml) (.push errors "Mozilla advisories page unreachable"))
-      (if (not zenSurfer) (.push errors "Zen browser version probe failed"))
-      (if (not librewolfPkgbuild) (.push errors "LibreWolf version probe failed"))
+      (if (not moz) (js/call errors .push "Mozilla product-details unreachable"))
+      (if (not advHtml) (js/call errors .push "Mozilla advisories page unreachable"))
+      (if (not zenSurfer) (js/call errors .push "Zen browser version probe failed"))
+      (if (not librewolfPkgbuild) (js/call errors .push "LibreWolf version probe failed"))
 
       ;; nixpkgs current Firefox -- uses the same nixpkgs the flake locks to.
       (let [nixpkgsFirefox (nixEvalRaw "(import (builtins.getFlake \"git+file:///home/tom/code/gjoa\").inputs.nixpkgs { system = \"x86_64-linux\"; }).firefox-unwrapped.version")
@@ -126,14 +124,14 @@
             ;; Parse Zen's pinned version out of surfer.json.
             zen (if zenSurfer
                   (try
-                    (let [j (JSON/parse zenSurfer)]
-                      (or (some-> (.-version j) .-version) nil))
-                    (catch Any e
-                      (do (.push errors "Zen surfer.json parse failed") nil)))
+                    (let [j (js/call JSON .parse zenSurfer)]
+                      (or (some-> (js/get j .version) (js/get .version)) nil))
+                    (catch (e Any)
+                      (do (js/call errors .push "Zen surfer.json parse failed") nil)))
                   nil)
             ;; LibreWolf's version file is plain text.
             librewolf (if librewolfPkgbuild
-                        (or (aget (.split (aget (.split (.trim librewolfPkgbuild) "\n") 0) "-") 0) nil)
+                        (or (aget (js/call (aget (js/call (js/call librewolfPkgbuild .trim) .split "\n") 0) .split "-") 0) nil)
                         nil)
             ;; Count advisories newer than our pin from the known-vulns page.
             advisoryCount (atom nil)
@@ -143,22 +141,22 @@
           (do
             (reset! advisoryCount 0)
             (reset! inTheWildCount 0)
-            (let [sectionRe (RegExp. "<h3 id=\"firefox([0-9.]+(?:esr)?)\"[^>]*>[\\s\\S]*?Fixed in Firefox ([0-9.]+(?:esr)?)\\s*</a>\\s*</h3>([\\s\\S]*?)(?=<h3 id=\"firefox|</main|<footer|$)" "g")
-                  advRe (RegExp. "<a href=\"(/en-US/security/advisories/mfsa\\d{4}-\\d+/?)\"[^>]*>\\s*<span class=\"level ([a-z]+)\">" "g")
+            (let [sectionRe (js/new RegExp "<h3 id=\"firefox([0-9.]+(?:esr)?)\"[^>]*>[\\s\\S]*?Fixed in Firefox ([0-9.]+(?:esr)?)\\s*</a>\\s*</h3>([\\s\\S]*?)(?=<h3 id=\"firefox|</main|<footer|$)" "g")
+                  advRe (js/new RegExp "<a href=\"(/en-US/security/advisories/mfsa\\d{4}-\\d+/?)\"[^>]*>\\s*<span class=\"level ([a-z]+)\">" "g")
                   pinTuple (parseVer pinned)]
               (loop []
-                (let [sm (.exec sectionRe advHtml)]
+                (let [sm (js/call sectionRe .exec advHtml)]
                   (when (not (nil? sm))
                     (let [v (aget sm 2)]
-                      (if (.endsWith v "esr")
+                      (if (js/call v .endsWith "esr")
                         nil ;; skip esr sections
                         (let [vt (parseVer v)]
                           (if (<= (cmpVer vt pinTuple) 0)
                             nil ;; only count fixes newer than us
                             (let [body (aget sm 3)]
-                              (set! (.-lastIndex advRe) 0)
+                              (js/set! advRe .lastIndex 0)
                               (loop []
-                                (let [am (.exec advRe body)]
+                                (let [am (js/call advRe .exec body)]
                                   (when (not (nil? am))
                                     (reset! advisoryCount (+ (deref advisoryCount) 1))
                                     (if (= (aget am 2) "critical")
@@ -166,10 +164,10 @@
                                     (recur)))))))))
                     (recur)))))))
 
-        {:mozillaLatest (or (some-> moz .-LATEST_FIREFOX_VERSION) nil)
-         :mozillaEsr (or (some-> moz .-FIREFOX_ESR) nil)
-         :mozillaNightly (or (some-> moz .-FIREFOX_NIGHTLY) nil)
-         :mozillaBeta (or (some-> moz .-LATEST_FIREFOX_DEVEL_VERSION) (some-> moz .-FIREFOX_DEVEDITION) nil)
+        {:mozillaLatest (or (some-> moz (js/get .LATEST_FIREFOX_VERSION)) nil)
+         :mozillaEsr (or (some-> moz (js/get .FIREFOX_ESR)) nil)
+         :mozillaNightly (or (some-> moz (js/get .FIREFOX_NIGHTLY)) nil)
+         :mozillaBeta (or (some-> moz (js/get .LATEST_FIREFOX_DEVEL_VERSION)) (some-> moz (js/get .FIREFOX_DEVEDITION)) nil)
          :nixpkgsFirefox nixpkgsFirefox
          :nixpkgsFirefoxEsr nixpkgsFirefoxEsr
          :zen zen
@@ -179,61 +177,61 @@
          :errors errors}))))
 
 ;; -- Local state -------------------------------------------------------------
-(defn mtime [p :- String] :- Any
-  (try (.-mtime (statSync p)) (catch Any e nil)))
+(defn mtime [(p String)] Any
+  (try (js/get (statSync p) .mtime) (catch (e Any) nil)))
 
-(defn fmtAge [d :- Any] :- Any
+(defn fmtAge [(d Any)] Any
   ;; Nix store paths use the 1970 epoch for reproducibility -- meaningless
   ;; as a "how old is the build" signal. Detect and short-circuit.
-  (if (<= (.getFullYear d) 1970)
+  (if (<= (js/call d .getFullYear) 1970)
     "nix-built"
-    (let [ms (- (Date/now) (.getTime d))
+    (let [ms (- (js/call Date .now) (js/call d .getTime))
           min (/ ms 60000)]
       (if (< min 1)
         "just now"
         (if (< min 60)
-          (str (Math/round min) " min ago")
+          (str (js/call Math .round min) " min ago")
           (if (< min (* 60 24))
-            (str (Math/round (/ min 60)) " hr ago")
-            (str (Math/round (/ (/ min 60) 24)) " d ago")))))))
+            (str (js/call Math .round (/ min 60)) " hr ago")
+            (str (js/call Math .round (/ (/ min 60) 24)) " d ago")))))))
 
-(defn gitStatusByLane [] :- Any
+(defn gitStatusByLane [] Any
   (let [lane1 [] lane2 [] lane3 [] other []
         raw (try (execSync "git status --porcelain" {:cwd REPO-ROOT :encoding "utf8"})
-                 (catch Any e ""))]
-    (doseq [line (.split raw "\n")]
-      (when (.trim line)
-        (let [file (.trim (.slice line 3))]
+                 (catch (e Any) ""))]
+    (doseq [line (js/call raw .split "\n")]
+      (when (js/call line .trim)
+        (let [file (js/call (js/call line .slice 3) .trim)]
           (cond
-            (.startsWith file "src/gjoa/chrome/") (.push lane1 file)
-            (.startsWith file "src/gjoa/browser/") (.push lane2 file)
-            (.startsWith file "patches/") (.push lane2 file)
-            (.startsWith file "configs/branding/") (.push lane2 file)
-            (= file "gjoa.json") (.push lane3 file)
-            (or (= file "flake.nix") (= file "flake.lock")) (.push lane3 file)
-            :else (.push other file)))))
+            (js/call file .startsWith "src/gjoa/chrome/") (js/call lane1 .push file)
+            (js/call file .startsWith "src/gjoa/browser/") (js/call lane2 .push file)
+            (js/call file .startsWith "patches/") (js/call lane2 .push file)
+            (js/call file .startsWith "configs/branding/") (js/call lane2 .push file)
+            (= file "gjoa.json") (js/call lane3 .push file)
+            (or (= file "flake.nix") (= file "flake.lock")) (js/call lane3 .push file)
+            :else (js/call other .push file)))))
     {:lane1 lane1 :lane2 lane2 :lane3 lane3 :other other}))
 
 ;; -- Rendering ---------------------------------------------------------------
-(defn section [title :- String] :- Any
+(defn section [(title String)] Any
   (console/log "")
   (console/log (bold (str "▸ " title))))
 
-(defn row [label :- Any value :- Any] :- Any
-  (console/log (str "  " (.padEnd label 22) " " value)))
+(defn row [(label Any) (value Any)] Any
+  (console/log (str "  " (js/call label .padEnd 22) " " value)))
 
-(defn main! [] :- Any
-  (let [jsonMode (.includes (.-argv process) "--json")
-        gjoa (JSON/parse (readFileSync GJOA-JSON "utf8"))
-        pinned (.-version (.-firefox gjoa))]
+(defn main! [] Any
+  (let [jsonMode (js/call (js/get process .argv) .includes "--json")
+        gjoa (js/call JSON .parse (readFileSync GJOA-JSON "utf8"))
+        pinned (js/get (js/get gjoa .firefox) .version)]
 
-    (.write (.-stderr process) (dim "probing oracles…\r"))
+    (js/call (js/get process .stderr) .write (dim "probing oracles…\r"))
     (let [oracles (js/await (loadOracles! pinned))]
-      (.write (.-stderr process) "                  \r")
+      (js/call (js/get process .stderr) .write "                  \r")
 
       (if jsonMode
         (do
-          (console/log (JSON/stringify {:pinned pinned :oracles oracles} nil 2))
+          (console/log (js/call JSON .stringify {:pinned pinned :oracles oracles} nil 2))
           nil)
         (let [hasMach (existsSync MACH-BIN)
               hasNix (existsSync NIX-RESULT)
@@ -249,7 +247,7 @@
                          (< (cmpVer (parseVer pinned) (parseVer (:mozillaLatest oracles))) 0))
               threat (if critical (red "CRITICAL") (if stale (yellow "STALE") (green "OK")))]
 
-          (console/log (str (bold "gjoa // status") "  " (dim (.replace (.slice (.toISOString (Date.)) 0 19) "T" " ")) "  " threat))
+          (console/log (str (bold "gjoa // status") "  " (dim (js/call (js/call (js/call (js/new Date) .toISOString) .slice 0 19) .replace "T" " ")) "  " threat))
 
           (section "VERSION POSITION")
           (row "our pin"         (bold pinned))
@@ -287,42 +285,42 @@
           (console/log (str "  " (dim "Lane 2: Firefox .sys.mjs / patches / branding -- `bun run import && ./mach build faster`, ~30s")))
           (console/log (str "  " (dim "Lane 3: gjoa.json (version) / flake.nix / C++/Rust -- full mach or nix build, 30-60 min")))
           (console/log "")
-          (when (.-length (:lane1 lanes)) (row (green "Lane 1") (str (String (.-length (:lane1 lanes))) " file" (if (= (.-length (:lane1 lanes)) 1) "" "s"))))
-          (when (.-length (:lane2 lanes)) (row (yellow "Lane 2") (str (String (.-length (:lane2 lanes))) " file" (if (= (.-length (:lane2 lanes)) 1) "" "s"))))
-          (when (.-length (:lane3 lanes)) (row (red "Lane 3") (str (String (.-length (:lane3 lanes))) " file" (if (= (.-length (:lane3 lanes)) 1) "" "s"))))
-          (when (.-length (:other lanes)) (row (dim "other") (dim (str (String (.-length (:other lanes))) " files (docs/config/test, no rebuild)"))))
-          (when (and (not (.-length (:lane1 lanes))) (not (.-length (:lane2 lanes))) (not (.-length (:lane3 lanes))) (not (.-length (:other lanes))))
+          (when (js/get (:lane1 lanes) .length) (row (green "Lane 1") (str (String (js/get (:lane1 lanes) .length)) " file" (if (= (js/get (:lane1 lanes) .length) 1) "" "s"))))
+          (when (js/get (:lane2 lanes) .length) (row (yellow "Lane 2") (str (String (js/get (:lane2 lanes) .length)) " file" (if (= (js/get (:lane2 lanes) .length) 1) "" "s"))))
+          (when (js/get (:lane3 lanes) .length) (row (red "Lane 3") (str (String (js/get (:lane3 lanes) .length)) " file" (if (= (js/get (:lane3 lanes) .length) 1) "" "s"))))
+          (when (js/get (:other lanes) .length) (row (dim "other") (dim (str (String (js/get (:other lanes) .length)) " files (docs/config/test, no rebuild)"))))
+          (when (and (not (js/get (:lane1 lanes) .length)) (not (js/get (:lane2 lanes) .length)) (not (js/get (:lane3 lanes) .length)) (not (js/get (:other lanes) .length)))
             (row "(clean tree)" ""))
 
           (section "RECOMMENDED NEXT")
           (let [rec []]
             (cond
-              (.-length (:lane3 lanes))
-              (.push rec (red "Lane 3 changes pending. Run the full build when ready."))
-              (.-length (:lane2 lanes))
+              (js/get (:lane3 lanes) .length)
+              (js/call rec .push (red "Lane 3 changes pending. Run the full build when ready."))
+              (js/get (:lane2 lanes) .length)
               (if (not hasMach)
                 (do
-                  (.push rec (yellow "Lane 2 changes pending but no mach binary."))
-                  (.push rec (str "  nix develop .#mach  &&  cd engine && ./mach build   " (dim "(~30-60 min cold)"))))
+                  (js/call rec .push (yellow "Lane 2 changes pending but no mach binary."))
+                  (js/call rec .push (str "  nix develop .#mach  &&  cd engine && ./mach build   " (dim "(~30-60 min cold)"))))
                 (do
-                  (.push rec (yellow "Lane 2 changes pending."))
-                  (.push rec "  bun run import  &&  (cd engine && ./mach build faster)  &&  gjoa hotreload")))
-              (.-length (:lane1 lanes))
+                  (js/call rec .push (yellow "Lane 2 changes pending."))
+                  (js/call rec .push "  bun run import  &&  (cd engine && ./mach build faster)  &&  gjoa hotreload")))
+              (js/get (:lane1 lanes) .length)
               (do
-                (.push rec (green "Lane 1 only."))
-                (.push rec (str "  gjoa sync  &&  " (if hasMach "gjoa hotreload" "gjoa") (dim (str "  (" (if hasMach "mach" "nix") " binary)")))))
+                (js/call rec .push (green "Lane 1 only."))
+                (js/call rec .push (str "  gjoa sync  &&  " (if hasMach "gjoa hotreload" "gjoa") (dim (str "  (" (if hasMach "mach" "nix") " binary)")))))
               :else
-              (.push rec (green "Clean. Launch with `gjoa` or `gjoa hotreload`.")))
+              (js/call rec .push (green "Clean. Launch with `gjoa` or `gjoa hotreload`.")))
             (doseq [line rec] (console/log (str "  " line))))
 
-          (when (> (.-length (:errors oracles)) 0)
+          (when (> (js/get (:errors oracles) .length) 0)
             (console/log "")
-            (console/log (dim (str "oracles offline: " (.join (:errors oracles) ", ")))))
+            (console/log (dim (str "oracles offline: " (js/call (:errors oracles) .join ", ")))))
 
           (console/log "")
           (console/log (dim "docs/ARCHITECTURE.md  ·  CLAUDE.md")))))))
 
 ;; Entry point: run via `bun run`. Gated on import.meta.main so the CLI runs
 ;; only when invoked directly, never on import.
-(when (.-main (js/import-meta))
-  (.catch (main!) (fn [e] (console/error e) (.exit process 1))))
+(when (js/get (js/import-meta) .main)
+  (js/call (main!) .catch (fn [e] Any (console/error e) (js/call process .exit 1))))

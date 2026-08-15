@@ -32,128 +32,127 @@
             [os :refer [tmpdir]]
             [gjoa.tools.prep.sh :refer [sh]]
             [gjoa.tools.prep.patch-header :refer [parseSecurity]]))
-(define-mode strict)
 (declare-extern [process Object parseInt Error] Any)
 
-(def REPO :- String (.cwd process))
-(def PATCHES-DIR :- String (join REPO "patches"))
-(def LOCK :- String (join REPO "configs" "upstream-provenance.json"))
+(def REPO String (js/call process .cwd))
+(def PATCHES-DIR String (join REPO "patches"))
+(def LOCK String (join REPO "configs" "upstream-provenance.json"))
 ;; L4: the build WOULD bake this small identity manifest's `digest` into the
 ;; binary's provenance metadata (proof it was built against UNMODIFIED Mozilla
 ;; blobs). No build right now — we only compute + commit the local manifest.
-(def IDENTITY :- String (join REPO "configs" "provenance-identity.json"))
+(def IDENTITY String (join REPO "configs" "provenance-identity.json"))
 ;; L5: tracked output of the provenance × security cross-check.
-(def SEC-REPORT :- String (join REPO "configs" "provenance-security-findings.json"))
-(def FF :- String (join (.-HOME (.-env process)) "code" "resources" "firefox"))
+(def SEC-REPORT String (join REPO "configs" "provenance-security-findings.json"))
+(def FF String (join (js/get (js/get process .env) .HOME) "code" "resources" "firefox"))
 
-(defn gjoa-version [] :- String
-  (.-version (.-firefox (JSON/parse (readFileSync (join REPO "gjoa.json") "utf8")))))
+(defn gjoa-version [] String
+  (js/get (js/get (js/call JSON .parse (readFileSync (join REPO "gjoa.json") "utf8")) .firefox) .version))
 
 ;; "152.0.1" -> "FIREFOX_152_0_1_RELEASE", rejecting anything that isn't a plain
 ;; Firefox version before it can reach the shell (command-injection guard).
-(defn version->tag [v :- String] :- String
-  (if (not (.match v (RegExp. "^[0-9]+(\\.[0-9]+){1,3}(esr)?$")))
-    (throw (Error. (str "refusing unsafe version string: " v)))
-    (str "FIREFOX_" (.replaceAll v "." "_") "_RELEASE")))
+(defn version->tag [(v String)] String
+  (if (not (js/call v .match (js/new RegExp "^[0-9]+(\\.[0-9]+){1,3}(esr)?$")))
+    (throw (js/new Error (str "refusing unsafe version string: " v)))
+    (str "FIREFOX_" (js/call v .replaceAll "." "_") "_RELEASE")))
 
 ;; git refs reaching the shell (a user-passed <ref>) must be word/dot/slash/dash.
-(defn safe-ref [r :- String] :- String
-  (if (not (.match r (RegExp. "^[\\w./-]+$")))
-    (throw (Error. (str "refusing unsafe ref: " r)))
+(defn safe-ref [(r String)] String
+  (if (not (js/call r .match (js/new RegExp "^[\\w./-]+$")))
+    (throw (js/new Error (str "refusing unsafe ref: " r)))
     r))
 
 ;; Stable content hash of a hunk's anchor span (Bun hasher — same as patches.bjs).
 ;; 64-hex => visually distinct from the 40-hex SHA-1 blob OIDs in the same lock.
-(defn sha256 [s :- String] :- String
-  (let [h (Bun.CryptoHasher. "sha256")]
-    (.update h s)
-    (.digest h "hex")))
+(defn sha256 [(s String)] String
+  (let [h (js/new Bun.CryptoHasher "sha256")]
+    (js/call h .update s)
+    (js/call h .digest "hex")))
 
 ;; Files a patch edits, from the unified diff (git format, plain fallback).
-(defn diff-touches [text :- String] :- Any
-  (let [out (Set.)]
-    (doseq [m (.matchAll text (RegExp. "^diff --git a/(\\S+)\\s+b/\\S+$" "gm"))]
-      (.add out (aget m 1)))
-    (when (= (.-size out) 0)
-      (doseq [m (.matchAll text (RegExp. "^\\+\\+\\+ b/(\\S+)$" "gm"))]
-        (.add out (aget m 1))))
-    (.sort (Array.from out))))
+(defn diff-touches [(text String)] Any
+  (let [out (js/new Set)]
+    (doseq [m (js/call text .matchAll (js/new RegExp "^diff --git a/(\\S+)\\s+b/\\S+$" "gm"))]
+      (js/call out .add (aget m 1)))
+    (when (= (js/get out .size) 0)
+      (doseq [m (js/call text .matchAll (js/new RegExp "^\\+\\+\\+ b/(\\S+)$" "gm"))]
+        (js/call out .add (aget m 1))))
+    (js/call (Array/from out) .sort)))
 
 ;; Per target file, the OLD-side line span of each hunk: {header a b}, where
 ;; @@ -a,b @@ means the patch anchors against baseline lines [a, a+b-1]. b is the
 ;; count (omitted => 1); a==0/b==0 is a /dev/null create (no baseline context).
 ;; -> { "<path>": [ {:header "@@ -a,b +c,d @@" :a a :b b} ... ] }.
-(defn diff-hunks [text :- String] :- Any
-  (let [result (Map.)
+(defn diff-hunks [(text String)] Any
+  (let [result (js/new Map)
         cur [""]
-        ensure (fn [f :- String] :- Any (when (not (.has result f)) (.set result f [])) (aset cur 0 f))]
-    (doseq [line (.split text "\n")]
-      (let [dm (.match line (RegExp. "^diff --git a/(\\S+) b/\\S+$"))
-            pm (.match line (RegExp. "^\\+\\+\\+ b/(\\S+)$"))
-            hm (.match line (RegExp. "^(@@ -(\\d+)(?:,(\\d+))? \\+\\d+(?:,\\d+)? @@)"))]
+        ensure (fn [(f String)] Any (when (not (js/call result .has f)) (js/call result .set f [])) (aset cur 0 f))]
+    (doseq [line (js/call text .split "\n")]
+      (let [dm (js/call line .match (js/new RegExp "^diff --git a/(\\S+) b/\\S+$"))
+            pm (js/call line .match (js/new RegExp "^\\+\\+\\+ b/(\\S+)$"))
+            hm (js/call line .match (js/new RegExp "^(@@ -(\\d+)(?:,(\\d+))? \\+\\d+(?:,\\d+)? @@)"))]
         (cond
           dm (ensure (aget dm 1))
           pm (ensure (aget pm 1))
           hm (let [f (aget cur 0)]
-               (when (.has result f)
+               (when (js/call result .has f)
                  (let [braw (aget hm 3)]
-                   (.push (.get result f) {:header (aget hm 1)
+                   (js/call (js/call result .get f) .push {:header (aget hm 1)
                                            :a (parseInt (aget hm 2) 10)
                                            :b (if braw (parseInt braw 10) 1)})))))))
     result))
 
-(defn list-patches [] :- Any
-  (.sort (.filter (readdirSync PATCHES-DIR) (fn [p :- String] :- Bool (.endsWith p ".patch")))))
+(defn list-patches [] Any
+  (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .sort))
 
 ;; blob OID of <ref>:<path> in the FF clone, or "absent" (path not in that tree
 ;; / bad path). path comes from our own diffs but is guarded anyway.
-(defn blob-oid [ref :- String pth :- String] :- String
-  (if (not (.match pth (RegExp. "^[\\w./-]+$")))
+(defn blob-oid [(ref String) (pth String)] String
+  (if (not (js/call pth .match (js/new RegExp "^[\\w./-]+$")))
     "absent"
-    (let [out (.trim (sh (str "git -C " FF " rev-parse " ref ":" pth) {:quiet true}))]
-      (if (.match out (RegExp. "^[0-9a-f]{40}$")) out "absent"))))
+    (let [out (js/call (sh (str "git -C " FF " rev-parse " ref ":" pth) {:quiet true}) .trim)]
+      (if (js/call out .match (js/new RegExp "^[0-9a-f]{40}$")) out "absent"))))
 
 ;; Lines of <ref>:<path> (no trailing-newline ghost trimmed — line k = aget k-1).
 ;; [] if absent/bad path. path comes from our diffs but is guarded like blob-oid.
-(defn blob-lines [ref :- String pth :- String] :- Any
-  (if (not (.match pth (RegExp. "^[\\w./-]+$")))
+(defn blob-lines [(ref String) (pth String)] Any
+  (if (not (js/call pth .match (js/new RegExp "^[\\w./-]+$")))
     []
     (let [out (sh (str "git -C " FF " show " ref ":" pth) {:quiet true})]
-      (if (= out "") [] (.split out "\n")))))
+      (if (= out "") [] (js/call out .split "\n")))))
 
 ;; Hash each hunk's baseline anchor span at <ref>. Skips create-hunks (a/b==0:
 ;; no upstream context). -> [ {:header :range [a b] :hash "<sha256>"} ... ].
-(defn file-hunk-records [ref :- String pth :- String hunks :- Any] :- Any
+(defn file-hunk-records [(ref String) (pth String) (hunks Any)] Any
   (let [lines (blob-lines ref pth)
         out []]
     (doseq [h hunks]
-      (let [a (.-a h) b (.-b h)]
+      (let [a (js/get h .a) b (js/get h .b)]
         (when (and (> a 0) (> b 0))
-          (let [span (.slice lines (- a 1) (+ (- a 1) b))]
-            (.push out {:header (.-header h) :range [a b] :hash (sha256 (.join span "\n"))})))))
+          (let [span (js/call lines .slice (- a 1) (+ (- a 1) b))]
+            (js/call out .push {:header (js/get h .header) :range [a b] :hash (sha256 (js/call span .join "\n"))})))))
     out))
 
-(defn ff-present? [] :- Bool (existsSync (join FF ".git")))
+(defn ff-present? [] Bool (existsSync (join FF ".git")))
 
 ;; L3 blame-locator: the upstream commits that touched <pth> between the lock
 ;; baseline and <ref> — turns "this file changed" into "Mozilla commit abc123
 ;; (bug …) touched it, here's why." base/ref are validated tags; pth is guarded.
-(defn upstream-commits [base :- String ref :- String pth :- String] :- Any
-  (if (not (.match pth (RegExp. "^[\\w./-]+$")))
+(defn upstream-commits [(base String) (ref String) (pth String)] Any
+  (if (not (js/call pth .match (js/new RegExp "^[\\w./-]+$")))
     []
-    (let [out (.trim (sh (str "git -C " FF " log --oneline --no-decorate -n 4 " base ".." ref " -- " pth) {:quiet true}))]
-      (if (= out "") [] (.split out "\n")))))
+    (let [out (js/call (sh (str "git -C " FF " log --oneline --no-decorate -n 4 " base ".." ref " -- " pth) {:quiet true}) .trim)]
+      (if (= out "") [] (js/call out .split "\n")))))
 
-(defn tier-of [pth :- String] :- String
+(defn tier-of [(pth String)] String
   (cond
-    (.match pth (RegExp. "\\.(rs|cpp|cc|h|webidl)$")) "native"
-    (.match pth (RegExp. "\\.(mjs|js)$")) "sys.mjs"
+    (js/call pth .match (js/new RegExp "\\.(rs|cpp|cc|h|webidl)$")) "native"
+    (js/call pth .match (js/new RegExp "\\.(mjs|js)$")) "sys.mjs"
     :else "build"))
 
-(defn entry-oid [e :- Any] :- String
-  (.-oid e))
-(defn entry-hunks [e :- Any] :- Any
-  (.-hunks e))
+(defn entry-oid [(e Any)] String
+  (js/get e .oid))
+(defn entry-hunks [(e Any)] Any
+  (js/get e .hunks))
 
 ;; L4 — baked provenance identity. One sha256 over the WHOLE locked surface:
 ;; every (patch, file) in sorted order, its blob OID, then each hunk's
@@ -162,34 +161,34 @@
 ;; per line (newline-joined); fields are paths (no spaces) / hex OIDs / hunk
 ;; lines that always start "  @@" — unambiguous. This single value is the supply-chain coordinate the
 ;; build would stamp into the binary: "built against exactly these Mozilla bytes."
-(defn aggregate-digest [patches :- Any] :- String
+(defn aggregate-digest [(patches Any)] String
   (let [p (or patches {})
         parts []]
-    (doseq [n (.sort (.keys Object p))]
-      (let [fobj (aget p n)]
-        (doseq [f (.sort (.keys Object fobj))]
-          (let [entry (aget fobj f)]
-            (.push parts (str n " " f " " (entry-oid entry)))
+    (doseq [n (js/call (js/call Object .keys p) .sort)]
+      (let [fobj (js/get p n)]
+        (doseq [f (js/call (js/call Object .keys fobj) .sort)]
+          (let [entry (js/get fobj f)]
+            (js/call parts .push (str n " " f " " (entry-oid entry)))
             (doseq [h (entry-hunks entry)]
-              (.push parts (str "  " (.-header h) " " (.join (.-range h) ",") " " (.-hash h))))))))
-    (sha256 (.join parts "\n"))))
+              (js/call parts .push (str "  " (js/get h .header) " " (js/call (js/get h .range) .join ",") " " (js/get h .hash))))))))
+    (sha256 (js/call parts .join "\n"))))
 
 ;; The patched hunks whose baseline anchor span is NO LONGER byte-identical at
 ;; <ref> (slice at the LOCKED line numbers — a shift above the hunk reads the
 ;; wrong span and conservatively counts as changed). Empty => file apply-safe.
-(defn changed-hunks [ref :- String pth :- String hunks :- Any] :- Any
+(defn changed-hunks [(ref String) (pth String) (hunks Any)] Any
   (let [lines (blob-lines ref pth)]
-    (.filter hunks (fn [h :- Any] :- Bool
-                     (let [a (aget (.-range h) 0)
-                           b (aget (.-range h) 1)
-                           span (.slice lines (- a 1) (+ (- a 1) b))]
-                       (not= (sha256 (.join span "\n")) (.-hash h)))))))
+    (js/call hunks .filter (fn [(h Any)] Bool
+                     (let [a (aget (js/get h .range) 0)
+                           b (aget (js/get h .range) 1)
+                           span (js/call lines .slice (- a 1) (+ (- a 1) b))]
+                       (not= (sha256 (js/call span .join "\n")) (js/get h .hash)))))))
 
 ;; ── lock ────────────────────────────────────────────────────────────────────
 
-(defn lock! [] :- Any
+(defn lock! [] Any
   (when (not (ff-present?))
-    (console/error (str "provenance: no Firefox clone at " FF " — cannot lock.")) (.exit process 1))
+    (console/error (str "provenance: no Firefox clone at " FF " — cannot lock.")) (js/call process .exit 1))
   (let [version (gjoa-version)
         tag (version->tag version)
         names (list-patches)
@@ -201,7 +200,7 @@
             fobj {}]
         (doseq [f files]
           (aset fobj f {:oid (blob-oid tag f)
-                        :hunks (file-hunk-records tag f (or (.get hunksByFile f) []))}))
+                        :hunks (file-hunk-records tag f (or (js/call hunksByFile .get f) []))}))
         (aset patches n fobj)))
     (let [digest (aggregate-digest patches)
           doc {:note (str "Upstream provenance lock (churn anti-rot). Per patch, per touched file: the git "
@@ -216,10 +215,9 @@
                :tag tag
                :digest digest
                :patches patches}
-          nf (.reduce names (fn [a :- Int n :- String] :- Int (+ a (.-length (.keys Object (aget patches n))))) 0)
-          nh (.reduce names (fn [a :- Int n :- String] :- Int
-                              (+ a (.reduce (.keys Object (aget patches n))
-                                            (fn [s :- Int f :- String] :- Int (+ s (.-length (.-hunks (aget (aget patches n) f))))) 0))) 0)
+          nf (js/call names .reduce (fn [(a Int) (n String)] Int (+ a (js/get (js/call Object .keys (js/get patches n)) .length))) 0)
+          nh (js/call names .reduce (fn [(a Int) (n String)] Int
+                              (+ a (js/call (js/call Object .keys (js/get patches n)) .reduce (fn [(s Int) (f String)] Int (+ s (js/get (js/get (js/get (js/get patches n) f) .hunks) .length))) 0))) 0)
           identity {:$schema "gjoa provenance identity (generated — do not edit by hand)"
                     :note (str "L4 baked-provenance identity. `digest` is one sha256 over EVERY locked blob OID + "
                                "hunk hash in configs/upstream-provenance.json — the supply-chain coordinate proving "
@@ -230,131 +228,131 @@
                     :baseline version
                     :tag tag
                     :digest digest
-                    :patches (.-length names)
+                    :patches (js/get names .length)
                     :files nf
                     :hunks nh}]
-      (writeFileSync LOCK (str (JSON/stringify doc nil 2) "\n"))
-      (writeFileSync IDENTITY (str (JSON/stringify identity nil 2) "\n"))
-      (console/log (str "wrote configs/upstream-provenance.json — " (.-length names) " patches, " nf " files, " nh " hunk anchors locked @ " tag))
+      (writeFileSync LOCK (str (js/call JSON .stringify doc nil 2) "\n"))
+      (writeFileSync IDENTITY (str (js/call JSON .stringify identity nil 2) "\n"))
+      (console/log (str "wrote configs/upstream-provenance.json — " (js/get names .length) " patches, " nf " files, " nh " hunk anchors locked @ " tag))
       (console/log (str "wrote configs/provenance-identity.json — baked digest " digest)))))
 
 ;; ── check ───────────────────────────────────────────────────────────────────
 
-(defn check! [ref-arg :- String strict :- Bool blame? :- Bool] :- Any
+(defn check! [(ref-arg String) (strict Bool) (blame? Bool)] Any
   (when (not (ff-present?))
-    (console/log (str "provenance: Firefox clone absent (" FF ") — check skipped")) (.exit process 0))
+    (console/log (str "provenance: Firefox clone absent (" FF ") — check skipped")) (js/call process .exit 0))
   (when (not (existsSync LOCK))
-    (console/error "provenance: no lock — run `provenance lock` first") (.exit process (if strict 2 0)))
-  (let [lock (JSON/parse (readFileSync LOCK "utf8"))
+    (console/error "provenance: no lock — run `provenance lock` first") (js/call process .exit (if strict 2 0)))
+  (let [lock (js/call JSON .parse (readFileSync LOCK "utf8"))
         version (gjoa-version)
-        ref (safe-ref (or ref-arg (.-tag lock)))
-        integrity (= ref (.-tag lock))
+        ref (safe-ref (or ref-arg (js/get lock .tag)))
+        integrity (= ref (js/get lock .tag))
         changed [] vanished [] collision [] hunkSafe [] drift []
-        unsafe-patches (Set.)]
+        unsafe-patches (js/new Set)]
     ;; baseline drift: lock no longer describes the current gjoa.json baseline.
-    (when (not= (.-baseline lock) version)
-      (.push drift (str "lock baseline " (.-baseline lock) " ≠ gjoa.json " version " — re-lock")))
+    (when (not= (js/get lock .baseline) version)
+      (js/call drift .push (str "lock baseline " (js/get lock .baseline) " ≠ gjoa.json " version " — re-lock")))
     ;; L4 baked-identity integrity: the lock's aggregate digest must match its own
     ;; content — a hand-edited OID/hunk (the supply-chain tamper case) breaks it.
-    (when (not= (.-digest lock) (aggregate-digest (.-patches lock)))
-      (.push drift "lock digest ≠ recomputed content digest — hand-edited/tampered, re-lock"))
+    (when (not= (js/get lock .digest) (aggregate-digest (js/get lock .patches)))
+      (js/call drift .push "lock digest ≠ recomputed content digest — hand-edited/tampered, re-lock"))
     (let [names (list-patches)
-          lockPatches (.-patches lock)]
+          lockPatches (js/get lock .patches)]
       ;; surface drift: a patch's touched-file set diverged from the lock.
       (doseq [n names]
         (let [cur (diff-touches (readFileSync (join PATCHES-DIR n) "utf8"))
-              locked (if (aget lockPatches n) (.keys Object (aget lockPatches n)) [])]
-          (when (not (aget lockPatches n))
-            (.push drift (str n " not in lock — re-lock")))
+              locked (if (js/get lockPatches n) (js/call Object .keys (js/get lockPatches n)) [])]
+          (when (not (js/get lockPatches n))
+            (js/call drift .push (str n " not in lock — re-lock")))
           (doseq [f cur]
-            (when (and (aget lockPatches n) (not (.includes locked f)))
-              (.push drift (str n " touches " f " (not locked) — re-lock"))))))
+            (when (and (js/get lockPatches n) (not (js/call locked .includes f)))
+              (js/call drift .push (str n " touches " f " (not locked) — re-lock"))))))
       ;; the content diff, per locked (patch,file).
-      (let [pnames (.sort (.keys Object lockPatches))]
+      (let [pnames (js/call (js/call Object .keys lockPatches) .sort)]
         (doseq [n pnames]
-          (let [fobj (aget lockPatches n)
-                files (.sort (.keys Object fobj))]
+          (let [fobj (js/get lockPatches n)
+                files (js/call (js/call Object .keys fobj) .sort)]
             (doseq [f files]
-              (let [entry (aget fobj f)
+              (let [entry (js/get fobj f)
                     was (entry-oid entry)
                     hunks (entry-hunks entry)
                     now (blob-oid ref f)]
                 (cond
                   (= was now) nil
                   (and (not= was "absent") (= now "absent"))
-                  (do (.push vanished {:patch n :file f :tier (tier-of f)}) (.add unsafe-patches n))
+                  (do (js/call vanished .push {:patch n :file f :tier (tier-of f)}) (js/call unsafe-patches .add n))
                   (and (= was "absent") (not= now "absent"))
-                  (do (.push collision {:patch n :file f :tier (tier-of f)}) (.add unsafe-patches n))
+                  (do (js/call collision .push {:patch n :file f :tier (tier-of f)}) (js/call unsafe-patches .add n))
                   :else
                   ;; whole-file OID moved — fall back to hunk anchors. ALL hunk
                   ;; spans intact => the edit was outside our hunks => apply-safe.
                   (let [bad (changed-hunks ref f hunks)]
-                    (if (and (> (.-length hunks) 0) (= (.-length bad) 0))
-                      (.push hunkSafe {:patch n :file f :tier (tier-of f)})
-                      (do (.push changed {:patch n :file f :tier (tier-of f)
-                                          :nbad (.-length bad) :ntotal (.-length hunks)})
-                          (.add unsafe-patches n)))))))))
+                    (if (and (> (js/get hunks .length) 0) (= (js/get bad .length) 0))
+                      (js/call hunkSafe .push {:patch n :file f :tier (tier-of f)})
+                      (do (js/call changed .push {:patch n :file f :tier (tier-of f)
+                                          :nbad (js/get bad .length) :ntotal (js/get hunks .length)})
+                          (js/call unsafe-patches .add n)))))))))
         ;; ── render ──
-        (console/log (str "upstream provenance — lock @ " (.-tag lock) " vs " ref
+        (console/log (str "upstream provenance — lock @ " (js/get lock .tag) " vs " ref
                           (if integrity "  (integrity check)" "")))
-        (console/log (str "  " (.-length pnames) " patches · "
-                          (- (.reduce pnames (fn [a :- Int n :- String] :- Int (+ a (.-length (.keys Object (aget lockPatches n))))) 0)
-                             (.-length changed) (.-length vanished) (.-length collision))
+        (console/log (str "  " (js/get pnames .length) " patches · "
+                          (- (js/call pnames .reduce (fn [(a Int) (n String)] Int (+ a (js/get (js/call Object .keys (js/get lockPatches n)) .length))) 0)
+                             (js/get changed .length) (js/get vanished .length) (js/get collision .length))
                           " file(s) apply-safe (OID-identical"
-                          (if (> (.-length hunkSafe) 0) (str " + " (.-length hunkSafe) " hunk-anchored") "")
+                          (if (> (js/get hunkSafe .length) 0) (str " + " (js/get hunkSafe .length) " hunk-anchored") "")
                           ")"))
-        (let [native-first (fn [arr :- Any] :- Any
-                             (.sort (.slice arr) (fn [a :- Any b :- Any] :- Int
-                                                    (- (if (= (.-tier a) "native") 0 1) (if (= (.-tier b) "native") 0 1)))))]
-          (when (> (.-length changed) 0)
+        (let [native-first (fn [(arr Any)] Any
+                             (js/call (js/call arr .slice) .sort (fn [(a Any) (b Any)] Int
+                                                    (- (if (= (js/get a .tier) "native") 0 1) (if (= (js/get b .tier) "native") 0 1)))))]
+          (when (> (js/get changed .length) 0)
             (console/log "  changed upstream (potential conflict, native first):")
             (doseq [c (native-first changed)]
-              (console/log (str "    [" (.-tier c) "] " (.-patch c) ": " (.-file c)
-                                (if (> (or (.-ntotal c) 0) 0)
-                                  (str "  (" (.-nbad c) "/" (.-ntotal c) " hunk anchor(s) moved)")
+              (console/log (str "    [" (js/get c .tier) "] " (js/get c .patch) ": " (js/get c .file)
+                                (if (> (or (js/get c .ntotal) 0) 0)
+                                  (str "  (" (js/get c .nbad) "/" (js/get c .ntotal) " hunk anchor(s) moved)")
                                   "  (no hunk data — whole-file)")))
               (when blame?
-                (doseq [ln (upstream-commits (.-tag lock) ref (.-file c))] (console/log (str "        · " ln))))))
-          (when (> (.-length hunkSafe) 0)
+                (doseq [ln (upstream-commits (js/get lock .tag) ref (js/get c .file))] (console/log (str "        · " ln))))))
+          (when (> (js/get hunkSafe .length) 0)
             (console/log "  changed OUTSIDE patch hunks — every hunk anchor intact (apply-safe):")
             (doseq [c (native-first hunkSafe)]
-              (console/log (str "    [" (.-tier c) "] " (.-patch c) ": " (.-file c)))))
-          (when (> (.-length vanished) 0)
+              (console/log (str "    [" (js/get c .tier) "] " (js/get c .patch) ": " (js/get c .file)))))
+          (when (> (js/get vanished .length) 0)
             (console/log "  VANISHED upstream (file moved/deleted — patch WILL fail):")
             (doseq [c (native-first vanished)]
-              (console/log (str "    [" (.-tier c) "] " (.-patch c) ": " (.-file c)))
+              (console/log (str "    [" (js/get c .tier) "] " (js/get c .patch) ": " (js/get c .file)))
               (when blame?
-                (doseq [ln (upstream-commits (.-tag lock) ref (.-file c))] (console/log (str "        · " ln))))))
-          (when (> (.-length collision) 0)
+                (doseq [ln (upstream-commits (js/get lock .tag) ref (js/get c .file))] (console/log (str "        · " ln))))))
+          (when (> (js/get collision .length) 0)
             (console/log "  upstream now ships a file we CREATE (collision):")
-            (doseq [c collision] (console/log (str "    " (.-patch c) ": " (.-file c))))))
-        (when (> (.-length drift) 0)
+            (doseq [c collision] (console/log (str "    " (js/get c .patch) ": " (js/get c .file))))))
+        (when (> (js/get drift .length) 0)
           (console/log "  STALE LOCK:")
           (doseq [d drift] (console/log (str "    " d))))
-        (let [safe-patches (.filter pnames (fn [n :- String] :- Bool (not (.has unsafe-patches n))))]
-          (when (and (not integrity) (> (.-length safe-patches) 0))
-            (console/log (str "  provably-safe patches (skip on this bump): " (.join safe-patches ", ")))))
-        (let [problems (+ (.-length changed) (.-length vanished) (.-length collision) (.-length drift))]
+        (let [safe-patches (js/call pnames .filter (fn [(n String)] Bool (not (js/call unsafe-patches .has n))))]
+          (when (and (not integrity) (> (js/get safe-patches .length) 0))
+            (console/log (str "  provably-safe patches (skip on this bump): " (js/call safe-patches .join ", ")))))
+        (let [problems (+ (js/get changed .length) (js/get vanished .length) (js/get collision .length) (js/get drift .length))]
           (cond
             (= problems 0) (console/log "  ✓ clean")
-            integrity (console/log (str "  " (.-length drift) " stale-lock issue(s)")))
+            integrity (console/log (str "  " (js/get drift .length) " stale-lock issue(s)")))
           ;; gate semantics: integrity mode fails only on STALE LOCK (drift); a
           ;; forward diff (explicit ref) is advisory — changed files are expected.
-          (when (and strict (if integrity (> (.-length drift) 0) (> problems 0)))
-            (.exit process 2)))))))
+          (when (and strict (if integrity (> (js/get drift .length) 0) (> problems 0)))
+            (js/call process .exit 2)))))))
 
 ;; ── digest (L4) ──────────────────────────────────────────────────────────────
 
 ;; Print the baked-identity digest from the existing lock (read-only; the build
 ;; reads this to stamp the binary). Re-verifies the stored digest so a hand-edit
 ;; is loud here too.
-(defn digest! [] :- Any
+(defn digest! [] Any
   (when (not (existsSync LOCK))
-    (console/error "provenance: no lock — run `provenance lock` first") (.exit process 1))
-  (let [lock (JSON/parse (readFileSync LOCK "utf8"))
-        d (aggregate-digest (.-patches lock))
-        stored (.-digest lock)]
-    (console/log (str "provenance digest @ " (.-tag lock) ": " d))
+    (console/error "provenance: no lock — run `provenance lock` first") (js/call process .exit 1))
+  (let [lock (js/call JSON .parse (readFileSync LOCK "utf8"))
+        d (aggregate-digest (js/get lock .patches))
+        stored (js/get lock .digest)]
+    (console/log (str "provenance digest @ " (js/get lock .tag) ": " d))
     (when (not= stored d)
       (console/log (str "  ✗ stored lock digest " stored " ≠ recomputed " d " — lock hand-edited/tampered; re-lock")))
     (console/log "  (build-gated: the compile stamps this into the binary's provenance metadata)")))
@@ -370,40 +368,40 @@
 ;; VACUOUSLY GREEN today: zero patches carry a `# security:` block; the overlay
 ;; mitigations in configs/security-mitigations.json are chrome JS (src/gjoa/…),
 ;; not upstream-anchored, so they are out of provenance scope by construction.
-(defn security-check! [ref-arg :- String strict :- Bool] :- Any
+(defn security-check! [(ref-arg String) (strict Bool)] Any
   (when (not (ff-present?))
-    (console/log (str "provenance: Firefox clone absent (" FF ") — security cross-check skipped")) (.exit process 0))
+    (console/log (str "provenance: Firefox clone absent (" FF ") — security cross-check skipped")) (js/call process .exit 0))
   (when (not (existsSync LOCK))
-    (console/error "provenance: no lock — run `provenance lock` first") (.exit process (if strict 2 0)))
-  (let [lock (JSON/parse (readFileSync LOCK "utf8"))
-        ref (safe-ref (or ref-arg (.-tag lock)))
-        integrity (= ref (.-tag lock))
-        lockPatches (.-patches lock)
+    (console/error "provenance: no lock — run `provenance lock` first") (js/call process .exit (if strict 2 0)))
+  (let [lock (js/call JSON .parse (readFileSync LOCK "utf8"))
+        ref (safe-ref (or ref-arg (js/get lock .tag)))
+        integrity (= ref (js/get lock .tag))
+        lockPatches (js/get lock .patches)
         names (list-patches)
         sec-names []
         findings []]
     (doseq [n names]
       (let [sec (parseSecurity (readFileSync (join PATCHES-DIR n) "utf8"))]
         (when sec
-          (.push sec-names n)
-          (let [fobj (or (aget lockPatches n) {})]
-            (doseq [f (.sort (.keys Object fobj))]
-              (let [entry (aget fobj f)
+          (js/call sec-names .push n)
+          (let [fobj (or (js/get lockPatches n) {})]
+            (doseq [f (js/call (js/call Object .keys fobj) .sort)]
+              (let [entry (js/get fobj f)
                     was (entry-oid entry)
                     hunks (entry-hunks entry)
                     now (blob-oid ref f)]
                 (cond
                   (= was now) nil
                   (and (not= was "absent") (= now "absent"))
-                  (.push findings {:patch n :id (or (.-id sec) "?") :file f :tier (tier-of f)
-                                   :kind "vanished" :mitigates (or (.-mitigates sec) "")})
+                  (js/call findings .push {:patch n :id (or (js/get sec .id) "?") :file f :tier (tier-of f)
+                                   :kind "vanished" :mitigates (or (js/get sec .mitigates) "")})
                   :else
                   (let [bad (changed-hunks ref f hunks)]
-                    (when (or (= (.-length hunks) 0) (> (.-length bad) 0))
-                      (.push findings {:patch n :id (or (.-id sec) "?") :file f :tier (tier-of f)
-                                       :kind (if (> (.-length bad) 0) "hunk-changed" "file-changed")
-                                       :nbad (.-length bad) :ntotal (.-length hunks)
-                                       :mitigates (or (.-mitigates sec) "")}))))))))))
+                    (when (or (= (js/get hunks .length) 0) (> (js/get bad .length) 0))
+                      (js/call findings .push {:patch n :id (or (js/get sec .id) "?") :file f :tier (tier-of f)
+                                       :kind (if (> (js/get bad .length) 0) "hunk-changed" "file-changed")
+                                       :nbad (js/get bad .length) :ntotal (js/get hunks .length)
+                                       :mitigates (or (js/get sec .mitigates) "")}))))))))))
     (let [doc {:$schema "gjoa provenance × security cross-check (generated — do not edit by hand)"
                :note (str "L5 cross-check: for each `# security:`-tagged patch, whether its LOCKED upstream blob/hunk "
                           "anchor changed vs the checked ref. A finding means Mozilla touched the code a mitigation "
@@ -412,30 +410,30 @@
                           "configs/security-mitigations.json are chrome JS, not upstream-anchored — out of scope here. "
                           "Regenerate via `upstream-provenance check --security`.")
                :generator "tools/prep/upstream-provenance.bjs (check --security)"
-               :baseline (.-baseline lock)
-               :tag (.-tag lock)
+               :baseline (js/get lock .baseline)
+               :tag (js/get lock .tag)
                :ref ref
                :securityPatches sec-names
                :findings findings}]
-      (writeFileSync SEC-REPORT (str (JSON/stringify doc nil 2) "\n"))
-      (console/log (str "provenance × security — lock @ " (.-tag lock) " vs " ref
+      (writeFileSync SEC-REPORT (str (js/call JSON .stringify doc nil 2) "\n"))
+      (console/log (str "provenance × security — lock @ " (js/get lock .tag) " vs " ref
                         (if integrity "  (integrity check)" "")))
-      (if (= (.-length sec-names) 0)
+      (if (= (js/get sec-names .length) 0)
         (console/log "  no `# security:`-tagged patches (vacuously clean; cross-check arms when one is added)")
-        (console/log (str "  " (.-length sec-names) " security-tagged patch(es): " (.join sec-names ", "))))
-      (if (= (.-length findings) 0)
+        (console/log (str "  " (js/get sec-names .length) " security-tagged patch(es): " (js/call sec-names .join ", "))))
+      (if (= (js/get findings .length) 0)
         (console/log "  ✓ no security anchor moved")
         (do
           (console/log "  ⚠ upstream changed at a security anchor — Mozilla may have FIXED it (drop the patch) or REFACTORED (re-verify the mitigation):")
           (doseq [c findings]
-            (console/log (str "    [" (.-tier c) "] " (.-patch c) " (" (.-id c) "): " (.-file c) " — " (.-kind c)
-                              (if (> (or (.-ntotal c) 0) 0) (str "  (" (.-nbad c) "/" (.-ntotal c) " hunk anchor(s) moved)") ""))))))
-      (console/log (str "  wrote configs/provenance-security-findings.json (" (.-length findings) " finding(s))"))
+            (console/log (str "    [" (js/get c .tier) "] " (js/get c .patch) " (" (js/get c .id) "): " (js/get c .file) " — " (js/get c .kind)
+                              (if (> (or (js/get c .ntotal) 0) 0) (str "  (" (js/get c .nbad) "/" (js/get c .ntotal) " hunk anchor(s) moved)") ""))))))
+      (console/log (str "  wrote configs/provenance-security-findings.json (" (js/get findings .length) " finding(s))"))
       ;; Gate semantics mirror check!: integrity strict fails if the lock no longer
       ;; describes its own baseline at a security anchor (shouldn't happen); a
       ;; forward-ref diff is advisory (a bump is EXPECTED to move anchors).
-      (when (and strict integrity (> (.-length findings) 0))
-        (.exit process 2)))))
+      (when (and strict integrity (> (js/get findings .length) 0))
+        (js/call process .exit 2)))))
 
 ;; ── anchor-local 3-way merge (churn lever #4) ────────────────────────────────
 
@@ -447,7 +445,7 @@
 ;; `; printf __RC__$?` tail captures that code through sh (which would otherwise
 ;; swallow a nonzero exit). Temp paths are mkdtemp-generated literals — no
 ;; injection surface. Returns {status "clean"|"conflict"|"skip", ...}.
-(defn merge3-file [baseTag :- String ref :- String pth :- String tmp :- Any] :- Any
+(defn merge3-file [(baseTag String) (ref String) (pth String) (tmp Any)] Any
   (let [enginePath (join REPO "engine" pth)]
     (if (not (existsSync enginePath))
       {:status "skip" :reason "no engine source (run import)"}
@@ -460,8 +458,8 @@
             (writeFileSync of other)
             (writeFileSync uf (readFileSync enginePath "utf8"))
             (let [out (try (sh (str "git merge-file -p '" uf "' '" bf "' '" of "' 2>/dev/null; printf '__RC__%s' \"$?\"") {})
-                        (catch Error _e "__RC__255"))
-                  m (.match out (RegExp. "__RC__(\\d+)$"))
+                        (catch (_e Error) "__RC__255"))
+                  m (js/call out .match (js/new RegExp "__RC__(\\d+)$"))
                   rc (if m (parseInt (aget m 1) 10) 255)]
               (cond
                 (= rc 0)   {:status "clean"}
@@ -472,58 +470,58 @@
 ;; set), attempt the anchor-local 3-way and tally auto-mergeable vs needs-human.
 ;; This is what L0–L3 set up: L0 says WHICH files moved, L3 says WHY — this says
 ;; "and here's the merge, already done where it's mechanical." No build.
-(defn merge3! [ref-arg :- String] :- Any
+(defn merge3! [(ref-arg String)] Any
   (when (not (ff-present?))
-    (console/log (str "provenance: Firefox clone absent (" FF ") — 3-way merge skipped")) (.exit process 0))
+    (console/log (str "provenance: Firefox clone absent (" FF ") — 3-way merge skipped")) (js/call process .exit 0))
   (when (not (existsSync LOCK))
-    (console/error "provenance: no lock — run `provenance lock` first") (.exit process 1))
-  (let [lock (JSON/parse (readFileSync LOCK "utf8"))
-        ref (safe-ref (or ref-arg (.-tag lock)))
-        baseTag (.-tag lock)
+    (console/error "provenance: no lock — run `provenance lock` first") (js/call process .exit 1))
+  (let [lock (js/call JSON .parse (readFileSync LOCK "utf8"))
+        ref (safe-ref (or ref-arg (js/get lock .tag)))
+        baseTag (js/get lock .tag)
         integrity (= ref baseTag)
-        lockPatches (.-patches lock)
-        pnames (.sort (.keys Object lockPatches))
+        lockPatches (js/get lock .patches)
+        pnames (js/call (js/call Object .keys lockPatches) .sort)
         tmp (mkdtempSync (join (tmpdir) "gjoa-merge3-"))
         clean [] conflict [] skip []]
     (try
       (when integrity
         (console/log "  (ref == baseline: nothing has moved — pass a bump ref, e.g. a later FF tag)"))
       (doseq [n pnames]
-        (let [fobj (aget lockPatches n)]
-          (doseq [f (.sort (.keys Object fobj))]
-            (let [entry (aget fobj f)
+        (let [fobj (js/get lockPatches n)]
+          (doseq [f (js/call (js/call Object .keys fobj) .sort)]
+            (let [entry (js/get fobj f)
                   was (entry-oid entry)
                   now (blob-oid ref f)]
               (when (and (not= was now) (not= was "absent") (not= now "absent"))
                 (let [r (merge3-file baseTag ref f tmp)]
                   (cond
-                    (= (.-status r) "clean")    (.push clean {:patch n :file f :tier (tier-of f)})
-                    (= (.-status r) "conflict") (.push conflict {:patch n :file f :tier (tier-of f) :conflicts (.-conflicts r)})
-                    :else (.push skip {:patch n :file f :reason (.-reason r)}))))))))
-      (finally (try (rmSync tmp {:recursive true :force true}) (catch Error _e nil))))
+                    (= (js/get r .status) "clean")    (js/call clean .push {:patch n :file f :tier (tier-of f)})
+                    (= (js/get r .status) "conflict") (js/call conflict .push {:patch n :file f :tier (tier-of f) :conflicts (js/get r .conflicts)})
+                    :else (js/call skip .push {:patch n :file f :reason (js/get r .reason)}))))))))
+      (finally (try (rmSync tmp {:recursive true :force true}) (catch (_e Error) nil))))
     (console/log (str "anchor-local 3-way merge — patched lock @ " baseTag " replayed onto " ref))
-    (console/log (str "  " (.-length clean) " auto-mergeable · " (.-length conflict) " need human · " (.-length skip) " skipped"))
-    (when (> (.-length conflict) 0)
+    (console/log (str "  " (js/get clean .length) " auto-mergeable · " (js/get conflict .length) " need human · " (js/get skip .length) " skipped"))
+    (when (> (js/get conflict .length) 0)
       (console/log "  CONFLICTS (our edits overlap Mozilla's — human rebase, native first):")
-      (doseq [c conflict] (console/log (str "    [" (.-tier c) "] " (.-patch c) ": " (.-file c) "  (" (.-conflicts c) " conflict hunk(s))"))))
-    (when (> (.-length clean) 0)
+      (doseq [c conflict] (console/log (str "    [" (js/get c .tier) "] " (js/get c .patch) ": " (js/get c .file) "  (" (js/get c .conflicts) " conflict hunk(s))"))))
+    (when (> (js/get clean .length) 0)
       (console/log "  AUTO-MERGEABLE (patch re-applies onto new upstream with no conflict):")
-      (doseq [c clean] (console/log (str "    [" (.-tier c) "] " (.-patch c) ": " (.-file c)))))
-    (when (> (.-length skip) 0)
-      (doseq [c skip] (console/log (str "    skip " (.-patch c) ": " (.-file c) " (" (.-reason c) ")"))))))
+      (doseq [c clean] (console/log (str "    [" (js/get c .tier) "] " (js/get c .patch) ": " (js/get c .file)))))
+    (when (> (js/get skip .length) 0)
+      (doseq [c skip] (console/log (str "    skip " (js/get c .patch) ": " (js/get c .file) " (" (js/get c .reason) ")"))))))
 
-(defn main! [] :- Any
-  (let [argv (.slice (.-argv process) 2)
+(defn main! [] Any
+  (let [argv (js/call (js/get process .argv) .slice 2)
         cmd (or (aget argv 0) "check")
-        strict (.includes argv "--strict")
-        ref (.find argv (fn [a :- String] :- Bool (and (not (.startsWith a "--")) (not= a cmd))))]
+        strict (js/call argv .includes "--strict")
+        ref (js/call argv .find (fn [(a String)] Bool (and (not (js/call a .startsWith "--")) (not= a cmd))))]
     (cond
       (= cmd "lock") (lock!)
       (= cmd "digest") (digest!)
       (= cmd "merge3") (merge3! (or ref nil))
-      (= cmd "check") (if (.includes argv "--security")
+      (= cmd "check") (if (js/call argv .includes "--security")
                         (security-check! (or ref nil) strict)
-                        (check! (or ref nil) strict (.includes argv "--blame")))
-      :else (do (console/error "usage: upstream-provenance <lock | digest | merge3 [ref] | check [ref] [--strict] [--blame] [--security]>") (.exit process 1)))))
+                        (check! (or ref nil) strict (js/call argv .includes "--blame")))
+      :else (do (console/error "usage: upstream-provenance <lock | digest | merge3 [ref] | check [ref] [--strict] [--blame] [--security]>") (js/call process .exit 1)))))
 
-(when (.-main (js/import-meta)) (main!))
+(when (js/get (js/import-meta) .main) (main!))

@@ -42,8 +42,8 @@ hot-reload. Proposing a nix rebuild to verify a *chrome* fix is the smell.
 
 ## The engine-hosting checkout is a locked mutable runtime worktree
 
-`~/code/gjoa/active` is the stable selector and must resolve to the locked
-worktree at `~/code/gjoa/worktrees/dev-runtime`. This checkout intentionally
+The launcher reads the locked worktree at `~/code/gjoa/worktrees/dev-runtime`
+directly. This checkout intentionally
 holds mutable ignored build and runtime state, including `.gjoa-sync-stamp`,
 `dist/`, `.beagle-tools`, and `engine/`. Its Git worktree lock prevents ordinary
 reaping, and its non-disposable ignored state independently makes `wt-reap`

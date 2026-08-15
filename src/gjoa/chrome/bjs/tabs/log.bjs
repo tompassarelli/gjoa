@@ -1,57 +1,53 @@
 #lang beagle/js
 (ns gjoa.tabs.log)
-(define-mode strict)
 
-(declare-extern [Services Ci PathUtils] Any)
+(declare-extern [Services Ci PathUtils undefined] Any)
 
-(def LOG-FILENAME :- String "gjoa-debug.log")
-(def LOG-MAX-BYTES :- Int (* 5 1024 1024))
+(def LOG-FILENAME String "gjoa-debug.log")
+(def LOG-MAX-BYTES Int (* 5 1024 1024))
 
-(def state :- Any {:log-path nil :rotate-checked false :flush-pending false})
-(def lines :- Any [])
+(def state Any {:log-path nil :rotate-checked false :flush-pending false})
+(def lines Any [])
 
-(defn log-path! [] :- String
-  (or (.-log-path state)
-      (let [p (.join PathUtils
-                (.-path (.get (.-dirsvc Services) "ProfD" (.-nsIFile Ci)))
+(defn log-path! [] String
+  (or (js/get state .log-path)
+      (let [p (js/call PathUtils .join
+                (js/get (js/call (js/get Services .dirsvc) .get "ProfD" (js/get Ci .nsIFile)) .path)
                 LOG-FILENAME)]
-        (set! (.-log-path state) p)
+        (js/set! state .log-path p)
         p)))
 
-(defn flush-lines! [] :- Any
-  (let [batch (.splice lines 0)]
-    (if (= 0 (.-length batch))
-      (do (set! (.-flush-pending state) false) nil)
-      (let [blob (.encode (TextEncoder.) (str (.join batch "\n") "\n"))
+(defn flush-lines! [] Any
+  (let [batch (js/call lines .splice 0)]
+    (if (= 0 (js/get batch .length))
+      (do (js/set! state .flush-pending false) nil)
+      (let [blob (js/call (js/new TextEncoder) .encode (str (js/call batch .join "\n") "\n"))
             path (log-path!)]
-        (-> (.write IOUtils path blob {:mode "appendOrCreate"})
-            (.then (fn []
-              (if (> (.-length lines) 0)
+        (-> (js/call IOUtils .write path blob {:mode "appendOrCreate"})
+            (js/call .then (fn [] Any
+              (if (> (js/get lines .length) 0)
                 (flush-lines!)
-                (set! (.-flush-pending state) false))))
-            (.catch (fn [e]
+                (js/set! state .flush-pending false))))
+            (js/call .catch (fn [e] Any
               (console/error "[GJOA:log] write failed" e)
-              (set! (.-flush-pending state) false))))))))
+              (js/set! state .flush-pending false))))))))
 
-(defn maybe-rotate! [] :- Any
-  (when (not (.-rotate-checked state))
-    (set! (.-rotate-checked state) true)
-    (-> (.stat IOUtils (log-path!))
-        (.then (fn [info]
-          (when (> (.-size info) LOG-MAX-BYTES)
-            (.write IOUtils (log-path!) (Uint8Array. 0) {:mode "overwrite"}))))
-        (.catch (fn [] nil)))))
+(defn maybe-rotate! [] Any
+  (when (not (js/get state .rotate-checked))
+    (js/set! state .rotate-checked true)
+    (-> (js/call IOUtils .stat (log-path!))
+        (js/call .then (fn [info] Any
+          (when (> (js/get info .size) LOG-MAX-BYTES)
+            (js/call IOUtils .write (log-path!) (js/new Uint8Array 0) {:mode "overwrite"}))))
+        (js/call .catch (fn [] Any nil)))))
 
-(js/export (defn create-logger! [tag :- String] :- Any
+(js/export (defn create-logger! [(tag String)] Any
   (let [prefix (str "[GJOA:" tag "]")]
-    (fn [event data]
-      (when (.getBoolPref (.-prefs Services) "gjoa.debug" false)
+    (fn [event data] Any
+      (when (js/call (js/get Services .prefs) .getBoolPref "gjoa.debug" false)
         (maybe-rotate!)
         (console/log prefix event (or data {}))
-        (.push lines (str (Date/now) " [" tag "] " event " " (JSON/stringify (or data {}))))
-        (when (not (.-flush-pending state))
-          (set! (.-flush-pending state) true)
-          ;; CHORE(pin-bump): drop the explicit `js/undefined` when the pinned
-          ;; compiler accepts zero-arg Promise/resolve. Beagle 3e942ba still
-          ;; declares its argument as required. microtask-defer the log flush.
-          (.then (Promise/resolve js/undefined) flush-lines!)))))))
+        (js/call lines .push (str (Date/now) " [" tag "] " event " " (JSON/stringify (or data {}))))
+        (when (not (js/get state .flush-pending))
+          (js/set! state .flush-pending true)
+          (js/call (Promise/resolve undefined) .then flush-lines!)))))))

@@ -9,20 +9,19 @@
 ;;   - delete + orphan reparenting
 (ns gjoa.tests.integration.spaces
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect expect-eq wait-for]]))
-(define-mode strict)
 
 ;; Count tab rows actually visible (not [hidden]) in the sidebar.
-(defn visible-tab-rows [] :- String
+(defn visible-tab-rows [] String
   "
     return [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row, #gjoa-tab-panel-pinned .gjoa-tab-row\")]
       .filter(r => !r.hidden).length;
   ")
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "Spaces — window.Spaces is exposed with a default 'Main' space" [mn]
      (await-true "return !!window.Spaces && window.Spaces.list().length >= 1;")
      (let [list (chrome-eval "return window.Spaces.list().map(s => ({ name: s.name }));")]
-       (expect (and (.-length list) (= (.-name (aget list 0)) "Main"))
+       (expect (and (js/get list .length) (= (js/get (aget list 0) .name) "Main"))
                (str "expected default 'Main', got " (JSON/stringify list))))
      (expect-eq (chrome-eval "return window.Spaces.active().name;") "Main" "active space"))
 
@@ -37,7 +36,7 @@
       ")
        (await-true "return window.Spaces.active().name === \"Work\";")
        ;; 2. All previously-visible tabs should now be hidden (they're in Main).
-       (await-true (str (.replace (visible-tab-rows) "return " "const c = ") "; return c === 0;"))
+       (await-true (str (js/call (visible-tab-rows) .replace "return " "const c = ") "; return c === 0;"))
        (expect-eq (chrome-eval (visible-tab-rows)) 0
                   (str "after switching to Work, expected 0 visible tabs (baseline " before ")"))
        ;; 3. Open a tab; it should land in Work and be visible.
@@ -47,7 +46,7 @@
         });
       ")
        ;; Wait for the row to render + receive an assignment + pass the visibility filter.
-       (await-true (str (.replace (visible-tab-rows) "return " "const c = ") "; return c >= 1;") 8000)
+       (await-true (str (js/call (visible-tab-rows) .replace "return " "const c = ") "; return c >= 1;") 8000)
        ;; 4. Switch back to Main; Work tab disappears, original tabs return.
        (chrome-eval "
         const main = window.Spaces.list().find(s => s.name === \"Main\");
@@ -55,7 +54,7 @@
       ")
        (await-true "return window.Spaces.active().name === \"Main\";")
        ;; Original visible count is restored.
-       (await-true (str (.replace (visible-tab-rows) "return " "const c = ") "; return c === " before ";") 5000)))
+       (await-true (str (js/call (visible-tab-rows) .replace "return " "const c = ") "; return c === " before ";") 5000)))
 
    (deftest "Spaces — assignTab moves a tab between spaces (visibility follows)" [mn]
      (await-true "return !!window.Spaces;")

@@ -1,27 +1,26 @@
 #lang beagle/js
 (ns gjoa.tabs.vim
   (:require [gjoa.macros :refer [q by-id key= xul-new xul-id html-new attr! pref-bool pref-int pref-str set-pref-bool! set-pref-str! dispatch-key on! on1! onc! xul htm bool rmattr! tabs! toggle! css!]]
-            [gjoa.tabs.helpers :refer [all-rows data-of! has-children is-horizontal level-of level-of-row subtree-rows tab-by-id tree-data!]]
+            [gjoa.tabs.helpers :refer [all-rows data-of! has-children! is-horizontal level-of! level-of-row! subtree-rows! tab-by-id tree-data!]]
             [gjoa.tabs.log :refer [create-logger!]]
             [gjoa.tabs.state :refer [hz-display row-of saved-tab-queue selection state tree-of]]
             [gjoa.tabs.picker :refer [make-picker!]]))
-(define-mode strict)
 
 ;; Browser globals
-(declare-extern [document window gBrowser Services setTimeout clearTimeout Math Array Reflect] Any)
+(declare-extern [document window gBrowser Services setTimeout clearTimeout Math Array Reflect undefined] Any)
 
 ;; Sibling module externs (no import)
-(defn insert-after-each [anchor :- Any rows-arr :- Any] :- Any
+(defn insert-after-each! [(anchor Any) (rows-arr Any)] Any
   (let [cur {:ref anchor}]
-    (.forEach rows-arr (fn [r]
-      (.after (.-ref cur) r)
-      (set! (.-ref cur) r)))))
+    (js/call rows-arr .forEach (fn [r] Any
+      (js/call (js/get cur .ref) .after r)
+      (js/set! cur .ref r)))))
 
-(defn hide-children [el :- Any] :- Any
-  (.forEach (Array/from (.-children el)) #(set! (.-hidden %) true)))
+(defn hide-children! [(el Any)] Any
+  (js/call (Array/from (js/get el .children)) .forEach (fn [%1] Any (js/set! %1 .hidden true))))
 
-(defn show-children [el :- Any] :- Any
-  (.forEach (Array/from (.-children el)) #(set! (.-hidden %) false)))
+(defn show-children! [(el Any)] Any
+  (js/call (Array/from (js/get el .children)) .forEach (fn [%1] Any (js/set! %1 .hidden false))))
 
 ;; THE command registry — the single source of truth for the global (normal-mode)
 ;; vim keymap. Each command has a stable :id (what about:vim and `:bind` reference,
@@ -29,7 +28,7 @@
 ;; The handler thunks live inside the vim closure (build-handlers below) keyed by
 ;; :id; dispatch, the which-key overlay, and (later) about:vim are all projections
 ;; of THIS list — so they can't drift from what actually fires.
-(def VIM-COMMANDS :- Any
+(def VIM-COMMANDS Any
   [{:id "tabsPicker"    :key "t" :desc "tabs (this window)"                 :cat "Tabs"}
    {:id "tabsPickerAll" :key "T" :desc "tabs (all windows)"                :cat "Tabs"}
    {:id "urlbar"        :key "o" :desc "urlbar"                            :cat "Navigation"}
@@ -58,16 +57,16 @@
 ;; Default key → command-id, derived from VIM-COMMANDS. The EFFECTIVE keymap is
 ;; this overlaid by the user override pref gjoa.keys.bindings (JSON {key: id|null};
 ;; null unbinds). about:vim + `:bind` (P2/P3) edit that one pref.
-(def DEFAULT-KEYMAP :- Any
-  (let [m (Map.)]
-    (.forEach VIM-COMMANDS (fn [c] (.set m (.-key c) (.-id c))))
+(def DEFAULT-KEYMAP Any
+  (let [m (js/new Map)]
+    (js/call VIM-COMMANDS .forEach (fn [c] Any (js/call m .set (js/get c .key) (js/get c .id))))
     m))
 
 ;; Valid command ids. A key whose override resolves outside this set is ignored —
 ;; an unknown/typo binding must NOT preventDefault and swallow the key.
-(def COMMAND-IDS :- Any
-  (let [s (Set.)]
-    (.forEach VIM-COMMANDS (fn [c] (.add s (.-id c))))
+(def COMMAND-IDS Any
+  (let [s (js/new Set)]
+    (js/call VIM-COMMANDS .forEach (fn [c] Any (js/call s .add (js/get c .id))))
     s))
 
 ;; Publish the catalog (default branch) so about:vim — a separate privileged page
@@ -75,34 +74,34 @@
 ;; from the SAME source. VIM-COMMANDS stays the one source of truth; the page edits
 ;; gjoa.keys.bindings, this only exposes the catalog.
 (try
-  (.setCharPref (.getDefaultBranch (.-prefs Services) "")
+  (js/call (js/call (js/get Services .prefs) .getDefaultBranch "") .setCharPref
                 "gjoa.keys.commands" (JSON/stringify VIM-COMMANDS))
-  (catch Any _e nil))
+  (catch (_e Any) nil))
 
 ;; Effective command-id bound to `key`. overrides-raw is the raw pref string; ""
 ;; (no custom binds — the common case) takes the pure-default fast path.
-(defn effective-command-id [key :- String overrides-raw :- String] :- Any
+(defn effective-command-id [(key String) (overrides-raw String)] Any
   (if (= overrides-raw "")
-    (.get DEFAULT-KEYMAP key)
+    (js/call DEFAULT-KEYMAP .get key)
     (try
       (let [ov (JSON/parse overrides-raw)
             v (get ov key)]
-        (if (= (typeof v) "undefined")
-          (.get DEFAULT-KEYMAP key)   ; not overridden → default
+        (if (= (js/typeof v) "undefined")
+          (js/call DEFAULT-KEYMAP .get key)   ; not overridden → default
           v))                          ; overridden id, or null = unbound
-      (catch Any _e (.get DEFAULT-KEYMAP key)))))
+      (catch (_e Any) (js/call DEFAULT-KEYMAP .get key)))))
 
 ;; Mutate one entry of the gjoa.keys.bindings override pref — cmd = a command-id
 ;; to bind, or nil to unbind that key. about:vim and `:bind`/`:unbind` share this.
 ;; key :- Any: callers pass the trimmed ex-command arg (String|Nil at the type
 ;; level, but the dispatch guard already proved it truthy); it's a JS-object key
 ;; at runtime. cmd = command-id string, or nil to unbind.
-(defn set-key-binding! [key :- Any cmd :- Any] :- Any
+(defn set-key-binding! [(key Any) (cmd Any)] Any
   (let [raw (pref-str "gjoa.keys.bindings" "")
-        ov (if (= raw "") (Object.) (try (JSON/parse raw) (catch Any _e (Object.))))]
-    (.set Reflect ov key cmd)
+        ov (if (= raw "") (js/new Object) (try (JSON/parse raw) (catch (_e Any) (js/new Object))))]
+    (js/call Reflect .set ov key cmd)
     (set-pref-str! "gjoa.keys.bindings" (JSON/stringify ov))))
-(def EX-COMMANDS :- Any
+(def EX-COMMANDS Any
   [{:name "group"      :description "Create a named folder at cursor"                    :takesArgs true}
    {:name "refile"     :description "Move cursor tab into a different group"             :takesArgs false}
    {:name "pin"        :description "Pin the cursor's tab"                               :takesArgs false}
@@ -119,7 +118,7 @@
    {:name "unbind"     :description "Unbind a key: :unbind <key>"                        :takesArgs true}
    {:name "bindreset"  :description "Reset all keybindings to defaults"                  :takesArgs false}
    {:name "help"       :description "Show the keymap cheatsheet"                         :takesArgs false}])
-(js/export (defn make-vim! [deps :- Any] :- Any
+(js/export (defn make-vim! [(deps Any)] Any
   (let [rows (:rows deps)
         layout (:layout deps)
         scheduleSave (:scheduleSave deps)
@@ -131,11 +130,6 @@
         spaces (:spaces deps)
 
         log (create-logger! "tabs/vim")
-
-        ;; Spotlight picker
-        picker (make-picker!
-                 {:restoreFocus #(when (.-panel state) (.focus (.-panel state)))
-                  :modelineMsg  #(modeline-msg %1 %2)})
 
         ;; Consolidated mutable state
         vs
@@ -163,276 +157,272 @@
            :link-hints-active false
            :visual-active false}
 
-        commit-tree (fn [targets]
-          (.forEach targets #(.syncAnyRow rows %))
-          (.updateVisibility rows)
+        commit-tree (fn [targets] Any
+          (js/call targets .forEach (fn [%1] Any (js/call rows .syncAnyRow %1)))
+          (js/call rows .updateVisibility)
           (scheduleSave))
 
-        tab-spec (fn [tab]
-          (or (some-> tab .-linkedBrowser .-currentURI .-spec) ""))
+        tab-spec (fn [tab] Any
+          (or (some-> tab (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec)) ""))
 
-        current-spec (fn []
-          (or (some-> gBrowser .-selectedBrowser .-currentURI .-spec) ""))
+        current-spec (fn [] Any
+          (or (some-> gBrowser (js/get .selectedBrowser) (js/get .currentURI) (js/get .spec)) ""))
 
 
-        tree-root (fn [row]
+        tree-root (fn [row] Any
           (let [all-r (all-rows)
-                idx (.indexOf all-r row)]
+                idx (js/call all-r .indexOf row)]
             (or (loop [i idx]
                   (cond
                     (< i 0) nil
-                    (= (level-of-row (aget all-r i)) 0) (aget all-r i)
+                    (= (level-of-row! (aget all-r i)) 0) (aget all-r i)
                     :else (recur (- i 1))))
                 row)))
 
-        set-cursor (fn [row]
-          (when (.-cursor state) (rmattr! (.-cursor state) "gjoa-cursor"))
-          (set! (.-cursor state) row)
+        collapse-hz-tree (fn [root] Any
+          (let [d (data-of! root)]
+            (when (and d (has-children! root))
+              (when (and (some-> state (js/get .cursor) (js/get ._tab))
+                         (not= (js/get state .cursor) root))
+                (let [cur-root (tree-root (js/get state .cursor))]
+                  (when (= cur-root root)
+                    (js/call hz-display .set root (js/get (js/get state .cursor) ._tab)))))
+              (js/set! d .collapsed true)
+              (js/call rows .syncAnyRow root)
+              (when (is-horizontal) (js/call layout .setUrlbarTopLayer true)))))
+
+        expand-hz-tree (fn [root] Any
+          (let [d (data-of! root)]
+            (when (and d (has-children! root))
+              (js/call hz-display .delete root)
+              (js/set! d .collapsed false)
+              (js/call rows .syncAnyRow root)
+              (when (is-horizontal) (js/call layout .setUrlbarTopLayer false)))))
+
+        update-horizontal-expansion (fn [] Any
+          (when (js/get state .cursor)
+            (let [root (tree-root (js/get state .cursor))]
+              (when (not= root (js/get vs .hz-expanded-root))
+                (when (js/get vs .hz-expanded-root)
+                  (collapse-hz-tree (js/get vs .hz-expanded-root)))
+                (expand-hz-tree root)
+                (js/set! vs .hz-expanded-root root)
+                (js/call rows .updateVisibility)))))
+
+        set-cursor (fn [row] Any
+          (when (js/get state .cursor) (rmattr! (js/get state .cursor) "gjoa-cursor"))
+          (js/set! state .cursor row)
           (when row
             (attr! row "gjoa-cursor" "true")
-            (.scrollIntoView row {:block "nearest" :inline "nearest"})
+            (js/call row .scrollIntoView {:block "nearest" :inline "nearest"})
             (when (is-horizontal) (update-horizontal-expansion))))
 
-        collapse-hz-tree (fn [root]
-          (let [d (data-of! root)]
-            (when (and d (has-children root))
-              (when (and (some-> state .-cursor .-_tab)
-                         (not= (.-cursor state) root))
-                (let [cur-root (tree-root (.-cursor state))]
-                  (when (= cur-root root)
-                    (.set hz-display root (.-_tab (.-cursor state))))))
-              (set! (.-collapsed d) true)
-              (.syncAnyRow rows root)
-              (when (is-horizontal) (.setUrlbarTopLayer layout true)))))
-
-        expand-hz-tree (fn [root]
-          (let [d (data-of! root)]
-            (when (and d (has-children root))
-              (.delete hz-display root)
-              (set! (.-collapsed d) false)
-              (.syncAnyRow rows root)
-              (when (is-horizontal) (.setUrlbarTopLayer layout false)))))
-
-        update-horizontal-expansion (fn []
-          (when (.-cursor state)
-            (let [root (tree-root (.-cursor state))]
-              (when (not= root (.-hz-expanded-root vs))
-                (when (.-hz-expanded-root vs)
-                  (collapse-hz-tree (.-hz-expanded-root vs)))
-                (expand-hz-tree root)
-                (set! (.-hz-expanded-root vs) root)
-                (.updateVisibility rows)))))
-
-        move-to-level0 (fn [delta] :- Bool
-          (if (not (.-cursor state))
+        move-to-level0 (fn [delta] Bool
+          (if (not (js/get state .cursor))
             false
             (let [all-r (all-rows)
-                  cur-idx (.indexOf all-r (.-cursor state))]
+                  cur-idx (js/call all-r .indexOf (js/get state .cursor))]
               (if (< cur-idx 0)
                 false
                 (let [step (if (> delta 0) 1 -1)
                       candidate (loop [i (+ cur-idx step)]
                                   (cond
-                                    (or (< i 0) (>= i (.-length all-r))) nil
-                                    (= (level-of-row (aget all-r i)) 0) (aget all-r i)
+                                    (or (< i 0) (>= i (js/get all-r .length))) nil
+                                    (= (level-of-row! (aget all-r i)) 0) (aget all-r i)
                                     :else (recur (+ i step))))]
                   (if candidate
                     (do (set-cursor candidate)
-                        (when (.-_tab candidate)
-                          (set! (.-selectedTab gBrowser) (.-_tab candidate)))
+                        (when (js/get candidate ._tab)
+                          (js/set! gBrowser .selectedTab (js/get candidate ._tab)))
                         true)
                     false))))))
 
-        activate-vim (fn [row]
-          (focus-panel)
-          (set-cursor row))
-
-        move-cursor (fn [delta] :- Bool
-          (if (not (.-cursor state))
+        move-cursor (fn [delta] Bool
+          (if (not (js/get state .cursor))
             (do (log "moveCursor:noCursor" {:delta delta}) false)
             (let [all-arr (all-rows)
-                  idx (.indexOf all-arr (.-cursor state))]
+                  idx (js/call all-arr .indexOf (js/get state .cursor))]
               (if (< idx 0)
                 (do (log "moveCursor:cursorNotInAllRows"
-                         {:delta delta :allLen (.-length all-arr)}) false)
+                         {:delta delta :allLen (js/get all-arr .length)}) false)
                 (let [step (if (> delta 0) 1 -1)
                       target (loop [i (+ idx step)]
                                (cond
-                                 (or (< i 0) (>= i (.-length all-arr))) nil
-                                 (not (.-hidden (aget all-arr i))) (aget all-arr i)
+                                 (or (< i 0) (>= i (js/get all-arr .length))) nil
+                                 (not (js/get (aget all-arr i) .hidden)) (aget all-arr i)
                                  :else (recur (+ i step))))]
                   (if target
                     (do (log "moveCursor:landed" {:delta delta :fromIdx idx})
                         (set-cursor target)
-                        (when (.-_tab target)
-                          (set! (.-selectedTab gBrowser) (.-_tab target)))
+                        (when (js/get target ._tab)
+                          (js/set! gBrowser .selectedTab (js/get target ._tab)))
                         true)
                     (do (log "moveCursor:noTarget"
-                             {:delta delta :fromIdx idx :allLen (.-length all-arr)})
+                             {:delta delta :fromIdx idx :allLen (js/get all-arr .length)})
                         false)))))))
 
 
-        prev-sibling-tab (fn [row]
-          (when (and row (.-_tab row))
-            (let [my-td (tree-data! (.-_tab row))
-                  my-level (level-of (.-_tab row))
-                  my-parent-id (.-parentId my-td)]
-              (loop [r (.-previousElementSibling row)]
+        prev-sibling-tab (fn [row] Any
+          (when (and row (js/get row ._tab))
+            (let [my-td (tree-data! (js/get row ._tab))
+                  my-level (level-of! (js/get row ._tab))
+                  my-parent-id (js/get my-td .parentId)]
+              (loop [r (js/get row .previousElementSibling)]
                 (cond
                   (nil? r) nil
-                  (not (boolean (.-_tab r))) (recur (.-previousElementSibling r))
-                  (< (level-of (.-_tab r)) my-level) nil
-                  (and (= (level-of (.-_tab r)) my-level)
-                       (= (.-parentId (tree-data! (.-_tab r))) my-parent-id))
-                    (.-_tab r)
-                  :else (recur (.-previousElementSibling r)))))))
+                  (not (boolean (js/get r ._tab))) (recur (js/get r .previousElementSibling))
+                  (< (level-of! (js/get r ._tab)) my-level) nil
+                  (and (= (level-of! (js/get r ._tab)) my-level)
+                       (= (js/get (tree-data! (js/get r ._tab)) .parentId) my-parent-id))
+                    (js/get r ._tab)
+                  :else (recur (js/get r .previousElementSibling)))))))
 
-        indent-row (fn [row]
-          (if (.-_group row)
+        indent-row (fn [row] Any
+          (if (js/get row ._group)
             (let [all-r (all-rows)
-                  i (.indexOf all-r row)]
+                  i (js/call all-r .indexOf row)]
               (when (> i 0)
-                (let [d (.-_group row)
-                      prev-lv (level-of-row (aget all-r (- i 1)))]
-                  (when (not (> (.-level d) prev-lv))
-                    (set! (.-level d) (+ (.-level d) 1))
-                    (.syncAnyRow rows row)))))
-            (when (.-_tab row)
-              (let [prev (.-previousElementSibling row)]
-                (if (and prev (.-_group prev))
-                  (do (set! (.-parentId (tree-data! (.-_tab row)))
-                            (.-id (.-_group prev)))
-                      (.forEach (subtree-rows row) #(.syncAnyRow rows %)))
+                (let [d (js/get row ._group)
+                      prev-lv (level-of-row! (aget all-r (- i 1)))]
+                  (when (not (> (js/get d .level) prev-lv))
+                    (js/set! d .level (+ (js/get d .level) 1))
+                    (js/call rows .syncAnyRow row)))))
+            (when (js/get row ._tab)
+              (let [prev (js/get row .previousElementSibling)]
+                (if (and prev (js/get prev ._group))
+                  (do (js/set! (tree-data! (js/get row ._tab)) .parentId
+                            (js/get (js/get prev ._group) .id))
+                      (js/call (subtree-rows! row) .forEach (fn [%1] Any (js/call rows .syncAnyRow %1))))
                   (let [sibling (prev-sibling-tab row)]
                     (when sibling
-                      (set! (.-parentId (tree-data! (.-_tab row)))
-                            (.-id (tree-data! sibling)))
-                      (.forEach (subtree-rows row) #(.syncAnyRow rows %))))))))
-          (.updateVisibility rows)
+                      (js/set! (tree-data! (js/get row ._tab)) .parentId
+                            (js/get (tree-data! sibling) .id))
+                      (js/call (subtree-rows! row) .forEach (fn [%1] Any (js/call rows .syncAnyRow %1)))))))))
+          (js/call rows .updateVisibility)
           (scheduleSave))
 
-        outdent-row (fn [row]
-          (if (.-_group row)
-            (let [d (.-_group row)]
-              (when (> (or (.-level d) 0) 0)
-                (set! (.-level d) (Math/max 0 (- (.-level d) 1)))
-                (.syncAnyRow rows row)))
-            (when (.-_tab row)
-              (let [td (tree-data! (.-_tab row))]
-                (when (not= (.-parentId td) nil)
-                  (if (= (js/typeof (.-parentId td)) "string")
-                    (set! (.-parentId td) nil)
-                    (let [parent (tab-by-id (.-parentId td))]
-                      (set! (.-parentId td)
-                            (and parent (.-parentId (tree-data! parent))))))
-                  (.forEach (subtree-rows row) #(.syncAnyRow rows %))))))
-          (.updateVisibility rows)
+        outdent-row (fn [row] Any
+          (if (js/get row ._group)
+            (let [d (js/get row ._group)]
+              (when (> (or (js/get d .level) 0) 0)
+                (js/set! d .level (Math/max 0 (- (js/get d .level) 1)))
+                (js/call rows .syncAnyRow row)))
+            (when (js/get row ._tab)
+              (let [td (tree-data! (js/get row ._tab))]
+                (when (not= (js/get td .parentId) nil)
+                  (if (= (js/typeof (js/get td .parentId)) "string")
+                    (js/set! td .parentId nil)
+                    (let [parent (tab-by-id (js/get td .parentId))]
+                      (js/set! td .parentId
+                            (and parent (js/get (tree-data! parent) .parentId)))))
+                  (js/call (subtree-rows! row) .forEach (fn [%1] Any (js/call rows .syncAnyRow %1)))))))
+          (js/call rows .updateVisibility)
           (scheduleSave))
 
-        move-to-root (fn [row]
-          (when (and row (.-_tab row))
-            (let [td (tree-data! (.-_tab row))]
-              (when (.-parentId td)
-                (set! (.-parentId td) nil)
-                (commit-tree (subtree-rows row))))))
+        move-to-root (fn [row] Any
+          (when (and row (js/get row ._tab))
+            (let [td (tree-data! (js/get row ._tab))]
+              (when (js/get td .parentId)
+                (js/set! td .parentId nil)
+                (commit-tree (subtree-rows! row))))))
 
-        make-child-of-above (fn [row]
-          (when (and row (.-_tab row))
-            (let [prev (.-previousElementSibling row)]
+        make-child-of-above (fn [row] Any
+          (when (and row (js/get row ._tab))
+            (let [prev (js/get row .previousElementSibling)]
               (when prev
-                (if (.-_group prev)
-                  (set! (.-parentId (tree-data! (.-_tab row)))
-                        (.-id (.-_group prev)))
-                  (when (.-_tab prev)
-                    (set! (.-parentId (tree-data! (.-_tab row)))
-                          (.-id (tree-data! (.-_tab prev))))))
-                (commit-tree (subtree-rows row))))))
+                (if (js/get prev ._group)
+                  (js/set! (tree-data! (js/get row ._tab)) .parentId
+                        (js/get (js/get prev ._group) .id))
+                  (when (js/get prev ._tab)
+                    (js/set! (tree-data! (js/get row ._tab)) .parentId
+                          (js/get (tree-data! (js/get prev ._tab)) .id))))
+                (commit-tree (subtree-rows! row))))))
 
-        swap-down (fn [row]
+        swap-down (fn [row] Any
           (when (data-of! row)
-            (let [my-level (level-of-row row)
-                  sub (subtree-rows row)
-                  last-row (aget sub (- (.-length sub) 1))
-                  next-row (.-nextElementSibling last-row)]
-              (when (and next-row (not= next-row (.-spacer state))
-                         (= (level-of-row next-row) my-level))
-                (let [next-sub (subtree-rows next-row)
-                      anchor (aget next-sub (- (.-length next-sub) 1))]
-                  (insert-after-each anchor sub))
-                (.updateVisibility rows)
+            (let [my-level (level-of-row! row)
+                  sub (subtree-rows! row)
+                  last-row (aget sub (- (js/get sub .length) 1))
+                  next-row (js/get last-row .nextElementSibling)]
+              (when (and next-row (not= next-row (js/get state .spacer))
+                         (= (level-of-row! next-row) my-level))
+                (let [next-sub (subtree-rows! next-row)
+                      anchor (aget next-sub (- (js/get next-sub .length) 1))]
+                  (insert-after-each! anchor sub))
+                (js/call rows .updateVisibility)
                 (scheduleSave)))))
 
-        swap-up (fn [row]
+        swap-up (fn [row] Any
           (when (data-of! row)
-            (let [my-level (level-of-row row)
-                  prev (loop [el (.-previousElementSibling row)]
+            (let [my-level (level-of-row! row)
+                  prev (loop [el (js/get row .previousElementSibling)]
                          (cond
                            (nil? el) nil
-                           (> (level-of-row el) my-level) (recur (.-previousElementSibling el))
+                           (> (level-of-row! el) my-level) (recur (js/get el .previousElementSibling))
                            :else el))]
-              (when (and prev (= (level-of-row prev) my-level))
-                (.forEach (subtree-rows row) #(.before prev %))
-                (.updateVisibility rows)
+              (when (and prev (= (level-of-row! prev) my-level))
+                (js/call (subtree-rows! row) .forEach (fn [%1] Any (js/call prev .before %1)))
+                (js/call rows .updateVisibility)
                 (scheduleSave)))))
 
         ;; Fold a row INTO its next same-level neighbour — it becomes that
         ;; neighbour's last child. The horizontal-mode counterpart to
         ;; make-child-of-above (which folds into the PREVIOUS neighbour): Alt+l
         ;; in horizontal "folds b into the tab on its right".
-        make-child-of-next (fn [row]
-          (when (and row (.-_tab row))
-            (let [my-level (level-of-row row)
-                  sub (subtree-rows row)
-                  last-row (aget sub (- (.-length sub) 1))
-                  next-row (.-nextElementSibling last-row)]
-              (when (and next-row (not= next-row (.-spacer state))
-                         (= (level-of-row next-row) my-level))
-                (if (.-_group next-row)
-                  (set! (.-parentId (tree-data! (.-_tab row))) (.-id (.-_group next-row)))
-                  (when (.-_tab next-row)
-                    (set! (.-parentId (tree-data! (.-_tab row)))
-                          (.-id (tree-data! (.-_tab next-row))))))
-                (let [next-sub (subtree-rows next-row)
-                      anchor (aget next-sub (- (.-length next-sub) 1))]
-                  (insert-after-each anchor sub))
-                (commit-tree (subtree-rows row))))))
+        make-child-of-next (fn [row] Any
+          (when (and row (js/get row ._tab))
+            (let [my-level (level-of-row! row)
+                  sub (subtree-rows! row)
+                  last-row (aget sub (- (js/get sub .length) 1))
+                  next-row (js/get last-row .nextElementSibling)]
+              (when (and next-row (not= next-row (js/get state .spacer))
+                         (= (level-of-row! next-row) my-level))
+                (if (js/get next-row ._group)
+                  (js/set! (tree-data! (js/get row ._tab)) .parentId (js/get (js/get next-row ._group) .id))
+                  (when (js/get next-row ._tab)
+                    (js/set! (tree-data! (js/get row ._tab)) .parentId
+                          (js/get (tree-data! (js/get next-row ._tab)) .id))))
+                (let [next-sub (subtree-rows! next-row)
+                      anchor (aget next-sub (- (js/get next-sub .length) 1))]
+                  (insert-after-each! anchor sub))
+                (commit-tree (subtree-rows! row))))))
 
         ;; Parent row of `row` = the nearest preceding row at a shallower level.
-        parent-row-of (fn [row]
-          (let [my-level (level-of-row row)]
-            (loop [el (.-previousElementSibling row)]
+        parent-row-of (fn [row] Any
+          (let [my-level (level-of-row! row)]
+            (loop [el (js/get row .previousElementSibling)]
               (cond
                 (nil? el) nil
-                (< (level-of-row el) my-level) el
-                :else (recur (.-previousElementSibling el))))))
+                (< (level-of-row! el) my-level) el
+                :else (recur (js/get el .previousElementSibling))))))
 
         ;; Unfold a nested row OUT to root, landing just AFTER its parent's whole
         ;; column (Alt+l on a child). In column-major DOM a lone child already
         ;; sits right after the parent, so that's a plain outdent; a middle child
         ;; is first moved past the parent's remaining subtree.
-        unfold-right (fn [row]
-          (when (and row (.-_tab row) (.-parentId (tree-data! (.-_tab row))))
-            (let [sub (subtree-rows row)
+        unfold-right (fn [row] Any
+          (when (and row (js/get row ._tab) (js/get (tree-data! (js/get row ._tab)) .parentId))
+            (let [sub (subtree-rows! row)
                   p (parent-row-of row)
-                  p-sub (when p (subtree-rows p))
-                  anchor (when p-sub (aget p-sub (- (.-length p-sub) 1)))]
-              (set! (.-parentId (tree-data! (.-_tab row))) nil)
-              (when (and anchor (not (.includes sub anchor)))
-                (insert-after-each anchor sub))
-              (commit-tree (subtree-rows row)))))
+                  p-sub (when p (subtree-rows! p))
+                  anchor (when p-sub (aget p-sub (- (js/get p-sub .length) 1)))]
+              (js/set! (tree-data! (js/get row ._tab)) .parentId nil)
+              (when (and anchor (not (js/call sub .includes anchor)))
+                (insert-after-each! anchor sub))
+              (commit-tree (subtree-rows! row)))))
 
         ;; Unfold a nested row OUT to root, landing just BEFORE its parent's
         ;; column (Alt+h on a child) — the mirror of unfold-right.
-        unfold-left (fn [row]
-          (when (and row (.-_tab row) (.-parentId (tree-data! (.-_tab row))))
-            (let [sub (subtree-rows row)
+        unfold-left (fn [row] Any
+          (when (and row (js/get row ._tab) (js/get (tree-data! (js/get row ._tab)) .parentId))
+            (let [sub (subtree-rows! row)
                   p (parent-row-of row)]
-              (set! (.-parentId (tree-data! (.-_tab row))) nil)
-              (when p (.forEach sub #(.before p %)))
-              (commit-tree (subtree-rows row)))))
+              (js/set! (tree-data! (js/get row ._tab)) .parentId nil)
+              (when p (js/call sub .forEach (fn [%1] Any (js/call p .before %1))))
+              (commit-tree (subtree-rows! row)))))
 
 
-        create-modeline (fn []
+        create-modeline (fn [] Any
           (let [ml (xul-id "hbox" "gjoa-modeline")
                 mode-label (xul-id "label" "gjoa-modeline-mode")
                 chord-label (xul-id "label" "gjoa-modeline-chord")
@@ -443,99 +433,108 @@
             (attr! chord-label "flex" "1")
             (attr! msg-label "value" "")
             (attr! msg-label "crop" "end")
-            (.appendChild ml mode-label)
-            (.appendChild ml chord-label)
-            (.appendChild ml msg-label)
-            (let [anchor (or (by-id "appcontent") (.-documentElement document))]
-              (.appendChild anchor ml)
-              (set! (.-modeline vs) ml))))
+            (js/call ml .appendChild mode-label)
+            (js/call ml .appendChild chord-label)
+            (js/call ml .appendChild msg-label)
+            (let [anchor (or (by-id "appcontent") (js/get document .documentElement))]
+              (js/call anchor .appendChild ml)
+              (js/set! vs .modeline ml))))
 
-        update-modeline (fn []
-          (when (.-modeline vs)
+        update-modeline (fn [] Any
+          (when (js/get vs .modeline)
             (let [mode-label (by-id "gjoa-modeline-mode")
                   chord-label (by-id "gjoa-modeline-chord")
                   msg-label (by-id "gjoa-modeline-msg")
-                  pending (if (.-pending-ctrl-w vs) "C-w-"
-                            (if (= (.-chord vs) "g") "g-" ""))]
+                  pending (if (js/get vs .pending-ctrl-w) "C-w-"
+                            (if (= (js/get vs .chord) "g") "g-" ""))]
               (when mode-label (attr! mode-label "value" ""))
               (when chord-label (attr! chord-label "value" pending))
               (let [has-content (or pending
-                                    (some-> msg-label (.getAttribute "value"))
-                                    (.-search-active vs)
-                                    (q (.-modeline vs) ".gjoa-search-input"))]
-                (toggle! (.-modeline vs) "gjoa-visible"
+                                    (some-> msg-label (js/call .getAttribute "value"))
+                                    (js/get vs .search-active)
+                                    (q (js/get vs .modeline) ".gjoa-search-input"))]
+                (toggle! (js/get vs .modeline) "gjoa-visible"
                                   has-content)))))
 
-        modeline-msg (fn [text duration]
-          (let [dur (if (= duration js/undefined) 3000 duration)]
-            (when (.-modeline vs)
+        modeline-msg (fn [text duration] Any
+          (let [dur (if (= duration undefined) 3000 duration)]
+            (when (js/get vs .modeline)
               (let [msg (by-id "gjoa-modeline-msg")]
                 (when msg
                   (attr! msg "value" text)
-                  (attr! (.-modeline vs) "gjoa-visible" "true")
-                  (clearTimeout (.-modeline-timer vs))
-                  (set! (.-modeline-timer vs)
-                        (setTimeout (fn []
+                  (attr! (js/get vs .modeline) "gjoa-visible" "true")
+                  (clearTimeout (js/get vs .modeline-timer))
+                  (js/set! vs .modeline-timer
+                        (setTimeout (fn [] Any
                                       (attr! msg "value" "")
                                       (update-modeline))
                                     dur)))))))
 
+        ;; Spotlight picker
+        picker (make-picker!
+                 {:restoreFocus (fn [] Any (when (js/get state .panel) (js/call (js/get state .panel) .focus)))
+                  :modelineMsg  (fn [%1 %2] Any (modeline-msg %1 %2))})
 
-        focus-panel (fn []
-          (set! (.-panel-active vs) true)
-          (.focus (.-panel state))
-          (when (not (.-cursor state))
-            (let [row (.get row-of (.-selectedTab gBrowser))]
+
+        focus-panel (fn [] Any
+          (js/set! vs .panel-active true)
+          (js/call (js/get state .panel) .focus)
+          (when (not (js/get state .cursor))
+            (let [row (js/call row-of .get (js/get gBrowser .selectedTab))]
               (when row (set-cursor row))))
           (update-modeline))
+
+        activate-vim (fn [row] Any
+          (focus-panel)
+          (set-cursor row))
 
         ;; Startup only. The panel is the DEFAULT keyboard target, never a
         ;; preemption: gjoa's bundles load after the window is interactive, so a
         ;; urlbar that already owns the caret is the user's click/Ctrl+L and this
         ;; must leave it alone (the panel would then eat their keystrokes as vim
         ;; commands). Cursor + modeline still initialize.
-        focus-panel-unless-urlbar (fn []
+        focus-panel-unless-urlbar (fn [] Any
           (let [u (by-id "urlbar")
-                a (.-activeElement document)]
-            (if (bool (and u a (or (identical? a u) (.contains u a))))
+                a (js/get document .activeElement)]
+            (if (bool (and u a (or (identical? a u) (js/call u .contains a))))
               (do
-                (when (not (.-cursor state))
-                  (let [row (.get row-of (.-selectedTab gBrowser))]
+                (when (not (js/get state .cursor))
+                  (let [row (js/call row-of .get (js/get gBrowser .selectedTab))]
                     (when row (set-cursor row))))
                 (update-modeline))
               (focus-panel))))
 
-        blur-panel (fn []
-          (set! (.-panel-active vs) false)
-          (set! (.-chord vs) nil)
-          (set! (.-pending-ctrl-w vs) false)
-          (clearTimeout (.-chord-timer vs))
-          (when (and (is-horizontal) (.-hz-expanded-root vs))
-            (collapse-hz-tree (.-hz-expanded-root vs))
-            (set! (.-hz-expanded-root vs) nil)
-            (.updateVisibility rows))
+        blur-panel (fn [] Any
+          (js/set! vs .panel-active false)
+          (js/set! vs .chord nil)
+          (js/set! vs .pending-ctrl-w false)
+          (clearTimeout (js/get vs .chord-timer))
+          (when (and (is-horizontal) (js/get vs .hz-expanded-root))
+            (collapse-hz-tree (js/get vs .hz-expanded-root))
+            (js/set! vs .hz-expanded-root nil)
+            (js/call rows .updateVisibility))
           (update-modeline))
 
 
-        activate-urlbar (fn [intent]
+        activate-urlbar (fn [intent] Any
           (try
-            (let [u (.-gURLBar window)]
+            (let [u (js/get window .gURLBar)]
               (when u
-                (when (.-focus u) (.focus u))
-                (when (.-select u) (.select u))
-                (when (some-> u .-view .-autoOpen)
-                  (.autoOpen (.-view u) {:event (Event. "command")}))))
-            (catch Any _e nil))
-          (.dispatchEvent document
-            (CustomEvent. "gjoa-urlbar-activate" {:detail {:intent intent}})))
+                (when (js/get u .focus) (js/call u .focus))
+                (when (js/get u .select) (js/call u .select))
+                (when (some-> u (js/get .view) (js/get .autoOpen))
+                  (js/call (js/get u .view) .autoOpen {:event (js/new Event "command")}))))
+            (catch (_e Any) nil))
+          (js/call document .dispatchEvent
+            (js/new CustomEvent "gjoa-urlbar-activate" {:detail {:intent intent}})))
 
-        toggle-last-tab (fn []
-          (let [target (.-last-tab vs)]
+        toggle-last-tab (fn [] Any
+          (let [target (js/get vs .last-tab)]
             (when target
               (try
-                (when (.-isOpen target)
-                  (set! (.-selectedTab gBrowser) target))
-                (catch Any e
+                (when (js/get target .isOpen)
+                  (js/set! gBrowser .selectedTab target))
+                (catch (e Any)
                   (console/error "gjoa-tabs: toggleLastTab failed" e))))))
 
         ;; Toggle Firefox's vertical sidebar launcher strip (#sidebar-container) in
@@ -543,50 +542,50 @@
         ;; the toolbar row, so the strip is redundant chrome. The CSS reacts to
         ;; the pref live via @media -moz-pref; we just flip the bool. Reports the
         ;; new state in the modeline so the silent CSS change is legible.
-        toggle-h-sidebar-strip (fn []
+        toggle-h-sidebar-strip (fn [] Any
           (let [cur (pref-bool "gjoa.layout.horizontalSidebarStrip" false)
                 next (not cur)]
             (set-pref-bool! "gjoa.layout.horizontalSidebarStrip" next)
             (modeline-msg (str "Sidebar strip " (if next "shown" "hidden")) 2000)))
 
-        key-enabled (fn [name] :- Bool
+        key-enabled (fn [name] Bool
           (pref-bool (str "gjoa.keys." name ".enabled") true))
 
-        blacklisted-hosts (fn []
+        blacklisted-hosts (fn [] Any
           (let [raw (pref-str "gjoa.keys.blacklist" "")]
-            (.filter (.map (.split raw ",") #(.toLowerCase (.trim %)))
-                     #(bool %))))
+            (js/call (js/call (js/call raw .split ",") .map (fn [%1] Any (js/call (js/call %1 .trim) .toLowerCase))) .filter
+                     (fn [%1] Any (bool %1)))))
 
-        current-host (fn [] :- String
+        current-host (fn [] String
           (try
             (let [uri (current-spec)]
-              (if (not uri) "" (.toLowerCase (.-hostname (URL. uri)))))
-            (catch Any _e "")))
+              (if (not uri) "" (js/call (js/get (js/new URL uri) .hostname) .toLowerCase)))
+            (catch (_e Any) "")))
 
-        current-host-blacklisted (fn [] :- Bool
+        current-host-blacklisted (fn [] Bool
           (let [host (current-host)]
             (and (bool host)
-                 (.some (blacklisted-hosts)
-                   #(or (= host %) (.endsWith host (str "." %)))))))
+                 (js/call (blacklisted-hosts) .some
+                   (fn [%1] Any (or (= host %1) (js/call host .endsWith (str "." %1))))))))
 
-        blacklist-add (fn [host]
+        blacklist-add (fn [host] Any
           (let [list (blacklisted-hosts)
-                h (.toLowerCase (.trim host))]
-            (when (and h (not (.includes list h)))
-              (.push list h)
-              (set-pref-str! "gjoa.keys.blacklist" (.join list ",")))))
+                h (js/call (js/call host .trim) .toLowerCase)]
+            (when (and h (not (js/call list .includes h)))
+              (js/call list .push h)
+              (set-pref-str! "gjoa.keys.blacklist" (js/call list .join ",")))))
 
-        blacklist-remove (fn [host] :- Bool
+        blacklist-remove (fn [host] Bool
           (let [list (blacklisted-hosts)
-                h (.toLowerCase (.trim host))
-                next (.filter list #(not= % h))]
-            (if (= (.-length next) (.-length list))
+                h (js/call (js/call host .trim) .toLowerCase)
+                next (js/call list .filter (fn [%1] Any (not= %1 h)))]
+            (if (= (js/get next .length) (js/get list .length))
               false
-              (do (set-pref-str! "gjoa.keys.blacklist" (.join next ","))
+              (do (set-pref-str! "gjoa.keys.blacklist" (js/call next .join ","))
                   true))))
 
 
-        leader-key (fn []
+        leader-key (fn [] Any
           ;; Must return nil (not undefined) when leader mode is off: the keydown
           ;; handler gates on `(not= leader nil)`, which compiles to `!== null`.
           ;; A bare `when` falls through to `undefined`, and `undefined !== null`
@@ -594,165 +593,165 @@
           ;; `e.key === undefined` never matches), silently killing all hotkeys.
           (if (pref-bool "gjoa.keys.useLeader" false)
             (let [v (pref-str "gjoa.keys.leader" " ")]
-              (if (= (.-length v) 0) nil v))
+              (if (= (js/get v .length) 0) nil v))
             nil))
 
-        leader-timeout-ms (fn [] :- Int
+        leader-timeout-ms (fn [] Int
           (pref-int "gjoa.keys.leader_timeout" 1500))
 
 
-        which-key-ensure (fn []
-          (if (some-> vs .-which-key-el .-isConnected)
-            (.-which-key-el vs)
+        which-key-ensure (fn [] Any
+          (if (some-> vs (js/get .which-key-el) (js/get .isConnected))
+            (js/get vs .which-key-el)
             (let [el (html-new "div")
                   header (htm "div" "gjoa-wk-header")]
-              (set! (.-id el) "gjoa-which-key")
-              (set! (.-hidden el) true)
-              (set! (.-textContent header) "leader")
-              (.appendChild el header)
-              (.forEach VIM-COMMANDS (fn [b]
+              (js/set! el .id "gjoa-which-key")
+              (js/set! el .hidden true)
+              (js/set! header .textContent "leader")
+              (js/call el .appendChild header)
+              (js/call VIM-COMMANDS .forEach (fn [b] Any
                 ;; exCommand (":") is listed in the ": commands" section below, not
                 ;; the leader keymap. Guard by command-id (the gjoa.keys.<id>.enabled
                 ;; toggle). Shows the DEFAULT key; effective-key display lands with about:vim.
-                (when (and (not= (.-id b) "exCommand") (key-enabled (.-id b)))
+                (when (and (not= (js/get b .id) "exCommand") (key-enabled (js/get b .id)))
                   (let [row (htm "div" "gjoa-wk-row")
                         k (htm "span" "gjoa-wk-key")
                         d (htm "span" "gjoa-wk-desc")]
-                    (set! (.-textContent k) (if (= (.-key b) " ") "Space" (.-key b)))
-                    (set! (.-textContent d) (.-desc b))
-                    (.appendChild row k)
-                    (.appendChild row d)
-                    (.appendChild el row)))))
+                    (js/set! k .textContent (if (= (js/get b .key) " ") "Space" (js/get b .key)))
+                    (js/set! d .textContent (js/get b .desc))
+                    (js/call row .appendChild k)
+                    (js/call row .appendChild d)
+                    (js/call el .appendChild row)))))
               ;; The ": commands" section — make the ex-command set as
               ;; self-documenting as the leader keymap (same ? / :help overlay).
               (let [exHeader (htm "div" "gjoa-wk-header gjoa-wk-section")]
-                (set! (.-textContent exHeader) ": commands")
-                (.appendChild el exHeader))
-              (.forEach EX-COMMANDS (fn [c]
+                (js/set! exHeader .textContent ": commands")
+                (js/call el .appendChild exHeader))
+              (js/call EX-COMMANDS .forEach (fn [c] Any
                 (let [row (htm "div" "gjoa-wk-row")
                       k (htm "span" "gjoa-wk-cmd")
                       d (htm "span" "gjoa-wk-desc")]
-                  (set! (.-textContent k) (str ":" (.-name c) (if (.-takesArgs c) " …" "")))
-                  (set! (.-textContent d) (.-description c))
-                  (.appendChild row k)
-                  (.appendChild row d)
-                  (.appendChild el row))))
-              (.appendChild (.-documentElement document) el)
-              (set! (.-which-key-el vs) el)
+                  (js/set! k .textContent (str ":" (js/get c .name) (if (js/get c .takesArgs) " …" "")))
+                  (js/set! d .textContent (js/get c .description))
+                  (js/call row .appendChild k)
+                  (js/call row .appendChild d)
+                  (js/call el .appendChild row))))
+              (js/call (js/get document .documentElement) .appendChild el)
+              (js/set! vs .which-key-el el)
               el)))
 
-        ensure-leader-focus-stash (fn []
-          (if (some-> vs .-leader-focus-stash .-isConnected)
-            (.-leader-focus-stash vs)
+        ensure-leader-focus-stash (fn [] Any
+          (if (some-> vs (js/get .leader-focus-stash) (js/get .isConnected))
+            (js/get vs .leader-focus-stash)
             (let [el (html-new "div")]
-              (set! (.-id el) "gjoa-leader-focus-stash")
+              (js/set! el .id "gjoa-leader-focus-stash")
               (attr! el "aria-hidden" "true")
               (attr! el "tabindex" "-1")
               (css! el "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none")
-              (.appendChild (.-documentElement document) el)
-              (set! (.-leader-focus-stash vs) el)
+              (js/call (js/get document .documentElement) .appendChild el)
+              (js/set! vs .leader-focus-stash el)
               el)))
 
-        arm-leader (fn []
-          (set! (.-leader-armed vs) true)
-          (when (not= (.-leader-timer vs) nil) (clearTimeout (.-leader-timer vs)))
-          (set! (.-leader-timer vs)
-                (setTimeout #(disarm-leader) (leader-timeout-ms)))
-          (let [a (.-activeElement document)]
-            (when (and a (not= a (.-leader-focus-stash vs)))
-              (set! (.-leader-prev-focus vs) a)))
-          (try (.focus (ensure-leader-focus-stash)) (catch Any _e nil)))
-
-        disarm-leader (fn []
-          (set! (.-leader-armed vs) false)
-          (when (not= (.-leader-timer vs) nil)
-            (clearTimeout (.-leader-timer vs))
-            (set! (.-leader-timer vs) nil))
+        disarm-leader (fn [] Any
+          (js/set! vs .leader-armed false)
+          (when (not= (js/get vs .leader-timer) nil)
+            (clearTimeout (js/get vs .leader-timer))
+            (js/set! vs .leader-timer nil))
           (try
-            (when (and (.-leader-prev-focus vs)
-                       (= (.-activeElement document) (.-leader-focus-stash vs)))
-              (when (.-focus (.-leader-prev-focus vs))
-                (.focus (.-leader-prev-focus vs))))
-            (catch Any _e nil))
-          (set! (.-leader-prev-focus vs) nil))
+            (when (and (js/get vs .leader-prev-focus)
+                       (= (js/get document .activeElement) (js/get vs .leader-focus-stash)))
+              (when (js/get (js/get vs .leader-prev-focus) .focus)
+                (js/call (js/get vs .leader-prev-focus) .focus)))
+            (catch (_e Any) nil))
+          (js/set! vs .leader-prev-focus nil))
 
-        toggle-which-key (fn []
+        arm-leader (fn [] Any
+          (js/set! vs .leader-armed true)
+          (when (not= (js/get vs .leader-timer) nil) (clearTimeout (js/get vs .leader-timer)))
+          (js/set! vs .leader-timer
+                (setTimeout (fn [] Any (disarm-leader)) (leader-timeout-ms)))
+          (let [a (js/get document .activeElement)]
+            (when (and a (not= a (js/get vs .leader-focus-stash)))
+              (js/set! vs .leader-prev-focus a)))
+          (try (js/call (ensure-leader-focus-stash) .focus) (catch (_e Any) nil)))
+
+        toggle-which-key (fn [] Any
           (let [el (which-key-ensure)]
-            (set! (.-hidden el) (not (.-hidden el)))))
+            (js/set! el .hidden (not (js/get el .hidden)))))
 
-        hide-which-key (fn []
-          (when (.-which-key-el vs)
-            (set! (.-hidden (.-which-key-el vs)) true)))
+        hide-which-key (fn [] Any
+          (when (js/get vs .which-key-el)
+            (js/set! (js/get vs .which-key-el) .hidden true)))
 
         ;; --- link hints (#130 P4) -------------------------------------------------
         ;; The page DOM lives in the content process; the GjoaInput actor's content
         ;; half does the labeling/activation, chrome owns the keymap. 'f'/'F' open a
         ;; session; while :link-hints-active, the global keydown routes each char to
         ;; the actor via sendQuery and clears the flag when the actor reports done.
-        link-hints-actor (fn [] :- Any
-          (some-> gBrowser .-selectedBrowser .-browsingContext .-currentWindowGlobal
-            (.getActor "GjoaInput")))
+        link-hints-actor (fn [] Any
+          (some-> gBrowser (js/get .selectedBrowser) (js/get .browsingContext) (js/get .currentWindowGlobal)
+            (js/call .getActor "GjoaInput")))
 
-        end-link-hints (fn [send-cancel?] :- Any
-          (set! (.-link-hints-active vs) false)
+        end-link-hints (fn [send-cancel?] Any
+          (js/set! vs .link-hints-active false)
           (when send-cancel?
             (let [a (link-hints-actor)]
-              (when a (try (.sendQuery a "LinkHints:Cancel") (catch Any _e nil))))))
+              (when a (try (js/call a .sendQuery "LinkHints:Cancel") (catch (_e Any) nil))))))
 
-        start-link-hints (fn [new-tab] :- Any
+        start-link-hints (fn [new-tab] Any
           (let [a (link-hints-actor)]
             (when a
-              (set! (.-link-hints-active vs) true)
+              (js/set! vs .link-hints-active true)
               (try
-                (.then (.sendQuery a "LinkHints:Show" {:newTab new-tab})
-                       (fn [r] (when (or (not r) (= (.-count r) 0))
-                                 (set! (.-link-hints-active vs) false)))
-                       (fn [_e] (set! (.-link-hints-active vs) false)))
-                (catch Any _e (set! (.-link-hints-active vs) false))))))
+                (js/call (js/call a .sendQuery "LinkHints:Show" {:newTab new-tab}) .then
+                       (fn [r] Any (when (or (not r) (= (js/get r .count) 0))
+                                 (js/set! vs .link-hints-active false)))
+                       (fn [_e] Any (js/set! vs .link-hints-active false)))
+                (catch (_e Any) (js/set! vs .link-hints-active false))))))
 
-        handle-link-hints-key (fn [e] :- Any
+        handle-link-hints-key (fn [e] Any
           (if (key= e "Escape")
             (end-link-hints true)
-            (let [k (.-key e)]
-              (when (or (= (.-length k) 1) (key= e "Backspace"))
+            (let [k (js/get e .key)]
+              (when (or (= (js/get k .length) 1) (key= e "Backspace"))
                 (let [a (link-hints-actor)]
                   (when a
                     (try
-                      (.then (.sendQuery a "LinkHints:Key" {:key k})
-                             (fn [r]
-                               (when (and r (not= (.-state r) "active"))
-                                 (set! (.-link-hints-active vs) false))
-                               (when (and r (.-url r) (.-newTab r))
-                                 (try (.openTrustedLinkIn window (.-url r) "tab")
-                                      (catch Any _e nil))))
-                             (fn [_e] (set! (.-link-hints-active vs) false)))
-                      (catch Any _e (set! (.-link-hints-active vs) false)))))))))
+                      (js/call (js/call a .sendQuery "LinkHints:Key" {:key k}) .then
+                             (fn [r] Any
+                               (when (and r (not= (js/get r .state) "active"))
+                                 (js/set! vs .link-hints-active false))
+                               (when (and r (js/get r .url) (js/get r .newTab))
+                                 (try (js/call window .openTrustedLinkIn (js/get r .url) "tab")
+                                      (catch (_e Any) nil))))
+                             (fn [_e] Any (js/set! vs .link-hints-active false)))
+                      (catch (_e Any) (js/set! vs .link-hints-active false)))))))))
 
         ;; --- visual / caret mode (#130 P6) ----------------------------------------
         ;; 'v' seeds a caret + enters visual mode; hjkl/w/b extend the page selection
         ;; (the actor calls Selection.modify), y yanks (execCommand copy), ESC clears.
-        start-visual (fn [] :- Any
+        start-visual (fn [] Any
           (let [a (link-hints-actor)]
             (when a
-              (set! (.-visual-active vs) true)
+              (js/set! vs .visual-active true)
               (try
-                (.then (.sendQuery a "Visual:Start" {})
-                       (fn [r] (when (or (not r) (not (.-ok r)))
-                                 (set! (.-visual-active vs) false)))
-                       (fn [_e] (set! (.-visual-active vs) false)))
-                (catch Any _e (set! (.-visual-active vs) false))))))
+                (js/call (js/call a .sendQuery "Visual:Start" {}) .then
+                       (fn [r] Any (when (or (not r) (not (js/get r .ok)))
+                                 (js/set! vs .visual-active false)))
+                       (fn [_e] Any (js/set! vs .visual-active false)))
+                (catch (_e Any) (js/set! vs .visual-active false))))))
 
-        end-visual (fn [yank?] :- Any
-          (set! (.-visual-active vs) false)
+        end-visual (fn [yank?] Any
+          (js/set! vs .visual-active false)
           (let [a (link-hints-actor)]
             (when a
               (if yank?
-                (try (.then (.sendQuery a "Visual:Yank")
-                            (fn [r] (when r (modeline-msg (str "yanked " (.-len r) " chars") 2000))))
-                     (catch Any _e nil))
-                (try (.sendQuery a "Visual:Cancel") (catch Any _e nil))))))
+                (try (js/call (js/call a .sendQuery "Visual:Yank") .then
+                            (fn [r] Any (when r (modeline-msg (str "yanked " (js/get r .len) " chars") 2000))))
+                     (catch (_e Any) nil))
+                (try (js/call a .sendQuery "Visual:Cancel") (catch (_e Any) nil))))))
 
-        visual-move-of (fn [k] :- Any
+        visual-move-of (fn [k] Any
           (cond
             (= k "h") {:dir "left"     :unit "character"}
             (= k "l") {:dir "right"    :unit "character"}
@@ -764,8 +763,8 @@
             (= k "$") {:dir "forward"  :unit "lineboundary"}
             :else nil))
 
-        handle-visual-key (fn [e] :- Any
-          (let [k (.-key e)]
+        handle-visual-key (fn [e] Any
+          (let [k (js/get e .key)]
             (cond
               (key= e "Escape") (end-visual false)
               (= k "y")         (end-visual true)
@@ -773,279 +772,202 @@
               (let [mv (visual-move-of k)]
                 (when mv
                   (let [a (link-hints-actor)]
-                    (when a (try (.sendQuery a "Visual:Move" mv) (catch Any _e nil)))))))))
+                    (when a (try (js/call a .sendQuery "Visual:Move" mv) (catch (_e Any) nil)))))))))
 
-        ;; id → action. The one place each command's behavior lives; dispatch and
-        ;; (later) about:vim / :bind reference commands by id. `e` is the keydown.
-        command-handlers (fn [e id] :- Any
-          (cond
-            (= id "tabsPicker")    (open-tabs-picker "space")
-            (= id "tabsPickerAll") (open-tabs-picker "all")
-            (= id "exCommand")     (open-ex-command-picker)
-            (= id "closeTab")      (try (.removeTab gBrowser (.-selectedTab gBrowser)) (catch Any _e nil))
-            (= id "urlbar")        (activate-urlbar "current")
-            (= id "urlbarNewTab")  (activate-urlbar "newTab")
-            (= id "lastTab")       (toggle-last-tab)
-            (= id "back")          (try (.goBack (.-selectedBrowser gBrowser)) (catch Any _e nil))
-            (= id "forward")       (try (.goForward (.-selectedBrowser gBrowser)) (catch Any _e nil))
-            (= id "scrollDown")
-              (when (not (.-repeat e))
-                (try (some-> gBrowser .-selectedBrowser .-browsingContext .-currentWindowGlobal
-                       (.getActor "GjoaInput") (.sendAsyncMessage "GjoaInput:ScrollStart" {:dy 1}))
-                     (catch Any _e nil)))
-            (= id "scrollUp")
-              (when (not (.-repeat e))
-                (try (some-> gBrowser .-selectedBrowser .-browsingContext .-currentWindowGlobal
-                       (.getActor "GjoaInput") (.sendAsyncMessage "GjoaInput:ScrollStart" {:dy -1}))
-                     (catch Any _e nil)))
-            (= id "summonSidebar")
-              ;; #127: SUMMON — brief reveal, meant for a quick peek; the sidebar
-              ;; dismisses itself after enter→leave. Mode-aware: in COMPACT mode
-              ;; it pins/unpins the overlay reveal; in STATIC mode it tucks the
-              ;; sidebar back into compact. (Behavior unchanged by the rename —
-              ;; the id now names the intent; the reveal logic is untouched.)
-              (let [sb (by-id "sidebar-container")]
-                (if (pref-bool "gjoa.sidebar.compact" false)
-                  (when sb
-                    (if (or (.hasAttribute sb "gjoa-pinned") (.hasAttribute sb "gjoa-has-hover"))
-                      (do (.removeAttribute sb "gjoa-pinned")
-                          (.removeAttribute sb "gjoa-has-hover"))
-                      (.setAttribute sb "gjoa-pinned" "true")))
-                  (do (when sb (.removeAttribute sb "gjoa-pinned"))
-                      (set-pref-bool! "gjoa.sidebar.compact" true))))
-            (= id "anchorSidebar")
-              ;; ANCHOR/FLOAT — the persistent toggle the custom sidebar button
-              ;; fires. Route through the SAME compact.toggle the button drives
-              ;; (window.gjoaCompact) so there is one anchor/float code path.
-              (let [c (.-gjoaCompact window)]
-                (when c (.toggle c)))
-            (= id "toggleStrip")   (toggle-h-sidebar-strip)
-            (= id "help")          (toggle-which-key)
-            (= id "linkHints")       (start-link-hints false)
-            (= id "linkHintsNewTab") (start-link-hints true)
-            ;; #130 P5: in-page find delegates to Firefox's native findbar — battle-
-            ;; tested highlight/scroll/wrap, n/N repeat. '/' opens it; n/N find-again.
-            (= id "find")
-              (try (.then (.getFindBar gBrowser)
-                          (fn [fb] (when fb (.startFind fb (.-FIND_NORMAL fb)))))
-                   (catch Any _e nil))
-            (= id "findNext")
-              (try (.then (.getFindBar gBrowser)
-                          (fn [fb] (when fb (.onFindAgainCommand fb false))))
-                   (catch Any _e nil))
-            (= id "findPrev")
-              (try (.then (.getFindBar gBrowser)
-                          (fn [fb] (when fb (.onFindAgainCommand fb true))))
-                   (catch Any _e nil))
-            (= id "visualMode")      (start-visual)
-            :else nil))
+        focus-content (fn [] Any
+          (js/call (js/get gBrowser .selectedBrowser) .focus))
 
-        try-dispatch-binding (fn [e] :- Bool
-          ;; Registry dispatch: key → effective command-id (VIM-COMMANDS defaults
-          ;; overlaid by the gjoa.keys.bindings override pref) → run its handler.
-          ;; Nothing hardcoded; about:vim + `:bind` rebind by editing that one pref.
-          (if (or (.-ctrlKey e) (.-altKey e) (.-metaKey e))
-            false
-            (let [id (effective-command-id (.-key e) (pref-str "gjoa.keys.bindings" ""))]
-              (if (and id (.has COMMAND-IDS id))
-                (dispatch-key e id (command-handlers e id))
-                false))))
-
-
-        focus-content (fn []
-          (.focus (.-selectedBrowser gBrowser)))
-
-        pane-switch (fn [key]
-          (let [k (.toLowerCase key)]
+        pane-switch (fn [key] Any
+          (let [k (js/call key .toLowerCase)]
             (cond
               (= k "h") (focus-panel)
               (= k "l") (focus-content)
-              (= k "w") (if (= (.-activeElement document) (.-panel state))
+              (= k "w") (if (= (js/get document .activeElement) (js/get state .panel))
                            (focus-content) (focus-panel))
               :else nil)))
 
 
-        go-to-end (fn [idx]
-          (let [visible (.filter (all-rows) #(not (.-hidden %)))]
-            (when (> (.-length visible) 0)
-              (let [r (aget visible (if (< idx 0) (+ (.-length visible) idx) idx))]
+        go-to-end (fn [(idx Int)] Any
+          (let [visible (js/call (all-rows) .filter (fn [%1] Any (not (js/get %1 .hidden))))]
+            (when (> (js/get visible .length) 0)
+              (let [r (aget visible (if (< idx 0) (+ (js/get visible .length) idx) idx))]
                 (set-cursor r)
-                (when (.-_tab r)
-                  (set! (.-selectedTab gBrowser) (.-_tab r)))))))
+                (when (js/get r ._tab)
+                  (js/set! gBrowser .selectedTab (js/get r ._tab)))))))
 
-        go-to-top (fn [] (go-to-end 0))
-        go-to-bottom (fn [] (go-to-end -1))
+        go-to-top (fn [] Any (go-to-end 0))
+        go-to-bottom (fn [] Any (go-to-end -1))
 
 
-        close-focused (fn []
-          (if (> (.-size selection) 1)
+        close-focused (fn [] Any
+          (if (> (js/get selection .size) 1)
             ;; Multi-select
             (let [sel (Array/from selection)]
               (clearSelection)
-              (let [last-r (aget sel (- (.-length sel) 1))
-                    find-valid (fn [n]
-                                 (when n
-                                   (if (or (.-hidden n) (= n (.-spacer state))
-                                           (.includes sel n))
-                                     (find-valid (.-nextElementSibling n))
-                                     n)))
-                    next (find-valid (.-nextElementSibling last-r))]
-                (when (and next (not= next (.-spacer state)))
-                  (set-cursor next))
-                (loop [i (- (.-length sel) 1)]
-                  (when (>= i 0)
-                    (let [row (aget sel i)]
-                      (if (.-_tab row)
-                        (.removeTab gBrowser (.-_tab row))
-                        (when (.-_group row) (.remove row))))
-                    (recur (- i 1))))
-                (.updateVisibility rows)
-                (scheduleSave)))
+              (let [last-r (aget sel (- (js/get sel .length) 1))]
+                (letfn [(find-valid [(n Any)] Any
+                          (when n
+                            (if (or (js/get n .hidden) (= n (js/get state .spacer))
+                                    (js/call sel .includes n))
+                              (find-valid (js/get n .nextElementSibling))
+                              n)))]
+                  (let [next (find-valid (js/get last-r .nextElementSibling))]
+                    (when (and next (not= next (js/get state .spacer)))
+                      (set-cursor next))
+                    (loop [i (- (js/get sel .length) 1)]
+                      (when (>= i 0)
+                        (let [row (aget sel i)]
+                          (if (js/get row ._tab)
+                            (js/call gBrowser .removeTab (js/get row ._tab))
+                            (when (js/get row ._group) (js/call row .remove))))
+                        (recur (- i 1))))
+                    (js/call rows .updateVisibility)
+                    (scheduleSave)))))
             ;; Single cursor
-            (when (.-cursor state)
-              (if (.-_tab (.-cursor state))
-                (.removeTab gBrowser (.-_tab (.-cursor state)))
-                (when (.-_group (.-cursor state))
-                  (let [d (.-_group (.-cursor state))
-                        my-level (or (.-level d) 0)
-                        group-id (.-id d)]
-                    (.forEach (tabs!)
-                      (fn [tab]
+            (when (js/get state .cursor)
+              (if (js/get (js/get state .cursor) ._tab)
+                (js/call gBrowser .removeTab (js/get (js/get state .cursor) ._tab))
+                (when (js/get (js/get state .cursor) ._group)
+                  (let [d (js/get (js/get state .cursor) ._group)
+                        my-level (or (js/get d .level) 0)
+                        group-id (js/get d .id)]
+                    (js/call (tabs!) .forEach
+                      (fn [tab] Any
                         (let [td (tree-data! tab)]
-                          (when (= (.-parentId td) group-id)
-                            (set! (.-parentId td) nil)))))
-                    (let [dec-groups (fn [nxt]
-                                      (when (and nxt (not= nxt (.-spacer state)))
-                                        (let [lv (level-of-row nxt)]
-                                          (when (> lv my-level)
-                                            (when (.-_group nxt)
-                                              (set! (.-level (.-_group nxt))
-                                                    (Math/max 0 (- (or (.-level (.-_group nxt)) 0) 1)))
-                                              (.syncGroupRow rows nxt))
-                                            (dec-groups (.-nextElementSibling nxt))))))]
-                      (dec-groups (.-nextElementSibling (.-cursor state))))
-                    (let [dying (.-cursor state)]
+                          (when (= (js/get td .parentId) group-id)
+                            (js/set! td .parentId nil)))))
+                    (letfn [(dec-groups [(nxt Any)] Any
+                              (when (and nxt (not= nxt (js/get state .spacer)))
+                                (let [lv (level-of-row! nxt)]
+                                  (when (> lv my-level)
+                                    (when (js/get nxt ._group)
+                                      (js/set! (js/get nxt ._group) .level
+                                            (Math/max 0 (- (or (js/get (js/get nxt ._group) .level) 0) 1)))
+                                      (js/call rows .syncGroupRow nxt))
+                                    (dec-groups (js/get nxt .nextElementSibling))))))]
+                      (dec-groups (js/get (js/get state .cursor) .nextElementSibling)))
+                    (let [dying (js/get state .cursor)]
                       (when (not (move-cursor 1)) (move-cursor -1))
-                      (.remove dying)
-                      (.updateVisibility rows)
+                      (js/call dying .remove)
+                      (js/call rows .updateVisibility)
                       (scheduleSave))))))))
 
 
-        clone-as-sibling (fn [tab]
-          (let [source-row (.get row-of tab)]
+        clone-as-sibling (fn [tab] Any
+          (let [source-row (js/call row-of .get tab)]
             (when source-row
-              (let [sibling-parent-id (.-parentId (tree-data! tab))]
-                (set! (.-pending-cursor-move vs) true)
-                (let [clone (.duplicateTab gBrowser tab)
-                      obs (MutationObserver.
-                            (fn []
-                              (let [clone-row (.get row-of clone)]
+              (let [sibling-parent-id (js/get (tree-data! tab) .parentId)]
+                (js/set! vs .pending-cursor-move true)
+                (let [clone (js/call gBrowser .duplicateTab tab)
+                      obs (js/new MutationObserver
+                            (fn [] Any
+                              (let [clone-row (js/call row-of .get clone)]
                                 (when clone-row
-                                  (.disconnect obs)
-                                  (set! (.-parentId (tree-data! clone)) sibling-parent-id)
-                                  (let [st (subtree-rows source-row)]
-                                    (.after (aget st (- (.-length st) 1)) clone-row))
-                                  (.syncTabRow rows clone)
-                                  (.updateVisibility rows)
+                                  (js/call obs .disconnect)
+                                  (js/set! (tree-data! clone) .parentId sibling-parent-id)
+                                  (let [st (subtree-rows! source-row)]
+                                    (js/call (aget st (- (js/get st .length) 1)) .after clone-row))
+                                  (js/call rows .syncTabRow clone)
+                                  (js/call rows .updateVisibility)
                                   (scheduleSave)))))]
-                  (.observe obs (.-panel state) {:childList true}))))))
+                  (js/call obs .observe (js/get state .panel) {:childList true}))))))
 
 
-        build-window-items (fn [filter-fn]
+        build-window-items (fn [filter-fn] Any
           (let [items []]
-            (.forEach (tabs!) (fn [tab]
+            (js/call (tabs!) .forEach (fn [tab] Any
               (when (filter-fn tab)
-                (let [td (.get tree-of tab)]
+                (let [td (js/call tree-of .get tab)]
                   (when td
                     (let [url (tab-spec tab)
-                          host (try (.-hostname (URL. url)) (catch Any _e ""))
+                          host (try (js/get (js/new URL url) .hostname) (catch (_e Any) ""))
                           ;; Load the favicon through the local page-icon: cache
                           ;; (Places favicon store) rather than the page-declared
                           ;; icon URL, so the privileged picker document never makes a
                           ;; fresh network fetch with the chrome principal (a tracking
                           ;; beacon / IP leak). Falls back to no icon for blank URLs.
-                          icon (if (and url (not= url "")) (str "page-icon:" url) js/undefined)]
-                      (.push items
-                        {:display (or (.-name td) (.-label tab) "(untitled)")
+                          icon (if (and url (not= url "")) (str "page-icon:" url) undefined)]
+                      (js/call items .push
+                        {:display (or (js/get td .name) (js/get tab .label) "(untitled)")
                          :secondary (or host url "")
                          :icon icon
-                         :id (.-id td)
-                         :parentId (if (= (js/typeof (.-parentId td)) "number")
-                                     (.-parentId td) nil)
-                         :depth (level-of tab)
+                         :id (js/get td .id)
+                         :parentId (if (= (js/typeof (js/get td .parentId)) "number")
+                                     (js/get td .parentId) nil)
+                         :depth (level-of! tab)
                          :data tab})))))))
             items))
 
-        open-tabs-picker (fn [scope]
-          (let [gjoa-api (.-Gjoa window)]
+        open-tabs-picker (fn [scope] Any
+          (let [gjoa-api (js/get window .Gjoa)]
             (if (and (= scope "all") gjoa-api)
-              (let [all-tabs (.all (.-tabs gjoa-api))]
-                (if (not (.-length all-tabs))
+              (let [all-tabs (js/call (js/get gjoa-api .tabs) .all)]
+                (if (not (js/get all-tabs .length))
                   (modeline-msg "No tabs" 3000)
-                  (let [window-labels (Map.)]
-                    (.forEach all-tabs (fn [t]
-                      (when (not (.has window-labels (.-windowId t)))
-                        (.set window-labels (.-windowId t)
-                              (str "Window " (+ (.-size window-labels) 1))))))
-                    (let [items (.map all-tabs (fn [t]
-                                  (let [w-label (or (.get window-labels (.-windowId t)) "Window ?")
-                                        host (try (.-hostname (URL. (.-url t)))
-                                                   (catch Any _e ""))]
-                                    {:display (or (.-customName t) (.-label t) "(untitled)")
+                  (let [window-labels (js/new Map)]
+                    (js/call all-tabs .forEach (fn [t] Any
+                      (when (not (js/call window-labels .has (js/get t .windowId)))
+                        (js/call window-labels .set (js/get t .windowId)
+                              (str "Window " (+ (js/get window-labels .size) 1))))))
+                    (let [items (js/call all-tabs .map (fn [t] Any
+                                  (let [w-label (or (js/call window-labels .get (js/get t .windowId)) "Window ?")
+                                        host (try (js/get (js/new URL (js/get t .url)) .hostname)
+                                                   (catch (_e Any) ""))]
+                                    {:display (or (js/get t .customName) (js/get t .label) "(untitled)")
                                      :secondary (if host (str host "  ·  " w-label) w-label)
-                                     :data {:id (.-id t) :windowId (.-windowId t)}})))]
-                      (.show picker
+                                     :data {:id (js/get t .id) :windowId (js/get t .windowId)}})))]
+                      (js/call picker .show
                         {:prompt "tabs (all windows) >"
                          :items items
                          :preserveTree false
-                         :onSelect (fn [item]
-                                     (let [d (.-data item)]
-                                       (try (.activate (.-tabs gjoa-api) (.-id d) (.-windowId d))
-                                            (catch Any _e nil))))})))))
+                         :onSelect (fn [item] Any
+                                     (let [d (js/get item .data)]
+                                       (try (js/call (js/get gjoa-api .tabs) .activate (js/get d .id) (js/get d .windowId))
+                                            (catch (_e Any) nil))))})))))
               ;; Current window / space
               (let [filter-fn (if (and (= scope "space") spaces)
-                                #(.isVisible spaces %)
-                                #(do % true))
+                                (fn [%1] Any (js/call spaces .isVisible %1))
+                                (fn [%1] Any (do %1 true)))
                     prompt-label (if (= scope "space")
-                                   (str "tabs (" (.-name (.active spaces)) ") >")
+                                   (str "tabs (" (js/get (js/call spaces .active) .name) ") >")
                                    "tabs (window) >")
                     items (build-window-items filter-fn)]
-                (if (not (.-length items))
+                (if (not (js/get items .length))
                   (modeline-msg "No tabs" 3000)
-                  (.show picker
+                  (js/call picker .show
                     {:prompt prompt-label
                      :items items
                      :preserveTree true
-                     :onSelect #(try (set! (.-selectedTab gBrowser) (.-data %))
-                                     (catch Any _e nil))
+                     :onSelect (fn [%1] Any (try (js/set! gBrowser .selectedTab (js/get %1 .data))
+                                     (catch (_e Any) nil)))
                      :actions
                        [{:label "Close" :key "x"
-                         :run #(try (.removeTab gBrowser (.-data %))
-                                    (catch Any _e nil))}
+                         :run (fn [%1] Any (try (js/call gBrowser .removeTab (js/get %1 .data))
+                                    (catch (_e Any) nil)))}
                         {:label "Duplicate" :key "d"
-                         :run #(try (.duplicateTab gBrowser (.-data %))
-                                    (catch Any _e nil))}
+                         :run (fn [%1] Any (try (js/call gBrowser .duplicateTab (js/get %1 .data))
+                                    (catch (_e Any) nil)))}
                         {:label "Pin / Unpin" :key "p"
-                         :run #(try
-                                 (if (.-pinned (.-data %))
-                                   (.unpinTab gBrowser (.-data %))
-                                   (.pinTab gBrowser (.-data %)))
-                                 (catch Any _e nil))}
+                         :run (fn [%1] Any (try
+                                 (if (js/get (js/get %1 .data) .pinned)
+                                   (js/call gBrowser .unpinTab (js/get %1 .data))
+                                   (js/call gBrowser .pinTab (js/get %1 .data)))
+                                 (catch (_e Any) nil)))}
                         {:label "Reload" :key "r"
-                         :run #(try (.reloadTab gBrowser (.-data %))
-                                    (catch Any _e nil))}]}))))))
+                         :run (fn [%1] Any (try (js/call gBrowser .reloadTab (js/get %1 .data))
+                                    (catch (_e Any) nil)))}]}))))))
 
 
-        label-of (fn [tag]
+        label-of (fn [tag] Any
           (when tag
-            (let [i (.indexOf tag ":")]
-              (if (>= i 0) (.slice tag (+ i 1)) tag))))
+            (let [i (js/call tag .indexOf ":")]
+              (if (>= i 0) (js/call tag .slice (+ i 1)) tag))))
 
-        tag-kind (fn [tag]
+        tag-kind (fn [tag] Any
           (when tag
-            (if (.startsWith tag "checkpoint:") "checkpoint" "session")))
+            (if (js/call tag .startsWith "checkpoint:") "checkpoint" "session")))
 
-        relative-time (fn [ts] :- String
+        relative-time (fn [ts] String
           (let [now (Date/now)
                 delta (- now ts)
                 mins (Math/floor (/ delta 60000))]
@@ -1065,279 +987,276 @@
                       (let [weeks (Math/floor (/ days 7))]
                         (if (< weeks 5)
                           (str weeks "w ago")
-                          (.toLocaleDateString (Date. ts) []
+                          (js/call (js/new Date ts) .toLocaleDateString []
                             {:month "short" :day "numeric"}))))))))))
 
-        top-hosts (fn [nodes max-count]
-          (let [mx (if (= max-count js/undefined) 3 max-count)
-                seen (Set.)
+        top-hosts (fn [nodes max-count] Any
+          (let [mx (if (= max-count undefined) 3 max-count)
+                seen (js/new Set)
                 hosts []]
-            (.forEach nodes (fn [n]
-              (when (and (not= (.-type n) "group") (.-url n)
-                         (< (.-length hosts) mx))
-                (let [host (try (.replace (.-hostname (URL. (.-url n)))
-                                          (RegExp. "^www\\.") "")
-                                (catch Any _e ""))]
-                  (when (and host (not= host "newtab") (not (.has seen host)))
-                    (.add seen host)
-                    (.push hosts host))))))
+            (js/call nodes .forEach (fn [n] Any
+              (when (and (not= (js/get n .type) "group") (js/get n .url)
+                         (< (js/get hosts .length) mx))
+                (let [host (try (js/call (js/get (js/new URL (js/get n .url)) .hostname) .replace
+                                          (js/new RegExp "^www\\.") "")
+                                (catch (_e Any) ""))]
+                  (when (and host (not= host "newtab") (not (js/call seen .has host)))
+                    (js/call seen .add host)
+                    (js/call hosts .push host))))))
             hosts))
 
-        tab-count (fn [nodes] :- Int
-          (.-length (.filter nodes #(not= (.-type %) "group"))))
+        tab-count (fn [nodes] Int
+          (js/get (js/call nodes .filter (fn [%1] Any (not= (js/get %1 .type) "group"))) .length))
 
-        event-has-space (fn [ev space-id]
-          (let [snap (.-snapshot ev)
-                ts (and snap (.-spaces snap) (.-tabSpaces (.-spaces snap)))]
+        event-has-space (fn [ev space-id] Any
+          (let [snap (js/get ev .snapshot)
+                ts (and snap (js/get snap .spaces) (js/get (js/get snap .spaces) .tabSpaces))]
             (if (nil? ts)
               true
-              (.some ts #(= (aget % 1) space-id)))))
+              (js/call ts .some (fn [%1] Any (= (aget %1 1) space-id))))))
 
-        history-picker-item (fn [ev]
-          (let [nodes (or (.-nodes (.-snapshot ev)) [])
+        history-picker-item (fn [ev] Any
+          (let [nodes (or (js/get (js/get ev .snapshot) .nodes) [])
                 count (tab-count nodes)
                 hosts (top-hosts nodes 3)
-                tag (label-of (.-tag ev))
-                when-str (relative-time (.-timestamp ev))
+                tag (label-of (js/get ev .tag))
+                when-str (relative-time (js/get ev .timestamp))
                 display (if tag
-                          (str tag "  --  " (or (.join hosts ", ") "empty"))
-                          (or (.join hosts ", ") "(empty)"))
+                          (str tag "  --  " (or (js/call hosts .join ", ") "empty"))
+                          (or (js/call hosts .join ", ") "(empty)"))
                 parts [when-str (str count " tab" (if (not= count 1) "s" ""))]]
             (when tag
-              (.unshift parts
-                (if (= (tag-kind (.-tag ev)) "checkpoint") "checkpoint" "session")))
-            {:display display :secondary (.join parts " . ") :data ev}))
+              (js/call parts .unshift
+                (if (= (tag-kind (js/get ev .tag)) "checkpoint") "checkpoint" "session")))
+            {:display display :secondary (js/call parts .join " . ") :data ev}))
 
-        session-picker-item (fn [ev]
-          (let [nodes (or (.-nodes (.-snapshot ev)) [])
+        session-picker-item (fn [ev] Any
+          (let [nodes (or (js/get (js/get ev .snapshot) .nodes) [])
                 count (tab-count nodes)
                 hosts (top-hosts nodes 4)
-                kind (tag-kind (.-tag ev))
-                label (or (label-of (.-tag ev)) "untitled")
-                when-str (relative-time (.-timestamp ev))
+                kind (tag-kind (js/get ev .tag))
+                label (or (label-of (js/get ev .tag)) "untitled")
+                when-str (relative-time (js/get ev .timestamp))
                 parts []]
-            (when (= kind "checkpoint") (.push parts "checkpoint"))
-            (.push parts when-str (str count " tab" (if (not= count 1) "s" "")))
-            (when (.-length hosts) (.push parts (.join hosts ", ")))
-            {:display label :secondary (.join parts " . ") :data ev}))
+            (when (= kind "checkpoint") (js/call parts .push "checkpoint"))
+            (js/call parts .push when-str (str count " tab" (if (not= count 1) "s" "")))
+            (when (js/get hosts .length) (js/call parts .push (js/call hosts .join ", ")))
+            {:display label :secondary (js/call parts .join " . ") :data ev}))
 
 
-        restore-event (fn [event]
-          (let [env (.-snapshot event)
-                tab-nodes (.filter (.-nodes env) #(not= (.-type %) "group"))
-                tab-space-map (Map.)]
-            (when (and (.-spaces env) (.-tabSpaces (.-spaces env)))
-              (.forEach (.-tabSpaces (.-spaces env))
-                #(.set tab-space-map (aget % 0) (aget % 1))))
-            (if (not (.-length tab-nodes))
+        restore-event (fn [event] Any
+          (let [env (js/get event .snapshot)
+                tab-nodes (js/call (js/get env .nodes) .filter (fn [%1] Any (not= (js/get %1 .type) "group")))
+                tab-space-map (js/new Map)]
+            (when (and (js/get env .spaces) (js/get (js/get env .spaces) .tabSpaces))
+              (js/call (js/get (js/get env .spaces) .tabSpaces) .forEach
+                (fn [%1] Any (js/call tab-space-map .set (aget %1 0) (aget %1 1)))))
+            (if (not (js/get tab-nodes .length))
               (do (modeline-msg "Restore: no tabs in event" 3000) nil)
-              (let [max-saved-id (.apply (.-max Math) nil
-                                   (.concat [0] (.map tab-nodes #(or (.-id %) 0))))
-                    offset (.-nextTabId state)]
-                (set! (.-nextTabId state) (+ (.-nextTabId state) max-saved-id 1))
-                (let [group-name (or (label-of (.-tag event))
-                                     (str "Restored " (.toLocaleString
-                                                        (Date. (.-timestamp event)))))
-                      group-row (.createGroupRow rows group-name 0)]
-                  (.insertBefore (.-panel state) group-row (.-spacer state))
-                  (.syncAnyRow rows group-row)
-                  (.forEach tab-nodes (fn [n]
-                    (let [new-id (+ (or (.-id n) 0) offset)
-                          new-parent-id (if (= (js/typeof (.-parentId n)) "number")
-                                          (+ (.-parentId n) offset)
-                                          (.-id (.-_group group-row)))
-                          orig-space (.get tab-space-map (or (.-id n) 0))]
-                      (.push saved-tab-queue
-                        {:type (.-type n) :url (.-url n) :name (.-name n)
+              (let [max-saved-id (js/call (js/get Math .max) .apply nil
+                                   (js/call [0] .concat (js/call tab-nodes .map (fn [%1] Any (or (js/get %1 .id) 0)))))
+                    offset (js/get state .nextTabId)]
+                (js/set! state .nextTabId (+ (js/get state .nextTabId) max-saved-id 1))
+                (let [group-name (or (label-of (js/get event .tag))
+                                     (str "Restored " (js/call (js/new Date (js/get event .timestamp)) .toLocaleString)))
+                      group-row (js/call rows .createGroupRow group-name 0)]
+                  (js/call (js/get state .panel) .insertBefore group-row (js/get state .spacer))
+                  (js/call rows .syncAnyRow group-row)
+                  (js/call tab-nodes .forEach (fn [n] Any
+                    (let [new-id (+ (or (js/get n .id) 0) offset)
+                          new-parent-id (if (= (js/typeof (js/get n .parentId)) "number")
+                                          (+ (js/get n .parentId) offset)
+                                          (js/get (js/get group-row ._group) .id))
+                          orig-space (js/call tab-space-map .get (or (js/get n .id) 0))]
+                      (js/call saved-tab-queue .push
+                        {:type (js/get n .type) :url (js/get n .url) :name (js/get n .name)
                          :id new-id :parentId new-parent-id
-                         :state (.-state n) :collapsed (.-collapsed n)
+                         :state (js/get n .state) :collapsed (js/get n .collapsed)
                          :spaceId orig-space
-                         :_origIdx (.-length saved-tab-queue)}))))
-                  (.forEach tab-nodes (fn [n]
-                    (let [url (or (.-url n) "about:blank")]
-                      (try (.addTab gBrowser url
+                         :_origIdx (js/get saved-tab-queue .length)}))))
+                  (js/call tab-nodes .forEach (fn [n] Any
+                    (let [url (or (js/get n .url) "about:blank")]
+                      (try (js/call gBrowser .addTab url
                              {:triggeringPrincipal
-                              (.getSystemPrincipal (.-scriptSecurityManager Services))})
-                           (catch Any e
+                              (js/call (js/get Services .scriptSecurityManager) .getSystemPrincipal)})
+                           (catch (e Any)
                              (log "restore:addTab-failed" {:url url :err (str e)}))))))
                   (scheduleSave))))))
 
 
-        execute-refile (fn [target]
-          (when (and (.-refile-source vs) target
-                     (not= target (.-refile-source vs)))
-            (let [src-rows (subtree-rows (.-refile-source vs))]
-              (if (.includes src-rows target)
+        execute-refile (fn [target] Any
+          (when (and (js/get vs .refile-source) target
+                     (not= target (js/get vs .refile-source)))
+            (let [src-rows (subtree-rows! (js/get vs .refile-source))]
+              (if (js/call src-rows .includes target)
                 (modeline-msg "Can't refile under own subtree" 3000)
-                (let [src-data (data-of! (.-refile-source vs))
+                (let [src-data (data-of! (js/get vs .refile-source))
                       tgt-data (data-of! target)]
                   (when (and src-data tgt-data)
-                    (if (and (.-_tab (.-refile-source vs)) (.-_tab target))
-                      (set! (.-parentId (tree-data! (.-_tab (.-refile-source vs))))
-                            (.-id (tree-data! (.-_tab target))))
-                      (let [tgt-level (level-of-row target)
-                            src-level (level-of-row (.-refile-source vs))
+                    (if (and (js/get (js/get vs .refile-source) ._tab) (js/get target ._tab))
+                      (js/set! (tree-data! (js/get (js/get vs .refile-source) ._tab)) .parentId
+                            (js/get (tree-data! (js/get target ._tab)) .id))
+                      (let [tgt-level (level-of-row! target)
+                            src-level (level-of-row! (js/get vs .refile-source))
                             delta (- (+ tgt-level 1) src-level)]
-                        (.forEach src-rows (fn [r]
-                          (when (.-_group r)
-                            (set! (.-level (.-_group r))
-                                  (Math/max 0 (+ (or (.-level (.-_group r)) 0) delta))))))))
-                    (let [tgt-sub (subtree-rows target)]
-                      (insert-after-each (aget tgt-sub (- (.-length tgt-sub) 1)) src-rows))
-                    (.forEach src-rows #(.syncAnyRow rows %))
-                    (.updateVisibility rows)
+                        (js/call src-rows .forEach (fn [r] Any
+                          (when (js/get r ._group)
+                            (js/set! (js/get r ._group) .level
+                                  (Math/max 0 (+ (or (js/get (js/get r ._group) .level) 0) delta))))))))
+                    (let [tgt-sub (subtree-rows! target)]
+                      (insert-after-each! (aget tgt-sub (- (js/get tgt-sub .length) 1)) src-rows))
+                    (js/call src-rows .forEach (fn [%1] Any (js/call rows .syncAnyRow %1)))
+                    (js/call rows .updateVisibility)
                     (scheduleSave)
-                    (let [label (or (.-name src-data)
-                                    (some-> vs .-refile-source .-_tab .-label)
+                    (let [label (or (js/get src-data .name)
+                                    (some-> vs (js/get .refile-source) (js/get ._tab) (js/get .label))
                                     "tab")
-                          tgt-label (or (.-name tgt-data)
-                                        (some-> target .-_tab .-label)
+                          tgt-label (or (js/get tgt-data .name)
+                                        (some-> target (js/get ._tab) (js/get .label))
                                         "tab")]
                       (modeline-msg (str "Refiled \"" label "\" -> \"" tgt-label "\"") 3000))
-                    (set! (.-refile-source vs) nil)
-                    (set! (.-search-matches vs) [])
-                    (set! (.-search-idx vs) -1)))))))
+                    (js/set! vs .refile-source nil)
+                    (js/set! vs .search-matches [])
+                    (js/set! vs .search-idx -1)))))))
 
-        cancel-refile (fn []
-          (when (.-refile-source vs)
-            (set! (.-refile-source vs) nil)
-            (set! (.-search-matches vs) [])
-            (set! (.-search-idx vs) -1)
+        cancel-refile (fn [] Any
+          (when (js/get vs .refile-source)
+            (js/set! vs .refile-source nil)
+            (js/set! vs .search-matches [])
+            (js/set! vs .search-idx -1)
             (modeline-msg "Refile cancelled" 3000)))
 
 
-        clear-filter (fn []
-          (.forEach (all-rows) #(set! (.-hidden %) false))
-          (.updateVisibility rows))
+        clear-filter (fn [] Any
+          (js/call (all-rows) .forEach (fn [%1] Any (js/set! %1 .hidden false)))
+          (js/call rows .updateVisibility))
 
-        apply-filter (fn [query]
-          (let [q (.toLowerCase (.trim query))]
+        apply-filter (fn [query] Any
+          (let [q (js/call (js/call query .trim) .toLowerCase)]
             (if (not q)
               (clear-filter)
               (let [all-r (all-rows)
-                    matched (Set.)]
-                (.forEach all-r (fn [row]
+                    matched (js/new Set)]
+                (js/call all-r .forEach (fn [row] Any
                   (let [d (data-of! row)]
                     (when d
-                      (let [label (.toLowerCase
-                                    (or (.-name d)
-                                        (if (.-_tab row) (.-label (.-_tab row)) "") ""))
-                            url (.toLowerCase (tab-spec (.-_tab row)))]
-                        (when (or (.includes label q) (.includes url q))
-                          (.add matched row)))))))
+                      (let [label (js/call (or (js/get d .name)
+                                        (if (js/get row ._tab) (js/get (js/get row ._tab) .label) "") "") .toLowerCase)
+                            url (js/call (tab-spec (js/get row ._tab)) .toLowerCase)]
+                        (when (or (js/call label .includes q) (js/call url .includes q))
+                          (js/call matched .add row)))))))
                 ;; Mark ancestors
-                (let [walk-anc (fn [prev lv-ref]
-                                 (when prev
-                                   (let [plv (level-of-row prev)]
-                                     (when (< plv (.-v lv-ref))
-                                       (.add matched prev)
-                                       (set! (.-v lv-ref) plv))
-                                     (when (not= plv 0)
-                                       (walk-anc (.-previousElementSibling prev) lv-ref)))))]
-                  (.forEach (Array/from matched) (fn [row]
-                    (walk-anc (.-previousElementSibling row)
-                              {:v (level-of-row row)}))))
-                (.forEach all-r #(set! (.-hidden %) (not (.has matched %))))))))
+                (letfn [(walk-anc [(prev Any) (lv-ref Any)] Any
+                          (when prev
+                            (let [plv (level-of-row! prev)]
+                              (when (< plv (js/get lv-ref .v))
+                                (js/call matched .add prev)
+                                (js/set! lv-ref .v plv))
+                              (when (not= plv 0)
+                                (walk-anc (js/get prev .previousElementSibling) lv-ref)))))]
+                  (js/call (Array/from matched) .forEach (fn [row] Any
+                    (walk-anc (js/get row .previousElementSibling)
+                              {:v (level-of-row! row)}))))
+                (js/call all-r .forEach (fn [%1] Any (js/set! %1 .hidden (not (js/call matched .has %1)))))))))
 
-        start-search (fn []
-          (when (and (not (.-search-active vs)) (.-modeline vs))
-            (set! (.-search-active vs) true)
-            (hide-children (.-modeline vs))
-            (attr! (.-modeline vs) "gjoa-visible" "true")
-            (let [input (htm "input" "gjoa-search-input")]
-              (set! (.-search-input vs) input)
-              (set! (.-placeholder input) "")
-              (.appendChild (.-modeline vs) input)
-              (.focus input)
-              (let [prefix (xul "label" "gjoa-search-prefix")]
-                (attr! prefix "value" "/")
-                (.insertBefore (.-modeline vs) prefix input))
-              (on! input "input"
-                #(apply-filter (.-value input)))
-              (on! input "keydown"
-                (fn [e]
-                  (.stopImmediatePropagation e)
-                  (.stopPropagation e)
-                  (cond
-                    (key= e "Escape") (end-search false)
-                    (key= e "Enter") (end-search true)
-                    (and (key= e "Backspace") (not (.-value input)))
-                    (end-search false)
-                    :else nil))))))
-
-        teardown-search-ui (fn []
-          (when (.-search-input vs) (.remove (.-search-input vs)))
-          (set! (.-search-input vs) nil)
-          (let [pfx (some-> vs .-modeline (.querySelector ".gjoa-search-prefix"))]
-            (when pfx (.remove pfx)))
-          (show-children (.-modeline vs))
+        teardown-search-ui (fn [] Any
+          (when (js/get vs .search-input) (js/call (js/get vs .search-input) .remove))
+          (js/set! vs .search-input nil)
+          (let [pfx (some-> vs (js/get .modeline) (js/call .querySelector ".gjoa-search-prefix"))]
+            (when pfx (js/call pfx .remove)))
+          (show-children! (js/get vs .modeline))
           (update-modeline))
 
-        end-search (fn [accept]
-          (set! (.-search-active vs) false)
+        end-search (fn [accept] Any
+          (js/set! vs .search-active false)
           (if accept
-            (let [q (or (some-> vs .-search-input .-value (.trim) (.toLowerCase)) "")]
-              (set! (.-search-matches vs) [])
-              (set! (.-search-idx vs) -1)
-              (let [excluded (if (.-refile-source vs)
-                               (Set. (subtree-rows (.-refile-source vs)))
+            (let [q (or (some-> vs (js/get .search-input) (js/get .value) (js/call .trim) (js/call .toLowerCase)) "")]
+              (js/set! vs .search-matches [])
+              (js/set! vs .search-idx -1)
+              (let [excluded (if (js/get vs .refile-source)
+                               (js/new Set (subtree-rows! (js/get vs .refile-source)))
                                nil)]
                 (when q
-                  (.forEach (all-rows) (fn [row]
-                    (when (not (and excluded (.has excluded row)))
+                  (js/call (all-rows) .forEach (fn [row] Any
+                    (when (not (and excluded (js/call excluded .has row)))
                       (let [d (data-of! row)]
                         (when d
-                          (let [label (.toLowerCase
-                                        (or (.-name d)
-                                            (if (.-_tab row) (.-label (.-_tab row)) "") ""))
-                                url (.toLowerCase (tab-spec (.-_tab row)))]
-                            (when (or (.includes label q) (.includes url q))
-                              (.push (.-search-matches vs) row))))))))))
+                          (let [label (js/call (or (js/get d .name)
+                                            (if (js/get row ._tab) (js/get (js/get row ._tab) .label) "") "") .toLowerCase)
+                                url (js/call (tab-spec (js/get row ._tab)) .toLowerCase)]
+                            (when (or (js/call label .includes q) (js/call url .includes q))
+                              (js/call (js/get vs .search-matches) .push row))))))))))
               (let [dtc {:v false}]
-                (if (= (.-length (.-search-matches vs)) 1)
-                  (let [match (aget (.-search-matches vs) 0)]
+                (if (= (js/get (js/get vs .search-matches) .length) 1)
+                  (let [match (aget (js/get vs .search-matches) 0)]
                     (set-cursor match)
-                    (when (.-_tab match) (set! (.-selectedTab gBrowser) (.-_tab match)))
-                    (if (.-refile-source vs)
+                    (when (js/get match ._tab) (js/set! gBrowser .selectedTab (js/get match ._tab)))
+                    (if (js/get vs .refile-source)
                       (execute-refile match)
-                      (do (set! (.-panel-active vs) false)
-                          (set! (.-search-matches vs) [])
-                          (set! (.-search-idx vs) -1)
-                          (.dispatchEvent sidebarMain (Event. "gjoa-dismiss"))
-                          (set! (.-v dtc) true))))
-                  (if (> (.-length (.-search-matches vs)) 0)
-                    (do (set! (.-search-idx vs) 0)
-                        (let [fm (aget (.-search-matches vs) 0)]
+                      (do (js/set! vs .panel-active false)
+                          (js/set! vs .search-matches [])
+                          (js/set! vs .search-idx -1)
+                          (js/call sidebarMain .dispatchEvent (js/new Event "gjoa-dismiss"))
+                          (js/set! dtc .v true))))
+                  (if (> (js/get (js/get vs .search-matches) .length) 0)
+                    (do (js/set! vs .search-idx 0)
+                        (let [fm (aget (js/get vs .search-matches) 0)]
                           (set-cursor fm)
-                          (when (.-_tab fm)
-                            (set! (.-selectedTab gBrowser) (.-_tab fm)))
-                          (let [hint (if (.-refile-source vs) "  Enter=refile, n/N=cycle" "")]
+                          (when (js/get fm ._tab)
+                            (js/set! gBrowser .selectedTab (js/get fm ._tab)))
+                          (let [hint (if (js/get vs .refile-source) "  Enter=refile, n/N=cycle" "")]
                             (modeline-msg
-                              (str "/" q "  [1/" (.-length (.-search-matches vs)) "]" hint) 3000))))
-                    (when (.-refile-source vs) (modeline-msg "No refile targets found" 3000))))
+                              (str "/" q "  [1/" (js/get (js/get vs .search-matches) .length) "]" hint) 3000))))
+                    (when (js/get vs .refile-source) (modeline-msg "No refile targets found" 3000))))
                 (clear-filter)
                 (teardown-search-ui)
-                (when (not (.-v dtc)) (focus-panel))))
+                (when (not (js/get dtc .v)) (focus-panel))))
             ;; reject
-            (do (set! (.-search-matches vs) [])
-                (set! (.-search-idx vs) -1)
+            (do (js/set! vs .search-matches [])
+                (js/set! vs .search-idx -1)
                 (clear-filter)
-                (when (.-refile-source vs) (cancel-refile))
+                (when (js/get vs .refile-source) (cancel-refile))
                 (teardown-search-ui)
                 (focus-panel))))
 
+        start-search (fn [] Any
+          (when (and (not (js/get vs .search-active)) (js/get vs .modeline))
+            (js/set! vs .search-active true)
+            (hide-children! (js/get vs .modeline))
+            (attr! (js/get vs .modeline) "gjoa-visible" "true")
+            (let [input (htm "input" "gjoa-search-input")]
+              (js/set! vs .search-input input)
+              (js/set! input .placeholder "")
+              (js/call (js/get vs .modeline) .appendChild input)
+              (js/call input .focus)
+              (let [prefix (xul "label" "gjoa-search-prefix")]
+                (attr! prefix "value" "/")
+                (js/call (js/get vs .modeline) .insertBefore prefix input))
+              (on! input "input"
+                (fn [] Any (apply-filter (js/get input .value))))
+              (on! input "keydown"
+                (fn [e] Any
+                  (js/call e .stopImmediatePropagation)
+                  (js/call e .stopPropagation)
+                  (cond
+                    (key= e "Escape") (end-search false)
+                    (key= e "Enter") (end-search true)
+                    (and (key= e "Backspace") (not (js/get input .value)))
+                    (end-search false)
+                    :else nil))))))
 
-        start-rename (fn [row]
+
+        start-rename (fn [row] Any
           (when row
             (let [label (q row ".gjoa-tab-label")]
               (when label
                 (let [d (data-of! row)]
                   (when d
-                    (let [original (or (.-name d)
-                                       (if (.-_tab row) (.-label (.-_tab row)) "") "")]
-                      (set! (.-textContent label) original)
+                    (let [original (or (js/get d .name)
+                                       (if (js/get row ._tab) (js/get (js/get row ._tab) .label) "") "")]
+                      (js/set! label .textContent original)
                       (attr! label "contenteditable" "plaintext-only")
-                      (.add (.-classList label) "gjoa-renaming")
+                      (js/call (js/get label .classList) .add "gjoa-renaming")
                       ;; RENAME GUARD (2026-07-20): mark rename active so the two
                       ;; capture-phase vim keydown handlers bail for the WHOLE duration.
                       ;; They gate on document.activeElement being editable, but focusing
@@ -1348,150 +1267,149 @@
                       ;; and tore the rename down (owner: "rename activates but I can't type").
                       ;; A state flag is immune to that focus-read race. Enter/Escape are
                       ;; still handled by the label's own keydown below.
-                      (set! (.-renaming vs) true)
-                      (.removeProperty (.-style label) "overflow")
-                      (.removeProperty (.-style label) "text-overflow")
-                      (.focus label)
-                      (let [sel (and (.-getSelection window) (.getSelection window))]
+                      (js/set! vs .renaming true)
+                      (js/call (js/get label .style) .removeProperty "overflow")
+                      (js/call (js/get label .style) .removeProperty "text-overflow")
+                      (js/call label .focus)
+                      (let [sel (and (js/get window .getSelection) (js/call window .getSelection))]
                         (when sel
-                          (let [range (.createRange document)]
-                            (.selectNodeContents range label)
-                            (.removeAllRanges sel)
-                            (.addRange sel range))))
+                          (let [range (js/call document .createRange)]
+                            (js/call range .selectNodeContents label)
+                            (js/call sel .removeAllRanges)
+                            (js/call sel .addRange range))))
                       (let [done-flag {:v false}
-                            finish (fn [commit]
-                                     (when (not (.-v done-flag))
-                                       (set! (.-v done-flag) true)
-                                       (let [value (.trim (or (.-textContent label) ""))]
+                            finish (fn [commit] Any
+                                     (when (not (js/get done-flag .v))
+                                       (js/set! done-flag .v true)
+                                       (let [value (js/call (or (js/get label .textContent) "") .trim)]
                                          (rmattr! label "contenteditable")
-                                         (.remove (.-classList label) "gjoa-renaming")
-                                         (set! (.-renaming vs) false)
-                                         (when (and (.-getSelection window) (.getSelection window))
-                                           (.removeAllRanges (.getSelection window)))
+                                         (js/call (js/get label .classList) .remove "gjoa-renaming")
+                                         (js/set! vs .renaming false)
+                                         (when (and (js/get window .getSelection) (js/call window .getSelection))
+                                           (js/call (js/call window .getSelection) .removeAllRanges))
                                          (when commit
-                                           (if (.-_group row)
-                                             (set! (.-name d) (or value "New Group"))
-                                             (set! (.-name d)
-                                                   (if (and value (not= value (.-label (.-_tab row))))
+                                           (if (js/get row ._group)
+                                             (js/set! d .name (or value "New Group"))
+                                             (js/set! d .name
+                                                   (if (and value (not= value (js/get (js/get row ._tab) .label)))
                                                      value nil)))
                                            (scheduleSave))
-                                         (if (.-_tab row)
-                                           (.syncTabRow rows (.-_tab row))
-                                           (.syncAnyRow rows row))
-                                         (.focus (.-panel state)))))]
+                                         (if (js/get row ._tab)
+                                           (js/call rows .syncTabRow (js/get row ._tab))
+                                           (js/call rows .syncAnyRow row))
+                                         (js/call (js/get state .panel) .focus))))]
                         (on! label "keydown"
-                          (fn [e]
-                            (when (key= e "Enter") (.preventDefault e) (finish true) (focus-panel))
-                            (when (key= e "Escape") (.preventDefault e) (finish false) (focus-panel))
-                            (.stopPropagation e)))
-                        (on1! label "blur" #(finish true))))))))))
+                          (fn [e] Any
+                            (when (key= e "Enter") (js/call e .preventDefault) (finish true) (focus-panel))
+                            (when (key= e "Escape") (js/call e .preventDefault) (finish false) (focus-panel))
+                            (js/call e .stopPropagation)))
+                        (on1! label "blur" (fn [] Any (finish true)))))))))))
 
 
-        cycle-space (fn [dir]
-          (let [list (.list spaces)]
-            (if (< (.-length list) 2)
+        cycle-space (fn [dir] Any
+          (let [list (js/call spaces .list)]
+            (if (< (js/get list .length) 2)
               (modeline-msg "Only one space -- :space new <name> to add" 2500)
-              (let [cur (.activeId spaces)
-                    idx (.findIndex list #(= (.-id %) cur))
+              (let [cur (js/call spaces .activeId)
+                    idx (js/call list .findIndex (fn [%1] Any (= (js/get %1 .id) cur)))
                     ;; `%` is beagle's anon-fn arg, NOT modulo — use `rem`.
-                    next-idx (rem (+ (rem (+ idx dir) (.-length list)) (.-length list))
-                                  (.-length list))
+                    next-idx (rem (+ (rem (+ idx dir) (js/get list .length)) (js/get list .length))
+                                  (js/get list .length))
                     next (aget list next-idx)]
-                (.setActive spaces (.-id next))
-                (modeline-msg (str ":space -> \"" (.-name next) "\"") 1500)))))
+                (js/call spaces .setActive (js/get next .id))
+                (modeline-msg (str ":space -> \"" (js/get next .name) "\"") 1500)))))
 
-        end-ex-mode (fn [cmd]
-          (let [sp (q (.-modeline vs) ".gjoa-search-prefix")]
-            (when sp (.remove sp)))
-          (let [si (q (.-modeline vs) ".gjoa-search-input")]
-            (when si (.remove si)))
-          (show-children (.-modeline vs))
+        end-ex-mode (fn [cmd] Any
+          (let [sp (q (js/get vs .modeline) ".gjoa-search-prefix")]
+            (when sp (js/call sp .remove)))
+          (let [si (q (js/get vs .modeline) ".gjoa-search-input")]
+            (when si (js/call si .remove)))
+          (show-children! (js/get vs .modeline))
           (update-modeline)
           (when cmd
-            (let [args (.split cmd (RegExp. "\\s+"))
-                  name (.toLowerCase (or (aget args 0) ""))]
+            (let [args (js/call cmd .split (js/new RegExp "\\s+"))
+                  name (js/call (or (aget args 0) "") .toLowerCase)]
               (cond
                 (or (= name "group") (= name "grp") (= name "folder"))
-                (let [label (or (.join (.slice args 1) " ") "New Group")
-                      row (.createGroupRow rows label
-                            (if (.-cursor state) (level-of-row (.-cursor state)) 0))]
-                  (if (.-cursor state)
-                    (let [st (subtree-rows (.-cursor state))]
-                      (.after (aget st (- (.-length st) 1)) row))
-                    (.insertBefore (.-panel state) row (.-spacer state)))
+                (let [label (or (js/call (js/call args .slice 1) .join " ") "New Group")
+                      row (js/call rows .createGroupRow label
+                            (if (js/get state .cursor) (level-of-row! (js/get state .cursor)) 0))]
+                  (if (js/get state .cursor)
+                    (let [st (subtree-rows! (js/get state .cursor))]
+                      (js/call (aget st (- (js/get st .length) 1)) .after row))
+                    (js/call (js/get state .panel) .insertBefore row (js/get state .spacer)))
                   (set-cursor row)
-                  (.updateVisibility rows)
+                  (js/call rows .updateVisibility)
                   (scheduleSave)
                   (modeline-msg (str ":group " label) 3000))
 
                 (or (= name "re") (= name "refile") (= name "rf"))
-                (if (not (.-cursor state))
+                (if (not (js/get state .cursor))
                   (modeline-msg "No cursor -- place cursor on tab to refile" 3000)
-                  (do (set! (.-refile-source vs) (.-cursor state))
-                      (let [src-label (or (some-> (.-cursor state) data-of! .-name)
-                                          (some-> state .-cursor .-_tab .-label)
+                  (do (js/set! vs .refile-source (js/get state .cursor))
+                      (let [src-label (or (some-> (js/get state .cursor) data-of! (js/get .name))
+                                          (some-> state (js/get .cursor) (js/get ._tab) (js/get .label))
                                           "tab")]
                         (modeline-msg (str "Refile: \"" src-label "\" -> search for target...") 3000))
-                      (setTimeout #(start-search) 0)))
+                      (setTimeout (fn [] Any (start-search)) 0)))
 
                 (or (= name "pin") (= name "unpin"))
-                (let [t (some-> state .-cursor .-_tab)
+                (let [t (some-> state (js/get .cursor) (js/get ._tab))
                       want-pin (= name "pin")]
                   (if (nil? t)
                     (modeline-msg "No tab at cursor" 3000)
-                    (if (= (.-pinned t) want-pin)
+                    (if (= (js/get t .pinned) want-pin)
                       (modeline-msg (str (if want-pin "Already pinned" "Not pinned")
-                                         ": " (.-label t)) 2000)
-                      (do (if want-pin (.pinTab gBrowser t) (.unpinTab gBrowser t))
-                          (modeline-msg (str ":" name " " (.-label t)) 3000)))))
+                                         ": " (js/get t .label)) 2000)
+                      (do (if want-pin (js/call gBrowser .pinTab t) (js/call gBrowser .unpinTab t))
+                          (modeline-msg (str ":" name " " (js/get t .label)) 3000)))))
 
                 (or (= name "checkpoint") (= name "cp"))
-                (let [label (.trim (.join (.slice args 1) " "))]
+                (let [label (js/call (js/call (js/call args .slice 1) .join " ") .trim)]
                   (if (not label)
                     (modeline-msg "Usage: :checkpoint <label>" 3000)
                     (do (scheduleSave)
                         (setTimeout
-                          (fn []
-                            (-> (.tagLatest history "checkpoint" label)
-                                (.then #(modeline-msg
-                                    (if % (str ":checkpoint \"" label "\"")
+                          (fn [] Any
+                            (-> (js/call history .tagLatest "checkpoint" label)
+                                (js/call .then (fn [%1] Any (modeline-msg
+                                    (if %1 (str ":checkpoint \"" label "\"")
                                       "Nothing to tag (no events yet)")
-                                    3000))
-                                (.catch #(modeline-msg
-                                    (str ":checkpoint failed: " (.-message %)) 4000))))
+                                    3000)))
+                                (js/call .catch (fn [%1] Any (modeline-msg
+                                    (str ":checkpoint failed: " (js/get %1 .message)) 4000)))))
                           100))))
 
                 (= name "restore")
-                (let [arg (.trim (.join (.slice args 1) " "))]
-                  (-> (.getTagged history 100)
-                      (.then (fn [tagged]
-                        (if (not (.-length tagged))
+                (let [arg (js/call (js/call (js/call args .slice 1) .join " ") .trim)]
+                  (-> (js/call history .getTagged 100)
+                      (js/call .then (fn [tagged] Any
+                        (if (not (js/get tagged .length))
                           (modeline-msg "No tagged sessions yet" 4000)
                           (if (not arg)
-                            (.show picker
+                            (js/call picker .show
                               {:prompt "restore >"
-                               :items (.map tagged #(session-picker-item %))
-                               :onSelect (fn [item]
-                                 (-> (restore-event (.-data item))
-                                     (.then #(modeline-msg
-                                       (str "Restored: " (label-of (.-tag (.-data item)))) 4000))
-                                     (.catch #(modeline-msg
-                                       (str ":restore failed: " (.-message %)) 4000))))})
-                            (let [needle (.toLowerCase arg)
-                                  matches (.filter tagged
-                                    #(.includes
-                                      (.toLowerCase (or (label-of (.-tag %)) "")) needle))]
-                              (if (not (.-length matches))
+                               :items (js/call tagged .map (fn [%1] Any (session-picker-item %1)))
+                               :onSelect (fn [item] Any
+                                 (-> (restore-event (js/get item .data))
+                                     (js/call .then (fn [] Any (modeline-msg
+                                       (str "Restored: " (label-of (js/get (js/get item .data) .tag))) 4000)))
+                                     (js/call .catch (fn [%1] Any (modeline-msg
+                                       (str ":restore failed: " (js/get %1 .message)) 4000)))))})
+                            (let [needle (js/call arg .toLowerCase)
+                                  matches (js/call tagged .filter
+                                    (fn [%1] Any (js/call (js/call (or (label-of (js/get %1 .tag)) "") .toLowerCase) .includes needle)))]
+                              (if (not (js/get matches .length))
                                 (modeline-msg (str "No sessions match \"" arg "\"") 3000)
                                 (-> (restore-event (aget matches 0))
-                                    (.then #(modeline-msg
-                                      (str "Restored: " (label-of (.-tag (aget matches 0)))) 4000))
-                                    (.catch #(modeline-msg
-                                      (str ":restore failed: " (.-message %)) 4000))))))))
-                      (.catch #(modeline-msg (str ":restore failed: " (.-message %)) 4000)))))
+                                    (js/call .then (fn [] Any (modeline-msg
+                                      (str "Restored: " (label-of (js/get (aget matches 0) .tag))) 4000)))
+                                    (js/call .catch (fn [%1] Any (modeline-msg
+                                      (str ":restore failed: " (js/get %1 .message)) 4000)))))))))
+                      (js/call .catch (fn [%1] Any (modeline-msg (str ":restore failed: " (js/get %1 .message)) 4000))))))
 
                 (= name "tabs")
-                (let [sub (.toLowerCase (or (aget args 1) ""))
+                (let [sub (js/call (or (aget args 1) "") .toLowerCase)
                       scope (cond
                               (or (= sub "all") (= sub "*")) "all"
                               (or (= sub "window") (= sub "win")) "current"
@@ -1499,27 +1417,27 @@
                   (open-tabs-picker scope))
 
                 (or (= name "blacklist") (= name "bl"))
-                (let [sub (.toLowerCase (or (aget args 1) ""))]
+                (let [sub (js/call (or (aget args 1) "") .toLowerCase)]
                   (cond
                     (or (= sub "list") (= sub "ls"))
                     (let [list (blacklisted-hosts)]
                       (modeline-msg
-                        (if (.-length list) (str "Blacklist: " (.join list ", "))
+                        (if (js/get list .length) (str "Blacklist: " (js/call list .join ", "))
                           "Blacklist is empty") 5000))
                     (or (= sub "remove") (= sub "rm") (= sub "del"))
-                    (let [host (or (some-> (aget args 2) (.trim)) (current-host))]
+                    (let [host (or (some-> (aget args 2) (js/call .trim)) (current-host))]
                       (if (not host) (modeline-msg "No host to remove" 3000)
                         (modeline-msg
                           (if (blacklist-remove host) (str "Removed: " host)
                             (str "Not in blacklist: " host)) 3000)))
                     :else
-                    (let [host (or (some-> (aget args 1) (.trim)) (current-host))]
+                    (let [host (or (some-> (aget args 1) (js/call .trim)) (current-host))]
                       (if (not host) (modeline-msg "No host to blacklist" 3000)
                         (do (blacklist-add host)
                             (modeline-msg (str "Blacklisted: " host) 3000))))))
 
                 (or (= name "unblacklist") (= name "ubl"))
-                (let [host (or (some-> (aget args 1) (.trim)) (current-host))]
+                (let [host (or (some-> (aget args 1) (js/call .trim)) (current-host))]
                   (if (not host) (modeline-msg "No host to remove" 3000)
                     (modeline-msg
                       (if (blacklist-remove host) (str "Removed: " host)
@@ -1533,17 +1451,17 @@
                 ;; Textual keybinding edits (the vim :map lineage) — write the same
                 ;; gjoa.keys.bindings pref about:vim does; dispatch resolves it live.
                 (or (= name "bind") (= name "map"))
-                (let [k (some-> (aget args 1) (.trim))
-                      cmd (some-> (aget args 2) (.trim))]
+                (let [k (some-> (aget args 1) (js/call .trim))
+                      cmd (some-> (aget args 2) (js/call .trim))]
                   (if (or (not (bool k)) (not (bool cmd)))
                     (modeline-msg "usage: :bind <key> <command>  (commands: about:vim)" 5000)
-                    (if (not (.has COMMAND-IDS cmd))
+                    (if (not (js/call COMMAND-IDS .has cmd))
                       (modeline-msg (str "Unknown command: " cmd "  (see about:vim)") 4500)
                       (do (set-key-binding! k cmd)
                           (modeline-msg (str "Bound " k " → " cmd) 3000)))))
 
                 (or (= name "unbind") (= name "unmap"))
-                (let [k (some-> (aget args 1) (.trim))]
+                (let [k (some-> (aget args 1) (js/call .trim))]
                   (if (not (bool k)) (modeline-msg "usage: :unbind <key>" 4000)
                     (do (set-key-binding! k nil)
                         (modeline-msg (str "Unbound " k) 3000))))
@@ -1554,148 +1472,223 @@
 
                 (= name "tabpos")
                 (let [valid ["sibling" "root" "child"]
-                      arg (.toLowerCase (or (aget args 1) ""))]
+                      arg (js/call (or (aget args 1) "") .toLowerCase)]
                   (if (not arg)
-                    (let [cur (.getCharPref (.-prefs Services)
+                    (let [cur (js/call (js/get Services .prefs) .getCharPref
                                 "gjoa.tabs.newTabPosition" "sibling")]
                       (modeline-msg (str ":tabpos = " cur
                                          " (options: sibling | root | child)") 4000))
-                    (if (not (.includes valid arg))
+                    (if (not (js/call valid .includes arg))
                       (modeline-msg "Usage: :tabpos <sibling|root|child>" 3500)
-                      (do (.setCharPref (.-prefs Services)
+                      (do (js/call (js/get Services .prefs) .setCharPref
                             "gjoa.tabs.newTabPosition" arg)
                           (modeline-msg (str ":tabpos -> " arg) 2500)))))
 
                 (= name "space")
-                (let [sub (.toLowerCase (or (aget args 1) "list"))
-                      rest (.trim (.join (.slice args 2) " "))]
+                (let [sub (js/call (or (aget args 1) "list") .toLowerCase)
+                      rest (js/call (js/call (js/call args .slice 2) .join " ") .trim)]
                   (cond
                     (= sub "new")
                     (let [sn (or rest "Untitled")
-                          s (.create spaces sn)]
-                      (.setActive spaces (.-id s))
-                      (modeline-msg (str ":space new \"" (.-name s) "\" -> switched") 2500))
+                          s (js/call spaces .create sn)]
+                      (js/call spaces .setActive (js/get s .id))
+                      (modeline-msg (str ":space new \"" (js/get s .name) "\" -> switched") 2500))
                     (= sub "rename")
                     (if (not rest) (modeline-msg "Usage: :space rename <name>" 3000)
-                      (do (.rename spaces (.activeId spaces) rest)
+                      (do (js/call spaces .rename (js/call spaces .activeId) rest)
                           (modeline-msg (str ":space rename \"" rest "\"") 2500)))
                     (= sub "delete")
-                    (let [cur (.active spaces)
-                          all (.list spaces)]
-                      (if (or (<= (.-length all) 1) (= (.-id (aget all 0)) (.-id cur)))
+                    (let [cur (js/call spaces .active)
+                          all (js/call spaces .list)]
+                      (if (or (<= (js/get all .length) 1) (= (js/get (aget all 0) .id) (js/get cur .id)))
                         (modeline-msg "Can't delete the default space" 3000)
-                        (do (.delete spaces (.-id cur))
-                            (modeline-msg (str ":space delete \"" (.-name cur) "\"") 2500))))
+                        (do (js/call spaces .delete (js/get cur .id))
+                            (modeline-msg (str ":space delete \"" (js/get cur .name) "\"") 2500))))
                     (= sub "switch")
                     (if (not rest) (modeline-msg "Usage: :space switch <name>" 3000)
-                      (let [match (.find (.list spaces)
-                                    #(= (.toLowerCase (.-name %))
-                                        (.toLowerCase rest)))]
+                      (let [match (js/call (js/call spaces .list) .find
+                                    (fn [%1] Any (= (js/call (js/get %1 .name) .toLowerCase)
+                                        (js/call rest .toLowerCase))))]
                         (if (nil? match)
                           (modeline-msg (str "No space named \"" rest "\"") 3000)
-                          (do (.setActive spaces (.-id match))
-                              (modeline-msg (str ":space -> \"" (.-name match) "\"") 2000)))))
+                          (do (js/call spaces .setActive (js/get match .id))
+                              (modeline-msg (str ":space -> \"" (js/get match .name) "\"") 2000)))))
                     :else
-                    (let [items (.map (.list spaces) (fn [s]
-                                  (let [r {:display (.-name s)
-                                           :secondary (if (= (.-id s) (.activeId spaces)) "(active)" "")
+                    (let [items (js/call (js/call spaces .list) .map (fn [s] Any
+                                  (let [r {:display (js/get s .name)
+                                           :secondary (if (= (js/get s .id) (js/call spaces .activeId)) "(active)" "")
                                            :data s}] r)))]
-                      (.show picker
+                      (js/call picker .show
                         {:prompt "spaces >"
                          :items items
-                         :onSelect (fn [item]
-                           (.setActive spaces (.-id (.-data item)))
+                         :onSelect (fn [item] Any
+                           (js/call spaces .setActive (js/get (js/get item .data) .id))
                            (modeline-msg
-                             (str ":space -> \"" (.-name (.-data item)) "\"") 2000))}))))
+                             (str ":space -> \"" (js/get (js/get item .data) .name) "\"") 2000))}))))
 
                 (= name "history")
-                (let [raw-args (.slice args 1)
-                      space-scoped (and (> (.-length raw-args) 0)
-                                       (= (.toLowerCase (aget raw-args 0)) "space"))
-                      q-args (if space-scoped (.slice raw-args 1) raw-args)
-                      q (.trim (.join q-args " "))
-                      active-space (and spaces (.activeId spaces))]
+                (let [raw-args (js/call args .slice 1)
+                      space-scoped (and (> (js/get raw-args .length) 0)
+                                       (= (js/call (aget raw-args 0) .toLowerCase) "space"))
+                      q-args (if space-scoped (js/call raw-args .slice 1) raw-args)
+                      q (js/call (js/call q-args .join " ") .trim)
+                      active-space (and spaces (js/call spaces .activeId))]
                   (-> (if q
-                        (.search history q {:taggedOnly false :limit 200})
-                        (.getRecent history 200))
-                      (.then (fn [evs]
+                        (js/call history .search q {:taggedOnly false :limit 200})
+                        (js/call history .getRecent 200))
+                      (js/call .then (fn [evs] Any
                         (let [filtered (if (and space-scoped active-space)
-                                         (.filter evs #(event-has-space % active-space))
+                                         (js/call evs .filter (fn [%1] Any (event-has-space %1 active-space)))
                                          evs)
-                              display-evs (.slice filtered 0 100)]
-                          (if (not (.-length display-evs))
+                              display-evs (js/call filtered .slice 0 100)]
+                          (if (not (js/get display-evs .length))
                             (modeline-msg
                               (if q (str "No events match \"" q "\"") "No history yet") 3000)
-                            (.show picker
+                            (js/call picker .show
                               {:prompt (if space-scoped
-                                         (str "history (" (.-name (.active spaces)) ") >")
+                                         (str "history (" (js/get (js/call spaces .active) .name) ") >")
                                          "history >")
-                               :items (.map display-evs #(history-picker-item %))
-                               :onSelect (fn [item]
-                                 (let [ev (.-data item)]
+                               :items (js/call display-evs .map (fn [%1] Any (history-picker-item %1)))
+                               :onSelect (fn [item] Any
+                                 (let [ev (js/get item .data)]
                                    (-> (restore-event ev)
-                                       (.then #(let [lbl (label-of (.-tag ev))]
+                                       (js/call .then (fn [] Any (let [lbl (label-of (js/get ev .tag))]
                                            (modeline-msg
                                              (str "Restored: "
-                                               (or lbl (.toLocaleString
-                                                         (Date. (.-timestamp ev)))))
-                                             4000)))
-                                       (.catch #(modeline-msg
-                                           (str ":history restore failed: " (.-message %))
-                                           4000)))))})))))
-                      (.catch #(modeline-msg (str ":history failed: " (.-message %)) 4000))))
+                                               (or lbl (js/call (js/new Date (js/get ev .timestamp)) .toLocaleString)))
+                                             4000))))
+                                       (js/call .catch (fn [%1] Any (modeline-msg
+                                           (str ":history restore failed: " (js/get %1 .message))
+                                           4000))))))})))))
+                      (js/call .catch (fn [%1] Any (modeline-msg (str ":history failed: " (js/get %1 .message)) 4000)))))
 
                 :else (modeline-msg (str "Unknown command: " name) 3000)))))
 
-        open-ex-command-picker (fn []
-          (let [items (.map EX-COMMANDS (fn [cmd]
-                        (let [r {:display (str ":" (.-name cmd))
-                                 :secondary (.-description cmd)
+        open-ex-command-picker (fn [] Any
+          (let [items (js/call EX-COMMANDS .map (fn [cmd] Any
+                        (let [r {:display (str ":" (js/get cmd .name))
+                                 :secondary (js/get cmd .description)
                                  :data cmd}] r)))]
-            (.show picker
+            (js/call picker .show
               {:prompt "ex >"
                :items items
-               :filterItem (fn [item q]
-                 (let [cmd (.-data item)
-                       first-word (or (aget (.split (.toLowerCase (.trim q))
-                                                    (RegExp. "\\s+")) 0) "")]
+               :filterItem (fn [item q] Any
+                 (let [cmd (js/get item .data)
+                       first-word (or (aget (js/call (js/call (js/call q .trim) .toLowerCase) .split
+                                                    (js/new RegExp "\\s+")) 0) "")]
                    (if (not first-word) true
-                     (let [hay (.toLowerCase (str (.-name cmd) " "
-                                                  (or (.-secondary item) "")))]
-                       (.includes hay first-word)))))
-               :onSelect (fn [item query]
-                 (let [cmd (.-data item)
-                       q (.trim (or query ""))
-                       lower (.toLowerCase q)
-                       use-qa (or (.startsWith lower
-                                    (str (.toLowerCase (.-name cmd)) " "))
-                                  (= lower (.toLowerCase (.-name cmd))))
-                       ex-cmd (if use-qa q (.-name cmd))]
+                     (let [hay (js/call (str (js/get cmd .name) " "
+                                                  (or (js/get item .secondary) "")) .toLowerCase)]
+                       (js/call hay .includes first-word)))))
+               :onSelect (fn [item query] Any
+                 (let [cmd (js/get item .data)
+                       q (js/call (or query "") .trim)
+                       lower (js/call q .toLowerCase)
+                       use-qa (or (js/call lower .startsWith
+                                    (str (js/call (js/get cmd .name) .toLowerCase) " "))
+                                  (= lower (js/call (js/get cmd .name) .toLowerCase)))
+                       ex-cmd (if use-qa q (js/get cmd .name))]
                    (end-ex-mode ex-cmd)))})))
 
+        ;; id → action. The one place each command's behavior lives; dispatch and
+        ;; (later) about:vim / :bind reference commands by id. `e` is the keydown.
+        command-handlers (fn [e id] Any
+          (cond
+            (= id "tabsPicker")    (open-tabs-picker "space")
+            (= id "tabsPickerAll") (open-tabs-picker "all")
+            (= id "exCommand")     (open-ex-command-picker)
+            (= id "closeTab")      (try (js/call gBrowser .removeTab (js/get gBrowser .selectedTab)) (catch (_e Any) nil))
+            (= id "urlbar")        (activate-urlbar "current")
+            (= id "urlbarNewTab")  (activate-urlbar "newTab")
+            (= id "lastTab")       (toggle-last-tab)
+            (= id "back")          (try (js/call (js/get gBrowser .selectedBrowser) .goBack) (catch (_e Any) nil))
+            (= id "forward")       (try (js/call (js/get gBrowser .selectedBrowser) .goForward) (catch (_e Any) nil))
+            (= id "scrollDown")
+              (when (not (js/get e .repeat))
+                (try (some-> gBrowser (js/get .selectedBrowser) (js/get .browsingContext) (js/get .currentWindowGlobal)
+                       (js/call .getActor "GjoaInput") (js/call .sendAsyncMessage "GjoaInput:ScrollStart" {:dy 1}))
+                     (catch (_e Any) nil)))
+            (= id "scrollUp")
+              (when (not (js/get e .repeat))
+                (try (some-> gBrowser (js/get .selectedBrowser) (js/get .browsingContext) (js/get .currentWindowGlobal)
+                       (js/call .getActor "GjoaInput") (js/call .sendAsyncMessage "GjoaInput:ScrollStart" {:dy -1}))
+                     (catch (_e Any) nil)))
+            (= id "summonSidebar")
+              ;; #127: SUMMON — brief reveal, meant for a quick peek; the sidebar
+              ;; dismisses itself after enter→leave. Mode-aware: in COMPACT mode
+              ;; it pins/unpins the overlay reveal; in STATIC mode it tucks the
+              ;; sidebar back into compact. (Behavior unchanged by the rename —
+              ;; the id now names the intent; the reveal logic is untouched.)
+              (let [sb (by-id "sidebar-container")]
+                (if (pref-bool "gjoa.sidebar.compact" false)
+                  (when sb
+                    (if (or (js/call sb .hasAttribute "gjoa-pinned") (js/call sb .hasAttribute "gjoa-has-hover"))
+                      (do (js/call sb .removeAttribute "gjoa-pinned")
+                          (js/call sb .removeAttribute "gjoa-has-hover"))
+                      (js/call sb .setAttribute "gjoa-pinned" "true")))
+                  (do (when sb (js/call sb .removeAttribute "gjoa-pinned"))
+                      (set-pref-bool! "gjoa.sidebar.compact" true))))
+            (= id "anchorSidebar")
+              ;; ANCHOR/FLOAT — the persistent toggle the custom sidebar button
+              ;; fires. Route through the SAME compact.toggle the button drives
+              ;; (window.gjoaCompact) so there is one anchor/float code path.
+              (let [c (js/get window .gjoaCompact)]
+                (when c (js/call c .toggle)))
+            (= id "toggleStrip")   (toggle-h-sidebar-strip)
+            (= id "help")          (toggle-which-key)
+            (= id "linkHints")       (start-link-hints false)
+            (= id "linkHintsNewTab") (start-link-hints true)
+            ;; #130 P5: in-page find delegates to Firefox's native findbar — battle-
+            ;; tested highlight/scroll/wrap, n/N repeat. '/' opens it; n/N find-again.
+            (= id "find")
+              (try (js/call (js/call gBrowser .getFindBar) .then
+                          (fn [fb] Any (when fb (js/call fb .startFind (js/get fb .FIND_NORMAL)))))
+                   (catch (_e Any) nil))
+            (= id "findNext")
+              (try (js/call (js/call gBrowser .getFindBar) .then
+                          (fn [fb] Any (when fb (js/call fb .onFindAgainCommand false))))
+                   (catch (_e Any) nil))
+            (= id "findPrev")
+              (try (js/call (js/call gBrowser .getFindBar) .then
+                          (fn [fb] Any (when fb (js/call fb .onFindAgainCommand true))))
+                   (catch (_e Any) nil))
+            (= id "visualMode")      (start-visual)
+            :else nil))
 
-        visual-move (fn [dir]
-          (when (not (.-selection-anchor vs))
-            (set! (.-selection-anchor vs) (.-cursor state)))
-          (when (and (move-cursor dir) (.-selection-anchor vs))
-            (selectRange (.-selection-anchor vs)))
+        try-dispatch-binding (fn [e] Bool
+          ;; Registry dispatch: key → effective command-id (VIM-COMMANDS defaults
+          ;; overlaid by the gjoa.keys.bindings override pref) → run its handler.
+          ;; Nothing hardcoded; about:vim + `:bind` rebind by editing that one pref.
+          (if (or (js/get e .ctrlKey) (js/get e .altKey) (js/get e .metaKey))
+            false
+            (let [id (effective-command-id (js/get e .key) (pref-str "gjoa.keys.bindings" ""))]
+              (if (and id (js/call COMMAND-IDS .has id))
+                (dispatch-key e id (command-handlers e id))
+                false))))
+
+
+        visual-move (fn [dir] Any
+          (when (not (js/get vs .selection-anchor))
+            (js/set! vs .selection-anchor (js/get state .cursor)))
+          (when (and (move-cursor dir) (js/get vs .selection-anchor))
+            (selectRange (js/get vs .selection-anchor)))
           true)
 
-        handle-action-keys (fn [e] :- Bool
+        handle-action-keys (fn [e] Bool
           (cond
             (key= e "Enter")
-            (if (.-refile-source vs)
-              (do (when (.-cursor state) (execute-refile (.-cursor state))) true)
-              (if (.-_tab (.-cursor state))
-                (do (set! (.-selectedTab gBrowser) (.-_tab (.-cursor state)))
-                    (blur-panel) (.focus (.-selectedBrowser gBrowser)) true)
-                (do (.toggleCollapse rows (.-cursor state)) true)))
+            (if (js/get vs .refile-source)
+              (do (when (js/get state .cursor) (execute-refile (js/get state .cursor))) true)
+              (if (js/get (js/get state .cursor) ._tab)
+                (do (js/set! gBrowser .selectedTab (js/get (js/get state .cursor) ._tab))
+                    (blur-panel) (js/call (js/get gBrowser .selectedBrowser) .focus) true)
+                (do (js/call rows .toggleCollapse (js/get state .cursor)) true)))
             (key= e "Tab")
-            (do (.toggleCollapse rows (.-cursor state)) true)
+            (do (js/call rows .toggleCollapse (js/get state .cursor)) true)
             (key= e "Escape")
-            (do (when (.-refile-source vs) (cancel-refile)) true)
+            (do (when (js/get vs .refile-source) (cancel-refile)) true)
             (key= e "r")
-            (do (start-rename (.-cursor state)) true)
+            (do (start-rename (js/get state .cursor)) true)
             (key= e "G")
             (do (go-to-bottom) true)
             (key= e "x")
@@ -1707,60 +1700,60 @@
             :else false))
 
 
-        handle-normal-key (fn [e] :- Bool
-          (when (and (not= (.-key e) "J") (not= (.-key e) "K"))
-            (set! (.-selection-anchor vs) nil))
+        handle-normal-key (fn [e] Bool
+          (when (and (not= (js/get e .key) "J") (not= (js/get e .key) "K"))
+            (js/set! vs .selection-anchor nil))
           ;; Place the vim cursor on the selected tab BEFORE any action runs. The
           ;; Alt+hjkl move branches (fold / outdent / reorder) and friends guard
           ;; on (.-cursor state), so a fresh tab selection followed by Alt+h would
           ;; silently no-op. This used to live only in the bare-key :else arm,
           ;; which is why Alt-moves did nothing until you first pressed j/k/h/l.
-          (when (and (not (.-cursor state)) (.includes "jklhG/rnNx" (.-key e)))
-            (let [row (.get row-of (.-selectedTab gBrowser))]
+          (when (and (not (js/get state .cursor)) (js/call "jklhG/rnNx" .includes (js/get e .key)))
+            (let [row (js/call row-of .get (js/get gBrowser .selectedTab))]
               (when row (set-cursor row))))
           (cond
-            (.-pending-ctrl-w vs)
-            (do (set! (.-pending-ctrl-w vs) false)
-                (clearTimeout (.-chord-timer vs))
+            (js/get vs .pending-ctrl-w)
+            (do (js/set! vs .pending-ctrl-w false)
+                (clearTimeout (js/get vs .chord-timer))
                 (if (or (key= e "h") (key= e "H") (key= e "l") (key= e "L")
                         (key= e "w") (key= e "W"))
-                  (do (pane-switch (.-key e)) true)
-                  (do (when (.-selectedTab gBrowser)
-                        (.removeTab gBrowser (.-selectedTab gBrowser)))
+                  (do (pane-switch (js/get e .key)) true)
+                  (do (when (js/get gBrowser .selectedTab)
+                        (js/call gBrowser .removeTab (js/get gBrowser .selectedTab)))
                       false)))
 
-            (and (.-ctrlKey e) (or (key= e "w") (= (.-code e) "KeyW")))
-            (do (set! (.-pending-ctrl-w vs) true)
-                (set! (.-chord-timer vs)
-                      (setTimeout (fn []
-                        (when (.-pending-ctrl-w vs)
-                          (set! (.-pending-ctrl-w vs) false)
-                          (when (.-selectedTab gBrowser)
-                            (.removeTab gBrowser (.-selectedTab gBrowser)))))
+            (and (js/get e .ctrlKey) (or (key= e "w") (= (js/get e .code) "KeyW")))
+            (do (js/set! vs .pending-ctrl-w true)
+                (js/set! vs .chord-timer
+                      (setTimeout (fn [] Any
+                        (when (js/get vs .pending-ctrl-w)
+                          (js/set! vs .pending-ctrl-w false)
+                          (when (js/get gBrowser .selectedTab)
+                            (js/call gBrowser .removeTab (js/get gBrowser .selectedTab)))))
                         CHORD-TIMEOUT))
                 true)
 
-            (.-chord vs)
-            (let [combo (str (.-chord vs) (.-key e))]
-              (set! (.-chord vs) nil)
-              (clearTimeout (.-chord-timer vs))
+            (js/get vs .chord)
+            (let [combo (str (js/get vs .chord) (js/get e .key))]
+              (js/set! vs .chord nil)
+              (clearTimeout (js/get vs .chord-timer))
               (cond
                 (= combo "gg") (do (go-to-top) true)
                 (= combo "gC")
-                (do (when (some-> state .-cursor .-_tab)
-                      (clone-as-sibling (.-_tab (.-cursor state)))) true)
+                (do (when (some-> state (js/get .cursor) (js/get ._tab))
+                      (clone-as-sibling (js/get (js/get state .cursor) ._tab))) true)
                 (or (= combo "gs") (= combo "gS"))
                 (do (cycle-space (if (= combo "gs") 1 -1)) true)
                 :else true))
 
-            (and (key= e "g") (not (.-shiftKey e)) (not (.-ctrlKey e)) (not (.-altKey e)))
-            (do (set! (.-chord vs) (.-key e))
-                (set! (.-chord-timer vs)
-                      (setTimeout #(set! (.-chord vs) nil) CHORD-TIMEOUT))
+            (and (key= e "g") (not (js/get e .shiftKey)) (not (js/get e .ctrlKey)) (not (js/get e .altKey)))
+            (do (js/set! vs .chord (js/get e .key))
+                (js/set! vs .chord-timer
+                      (setTimeout (fn [] Any (js/set! vs .chord nil)) CHORD-TIMEOUT))
                 true)
 
             (key= e "i")
-            (do (blur-panel) (.focus (.-selectedBrowser gBrowser)) true)
+            (do (blur-panel) (js/call (js/get gBrowser .selectedBrowser) .focus) true)
 
             ;; Alt+hjkl MOVES the focused tab, mode-relative.
             ;; VERTICAL:   h = outdent (to root), l = indent (fold into the tab
@@ -1768,150 +1761,150 @@
             ;; HORIZONTAL: h = fold into the LEFT neighbour, l = fold into the
             ;;             RIGHT neighbour, k = outdent/unfold, j = reorder later.
             ;; Arrows track their letters.
-            (and (.-altKey e) (or (key= e "h") (= (.-code e) "KeyH") (key= e "ArrowLeft")))
-            (do (when (.-cursor state)
-                  (let [c (.-cursor state)]
+            (and (js/get e .altKey) (or (key= e "h") (= (js/get e .code) "KeyH") (key= e "ArrowLeft")))
+            (do (when (js/get state .cursor)
+                  (let [c (js/get state .cursor)]
                     (if (is-horizontal)
                       ;; Move LEFT through the tree: a CHILD unfolds OUT to the
                       ;; left (lands before its parent's column); a ROOT folds
                       ;; INTO its left neighbour.
-                      (if (and (.-_tab c) (.-parentId (tree-data! (.-_tab c))))
+                      (if (and (js/get c ._tab) (js/get (tree-data! (js/get c ._tab)) .parentId))
                         (unfold-left c)
                         (make-child-of-above c))
                       (move-to-root c)))) true)
 
-            (and (.-altKey e) (or (key= e "l") (= (.-code e) "KeyL") (key= e "ArrowRight")))
-            (do (when (.-cursor state)
-                  (let [c (.-cursor state)]
+            (and (js/get e .altKey) (or (key= e "l") (= (js/get e .code) "KeyL") (key= e "ArrowRight")))
+            (do (when (js/get state .cursor)
+                  (let [c (js/get state .cursor)]
                     (if (is-horizontal)
                       ;; Move RIGHT through the tree: a CHILD unfolds OUT to the
                       ;; right (lands after its parent's column); a ROOT folds
                       ;; INTO its right neighbour.
-                      (if (and (.-_tab c) (.-parentId (tree-data! (.-_tab c))))
+                      (if (and (js/get c ._tab) (js/get (tree-data! (js/get c ._tab)) .parentId))
                         (unfold-right c)
                         (make-child-of-next c))
                       (make-child-of-above c)))) true)
 
-            (and (.-altKey e) (or (key= e "j") (= (.-code e) "KeyJ") (key= e "ArrowDown")))
-            (do (when (.-cursor state) (swap-down (.-cursor state))) true)
+            (and (js/get e .altKey) (or (key= e "j") (= (js/get e .code) "KeyJ") (key= e "ArrowDown")))
+            (do (when (js/get state .cursor) (swap-down (js/get state .cursor))) true)
 
-            (and (.-altKey e) (or (key= e "k") (= (.-code e) "KeyK") (key= e "ArrowUp")))
-            (do (when (.-cursor state)
-                  (if (is-horizontal) (move-to-root (.-cursor state)) (swap-up (.-cursor state)))) true)
+            (and (js/get e .altKey) (or (key= e "k") (= (js/get e .code) "KeyK") (key= e "ArrowUp")))
+            (do (when (js/get state .cursor)
+                  (if (is-horizontal) (move-to-root (js/get state .cursor)) (swap-up (js/get state .cursor)))) true)
 
             :else
             (do
-              (when (and (not (.-cursor state)) (.includes "jklhG/rnNx" (.-key e)))
-                (let [row (.get row-of (.-selectedTab gBrowser))]
+              (when (and (not (js/get state .cursor)) (js/call "jklhG/rnNx" .includes (js/get e .key)))
+                (let [row (js/call row-of .get (js/get gBrowser .selectedTab))]
                   (when row (set-cursor row))))
-              (if (not (.-cursor state)) false
-                (if (and (not (.-ctrlKey e)) (not (.-metaKey e)))
+              (if (not (js/get state .cursor)) false
+                (if (and (not (js/get e .ctrlKey)) (not (js/get e .metaKey)))
                   (cond
                     (or (key= e "j") (key= e "ArrowDown")) (do (move-cursor 1) true)
                     (or (key= e "k") (key= e "ArrowUp")) (do (move-cursor -1) true)
                     (or (key= e "h") (key= e "ArrowLeft"))
-                      (do (if (is-horizontal) (move-to-level0 -1) (outdent-row (.-cursor state))) true)
+                      (do (if (is-horizontal) (move-to-level0 -1) (outdent-row (js/get state .cursor))) true)
                     (or (key= e "l") (key= e "ArrowRight"))
-                      (do (if (is-horizontal) (move-to-level0 1) (indent-row (.-cursor state))) true)
+                      (do (if (is-horizontal) (move-to-level0 1) (indent-row (js/get state .cursor))) true)
                     :else (handle-action-keys e))
                   (handle-action-keys e))))))
 
 
-        setup-global-keys (fn []
-          (set! (.-current-selected-tab vs) (.-selectedTab gBrowser))
-          (on! (.-tabContainer gBrowser) "TabSelect"
-            (fn [e]
-              (let [new-tab (.-target e)]
-                (when (not= new-tab (.-current-selected-tab vs))
-                  (set! (.-last-tab vs) (.-current-selected-tab vs))
-                  (set! (.-current-selected-tab vs) new-tab)))))
+        setup-global-keys (fn [] Any
+          (js/set! vs .current-selected-tab (js/get gBrowser .selectedTab))
+          (on! (js/get gBrowser .tabContainer) "TabSelect"
+            (fn [e] Any
+              (let [new-tab (js/get e .target)]
+                (when (not= new-tab (js/get vs .current-selected-tab))
+                  (js/set! vs .last-tab (js/get vs .current-selected-tab))
+                  (js/set! vs .current-selected-tab new-tab)))))
           (onc! document "keydown"
-            (fn [e]
-              (let [a (.-activeElement document)]
-                (when (and (not (.isActive picker))
-                           (not (.-renaming vs))
-                           (not (.contentInputFocused contentFocus))
+            (fn [e] Any
+              (let [a (js/get document .activeElement)]
+                (when (and (not (js/call picker .isActive))
+                           (not (js/get vs .renaming))
+                           (not (js/call contentFocus .contentInputFocused))
                            (not (current-host-blacklisted))
-                           (not (and a (not= a (.-panel state))
-                                      (or (= (.-tagName a) "INPUT") (= (.-tagName a) "input")
-                                          (= (.-tagName a) "TEXTAREA") (= (.-tagName a) "textarea")
-                                          (.-isContentEditable a))))
+                           (not (and a (not= a (js/get state .panel))
+                                      (or (= (js/get a .tagName) "INPUT") (= (js/get a .tagName) "input")
+                                          (= (js/get a .tagName) "TEXTAREA") (= (js/get a .tagName) "textarea")
+                                          (js/get a .isContentEditable))))
                            (not (and a
-                                  (or (and (.-closest a) (.closest a "#urlbar"))
-                                      (and (.-closest a) (.closest a "findbar"))
-                                      (and (.-closest a) (.closest a ".gjoa-search-input"))
-                                      (and (.-closest a) (.closest a ".gjoa-picker")))))
+                                  (or (and (js/get a .closest) (js/call a .closest "#urlbar"))
+                                      (and (js/get a .closest) (js/call a .closest "findbar"))
+                                      (and (js/get a .closest) (js/call a .closest ".gjoa-search-input"))
+                                      (and (js/get a .closest) (js/call a .closest ".gjoa-picker")))))
                            (not (or (key= e "Shift") (key= e "Control")
                                      (key= e "Alt") (key= e "Meta"))))
-                  (if (.-link-hints-active vs)
-                    (do (.preventDefault e) (.stopImmediatePropagation e)
+                  (if (js/get vs .link-hints-active)
+                    (do (js/call e .preventDefault) (js/call e .stopImmediatePropagation)
                         (handle-link-hints-key e))
-                  (if (.-visual-active vs)
-                    (do (.preventDefault e) (.stopImmediatePropagation e)
+                  (if (js/get vs .visual-active)
+                    (do (js/call e .preventDefault) (js/call e .stopImmediatePropagation)
                         (handle-visual-key e))
                   (if (and (key= e "Escape")
-                           (.-which-key-el vs)
-                           (not (.-hidden (.-which-key-el vs))))
-                    (do (.preventDefault e) (.stopImmediatePropagation e)
+                           (js/get vs .which-key-el)
+                           (not (js/get (js/get vs .which-key-el) .hidden)))
+                    (do (js/call e .preventDefault) (js/call e .stopImmediatePropagation)
                         (hide-which-key))
                     (let [leader (leader-key)]
                       (if (not= leader nil)
-                        (if (not (.-leader-armed vs))
+                        (if (not (js/get vs .leader-armed))
                           (when (key= e leader)
-                            (.preventDefault e) (.stopImmediatePropagation e)
+                            (js/call e .preventDefault) (js/call e .stopImmediatePropagation)
                             (arm-leader))
                           (if (or (key= e leader) (key= e "Escape"))
-                            (do (.preventDefault e) (.stopImmediatePropagation e)
+                            (do (js/call e .preventDefault) (js/call e .stopImmediatePropagation)
                                 (disarm-leader))
                             (let [handled (try-dispatch-binding e)]
                               (disarm-leader)
                               (when (not handled)
-                                (.preventDefault e)
-                                (.stopImmediatePropagation e)))))
+                                (js/call e .preventDefault)
+                                (js/call e .stopImmediatePropagation)))))
                         (try-dispatch-binding e))))))))))
           (onc! document "keyup"
-            (fn [e]
+            (fn [e] Any
               (when (or (key= e "j") (key= e "k"))
                 (try
-                  (some-> gBrowser .-selectedBrowser .-browsingContext .-currentWindowGlobal
-                    (.getActor "GjoaInput") (.sendAsyncMessage "GjoaInput:ScrollStop"))
-                  (catch Any _e nil))))))
+                  (some-> gBrowser (js/get .selectedBrowser) (js/get .browsingContext) (js/get .currentWindowGlobal)
+                    (js/call .getActor "GjoaInput") (js/call .sendAsyncMessage "GjoaInput:ScrollStop"))
+                  (catch (_e Any) nil))))))
 
 
-        setup-vim-keys (fn []
-          (attr! (.-panel state) "tabindex" "0")
+        setup-vim-keys (fn [] Any
+          (attr! (js/get state .panel) "tabindex" "0")
           (onc! document "keydown"
-            (fn [e]
-              (when (and (not (.isActive picker)) (.-panel-active vs) (not (.-renaming vs)))
-                (let [active (.-activeElement document)]
-                    (if (and active (not= active (.-panel state))
-                             (or (= (.-tagName active) "INPUT") (= (.-tagName active) "input")
-                                 (= (.-tagName active) "TEXTAREA") (= (.-tagName active) "textarea")
-                                 (.-isContentEditable active)
-                                 (and (.-closest active) (.closest active "#urlbar"))
-                                 (and (.-closest active) (.closest active "findbar"))))
+            (fn [e] Any
+              (when (and (not (js/call picker .isActive)) (js/get vs .panel-active) (not (js/get vs .renaming)))
+                (let [active (js/get document .activeElement)]
+                    (if (and active (not= active (js/get state .panel))
+                             (or (= (js/get active .tagName) "INPUT") (= (js/get active .tagName) "input")
+                                 (= (js/get active .tagName) "TEXTAREA") (= (js/get active .tagName) "textarea")
+                                 (js/get active .isContentEditable)
+                                 (and (js/get active .closest) (js/call active .closest "#urlbar"))
+                                 (and (js/get active .closest) (js/call active .closest "findbar"))))
                       (blur-panel)
                       (if (key= e "Escape")
-                        (if (.-search-active vs)
+                        (if (js/get vs .search-active)
                           (do (end-search false)
-                              (.preventDefault e) (.stopImmediatePropagation e))
-                          (when (some-> vs .-modeline (.querySelector ".gjoa-search-input"))
+                              (js/call e .preventDefault) (js/call e .stopImmediatePropagation))
+                          (when (some-> vs (js/get .modeline) (js/call .querySelector ".gjoa-search-input"))
                             (end-ex-mode nil)
-                            (.preventDefault e) (.stopImmediatePropagation e)))
+                            (js/call e .preventDefault) (js/call e .stopImmediatePropagation)))
                         (if (handle-normal-key e)
-                          (do (.preventDefault e) (.stopImmediatePropagation e)
+                          (do (js/call e .preventDefault) (js/call e .stopImmediatePropagation)
                               (update-modeline))
-                          (when (= (.-length (.-key e)) 1)
+                          (when (= (js/get (js/get e .key) .length) 1)
                             (blur-panel)
-                            (when (and (not (.-ctrlKey e)) (not (.-altKey e)) (not (.-metaKey e)))
-                              (.focus (.-selectedBrowser gBrowser)))))))))))
-          (on! (.-tabpanels gBrowser) "mousedown"
-            #(when (.-panel-active vs) (blur-panel))))
+                            (when (and (not (js/get e .ctrlKey)) (not (js/get e .altKey)) (not (js/get e .metaKey)))
+                              (js/call (js/get gBrowser .selectedBrowser) .focus))))))))))
+          (on! (js/get gBrowser .tabpanels) "mousedown"
+            (fn [] Any (when (js/get vs .panel-active) (blur-panel)))))
 
 
-        consume-pending-cursor-move (fn [] :- Bool
-          (if (not (.-pending-cursor-move vs)) false
-            (do (set! (.-pending-cursor-move vs) false) true)))]
+        consume-pending-cursor-move (fn [] Bool
+          (if (not (js/get vs .pending-cursor-move)) false
+            (do (js/set! vs .pending-cursor-move false) true)))]
 
 
     {:setCursor set-cursor
@@ -1926,5 +1919,5 @@
      :cloneAsSibling clone-as-sibling
      :startRename start-rename
      :consumePendingCursorMove consume-pending-cursor-move
-     :runExCommand #(end-ex-mode %)
+     :runExCommand (fn [%1] Any (end-ex-mode %1))
      :openExCommandPicker open-ex-command-picker})))

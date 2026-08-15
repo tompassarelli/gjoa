@@ -22,7 +22,6 @@
 ;; fixed sleep.
 (ns gjoa.tests.integration.sidebar-collapse-width
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect]]))
-(define-mode strict)
 
 (declare-extern [Number] Any)
 
@@ -30,7 +29,7 @@
 ;; persisted width so the expanded state is unambiguously wide (well past the
 ;; favicon strip). Setting the pref BEFORE expanding means expand() pins this
 ;; exact inline width. Returns the preconditions the test guards on.
-(def ENSURE-EXPANDED-WIDE :- String "
+(def ENSURE-EXPANDED-WIDE String "
   Services.prefs.setBoolPref('sidebar.verticalTabs', true);
   Services.prefs.setBoolPref('sidebar.revamp', true);
   Services.prefs.setIntPref('gjoa.sidebar.width', 320);
@@ -45,7 +44,7 @@
 
 ;; Force a collapse the way FF does at runtime: drop the attribute the drawer's
 ;; MutationObserver keys off, which calls collapse().
-(def DRIVE-COLLAPSE :- String "
+(def DRIVE-COLLAPSE String "
   const sm = document.getElementById('sidebar-container');
   if (!sm) return false;
   sm.removeAttribute('sidebar-launcher-expanded');
@@ -53,7 +52,7 @@
 ")
 
 ;; Force a re-expand the same way: re-add the attribute → expand().
-(def DRIVE-EXPAND :- String "
+(def DRIVE-EXPAND String "
   const sm = document.getElementById('sidebar-container');
   if (!sm) return false;
   sm.setAttribute('sidebar-launcher-expanded', '');
@@ -63,7 +62,7 @@
 ;; Snapshot #sidebar-container's measured width AND its inline width style. The inline
 ;; style is the actual bug surface — a non-empty `style.width` is what pinned the
 ;; strip wide when collapsed.
-(def MEASURE-SIDEBAR :- String "
+(def MEASURE-SIDEBAR String "
   const sm = document.getElementById('sidebar-container');
   if (!sm) return { error: 'no #sidebar-container' };
   const r = sm.getBoundingClientRect();
@@ -77,7 +76,7 @@
 
 ;; Tallest visible footer moz-button — `.tools-overflow` exists only in the
 ;; expanded row, so the collapsed rail has no stable per-button selector.
-(def FOOTER-BTN-JS :- String "
+(def FOOTER-BTN-JS String "
   const sideMain = document.querySelector('#sidebar-container sidebar-main');
   const root = sideMain ? (sideMain.shadowRoot || sideMain) : null;
   const hs = (root ? Array.from(root.querySelectorAll('moz-button')) : [])
@@ -89,7 +88,7 @@
 ;; box-to-box: both clusters centre a 16px icon in a larger box, so equal box gaps
 ;; with unequal boxes still look uneven. Gaps are measured between adjacent icon
 ;; rects — tab favicons in the panel, moz-button <img>s in sidebar-main's shadow.
-(def MEASURE-RAIL-RHYTHM :- String (str "
+(def MEASURE-RAIL-RHYTHM String (str "
   const panel = document.getElementById('gjoa-tab-panel');
   if (!panel || !panel.hasAttribute('gjoa-icons-only')) return { error: 'not icons-only' };
   const panelTop = panel.getBoundingClientRect().top;
@@ -132,9 +131,9 @@
 
 ;; Same footer-button measurement alone, usable in the expanded state to prove
 ;; the collapsed-only --button-min-height override doesn't leak.
-(def MEASURE-FOOTER-BTN :- String (str FOOTER-BTN-JS " return { footerBtnHeight };"))
+(def MEASURE-FOOTER-BTN String (str FOOTER-BTN-JS " return { footerBtnHeight };"))
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "sidebar — collapse narrows to favicon strip (no inline width pins it wide); expand restores (#833c5b9)" [mn]
      (let [pre (chrome-eval ENSURE-EXPANDED-WIDE)]
        ;; GUARD against a vacuous pass on a dead-chrome binary: if GjoaLoader
@@ -142,8 +141,8 @@
        ;; drawer's expand/collapse never wires up — the attribute toggle would
        ;; then be a no-op and a "narrow" assertion could pass on native FF
        ;; defaults rather than on our fix. Fail loudly + specifically.
-       (expect (.-hasSidebarMain pre) "no #sidebar-container — not a gjoa chrome window")
-       (expect (and (.-hasToolbar pre) (.-hasGjoaTest pre))
+       (expect (js/get pre .hasSidebarMain) "no #sidebar-container — not a gjoa chrome window")
+       (expect (and (js/get pre .hasToolbar) (js/get pre .hasGjoaTest))
          (str "gjoa drawer chrome did not initialize (#gjoa-urlbar-toolbar / "
               "window.gjoaTest missing) — e.g. GjoaLoader $$bc-runtime mismatch in a "
               "stale binary. Rebuild the bundle/binary; this test needs live gjoa "
@@ -158,18 +157,18 @@
                       "       sm.getBoundingClientRect().width > 200;")
                  5000))
      (let [exp (chrome-eval MEASURE-SIDEBAR)]
-       (expect (not (.-error exp)) (str "MEASURE-SIDEBAR (expanded) error: " (JSON/stringify exp)))
-       (expect (> (Number (.-width exp)) 200)
-         (str "expanded sidebar not wide — width " (.toFixed (Number (.-width exp)) 1)
+       (expect (not (js/get exp .error)) (str "MEASURE-SIDEBAR (expanded) error: " (JSON/stringify exp)))
+       (expect (> (Number (js/get exp .width)) 200)
+         (str "expanded sidebar not wide — width " (js/call (Number (js/get exp .width)) .toFixed 1)
               "px (expected > 200; expand() should pin the 320px persisted width). "
               (JSON/stringify exp)))
-       (expect (.-hasInlineWidth exp)
+       (expect (js/get exp .hasInlineWidth)
          (str "expand() did not pin an inline width on #sidebar-container — the "
               "expand-restore half of the fix is gone (collapse would have nothing "
               "to clear). " (JSON/stringify exp))))
 
      ;; --- COLLAPSE: the regression surface ---
-     (js/await (.executeScript mn DRIVE-COLLAPSE))
+     (js/await (js/call mn .executeScript DRIVE-COLLAPSE))
      ;; Await the real collapsed DOM state: BOTH the strip narrowed to favicon
      ;; width AND no inline width style remains. The OLD bug failed both — the
      ;; inline width:320px pinned the measured width wide. < 80px = favicon strip.
@@ -180,20 +179,20 @@
                       "return w > 0 && w < 80 && sm.style.width === '';")
                  5000))
      (let [col (chrome-eval MEASURE-SIDEBAR)]
-       (expect (not (.-error col)) (str "MEASURE-SIDEBAR (collapsed) error: " (JSON/stringify col)))
-       (expect (not (.-expandedAttr col))
+       (expect (not (js/get col .error)) (str "MEASURE-SIDEBAR (collapsed) error: " (JSON/stringify col)))
+       (expect (not (js/get col .expandedAttr))
          (str "sidebar still has [sidebar-launcher-expanded] after collapse — measured "
               "the wrong state. " (JSON/stringify col)))
        ;; THE FIX, part 1: no inline width style survives the collapse.
-       (expect (not (.-hasInlineWidth col))
+       (expect (not (js/get col .hasInlineWidth))
          (str "collapsed #sidebar-container STILL has an inline width style ('"
-              (.-inlineWidth col) "') — collapse() did not removeProperty('width'); "
+              (js/get col .inlineWidth) "') — collapse() did not removeProperty('width'); "
               "this inline width pins the strip wide (the regression). "
               (JSON/stringify col)))
        ;; THE FIX, part 2: the actual measured width is the narrow favicon strip.
-       (expect (< (Number (.-width col)) 80)
+       (expect (< (Number (js/get col .width)) 80)
          (str "collapsed sidebar did not narrow to the favicon strip — width "
-              (.toFixed (Number (.-width col)) 1) "px (expected < 80px). The persisted "
+              (js/call (Number (js/get col .width)) .toFixed 1) "px (expected < 80px). The persisted "
               "inline width kept it wide (the bug). " (JSON/stringify col))))
 
      ;; --- RAIL RHYTHM (#B6): collapsed-rail vertical spacing ---
@@ -206,33 +205,33 @@
         return true;")
      (await-true "return document.querySelectorAll('#gjoa-tab-panel .gjoa-tab-row').length >= 2;" 3000)
      (let [rhythm (chrome-eval MEASURE-RAIL-RHYTHM)]
-       (expect (not (.-error rhythm)) (str "MEASURE-RAIL-RHYTHM error: " (JSON/stringify rhythm)))
+       (expect (not (js/get rhythm .error)) (str "MEASURE-RAIL-RHYTHM error: " (JSON/stringify rhythm)))
        ;; The rail is ONE rhythm, not two calibrated ones: every adjacent icon pair —
        ;; tab to tab, tool to tool, and the two clusters against each other — sits the
        ;; same distance apart, within 3px (sub-pixel layout + the 1.75px cluster-edge
        ;; padding are the only slack). Owner spec: "all the icons (settings, tabs)
        ;; should have same space between distances".
-       (expect (and (>= (Number (.-firstTabOffset rhythm)) 10) (<= (Number (.-firstTabOffset rhythm)) 14))
+       (expect (and (>= (Number (js/get rhythm .firstTabOffset)) 10) (<= (Number (js/get rhythm .firstTabOffset)) 14))
          (str "first-tab top offset must sit in the 10–14px band (10px container padding "
               "+ 2px row margin) — below it the first favicon reads as jammed against the "
               "panel edge. " (JSON/stringify rhythm)))
        ;; One absolute anchor, so a uniformly INFLATED rail can't pass on symmetry alone.
-       (expect (<= (Number (.-rowPitch rhythm)) 28)
+       (expect (<= (Number (js/get rhythm .rowPitch)) 28)
          (str "collapsed row pitch must be <= 28px (24px row + 2x2px margin) — " (JSON/stringify rhythm)))
-       (expect (and (> (.-length (.-tabGaps rhythm)) 0) (> (.-length (.-toolGaps rhythm)) 0))
+       (expect (and (> (js/get (js/get rhythm .tabGaps) .length) 0) (> (js/get (js/get rhythm .toolGaps) .length) 0))
          (str "rhythm probe found no adjacent icon pair to measure in one of the clusters "
               "— the uniformity assertion below would pass vacuously. "
               (JSON/stringify rhythm)))
-       (expect (<= (Number (.-tabGapSpread rhythm)) 3)
-         (str "tab-cluster icon gaps are not uniform (spread " (.-tabGapSpread rhythm)
-              "px > 3px): " (JSON/stringify (.-tabGaps rhythm))))
-       (expect (<= (Number (.-toolGapSpread rhythm)) 3)
-         (str "tool-cluster icon gaps are not uniform (spread " (.-toolGapSpread rhythm)
-              "px > 3px): " (JSON/stringify (.-toolGaps rhythm))))
-       (expect (<= (Number (.-clusterGapDelta rhythm)) 3)
-         (str "the two clusters run different rhythms (delta " (.-clusterGapDelta rhythm)
-              "px > 3px) — tabs " (JSON/stringify (.-tabGaps rhythm)) " vs tools "
-              (JSON/stringify (.-toolGaps rhythm)) ". The collapsed rail must read as one "
+       (expect (<= (Number (js/get rhythm .tabGapSpread)) 3)
+         (str "tab-cluster icon gaps are not uniform (spread " (js/get rhythm .tabGapSpread)
+              "px > 3px): " (JSON/stringify (js/get rhythm .tabGaps))))
+       (expect (<= (Number (js/get rhythm .toolGapSpread)) 3)
+         (str "tool-cluster icon gaps are not uniform (spread " (js/get rhythm .toolGapSpread)
+              "px > 3px): " (JSON/stringify (js/get rhythm .toolGaps))))
+       (expect (<= (Number (js/get rhythm .clusterGapDelta)) 3)
+         (str "the two clusters run different rhythms (delta " (js/get rhythm .clusterGapDelta)
+              "px > 3px) — tabs " (JSON/stringify (js/get rhythm .tabGaps)) " vs tools "
+              (JSON/stringify (js/get rhythm .toolGaps)) ". The collapsed rail must read as one "
               "beat top to bottom; --tab-min-height and --button-min-height both size the "
               "tool box, so they must equal the tab-row box. " (JSON/stringify rhythm)))
        (chrome-eval "
@@ -242,23 +241,23 @@
 
        ;; --- EXPAND: must restore the persisted width, AND the footer --tab-min-height
        ;; override must not leak past its collapsed-only guard.
-       (js/await (.executeScript mn DRIVE-EXPAND))
+       (js/await (js/call mn .executeScript DRIVE-EXPAND))
        (js/await (await-true
                    (str "const sm = document.getElementById('sidebar-container');"
                         "if (!sm || !sm.hasAttribute('sidebar-launcher-expanded')) return false;"
                         "return sm.style.width !== '' && sm.getBoundingClientRect().width > 200;")
                    5000))
        (let [re (chrome-eval MEASURE-SIDEBAR)]
-         (expect (not (.-error re)) (str "MEASURE-SIDEBAR (re-expanded) error: " (JSON/stringify re)))
-         (expect (and (.-hasInlineWidth re) (> (Number (.-width re)) 200))
+         (expect (not (js/get re .error)) (str "MEASURE-SIDEBAR (re-expanded) error: " (JSON/stringify re)))
+         (expect (and (js/get re .hasInlineWidth) (> (Number (js/get re .width)) 200))
            (str "re-expand did not restore the persisted width — width "
-                (.toFixed (Number (.-width re)) 1) "px, inline '" (.-inlineWidth re)
+                (js/call (Number (js/get re .width)) .toFixed 1) "px, inline '" (js/get re .inlineWidth)
                 "' (expected wide + inline 320px). The expand-restore half regressed. "
                 (JSON/stringify re))))
        (let [exp-footer (chrome-eval MEASURE-FOOTER-BTN)]
-         (expect (not= (.-footerBtnHeight exp-footer) (.-footerBtnHeight rhythm))
-           (str "expanded footer button height (" (.-footerBtnHeight exp-footer)
-                ") must differ from the collapsed height (" (.-footerBtnHeight rhythm)
+         (expect (not= (js/get exp-footer .footerBtnHeight) (js/get rhythm .footerBtnHeight))
+           (str "expanded footer button height (" (js/get exp-footer .footerBtnHeight)
+                ") must differ from the collapsed height (" (js/get rhythm .footerBtnHeight)
                 ") — the collapsed-only --tab-min-height override is leaking.")))))]))
 
 (js/export-default tests)

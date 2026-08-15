@@ -1,11 +1,10 @@
 #lang beagle/js
 ;; tools/bench/stats.bjs — Statistical utilities for benchmarking.
 (ns gjoa.tools.bench.stats)
-(define-mode strict)
 
 ;; Student's t critical values for 95% CI (two-tailed, alpha=0.05)
 ;; Index by degrees of freedom (n-1), for n=3..30
-(def T-CRITICAL-95 :- Any
+(def T-CRITICAL-95 Any
   {2 4.303
    3 3.182
    4 2.776
@@ -35,75 +34,73 @@
    28 2.048
    29 2.045})
 
-(defn tCritical [df :- Number] :- Number
+(defn tCritical [(df Number)] Number
   (let [v (get T-CRITICAL-95 df)]
     (cond
       (some? v) v
       (< df 2) 12.706 ;; df=1, very wide
       :else 1.96))) ;; approximate for df > 29
 
-(js/export (defn geometric-mean [values :- Any] :- Number
-  (if (= (.-length values) 0)
+(js/export (defn geometric-mean [(values Any)] Number
+  (if (= (js/get values .length) 0)
     0
-    (let [logSum (.reduce values (fn [acc v] (+ acc (Math/log v))) 0)]
-      (Math/exp (/ logSum (.-length values)))))))
+    (let [logSum (js/call values .reduce (fn [acc v] Any (+ acc (js/call Math .log v))) 0)]
+      (js/call Math .exp (/ logSum (js/get values .length)))))))
 
-(js/export (defn arithmetic-mean [values :- Any] :- Number
-  (if (= (.-length values) 0)
+(js/export (defn arithmetic-mean [(values Any)] Number
+  (if (= (js/get values .length) 0)
     0
-    (/ (.reduce values (fn [a b] (+ a b)) 0) (.-length values)))))
+    (/ (js/call values .reduce (fn [a b] Any (+ a b)) 0) (js/get values .length)))))
 
-(js/export (defn standard-deviation [values :- Any] :- Number
-  (if (< (.-length values) 2)
+(js/export (defn standard-deviation [(values Any)] Number
+  (if (< (js/get values .length) 2)
     0
     (let [mean (arithmetic-mean values)
-          squaredDiffs (.map values (fn [v] (Math/pow (- v mean) 2)))
-          variance (/ (.reduce squaredDiffs (fn [a b] (+ a b)) 0) (- (.-length values) 1))]
-      (Math/sqrt variance)))))
+          squaredDiffs (js/call values .map (fn [v] Any (js/call Math .pow (- v mean) 2)))
+          variance (/ (js/call squaredDiffs .reduce (fn [a b] Any (+ a b)) 0) (- (js/get values .length) 1))]
+      (js/call Math .sqrt variance)))))
 
-(js/export (defn confidence-interval95 [values :- Any] :- Any
-  (let [n (.-length values)
+(js/export (defn confidence-interval95 [(values Any)] Any
+  (let [n (js/get values .length)
         mean (arithmetic-mean values)]
     (if (< n 2)
       {:mean mean :ci 0 :low mean :high mean}
       (let [sd (standard-deviation values)
             df (- n 1)
             t (tCritical df)
-            se (/ sd (Math/sqrt n))
+            se (/ sd (js/call Math .sqrt n))
             ci (* t se)]
         {:mean mean :ci ci :low (- mean ci) :high (+ mean ci)})))))
 
-(js/export (defn median [values :- Any] :- Number
-  (if (= (.-length values) 0)
+(js/export (defn median [(values Any)] Number
+  (if (= (js/get values .length) 0)
     0
-    (let [sorted (.sort [...values] (fn [a b] (- a b)))
-          mid (Math/floor (/ (.-length sorted) 2))]
-      (if (= (mod (.-length sorted) 2) 0)
+    (let [sorted (js/call [...values] .sort (fn [a b] Any (- a b)))
+          mid (js/call Math .floor (/ (js/get sorted .length) 2))]
+      (if (= (mod (js/get sorted .length) 2) 0)
         (/ (+ (get sorted (- mid 1)) (get sorted mid)) 2)
         (get sorted mid))))))
 
-(js/export (defn format-result [label :- String gjoa :- Any firefox :- Any unit :- String] :- String
+(js/export (defn format-result [(label String) (gjoa Any) (firefox Any) (unit String)] String
   (let [gjoaCI (confidence-interval95 gjoa)
         firefoxCI (confidence-interval95 firefox)
         lines []]
-    (.push lines (str "  " label))
-    (.push lines
-      (str "    Gjoa:    " (.toFixed (.-mean gjoaCI) 1) " " unit "  "
-           "[" (.toFixed (.-low gjoaCI) 1) " .. " (.toFixed (.-high gjoaCI) 1) "] "
-           "(95% CI, n=" (.-length gjoa) ")"))
-    (.push lines
-      (str "    Firefox: " (.toFixed (.-mean firefoxCI) 1) " " unit "  "
-           "[" (.toFixed (.-low firefoxCI) 1) " .. " (.toFixed (.-high firefoxCI) 1) "] "
-           "(95% CI, n=" (.-length firefox) ")"))
+    (js/call lines .push (str "  " label))
+    (js/call lines .push (str "    Gjoa:    " (js/call (js/get gjoaCI .mean) .toFixed 1) " " unit "  "
+           "[" (js/call (js/get gjoaCI .low) .toFixed 1) " .. " (js/call (js/get gjoaCI .high) .toFixed 1) "] "
+           "(95% CI, n=" (js/get gjoa .length) ")"))
+    (js/call lines .push (str "    Firefox: " (js/call (js/get firefoxCI .mean) .toFixed 1) " " unit "  "
+           "[" (js/call (js/get firefoxCI .low) .toFixed 1) " .. " (js/call (js/get firefoxCI .high) .toFixed 1) "] "
+           "(95% CI, n=" (js/get firefox .length) ")"))
     ;; Guard against division by zero / empty samples (BENCH-6).
-    (if (or (< (.-length gjoa) 1) (< (.-length firefox) 1)
-            (= (.-mean gjoaCI) 0) (= (.-mean firefoxCI) 0))
+    (if (or (< (js/get gjoa .length) 1) (< (js/get firefox .length) 1)
+            (= (js/get gjoaCI .mean) 0) (= (js/get firefoxCI .mean) 0))
       (do
-        (.push lines "    Ratio:   n/a (insufficient samples)")
-        (.join lines "\n"))
-      (let [speedup (/ (.-mean firefoxCI) (.-mean gjoaCI))
-            pct (.toFixed (* (- speedup 1) 100) 1)
+        (js/call lines .push "    Ratio:   n/a (insufficient samples)")
+        (js/call lines .join "\n"))
+      (let [speedup (/ (js/get firefoxCI .mean) (js/get gjoaCI .mean))
+            pct (js/call (* (- speedup 1) 100) .toFixed 1)
             dir (if (>= speedup 1) "faster" "slower")
-            absPct (.toFixed (Math/abs (parseFloat pct)) 1)]
-        (.push lines (str "    Ratio:   " (.toFixed speedup 3) "x — Gjoa is " absPct "% " dir))
-        (.join lines "\n"))))))
+            absPct (js/call (js/call Math .abs (parseFloat pct)) .toFixed 1)]
+        (js/call lines .push (str "    Ratio:   " (js/call speedup .toFixed 3) "x — Gjoa is " absPct "% " dir))
+        (js/call lines .join "\n"))))))

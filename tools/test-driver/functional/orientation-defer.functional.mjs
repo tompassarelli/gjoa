@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(here, "../../../.beagle-out/tabs/index.js"), "utf8");
+const src = readFileSync(join(here, "../../../.beagle-out/gjoa/tabs/index.js"), "utf8");
 
 // Extract `export function should_defer_reveal_p(...) { ... }` (a small, brace-balanced
 // block in the real emit). Strip the `export` keyword and eval to a callable.

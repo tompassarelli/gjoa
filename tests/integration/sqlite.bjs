@@ -5,7 +5,6 @@
 ;; the runner output.
 (ns gjoa.tests.integration.sqlite
   (:require [gjoa.tests.dsl :refer [deftest]]))
-(define-mode strict)
 
 ;; IntegrationTest is a type-only import in the .ts source; types live in
 ;; .ts and have no runtime form in beagle, so the test objects are plain
@@ -13,7 +12,7 @@
 
 ;; The chrome-script run inside the browser by executeAsyncScript. It has
 ;; no `${}` interpolation, so it's a plain string literal.
-(def PROBE-SCRIPT :- String
+(def PROBE-SCRIPT String
   "
         const cb = arguments[arguments.length - 1];
         (async () => {
@@ -51,9 +50,9 @@
 ;; statement supports only function/class). Exported as a named binding
 ;; `tests`; the runner's `mod.default` lookup needs a default-export shim
 ;; or a switch to the named export. See issues.
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "sqlite: report version + FTS3/FTS5 availability" [mn]
-     (let [probe (js/await (.executeAsyncScript mn PROBE-SCRIPT))]
+     (let [probe (js/await (js/call mn .executeAsyncScript PROBE-SCRIPT))]
        (console/error "[sqlite probe]" (JSON/stringify probe nil 2))))]))
 
 (js/export-default tests)

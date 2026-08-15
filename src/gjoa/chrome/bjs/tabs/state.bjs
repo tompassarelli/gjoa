@@ -1,8 +1,7 @@
 #lang beagle/js
 (ns gjoa.tabs.state)
-(define-mode strict)
 
-(js/export (def state :- Any
+(js/export (def state Any
   {:panel nil
    :spacer nil
    :pinnedContainer nil
@@ -14,10 +13,10 @@
    :inSessionRestore true
    :lastLoadedNodes []}))
 
-(js/export (def tree-of :- Any (WeakMap.)))
-(js/export (def row-of :- Any (WeakMap.)))
-(js/export (def hz-display :- Any (WeakMap.)))
-(js/export (def saved-tab-queue :- Any []))
-(js/export (def closed-tabs :- Any []))
-(js/export (def selection :- Any (Set.)))
-(js/export (def moving-tabs :- Any (Set.)))
+(js/export (def tree-of Any (js/new WeakMap)))
+(js/export (def row-of Any (js/new WeakMap)))
+(js/export (def hz-display Any (js/new WeakMap)))
+(js/export (def saved-tab-queue Any []))
+(js/export (def closed-tabs Any []))
+(js/export (def selection Any (js/new Set)))
+(js/export (def moving-tabs Any (js/new Set)))

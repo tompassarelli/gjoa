@@ -8,55 +8,54 @@
   (:require [fs :refer [readdirSync readFileSync]]
             [path :refer [join]]
             [gjoa.tools.prep.sh :refer [sh]]))
-(define-mode strict)
 (declare-extern [process] Any)
 
-(def REPO :- String (.cwd process))
-(def PATCHES-DIR :- String (join REPO "patches"))
-;; mozilla-central full clone (the churn oracle). /reference per code/CLAUDE.md.
-(def FF :- String (join (.-HOME (.-env process)) "code" "reference" "firefox"))
+(def REPO String (js/call process .cwd))
+(def PATCHES-DIR String (join REPO "patches"))
+;; mozilla-central full clone used as the churn oracle.
+(def FF String (join (js/get (js/get process .env) .HOME) "code" "resources" "firefox"))
 
 ;; churn = commits touching <file> in mozilla-central over the last year.
-(defn churn [file :- String] :- Number
-  (parseInt (.trim (sh (str "git -C " FF " log --oneline --since='1 year ago' -- '" file "' 2>/dev/null | wc -l") {:quiet true})) 10))
+(defn churn [(file String)] Number
+  (parseInt (js/call (sh (str "git -C " FF " log --oneline --since='1 year ago' -- '" file "' 2>/dev/null | wc -l") {:quiet true}) .trim) 10))
 
-(defn touches [text :- String] :- Any
+(defn touches [(text String)] Any
   (let [out []]
-    (doseq [m (.matchAll text (RegExp. "^#     - (\\S+)\\s*$" "gm"))]
-      (.push out (aget m 1)))
+    (doseq [m (js/call text .matchAll (js/new RegExp "^#     - (\\S+)\\s*$" "gm"))]
+      (js/call out .push (aget m 1)))
     out))
 
 ;; rung_base — seam-tier cadence multiplier, inferred from the highest-cadence
 ;; file kind the patch touches. Native C++/Rust/WebIDL source conflicts per
 ;; release (3.0); a .sys.mjs in-place patch per major version (0.5); build-wiring
 ;; (moz.build / jar.mn) ~never (0.05).
-(defn rung-base [files :- Any] :- Number
+(defn rung-base [(files Any)] Number
   (cond
-    (.some files (fn [f :- String] :- Bool (.test (RegExp. "\\.(rs|cpp|cc|h|webidl)$") f))) 3.0
-    (.some files (fn [f :- String] :- Bool (.test (RegExp. "\\.(mjs|js)$") f))) 0.5
+    (js/call files .some (fn [(f String)] Bool (js/call (js/new RegExp "\\.(rs|cpp|cc|h|webidl)$") .test f))) 3.0
+    (js/call files .some (fn [(f String)] Bool (js/call (js/new RegExp "\\.(mjs|js)$") .test f))) 0.5
     :else 0.05))
 
-(defn rung-name [rb :- Number] :- String
+(defn rung-name [(rb Number)] String
   (cond (= rb 3.0) "native-src" (= rb 0.5) "sys.mjs" :else "build"))
 
-(defn score-patch [name :- String] :- Any
+(defn score-patch [(name String)] Any
   (let [text (readFileSync (join PATCHES-DIR name) "utf8")
         files (touches text)
         rb (rung-base files)
-        total-churn (.reduce files (fn [acc :- Number f :- String] :- Number (+ acc (churn f))) 0)]
-    {:name name :rung rb :churn total-churn :score (* rb total-churn) :nfiles (.-length files)}))
+        total-churn (js/call files .reduce (fn [(acc Number) (f String)] Number (+ acc (churn f))) 0)]
+    {:name name :rung rb :churn total-churn :score (* rb total-churn) :nfiles (js/get files .length)}))
 
-(defn main! [] :- Any
-  (let [names (.sort (.filter (readdirSync PATCHES-DIR) (fn [p :- String] :- Bool (.endsWith p ".patch"))))
-        rows (.sort (.map names score-patch) (fn [a :- Any b :- Any] :- Number (- (.-score b) (.-score a))))]
+(defn main! [] Any
+  (let [names (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .sort)
+        rows (js/call (js/call names .map score-patch) .sort (fn [(a Any) (b Any)] Number (- (js/get b .score) (js/get a .score))))]
     (console/log "patch seam-cost  =  rung x upstream-churn  (~expected rebases/yr; higher = demote first)\n")
     (doseq [r rows]
-      (console/log (str "  " (.padStart (.toFixed (.-score r) 1) 7)
-                         "   " (.padEnd (rung-name (.-rung r)) 11)
-                         " churn=" (.padEnd (str (.-churn r)) 4)
-                         " files=" (.padEnd (str (.-nfiles r)) 3)
-                         " " (.-name r))))
+      (console/log (str "  " (js/call (js/call (js/get r .score) .toFixed 1) .padStart 7)
+                         "   " (js/call (rung-name (js/get r .rung)) .padEnd 11)
+                         " churn=" (js/call (str (js/get r .churn)) .padEnd 4)
+                         " files=" (js/call (str (js/get r .nfiles)) .padEnd 3)
+                         " " (js/get r .name))))
     (console/log "")))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (main!))

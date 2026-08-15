@@ -3,14 +3,35 @@
   (:require [gjoa.macros :refer [by-id q xul-new xul-id pref-int set-pref-int! pref-bool set-pref-bool! on! off! has?]]
             [gjoa.drawer.focus :refer [with-urlbar-focus!]]
             [gjoa.tabs.log :refer [create-logger!]]))
-(define-mode strict)
 
-(declare-extern [window Services CustomizableUI] Any)
+(declare-extern [window Services CustomizableUI getComputedStyle] Any)
 
-(def WIDTH-PREF :- String "gjoa.sidebar.width")
-(def REPAIR-PREF :- String "gjoa.navbar.repaired")
+(def WIDTH-PREF String "gjoa.sidebar.width")
+(def REPAIR-PREF String "gjoa.navbar.repaired")
 
-(js/export (defn make-layout! [deps] :- Any
+(defn collect-icons! [scope hits] Any
+  (let [sr (js/get scope .shadowRoot)]
+    (when sr (collect-icons! sr hits)))
+  (let [kids (js/get scope .children)]
+    (when kids
+      (js/call (Array/from kids) .forEach
+        (fn [child] Any
+          (let [tag (js/call (js/get child .tagName) .toLowerCase)
+                cls (js/get child .classList)
+                is-icon (or (= tag "img")
+                            (= tag "svg")
+                            (= tag "moz-icon")
+                            (js/call cls .contains "toolbarbutton-icon")
+                            (js/call cls .contains "button-icon"))]
+            (when is-icon
+              (let [r (js/call child .getBoundingClientRect)]
+                (when (and (> (js/get r .width) 0)
+                           (> (js/get r .height) 0)
+                           (>= (js/get r .top) 0))
+                  (js/call hits .push r))))
+            (collect-icons! child hits)))))))
+
+(js/export (defn make-layout! [deps] Any
   (let [log (create-logger! "drawer/layout")
         sidebar-main (:sidebarMain deps)
         navigator-toolbox (:navigatorToolbox deps)
@@ -19,10 +40,10 @@
         urlbar (:urlbar deps)
         sidebar-main-element (q sidebar-main "sidebar-main")
 
-        toolbox-parent (.-parentNode navigator-toolbox)
-        toolbox-next (.-nextSibling navigator-toolbox)
-        urlbar-parent (.-parentNode urlbar-container)
-        urlbar-next (.-nextSibling urlbar-container)
+        toolbox-parent (js/get navigator-toolbox .parentNode)
+        toolbox-next (js/get navigator-toolbox .nextSibling)
+        urlbar-parent (js/get urlbar-container .parentNode)
+        urlbar-next (js/get urlbar-container .nextSibling)
 
         state {:urlbar-toolbar nil
                :resize-obs nil
@@ -31,12 +52,12 @@
                :updating false}
 
         ;; --- inject-sidebar-shadow-overrides ---
-        inject-sidebar-shadow-overrides (fn []
-          (let [sr (some-> sidebar-main-element .-shadowRoot)]
+        inject-sidebar-shadow-overrides (fn [] Any
+          (let [sr (some-> sidebar-main-element (js/get .shadowRoot))]
             (if (nil? sr)
               (setTimeout inject-sidebar-shadow-overrides 100)
-              (let [s (CSSStyleSheet.)]
-                (.replaceSync s
+              (let [s (js/new CSSStyleSheet)]
+                (js/call s .replaceSync
                   (str "#sidebar-tools-and-extensions-splitter { display: none !important; }"
                        " .tools-and-extensions > moz-button:not(.tools-overflow):first-of-type {"
                        "   --button-outer-padding-block-start: calc(var(--space-xxsmall) * 2) !important;"
@@ -87,98 +108,74 @@
                        " :host([expanded]) button-group.tools-and-extensions:not([part='overflow-button']) > moz-button {"
                        "   visibility: visible !important;"
                        " }"))
-                (.push (.-adoptedStyleSheets sr) s)))))
+                (js/call (js/get sr .adoptedStyleSheets) .push s)))))
 
         ;; --- sync-urlbar-width ---
-        sync-urlbar-width (fn []
-          (when (and urlbar (not (.-updating state))
+        sync-urlbar-width (fn [] Any
+          (when (and urlbar (not (js/get state .updating))
                      (not (has? urlbar "breakout-extend")))
-              (set! (.-updating state) true)
+              (js/set! state .updating true)
               (let [inset (or (parseFloat
-                                (.getPropertyValue
-                                  (getComputedStyle (.-documentElement document))
+                                (js/call (getComputedStyle (js/get document .documentElement)) .getPropertyValue
                                   "--gjoa-sidebar-inset"))
                               10)
-                    w (Math/max 0 (- (.-width (.getBoundingClientRect sidebar-main))
+                    w (Math/max 0 (- (js/get (js/call sidebar-main .getBoundingClientRect) .width)
                                       (* inset 2)))]
-                (.setProperty (.-style urlbar) "--urlbar-width" (str w "px"))
+                (js/call (js/get urlbar .style) .setProperty "--urlbar-width" (str w "px"))
                 ;; #150: stash the resting width so the FLIPPED breakout-extend
                 ;; CSS can grow the bar toward the page (leftward) instead of the
                 ;; off-screen window edge — it translates left by (expand-w −
                 ;; resting-w), and `--urlbar-width` is clobbered to expand-w
                 ;; inside that rule, so it needs this untouched copy.
-                (.setProperty (.-style urlbar) "--gjoa-urlbar-resting-w" (str w "px")))
-              (set! (.-updating state) false)))
+                (js/call (js/get urlbar .style) .setProperty "--gjoa-urlbar-resting-w" (str w "px")))
+              (js/set! state .updating false)))
 
         ;; Parent AND container: while the palette floats the parent is the stage.
-        drop-breakout-dimensions! (fn []
+        drop-breakout-dimensions! (fn [] Any
           (when urlbar
-            (.removeProperty (.-style urlbar) "--urlbar-height")
-            (when (.-parentNode urlbar)
-              (.removeProperty (.-style (.-parentNode urlbar))
+            (js/call (js/get urlbar .style) .removeProperty "--urlbar-height")
+            (when (js/get urlbar .parentNode)
+              (js/call (js/get (js/get urlbar .parentNode) .style) .removeProperty
                                "--urlbar-container-height")))
           (when urlbar-container
-            (.removeProperty (.-style urlbar-container) "--urlbar-container-height")))
+            (js/call (js/get urlbar-container .style) .removeProperty "--urlbar-container-height")))
 
         ;; The blocker pair is Firefox's own public re-measure entry
         ;; (decrementBreakoutBlockerCount → #updateLayoutBreakout); the flush is what
         ;; makes it read the settled layout rather than the pre-move one.
-        relatch-breakout! (fn []
+        relatch-breakout! (fn [] Any
           (try
-            (.then (.promiseDocumentFlushed window (fn [] nil))
-              (fn [_r]
-                (let [u (.-gURLBar window)]
-                  (when (and u (.-incrementBreakoutBlockerCount u))
-                    (.incrementBreakoutBlockerCount u)
-                    (.decrementBreakoutBlockerCount u))))
-              (fn [_e] nil))
-            (catch Any _e nil)))
+            (js/call (js/call window .promiseDocumentFlushed (fn [] Any nil)) .then
+              (fn [_r] Any
+                (let [u (js/get window .gURLBar)]
+                  (when (and u (js/get u .incrementBreakoutBlockerCount))
+                    (js/call u .incrementBreakoutBlockerCount)
+                    (js/call u .decrementBreakoutBlockerCount))))
+              (fn [_e] Any nil))
+            (catch (_e Any) nil)))
 
         ;; A re-measure taken while the bar is CLICK-EXPANDED measures the expanded
         ;; box, so the reconnect a move causes latches the row we left onto the row we
         ;; enter — drop both and re-measure once the extend ends. Never while the
         ;; palette floats: drawer/urlbar.bjs owns both vars for its lifetime.
-        remeasure-breakout! (fn []
-          (when (.-extend-obs state)
-            (.disconnect (.-extend-obs state))
-            (set! (.-extend-obs state) nil))
+        remeasure-breakout! (fn [] Any
+          (when (js/get state .extend-obs)
+            (js/call (js/get state .extend-obs) .disconnect)
+            (js/set! state .extend-obs nil))
           (when (and urlbar (has? urlbar "breakout-extend")
-                     (not (has? (.-documentElement document) "gjoa-urlbar-floating")))
+                     (not (has? (js/get document .documentElement) "gjoa-urlbar-floating")))
             (drop-breakout-dimensions!)
-            (let [obs (MutationObserver.
-                        (fn []
+            (let [obs (js/new MutationObserver
+                        (fn [] Any
                           (when (not (has? urlbar "breakout-extend"))
-                            (.disconnect obs)
-                            (set! (.-extend-obs state) nil)
+                            (js/call obs .disconnect)
+                            (js/set! state .extend-obs nil)
                             (relatch-breakout!))))]
-              (.observe obs urlbar {:attributes true :attributeFilter ["breakout-extend"]})
-              (set! (.-extend-obs state) obs))))
-
-        ;; --- collect-icons ---
-        collect-icons (fn [scope hits]
-          (let [sr (.-shadowRoot scope)]
-            (when sr (collect-icons sr hits)))
-          (let [kids (.-children scope)]
-            (when kids
-              (.forEach (Array/from kids)
-                (fn [child]
-                  (let [tag (.toLowerCase (.-tagName child))
-                        cls (.-classList child)
-                        is-icon (or (= tag "img")
-                                    (= tag "svg")
-                                    (= tag "moz-icon")
-                                    (.contains cls "toolbarbutton-icon")
-                                    (.contains cls "button-icon"))]
-                    (when is-icon
-                      (let [r (.getBoundingClientRect child)]
-                        (when (and (> (.-width r) 0)
-                                   (> (.-height r) 0)
-                                   (>= (.-top r) 0))
-                          (.push hits r))))
-                    (collect-icons child hits)))))))
+              (js/call obs .observe urlbar {:attributes true :attributeFilter ["breakout-extend"]})
+              (js/set! state .extend-obs obs))))
 
         ;; --- sync-symmetric-footer-once ---
-        sync-symmetric-footer-once (fn []
+        sync-symmetric-footer-once (fn [] Any
           (let [sidebar-main-el (by-id "sidebar-container")]
             (if (not sidebar-main-el)
               true
@@ -188,49 +185,48 @@
                   true
                   (let [top-hits []
                         bottom-hits []]
-                    (collect-icons nav-bar-el top-hits)
-                    (collect-icons footer bottom-hits)
-                    (if (or (not (.-length top-hits)) (not (.-length bottom-hits)))
+                    (collect-icons! nav-bar-el top-hits)
+                    (collect-icons! footer bottom-hits)
+                    (if (or (not (js/get top-hits .length)) (not (js/get bottom-hits .length)))
                       true
                       (do
-                        (.sort top-hits #(- (.-top %1) (.-top %2)))
-                        (.sort bottom-hits #(- (.-bottom %1) (.-bottom %2)))
+                        (js/call top-hits .sort (fn [%1 %2] Any (- (js/get %1 .top) (js/get %2 .top))))
+                        (js/call bottom-hits .sort (fn [%1 %2] Any (- (js/get %1 .bottom) (js/get %2 .bottom))))
                         (let [top-icon (aget top-hits 0)
-                              bottom-icon (aget bottom-hits (- (.-length bottom-hits) 1))
-                              sidebar-rect (.getBoundingClientRect sidebar-main-el)
-                              top-gap (- (.-top top-icon) (.-top sidebar-rect))
-                              bottom-gap (- (.-bottom sidebar-rect) (.-bottom bottom-icon))
+                              bottom-icon (aget bottom-hits (- (js/get bottom-hits .length) 1))
+                              sidebar-rect (js/call sidebar-main-el .getBoundingClientRect)
+                              top-gap (- (js/get top-icon .top) (js/get sidebar-rect .top))
+                              bottom-gap (- (js/get sidebar-rect .bottom) (js/get bottom-icon .bottom))
                               BOTTOM-OFFSET 4
                               delta (- (+ top-gap BOTTOM-OFFSET) bottom-gap)]
                           (if (< (Math/abs delta) 0.5)
                             (do
                               (log (str "symfooter:converged topGap="
-                                        (.toFixed top-gap 1)
-                                        " bottomGap=" (.toFixed bottom-gap 1)
-                                        " target=" (.toFixed (+ top-gap BOTTOM-OFFSET) 1)))
+                                        (js/call top-gap .toFixed 1)
+                                        " bottomGap=" (js/call bottom-gap .toFixed 1)
+                                        " target=" (js/call (+ top-gap BOTTOM-OFFSET) .toFixed 1)))
                               true)
                             (let [current-var (or (parseFloat
-                                                    (.getPropertyValue
-                                                      (getComputedStyle (.-documentElement document))
+                                                    (js/call (getComputedStyle (js/get document .documentElement)) .getPropertyValue
                                                       "--gjoa-symmetric-footer"))
                                                   0)
                                   next (Math/max 0 (Math/round (- current-var (* delta 0.6))))]
-                              (.setProperty (.-style (.-documentElement document))
+                              (js/call (js/get (js/get document .documentElement) .style) .setProperty
                                             "--gjoa-symmetric-footer" (str next "px"))
-                              (log (str "symfooter:pass topGap=" (.toFixed top-gap 1)
-                                        " bottomGap=" (.toFixed bottom-gap 1)
+                              (log (str "symfooter:pass topGap=" (js/call top-gap .toFixed 1)
+                                        " bottomGap=" (js/call bottom-gap .toFixed 1)
                                         " var=" current-var "→" next))
                               false)))))))))))
 
         ;; --- sync-symmetric-footer ---
-        sync-symmetric-footer (fn []
-          (.forEach (Array/from {:length 30})
-            (fn [_ i]
+        sync-symmetric-footer (fn [] Any
+          (js/call (Array/from {:length 30}) .forEach
+            (fn [_ i] Any
               (setTimeout sync-symmetric-footer-once (* i 50)))))
 
         ;; --- expand ---
-        expand (fn []
-          (when (not (.-urlbar-toolbar state))
+        expand (fn [] Any
+          (when (not (js/get state .urlbar-toolbar))
             (log "expand")
             ;; A hot-reload re-runs init! without the previous bundle removing what it
             ;; built, so a live holder of the id is a stale duplicate — evict it AFTER
@@ -238,123 +234,123 @@
             (let [stale (by-id "gjoa-urlbar-toolbar")]
               ;; Both moves below carry #urlbar; without this the caret a user put
               ;; there before the drawer initialized is silently dropped to <body>.
-              (with-urlbar-focus! (fn []
+              (with-urlbar-focus! (fn [] Any
                 ;; Re-apply the persisted width — collapse() clears the inline width
                 ;; so the icon strip can go favicon-thin, so re-expanding must restore
                 ;; the user's chosen width (not snap back to native default).
-                (set! (.-width (.-style sidebar-main)) (str (pref-int WIDTH-PREF 300) "px"))
+                (js/set! (js/get sidebar-main .style) .width (str (pref-int WIDTH-PREF 300) "px"))
                 (when sidebar-main-element
-                  (.insertBefore sidebar-main navigator-toolbox sidebar-main-element))
+                  (js/call sidebar-main .insertBefore navigator-toolbox sidebar-main-element))
                 (let [tb (xul-id "toolbar" "gjoa-urlbar-toolbar")]
-                  (.add (.-classList tb) "browser-toolbar")
-                  (.appendChild tb urlbar-container)
-                  (.after nav-bar tb)
-                  (set! (.-urlbar-toolbar state) tb))))
-              (when (and stale (not (identical? stale (.-urlbar-toolbar state))))
-                (.remove stale)))
+                  (js/call (js/get tb .classList) .add "browser-toolbar")
+                  (js/call tb .appendChild urlbar-container)
+                  (js/call nav-bar .after tb)
+                  (js/set! state .urlbar-toolbar tb))))
+              (when (and stale (not (identical? stale (js/get state .urlbar-toolbar))))
+                (js/call stale .remove)))
             (remeasure-breakout!)
             (when urlbar
-              (let [ro (ResizeObserver. sync-urlbar-width)]
-                (.observe ro sidebar-main)
-                (set! (.-resize-obs state) ro))
-              (let [mo (MutationObserver. sync-urlbar-width)]
-                (.observe mo urlbar {:attributes true :attributeFilter ["style"]})
-                (set! (.-mutation-obs state) mo)))))
+              (let [ro (js/new ResizeObserver sync-urlbar-width)]
+                (js/call ro .observe sidebar-main)
+                (js/set! state .resize-obs ro))
+              (let [mo (js/new MutationObserver sync-urlbar-width)]
+                (js/call mo .observe urlbar {:attributes true :attributeFilter ["style"]})
+                (js/set! state .mutation-obs mo)))))
 
         ;; --- collapse ---
-        collapse (fn []
-          (when (.-urlbar-toolbar state)
+        collapse (fn [] Any
+          (when (js/get state .urlbar-toolbar)
             (log "collapse")
-            (some-> state .-resize-obs .disconnect)
-            (some-> state .-mutation-obs .disconnect)
-            (set! (.-resize-obs state) nil)
-            (set! (.-mutation-obs state) nil)
+            (some-> state (js/get .resize-obs) (js/call .disconnect))
+            (some-> state (js/get .mutation-obs) (js/call .disconnect))
+            (js/set! state .resize-obs nil)
+            (js/set! state .mutation-obs nil)
 
             ;; Drop the persisted expanded width (set inline on expand/init) so
             ;; the collapsed sidebar reverts to its native favicon-width strip.
             ;; Without this the inline `width:NNNpx` overrode the icon-strip
             ;; width — the sidebar stayed wide + still showed tab labels.
-            (.removeProperty (.-style sidebar-main) "width")
+            (js/call (js/get sidebar-main .style) .removeProperty "width")
 
             ;; Same caret contract as expand: these moves carry #urlbar.
-            (with-urlbar-focus! (fn []
+            (with-urlbar-focus! (fn [] Any
               ;; `identical?`, never `=`: beagle's `=` is STRUCTURAL and two DOM nodes
               ;; both have zero own keys, so `=` is true for ANY pair — and an
               ;; insertBefore against a reference node that has since moved THROWS.
-              (if (and urlbar-next (identical? (.-parentNode urlbar-next) urlbar-parent))
-                (.insertBefore urlbar-parent urlbar-container urlbar-next)
-                (.appendChild urlbar-parent urlbar-container))
+              (if (and urlbar-next (identical? (js/get urlbar-next .parentNode) urlbar-parent))
+                (js/call urlbar-parent .insertBefore urlbar-container urlbar-next)
+                (js/call urlbar-parent .appendChild urlbar-container))
 
-              (.remove (.-urlbar-toolbar state))
-              (set! (.-urlbar-toolbar state) nil)
+              (js/call (js/get state .urlbar-toolbar) .remove)
+              (js/set! state .urlbar-toolbar nil)
 
               (let [spring2 (by-id "customizableui-special-spring2")
                     ext-btn (by-id "unified-extensions-button")
                     sb-btn (by-id "gjoa-sidebar-button")]
-                (when spring2 (.after urlbar-container spring2))
-                (when (and spring2 ext-btn) (.after spring2 ext-btn))
+                (when spring2 (js/call urlbar-container .after spring2))
+                (when (and spring2 ext-btn) (js/call spring2 .after ext-btn))
                 ;; keep gjoa's swapped sidebar button immediately after the
                 ;; extensions button through the collapse reflow, so the
                 ;; hamburger → extensions → sidebar order survives compact mode (#92).
-                (when (and ext-btn sb-btn) (.after ext-btn sb-btn)))
+                (when (and ext-btn sb-btn) (js/call ext-btn .after sb-btn)))
 
-              (if (and toolbox-next (identical? (.-parentNode toolbox-next) toolbox-parent))
-                (.insertBefore toolbox-parent navigator-toolbox toolbox-next)
-                (.appendChild toolbox-parent navigator-toolbox))))
+              (if (and toolbox-next (identical? (js/get toolbox-next .parentNode) toolbox-parent))
+                (js/call toolbox-parent .insertBefore navigator-toolbox toolbox-next)
+                (js/call toolbox-parent .appendChild navigator-toolbox))))
             (remeasure-breakout!)))
 
         ;; --- context-menu fix ---
-        on-context-menu (fn [e]
-          (when (identical? (.-parentNode navigator-toolbox) sidebar-main)
-            (.stopPropagation e)))
+        on-context-menu (fn [e] Any
+          (when (identical? (js/get navigator-toolbox .parentNode) sidebar-main)
+            (js/call e .stopPropagation)))
 
         ;; --- nav-bar widget repair (#122) ---
         ;; #gjoa-sidebar-button is a swap of the native #sidebar-button node, so a
         ;; lost sidebar-button placement removes BOTH visible buttons.
-        placement-of (fn [id]
-          (try (.getPlacementOfWidget CustomizableUI id) (catch Any _e nil)))
+        placement-of (fn [id] Any
+          (try (js/call CustomizableUI .getPlacementOfWidget id) (catch (_e Any) nil)))
 
-        build-in-window! (fn [id]
+        build-in-window! (fn [id] Any
           (try
             (when (and (placement-of id) (nil? (by-id id)))
-              (.ensureWidgetPlacedInWindow CustomizableUI id window))
-            (catch Any _e nil)))
+              (js/call CustomizableUI .ensureWidgetPlacedInWindow id window))
+            (catch (_e Any) nil)))
 
         ;; addWidgetToArea APPENDS when position is nil, permanently reordering the
         ;; user's persisted nav-bar, so always hand it the slot the widget came from.
-        re-add! (fn [id position]
+        re-add! (fn [id position] Any
           (try
             (when (nil? (placement-of id))
-              (.addWidgetToArea CustomizableUI id "nav-bar" position))
-            (catch Any _e nil)))
+              (js/call CustomizableUI .addWidgetToArea id "nav-bar" position))
+            (catch (_e Any) nil)))
 
         ;; Persisted slot only — visual order is pinned by nav-bar CSS `order`,
         ;; because this persisted index and the rendered DOM order differ.
-        nav-bar-slot-after (fn [anchor-id]
+        nav-bar-slot-after (fn [anchor-id] Any
           (try
             (let [p (placement-of anchor-id)]
-              (if (and p (= (.-area p) "nav-bar")) (+ (.-position p) 1) nil))
-            (catch Any _e nil)))
+              (if (and p (= (js/get p .area) "nav-bar")) (+ (js/get p .position) 1) nil))
+            (catch (_e Any) nil)))
 
         ;; Called pre-buildArea: a placement live here and gone a tick later was
         ;; dropped BY the flip. A user-removed one already reads null, because
         ;; SidebarManager forces verticalTabs=false a microtask AFTER the removal.
-        snapshot-placements (fn []
-          (.map ["stop-reload-button" "sidebar-button"]
-            (fn [id]
+        snapshot-placements (fn [] Any
+          (js/call ["stop-reload-button" "sidebar-button"] .map
+            (fn [id] Any
               (let [p (placement-of id)]
-                {:id id :live (not (nil? p)) :position (if p (.-position p) nil)}))))
+                {:id id :live (not (nil? p)) :position (if p (js/get p .position) nil)}))))
 
-        repair-dropped! (fn [snap]
-          (.forEach snap
-            (fn [entry]
-              (when (.-live entry) (re-add! (.-id entry) (.-position entry)))
-              (build-in-window! (.-id entry)))))
+        repair-dropped! (fn [snap] Any
+          (js/call snap .forEach
+            (fn [entry] Any
+              (when (js/get entry .live) (re-add! (js/get entry .id) (js/get entry .position)))
+              (build-in-window! (js/get entry .id)))))
 
         ;; Heals a profile #122 already persisted as broken. Must stay ONE-shot:
         ;; re-adding per window init makes both widgets unremovable, since removing
         ;; sidebar-button forces horizontal tabs, which re-enters the repair below.
-        heal-once! (fn []
+        heal-once! (fn [] Any
           (when (not (pref-bool REPAIR-PREF false))
             (re-add! "stop-reload-button" (nav-bar-slot-after "forward-button"))
             ;; no slot: gjoa's nav-bar CSS `order` owns where this one renders.
@@ -377,19 +373,19 @@
     (on! window "resize" sync-symmetric-footer)
 
     (let [sidebar-main-el (by-id "sidebar-container")
-          sym-resize-obs (ResizeObserver. sync-symmetric-footer)]
-      (when sidebar-main-el (.observe sym-resize-obs sidebar-main-el))
+          sym-resize-obs (js/new ResizeObserver sync-symmetric-footer)]
+      (when sidebar-main-el (js/call sym-resize-obs .observe sidebar-main-el))
 
       ;; --- expand/collapse observer ---
-      (let [expand-observer (MutationObserver.
-                              (fn []
+      (let [expand-observer (js/new MutationObserver
+                              (fn [] Any
                                 (let [expanded (has? sidebar-main "sidebar-launcher-expanded")]
-                                  (if (and expanded (not (.-urlbar-toolbar state)))
+                                  (if (and expanded (not (js/get state .urlbar-toolbar)))
                                     (expand)
-                                    (when (and (not expanded) (.-urlbar-toolbar state))
+                                    (when (and (not expanded) (js/get state .urlbar-toolbar))
                                       (collapse)))
                                   (sync-symmetric-footer))))]
-        (.observe expand-observer sidebar-main
+        (js/call expand-observer .observe sidebar-main
           {:attributes true :attributeFilter ["sidebar-launcher-expanded"]})
 
         ;; --- #122: drive expand/collapse off the verticalTabs pref directly ---
@@ -402,37 +398,37 @@
         ;; Fix: trigger collapse/expand off verticalTabs, and restore whatever buildArea
         ;; then dropped — snapshot synchronously, repair a tick later (post-buildArea).
         (let [vt-observer {:observe
-                           (fn [_s _t _d]
+                           (fn [_s _t _d] Any
                              (let [vertical (pref-bool "sidebar.verticalTabs" true)]
                                (if vertical
                                  (when (and (has? sidebar-main "sidebar-launcher-expanded")
-                                            (not (.-urlbar-toolbar state)))
+                                            (not (js/get state .urlbar-toolbar)))
                                    (expand))
                                  (let [snap (snapshot-placements)]
-                                   (when (.-urlbar-toolbar state) (collapse))
-                                   (.setTimeout window (fn [] (repair-dropped! snap)) 0)))
+                                   (when (js/get state .urlbar-toolbar) (collapse))
+                                   (js/call window .setTimeout (fn [] Any (repair-dropped! snap)) 0)))
                                (sync-symmetric-footer)))}]
-          (.addObserver (.-prefs Services) "sidebar.verticalTabs" vt-observer))
+          (js/call (js/get Services .prefs) .addObserver "sidebar.verticalTabs" vt-observer))
 
         ;; --- width pref ---
         (let [default-width (pref-int WIDTH-PREF 300)]
           (when (has? sidebar-main "sidebar-launcher-expanded")
-            (set! (.-width (.-style sidebar-main)) (str default-width "px"))))
+            (js/set! (js/get sidebar-main .style) .width (str default-width "px"))))
 
-        (let [width-obs (ResizeObserver.
-                          (fn []
+        (let [width-obs (js/new ResizeObserver
+                          (fn [] Any
                             (when (has? sidebar-main "sidebar-launcher-expanded")
-                              (let [w (Math/round (.-width (.getBoundingClientRect sidebar-main)))]
+                              (let [w (Math/round (js/get (js/call sidebar-main .getBoundingClientRect) .width))]
                                 (when (> w 0) (set-pref-int! WIDTH-PREF w))))))]
-          (.observe width-obs sidebar-main)
+          (js/call width-obs .observe sidebar-main)
 
-          {:isExpanded #(not= (.-urlbar-toolbar state) nil)
-           :destroy (fn []
-             (.disconnect expand-observer)
-             (.disconnect width-obs)
-             (.disconnect sym-resize-obs)
-             (some-> state .-resize-obs .disconnect)
-             (some-> state .-mutation-obs .disconnect)
-             (some-> state .-extend-obs .disconnect)
+          {:isExpanded (fn [] Any (not= (js/get state .urlbar-toolbar) nil))
+           :destroy (fn [] Any
+             (js/call expand-observer .disconnect)
+             (js/call width-obs .disconnect)
+             (js/call sym-resize-obs .disconnect)
+             (some-> state (js/get .resize-obs) (js/call .disconnect))
+             (some-> state (js/get .mutation-obs) (js/call .disconnect))
+             (some-> state (js/get .extend-obs) (js/call .disconnect))
              (off! navigator-toolbox "contextmenu" on-context-menu)
              (off! window "resize" sync-symmetric-footer))}))))))

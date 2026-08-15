@@ -2,29 +2,28 @@
 (ns gjoa.platform.tabs-reconciler
   (:require [gjoa.macros :refer [on! off!]]
             [gjoa.tabs.log :refer [create-logger!]]))
-(define-mode strict)
 
 (declare-extern [gBrowser] Any)
 
-(js/export (defn make-tabs-reconciler! [deps :- Any] :- Any
+(js/export (defn make-tabs-reconciler! [(deps Any)] Any
   (let [log (create-logger! "reconciler/tabs")
-        scheduler (.-scheduler deps)
+        scheduler (js/get deps .scheduler)
 
-        unregister (.register scheduler
+        unregister (js/call scheduler .register
                      {:domain "tabs"
-                      :run #(log "reconcile" {:reasons %})})
+                      :run (fn [%1] Any (log "reconcile" {:reasons %1}))})
 
-        on-tab-event #(.markDirty scheduler "tabs" (.-type %))
+        on-tab-event (fn [%1] Any (js/call scheduler .markDirty "tabs" (js/get %1 .type)))
 
         events ["TabOpen" "TabClose" "TabMove" "TabSelect"
                 "TabAttrModified" "TabPinned" "TabUnpinned"]
 
-        destroy (fn []
-                  (.forEach events
-                    #(off! (.-tabContainer gBrowser) % on-tab-event))
+        destroy (fn [] Any
+                  (js/call events .forEach
+                    (fn [%1] Any (off! (js/get gBrowser .tabContainer) %1 on-tab-event)))
                   (unregister))]
 
-    (.forEach events
-      #(on! (.-tabContainer gBrowser) % on-tab-event))
+    (js/call events .forEach
+      (fn [%1] Any (on! (js/get gBrowser .tabContainer) %1 on-tab-event)))
 
     {:destroy destroy})))

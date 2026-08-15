@@ -5,7 +5,6 @@
 ;; — the same channel as perf-prefs / dark-mode-prefs / adblock-prefs / genai /
 ;; layout. (`;;` comments don't survive the beagle→js emit; rationale lives here.)
 (ns gjoa.defaults.pref.theme)
-(define-mode strict)
 (declare-extern [pref] Any)
 
 ;; The active chrome-theme variant. gjoa's theme is one OKLCH token system fed by

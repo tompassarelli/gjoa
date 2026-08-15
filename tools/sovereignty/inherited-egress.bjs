@@ -14,17 +14,16 @@
   (:require [fs :refer [readFileSync readdirSync existsSync]]
             [path :refer [join]])
   )
-(define-mode strict)
-(declare-extern [process console Array RegExp JSON] Any)
+(declare-extern [process console Array RegExp JSON undefined] Any)
 
-(def REPO :- String (.cwd process))
-(def PREF-DIR :- String (join REPO "src" "gjoa" "defaults" "pref"))
+(def REPO String (js/call process .cwd))
+(def PREF-DIR String (join REPO "src" "gjoa" "defaults" "pref"))
 
 ;; Catalog of Firefox built-in network-egress vectors and the pref that gates each,
 ;; with the value that disables it. (SafeBrowsing is deliberately EXCLUDED — it is a
 ;; security feature whose egress is a worthwhile trade; gjoa keeping it on is correct,
 ;; not a gap.) Extend as Mozilla adds vectors.
-(def CATALOG :- Any
+(def CATALOG Any
   [["toolkit.telemetry.enabled" "Telemetry upload" "false"]
    ["toolkit.telemetry.unified" "Unified telemetry" "false"]
    ["toolkit.telemetry.archive.enabled" "Telemetry archive" "false"]
@@ -44,42 +43,42 @@
    ["app.normandy.api_url" "Normandy API endpoint" ""]])
 
 ;; parse `(pref "name" value)` forms from every pref source -> Map{name -> value-str}.
-(defn collect-prefs [] :- Any
-  (let [m (Map.)]
+(defn collect-prefs [] Any
+  (let [m (js/new Map)]
     (when (existsSync PREF-DIR)
       (doseq [name (readdirSync PREF-DIR)]
-        (when (.endsWith name ".bjs")
+        (when (js/call name .endsWith ".bjs")
           (let [src (readFileSync (join PREF-DIR name) "utf8")]
-            (doseq [mt (.matchAll src (RegExp. "\\(pref\\s+\"([^\"]+)\"\\s+([^)]+)\\)" "g"))]
-              (.set m (aget mt 1) (.trim (aget mt 2))))))))
+            (doseq [mt (js/call src .matchAll (js/new RegExp "\\(pref\\s+\"([^\"]+)\"\\s+([^)]+)\\)" "g"))]
+              (js/call m .set (aget mt 1) (js/call (aget mt 2) .trim)))))))
     m))
 
-(defn audit [] :- Any
+(defn audit [] Any
   (let [prefs (collect-prefs) disabled [] gaps []]
     (doseq [entry CATALOG]
       (let [name (aget entry 0) vector (aget entry 1) want (aget entry 2)
-            have (.get prefs name)]
-        (if (and (not= have js/undefined)
+            have (js/call prefs .get name)]
+        (if (and (not= have undefined)
                  (or (= have want) (and (= want "") (or (= have "\"\"") (= have "")))))
-          (.push disabled {:name name :vector vector :value have})
-          (.push gaps {:name name :vector vector :have (if (= have js/undefined) "(unset — Firefox default)" have)}))))
-    {:disabled disabled :gaps gaps :catalogued (.-length CATALOG)}))
+          (js/call disabled .push {:name name :vector vector :value have})
+          (js/call gaps .push {:name name :vector vector :have (if (= have undefined) "(unset — Firefox default)" have)}))))
+    {:disabled disabled :gaps gaps :catalogued (js/get CATALOG .length)}))
 
-(defn main! [] :- Any
-  (let [a (audit) disabled (.-disabled a) gaps (.-gaps a)]
-    (when (.includes (.-argv process) "--json")
-      (console/log (JSON/stringify a nil 2))
-      (.exit process 0))
+(defn main! [] Any
+  (let [a (audit) disabled (js/get a .disabled) gaps (js/get a .gaps)]
+    (when (js/call (js/get process .argv) .includes "--json")
+      (console/log (js/call JSON .stringify a nil 2))
+      (js/call process .exit 0))
     (console/log (str "\nFirefox-inherited egress — what gjoa's default prefs disable\n"
                       "(parsed from src/gjoa/defaults/pref/*.bjs)\n"))
-    (console/log (str "DISABLED by gjoa (" (.-length disabled) "/" (.-length CATALOG) " catalogued vectors):"))
-    (doseq [d disabled] (console/log (str "  ✓ " (.-vector d) "  — " (.-name d) "=" (.-value d))))
-    (when (> (.-length gaps) 0)
-      (console/log (str "\nNOT disabled — Firefox default still applies (" (.-length gaps) ") — the gap list:"))
-      (doseq [g gaps] (console/log (str "  • " (.-vector g) "  — " (.-name g) " " (.-have g)))))
+    (console/log (str "DISABLED by gjoa (" (js/get disabled .length) "/" (js/get CATALOG .length) " catalogued vectors):"))
+    (doseq [d disabled] (console/log (str "  ✓ " (js/get d .vector) "  — " (js/get d .name) "=" (js/get d .value))))
+    (when (> (js/get gaps .length) 0)
+      (console/log (str "\nNOT disabled — Firefox default still applies (" (js/get gaps .length) ") — the gap list:"))
+      (doseq [g gaps] (console/log (str "  • " (js/get g .vector) "  — " (js/get g .name) " " (js/get g .have)))))
     (console/log (str "\nNOTE: SafeBrowsing egress is intentionally KEPT (security feature). This"))
     (console/log "  catalog is the known-vector set; absence here ≠ proof of no other egress —")
     (console/log "  it is the audited, named list, paired with egress-scan.js (our own code).")))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (main!))

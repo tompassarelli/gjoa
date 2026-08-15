@@ -2,39 +2,38 @@
 (ns gjoa.tabs.menu
   (:require [gjoa.macros :refer [by-id mi sep xul-id with-ctx on! has? attr! tabs! bool]]
             [gjoa.tabs.state :refer [row-of state]]
-            [gjoa.tabs.helpers :refer [data-of! has-children level-of-row subtree-rows tree-data!]]))
-(define-mode strict)
+            [gjoa.tabs.helpers :refer [data-of! has-children! level-of-row! subtree-rows! tree-data!]]))
 
 (declare-extern [gBrowser Services Ci Cc TabContextMenu PlacesCommandHook BrowserCommands undoCloseTab] Any)
 
-(js/export (defn build-context-menu! [deps :- Any] :- Any
+(js/export (defn build-context-menu! [(deps Any)] Any
   (let [{:keys [startRename toggleCollapse createGroupRow setCursor updateVisibility scheduleTreeResync scheduleSave]} deps
 
         menu (xul-id "menupopup" "gjoa-tab-menu")]
 
     (let [rename-item (mi "Rename Tab"
-                        (fn [] (with-ctx row (startRename row))))
+                        (fn [] Any (with-ctx row (startRename row))))
 
           collapse-item (mi "Collapse"
-                          (fn [] (with-ctx row (toggleCollapse row))))
+                          (fn [] Any (with-ctx row (toggleCollapse row))))
 
           create-group-item (mi "Create Group"
-                              (fn []
-                                (when (.-contextTab state)
-                                  (let [row (.get row-of (.-contextTab state))]
+                              (fn [] Any
+                                (when (js/get state .contextTab)
+                                  (let [row (js/call row-of .get (js/get state .contextTab))]
                                     (when row
-                                      (let [tab-level (level-of-row row)
+                                      (let [tab-level (level-of-row! row)
                                             grp (createGroupRow "New Group" tab-level)]
-                                        (.before row grp)
+                                        (js/call row .before grp)
                                         ;; Adopt the whole multiselection into the new
                                         ;; group (not just the context tab), so "select
                                         ;; tabs → create group" folds them all in.
-                                        (let [ctx (.-contextTab state)
-                                              sel (or (.-selectedTabs gBrowser) [])
-                                              adoptees (if (and (> (.-length sel) 1) (.includes sel ctx)) sel [ctx])
-                                              gid (.-id (.-_group grp))]
-                                          (.forEach adoptees
-                                            (fn [t :- Any] :- Any (set! (.-parentId (tree-data! t)) gid))))
+                                        (let [ctx (js/get state .contextTab)
+                                              sel (or (js/get gBrowser .selectedTabs) [])
+                                              adoptees (if (and (> (js/get sel .length) 1) (js/call sel .includes ctx)) sel [ctx])
+                                              gid (js/get (js/get grp ._group) .id)]
+                                          (js/call adoptees .forEach
+                                            (fn [(t Any)] Any (js/set! (tree-data! t) .parentId gid))))
                                         (scheduleTreeResync)
                                         (setCursor grp)
                                         (updateVisibility)
@@ -42,191 +41,189 @@
                                         (startRename grp)))))))
 
           close-kids-item (mi "Close Children"
-                            (fn []
-                              (when (.-contextTab state)
-                                (let [row (.get row-of (.-contextTab state))]
+                            (fn [] Any
+                              (when (js/get state .contextTab)
+                                (let [row (js/call row-of .get (js/get state .contextTab))]
                                   (when row
-                                    (let [kids (.slice (subtree-rows row) 1)]
-                                      (loop [i (- (.-length kids) 1)]
+                                    (let [kids (js/call (subtree-rows! row) .slice 1)]
+                                      (loop [i (- (js/get kids .length) 1)]
                                         (when (>= i 0)
                                           (let [k (aget kids i)]
-                                            (if (.-_tab k)
-                                              (.removeTab gBrowser (.-_tab k))
-                                              (.remove k)))
+                                            (if (js/get k ._tab)
+                                              (js/call gBrowser .removeTab (js/get k ._tab))
+                                              (js/call k .remove)))
                                           (recur (- i 1))))))))))
 
           split-view-item (mi "Add Split View"
-                            (fn []
-                              (when (.-contextTab state)
-                                (set! (.-contextTab TabContextMenu) (.-contextTab state))
-                                (set! (.-contextTabs TabContextMenu) [(.-contextTab state)])
-                                (when (.-moveTabsToSplitView TabContextMenu)
-                                  (.moveTabsToSplitView TabContextMenu)))))
+                            (fn [] Any
+                              (when (js/get state .contextTab)
+                                (js/set! TabContextMenu .contextTab (js/get state .contextTab))
+                                (js/set! TabContextMenu .contextTabs [(js/get state .contextTab)])
+                                (when (js/get TabContextMenu .moveTabsToSplitView)
+                                  (js/call TabContextMenu .moveTabsToSplitView)))))
 
           reload-item    (mi "Reload Tab"
-                           (fn [] (when (.-contextTab state)
-                             (.reloadTab gBrowser (.-contextTab state)))))
+                           (fn [] Any (when (js/get state .contextTab)
+                             (js/call gBrowser .reloadTab (js/get state .contextTab)))))
           mute-item      (mi "Mute Tab"
-                           (fn [] (when (.-contextTab state)
-                             (.toggleMuteAudio (.-contextTab state)))))
+                           (fn [] Any (when (js/get state .contextTab)
+                             (js/call (js/get state .contextTab) .toggleMuteAudio))))
           pin-item       (mi "Pin Tab"
-                           (fn [] (when (.-contextTab state)
-                             (let [t (.-contextTab state)]
-                               (if (.-pinned t) (.unpinTab gBrowser t) (.pinTab gBrowser t))))))
+                           (fn [] Any (when (js/get state .contextTab)
+                             (let [t (js/get state .contextTab)]
+                               (if (js/get t .pinned) (js/call gBrowser .unpinTab t) (js/call gBrowser .pinTab t))))))
           duplicate-item (mi "Duplicate Tab"
-                           (fn [] (when (.-contextTab state)
-                             (.duplicateTab gBrowser (.-contextTab state)))))
+                           (fn [] Any (when (js/get state .contextTab)
+                             (js/call gBrowser .duplicateTab (js/get state .contextTab)))))
           bookmark-item  (mi "Bookmark Tab"
-                           (fn [] (when (.-contextTab state)
-                             (when (.-bookmarkTabs PlacesCommandHook)
-                               (.bookmarkTabs PlacesCommandHook [(.-contextTab state)])))))
+                           (fn [] Any (when (js/get state .contextTab)
+                             (when (js/get PlacesCommandHook .bookmarkTabs)
+                               (js/call PlacesCommandHook .bookmarkTabs [(js/get state .contextTab)])))))
           move-to-window-item (mi "Move to New Window"
-                                (fn [] (when (.-contextTab state)
-                                  (.replaceTabWithWindow gBrowser (.-contextTab state)))))
+                                (fn [] Any (when (js/get state .contextTab)
+                                  (js/call gBrowser .replaceTabWithWindow (js/get state .contextTab)))))
           copy-link-item (mi "Copy Link"
-                           (fn [] (when (.-contextTab state)
-                                    (let [url (some-> (.-contextTab state) .-linkedBrowser .-currentURI .-spec)]
+                           (fn [] Any (when (js/get state .contextTab)
+                                    (let [url (some-> (js/get state .contextTab) (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec))]
                                       (when url
                                         (let [cid "@mozilla.org/widget/clipboardhelper;1"
-                                              helper (.getService (.get Reflect Cc cid) (.-nsIClipboardHelper Ci))]
-                                          (.copyString helper url)))))))
+                                              helper (js/call (js/call Reflect .get Cc cid) .getService (js/get Ci .nsIClipboardHelper))]
+                                          (js/call helper .copyString url)))))))
           close-item     (mi "Close Tab"
-                           (fn [] (when (.-contextTab state)
-                             (.removeTab gBrowser (.-contextTab state)))))
-          reopen-item    (mi "Reopen Closed Tab" (fn [] (undoCloseTab)))]
+                           (fn [] Any (when (js/get state .contextTab)
+                             (js/call gBrowser .removeTab (js/get state .contextTab)))))
+          reopen-item    (mi "Reopen Closed Tab" (fn [] Any (undoCloseTab)))]
 
-      (.append menu rename-item collapse-item create-group-item close-kids-item
+      (js/call menu .append rename-item collapse-item create-group-item close-kids-item
                (sep) split-view-item reload-item mute-item pin-item duplicate-item
                (sep) bookmark-item copy-link-item move-to-window-item
                (sep) close-item reopen-item)
 
       (on! menu "popupshowing"
-        (fn []
-          (when (.-contextTab state)
-            (let [row (.get row-of (.-contextTab state))
-                  has (and row (has-children row))]
-              (set! (.-hidden collapse-item) (not has))
-              (set! (.-hidden close-kids-item) (not has))
+        (fn [] Any
+          (when (js/get state .contextTab)
+            (let [row (js/call row-of .get (js/get state .contextTab))
+                  has (and row (has-children! row))]
+              (js/set! collapse-item .hidden (not has))
+              (js/set! close-kids-item .hidden (not has))
               (when (and has row)
                 (let [d (data-of! row)]
                   (when d
                     (attr! collapse-item "label"
-                      (if (.-collapsed d) "Expand" "Collapse")))))
+                      (if (js/get d .collapsed) "Expand" "Collapse")))))
               (attr! mute-item "label"
-                (if (has? (.-contextTab state) "muted") "Unmute Tab" "Mute Tab"))
+                (if (has? (js/get state .contextTab) "muted") "Unmute Tab" "Mute Tab"))
               (attr! pin-item "label"
-                (if (.-pinned (.-contextTab state)) "Unpin Tab" "Pin Tab"))
-              (set! (.-hidden split-view-item) (bool (.-splitview (.-contextTab state))))))))
+                (if (js/get (js/get state .contextTab) .pinned) "Unpin Tab" "Pin Tab"))
+              (js/set! split-view-item .hidden (bool (js/get (js/get state .contextTab) .splitview)))))))
 
-      (.appendChild (by-id "mainPopupSet") menu)
+      (js/call (by-id "mainPopupSet") .appendChild menu)
       menu))))
-(js/export (defn build-group-context-menu! [deps :- Any] :- Any
+(js/export (defn build-group-context-menu! [(deps Any)] Any
   (let [{:keys [startRename toggleCollapse syncGroupRow updateVisibility scheduleSave]} deps
 
         menu (xul-id "menupopup" "gjoa-group-menu")]
 
     (let [rename-item (mi "Rename Group"
-                        (fn [] (when (.-contextGroupRow state) (startRename (.-contextGroupRow state)))))
+                        (fn [] Any (when (js/get state .contextGroupRow) (startRename (js/get state .contextGroupRow)))))
 
           collapse-item (mi "Collapse"
-                          (fn [] (when (.-contextGroupRow state) (toggleCollapse (.-contextGroupRow state)))))
+                          (fn [] Any (when (js/get state .contextGroupRow) (toggleCollapse (js/get state .contextGroupRow)))))
 
           close-group-item (mi "Close Group"
-                             (fn []
-                               (let [row (.-contextGroupRow state)]
-                                 (when (some-> row .-_group)
-                                   (let [my-level (or (.-level (.-_group row)) 0)
-                                         group-id (.-id (.-_group row))]
-                                     (.forEach (tabs!)
-                                       #(let [td (tree-data! %)]
-                                          (when (= (.-parentId td) group-id)
-                                            (set! (.-parentId td) nil))))
-                                     (let [walk (fn [nxt]
-                                                  (when (and nxt (not= nxt (.-spacer state)))
-                                                    (let [lv (level-of-row nxt)]
-                                                      (when (> lv my-level)
-                                                        (when (.-_group nxt)
-                                                          (set! (.-level (.-_group nxt))
-                                                                (Math/max 0 (- (or (.-level (.-_group nxt)) 0) 1)))
-                                                          (syncGroupRow nxt))
-                                                        (walk (.-nextElementSibling nxt))))))]
-                                       (walk (.-nextElementSibling row)))
-                                     (.remove row)
+                             (fn [] Any
+                               (let [row (js/get state .contextGroupRow)]
+                                 (when (some-> row (js/get ._group))
+                                   (let [my-level (or (js/get (js/get row ._group) .level) 0)
+                                         group-id (js/get (js/get row ._group) .id)]
+                                     (js/call (tabs!) .forEach
+                                       (fn [%1] Any (let [td (tree-data! %1)]
+                                          (when (= (js/get td .parentId) group-id)
+                                            (js/set! td .parentId nil)))))
+                                     (letfn [(walk [(nxt Any)] Any
+                                                (when (and nxt (not= nxt (js/get state .spacer)))
+                                                  (let [lv (level-of-row! nxt)]
+                                                    (when (> lv my-level)
+                                                      (when (js/get nxt ._group)
+                                                        (js/set! (js/get nxt ._group) .level
+                                                              (Math/max 0 (- (or (js/get (js/get nxt ._group) .level) 0) 1)))
+                                                        (syncGroupRow nxt))
+                                                      (walk (js/get nxt .nextElementSibling))))))]
+                                       (walk (js/get row .nextElementSibling)))
+                                     (js/call row .remove)
                                      (updateVisibility)
                                      (scheduleSave))))))
 
           close-tabs-item (mi "Close Tabs in Group"
-                            (fn []
-                              (let [row (.-contextGroupRow state)]
+                            (fn [] Any
+                              (let [row (js/get state .contextGroupRow)]
                                 (when row
-                                  (let [tabs-in-group (.map
-                                                        (.filter (.slice (subtree-rows row) 1)
-                                                          #(.-_tab %))
-                                                        #(.-_tab %))]
-                                    (loop [i (- (.-length tabs-in-group) 1)]
+                                  (let [tabs-in-group (js/call (js/call (js/call (subtree-rows! row) .slice 1) .filter
+                                                          (fn [%1] Any (js/get %1 ._tab))) .map
+                                                        (fn [%1] Any (js/get %1 ._tab)))]
+                                    (loop [i (- (js/get tabs-in-group .length) 1)]
                                       (when (>= i 0)
-                                        (.removeTab gBrowser (aget tabs-in-group i))
+                                        (js/call gBrowser .removeTab (aget tabs-in-group i))
                                         (recur (- i 1)))))))))
 
           move-to-window-item (mi "Move Tabs to New Window"
-                                (fn []
-                                  (let [row (.-contextGroupRow state)]
+                                (fn [] Any
+                                  (let [row (js/get state .contextGroupRow)]
                                     (when row
-                                      (let [tabs-in-group (.map
-                                                            (.filter (.slice (subtree-rows row) 1)
-                                                              #(.-_tab %))
-                                                            #(.-_tab %))]
-                                        (when (.-length tabs-in-group)
-                                          (if (= (js/typeof (.-replaceTabsWithWindow gBrowser)) "function")
-                                            (.replaceTabsWithWindow gBrowser tabs-in-group)
-                                            (.replaceTabWithWindow gBrowser (aget tabs-in-group 0)))))))))]
+                                      (let [tabs-in-group (js/call (js/call (js/call (subtree-rows! row) .slice 1) .filter
+                                                              (fn [%1] Any (js/get %1 ._tab))) .map
+                                                            (fn [%1] Any (js/get %1 ._tab)))]
+                                        (when (js/get tabs-in-group .length)
+                                          (if (= (js/typeof (js/get gBrowser .replaceTabsWithWindow)) "function")
+                                            (js/call gBrowser .replaceTabsWithWindow tabs-in-group)
+                                            (js/call gBrowser .replaceTabWithWindow (aget tabs-in-group 0)))))))))]
 
-      (.append menu rename-item collapse-item close-tabs-item (sep) close-group-item move-to-window-item)
+      (js/call menu .append rename-item collapse-item close-tabs-item (sep) close-group-item move-to-window-item)
 
       (on! menu "popupshowing"
-        (fn []
-          (let [row (.-contextGroupRow state)]
-            (when (some-> row .-_group)
-              (let [has (has-children row)]
-                (set! (.-hidden collapse-item) (not has))
+        (fn [] Any
+          (let [row (js/get state .contextGroupRow)]
+            (when (some-> row (js/get ._group))
+              (let [has (has-children! row)]
+                (js/set! collapse-item .hidden (not has))
                 (when has
                   (attr! collapse-item "label"
-                    (if (.-collapsed (.-_group row)) "Expand" "Collapse")))
-                (set! (.-hidden close-tabs-item) (not has))
-                (set! (.-hidden move-to-window-item) (not has)))))))
+                    (if (js/get (js/get row ._group) .collapsed) "Expand" "Collapse")))
+                (js/set! close-tabs-item .hidden (not has))
+                (js/set! move-to-window-item .hidden (not has)))))))
 
-      (.appendChild (by-id "mainPopupSet") menu)
+      (js/call (by-id "mainPopupSet") .appendChild menu)
       menu))))
-(js/export (defn build-panel-context-menu! [deps :- Any] :- Any
+(js/export (defn build-panel-context-menu! [(deps Any)] Any
   (let [{:keys [createGroupRow startRename setCursor updateVisibility scheduleSave]} deps
 
         menu (xul-id "menupopup" "gjoa-panel-menu")]
 
     (let [new-group-item (mi "New Tab Group"
-                           (fn []
+                           (fn [] Any
                              (let [grp (createGroupRow "New Group" 0)]
-                               (.insertBefore (.-panel state) grp (.-spacer state))
+                               (js/call (js/get state .panel) .insertBefore grp (js/get state .spacer))
                                (setCursor grp)
                                (updateVisibility)
                                (scheduleSave)
                                (startRename grp))))
 
           new-tab-item (mi "New Tab"
-                         (fn []
+                         (fn [] Any
                            (if (and BrowserCommands
-                                    (.-openTab BrowserCommands)
-                                    (= (js/typeof (.-openTab BrowserCommands)) "function"))
-                             (.openTab BrowserCommands)
-                             (.addTab gBrowser "about:newtab"
-                               {:triggeringPrincipal (.getSystemPrincipal (.-scriptSecurityManager Services))
+                                    (js/get BrowserCommands .openTab)
+                                    (= (js/typeof (js/get BrowserCommands .openTab)) "function"))
+                             (js/call BrowserCommands .openTab)
+                             (js/call gBrowser .addTab "about:newtab"
+                               {:triggeringPrincipal (js/call (js/get Services .scriptSecurityManager) .getSystemPrincipal)
                                 :inBackground false}))))
 
           undo-close-item (mi "Undo Close Tab"
-                            (fn []
+                            (fn [] Any
                               (when (= (js/typeof undoCloseTab) "function")
                                 (undoCloseTab))))]
 
-      (.append menu new-tab-item new-group-item (sep) undo-close-item)
+      (js/call menu .append new-tab-item new-group-item (sep) undo-close-item)
 
-      (.appendChild (by-id "mainPopupSet") menu)
+      (js/call (by-id "mainPopupSet") .appendChild menu)
       menu))))

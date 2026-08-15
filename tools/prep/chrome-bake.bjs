@@ -20,42 +20,41 @@
             [path :refer [join]]
             [gjoa.tools.prep.paths :refer [ENGINE-DIR REPO-ROOT]]
             [gjoa.tools.prep.log :refer [log]]))
-(define-mode strict)
 (declare-extern [Bun] Any)
 
-(def DIST-CHROME :- String (join REPO-ROOT "dist" "chrome"))
-(def BAKE-ROOT :- String
+(def DIST-CHROME String (join REPO-ROOT "dist" "chrome"))
+(def BAKE-ROOT String
   (join ENGINE-DIR "browser" "components" "gjoa" "content"))
 
 ;; Hardcoded list — match jar.mn + GjoaLoader.sys.mjs PROD_SCRIPTS / PROD_STYLES.
-(def SCRIPTS :- Any
+(def SCRIPTS Any
   ["gjoa-security.uc.js"
    "gjoa-drawer.uc.js"
    "gjoa-tabs.uc.js"
    "gjoa-dark-mode.uc.js"
    "gjoa-blocking.uc.js"
    "gjoa-theme.uc.js"])
-(def STYLES :- Any
+(def STYLES Any
   ["gjoa.uc.css"
    "gjoa-tabs.uc.css"
    "gjoa-which-key.uc.css"])
 
-(defn ensureChromeDist [] :- Any
+(defn ensureChromeDist [] Any
   (if (existsSync DIST-CHROME)
     nil
     (do
-      (.step log "dist/chrome/ missing — running chrome:dist")
-      (let [proc (.spawn Bun {:cmd ["bun" "run" "chrome:dist"]
+      (js/call log .step "dist/chrome/ missing — running chrome:dist")
+      (let [proc (js/call Bun .spawn {:cmd ["bun" "run" "chrome:dist"]
                               :cwd REPO-ROOT
                               :stdout "inherit"
                               :stderr "inherit"})
-            code (js/await (.-exited proc))]
+            code (js/await (js/get proc .exited))]
         (when (not= code 0)
-          (throw (Error. (str "chrome:dist failed (exit " code ")"))))))))
+          (throw (js/new Error (str "chrome:dist failed (exit " code ")"))))))))
 
-(defn bakeOne [srcSubdir :- String dstSubdir :- String names :- Any] :- Any
+(defn bakeOne [(srcSubdir String) (dstSubdir String) (names Any)] Any
   (let [dstDir (join BAKE-ROOT dstSubdir)
-        n (.-length names)]
+        n (js/get names .length)]
     (js/await (mkdir dstDir {:recursive true}))
     ;; Sequential index loop so each copyFile is awaited in order (a `doseq`
     ;; would emit .forEach, which does NOT await its async body).
@@ -65,15 +64,15 @@
               src (join DIST-CHROME srcSubdir fname)]
           (do
             (when (not (existsSync src))
-              (throw (Error. (str "chrome-bake: expected " src
+              (throw (js/new Error (str "chrome-bake: expected " src
                                   " from chrome:dist (declared in jar.mn) — did the bundle list drift?"))))
             (js/await (copyFile src (join dstDir fname)))
             (recur (+ i 1))))))))
 
-(js/export (defn chrome-bake [] :- Any
+(js/export (defn chrome-bake [] Any
   (js/await (ensureChromeDist))
-  (.step log (str "baking " (.-length SCRIPTS) " scripts + "
-                  (.-length STYLES) " stylesheets into engine"))
+  (js/call log .step (str "baking " (js/get SCRIPTS .length) " scripts + "
+                  (js/get STYLES .length) " stylesheets into engine"))
   (js/await (bakeOne "JS" "scripts" SCRIPTS))
   (js/await (bakeOne "CSS" "styles" STYLES))
-  (.ok log (str "chrome bundles baked at " BAKE-ROOT))))
+  (js/call log .ok (str "chrome bundles baked at " BAKE-ROOT))))

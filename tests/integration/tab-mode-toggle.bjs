@@ -16,15 +16,13 @@
 ;;   - horizontal layout-collapse is transient, not written to the saved tree
 (ns gjoa.tests.integration.tab-mode-toggle
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect expect-eq wait-for]]))
-(define-mode strict)
 
 ;; --- helpers -----------------------------------------------------------------
 
 ;; Reset to a single Main space in vertical mode. Closes prior test-marked tabs
 ;; so per-test tree counts are clean.
-(defn reset! [mn :- Any] :- Any
-  (js/await (.executeScript mn
-    (str
+(defn reset! [(mn Any)] Any
+  (js/await (js/call mn .executeScript (str
       "    try { Services.prefs.setBoolPref(\"sidebar.verticalTabs\", true); } catch {}\n"
       "    if (window.Spaces) {\n"
       "      const main = window.Spaces.list().find(s => s.name === \"Main\") || window.Spaces.list()[0];\n"
@@ -42,7 +40,7 @@
 
 ;; Build one expanded root tree `<stamp>-<key>` with two children, in the active
 ;; space. Leaves `collapsed=false` on the root. Does NOT change the selection.
-(defn build-tree-js [stamp :- String key :- String] :- String
+(defn build-tree-js [(stamp String) (key String)] String
   (str
     "    const principal = Services.scriptSecurityManager.getSystemPrincipal();\n"
     "    const T = window.gjoaTest.treeOf;\n"
@@ -58,7 +56,7 @@
     "    window.gjoaTest.rows.scheduleTreeResync();\n"))
 
 ;; Read {collapsed, layoutCollapsed, hasChildren} for a marked root tab.
-(defn read-root-js [stamp :- String key :- String] :- String
+(defn read-root-js [(stamp String) (key String)] String
   (str
     "    const t = [...gBrowser.tabs].find(x => x.getAttribute(\"gjoa-test-marker\") === \"" stamp "-" key "\");\n"
     "    if (!t) return null;\n"
@@ -67,17 +65,17 @@
     "    return { collapsed: !!td.collapsed, layoutCollapsed: !!td.layoutCollapsed,\n"
     "             caret: row ? row.hasAttribute(\"gjoa-collapsed\") : null };\n"))
 
-(defn to-horizontal! [mn :- Any] :- Any
+(defn to-horizontal! [(mn Any)] Any
   (chrome-eval "Services.prefs.setBoolPref(\"sidebar.verticalTabs\", false);")
   (await-true "return document.getElementById(\"gjoa-tab-panel\").hasAttribute(\"gjoa-horizontal\");" 3000))
 
-(defn to-vertical! [mn :- Any] :- Any
+(defn to-vertical! [(mn Any)] Any
   (chrome-eval "Services.prefs.setBoolPref(\"sidebar.verticalTabs\", true);")
   (await-true "return !document.getElementById(\"gjoa-tab-panel\").hasAttribute(\"gjoa-horizontal\");" 3000))
 
 ;; --- tests -------------------------------------------------------------------
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "mode toggle — an expanded tree is still expanded after horizontal<->vertical" [mn]
      (await-true "return !!window.gjoaTest && !!document.getElementById(\"gjoa-tab-panel\");" 3000)
      (js/await (reset! mn))
@@ -91,9 +89,9 @@
        (js/await (to-horizontal! mn))
        (js/await (to-vertical! mn))
        (let [r (chrome-eval (read-root-js stamp "A"))]
-         (expect-eq (.-collapsed r) false "persisted collapsed must stay false after a round-trip")
-         (expect-eq (.-layoutCollapsed r) false "layoutCollapsed must be cleared in vertical")
-         (expect-eq (.-caret r) false "caret must show expanded"))))
+         (expect-eq (js/get r .collapsed) false "persisted collapsed must stay false after a round-trip")
+         (expect-eq (js/get r .layoutCollapsed) false "layoutCollapsed must be cleared in vertical")
+         (expect-eq (js/get r .caret) false "caret must show expanded"))))
 
    (deftest "mode toggle — a user-collapsed tree stays collapsed (persisted state preserved)" [mn]
      (await-true "return !!window.gjoaTest;" 3000)
@@ -112,7 +110,7 @@
        (js/await (to-horizontal! mn))
        (js/await (to-vertical! mn))
        (let [r (chrome-eval (read-root-js stamp "A"))]
-         (expect-eq (.-collapsed r) true "user collapse must survive a mode round-trip"))))
+         (expect-eq (js/get r .collapsed) true "user collapse must survive a mode round-trip"))))
 
    (deftest "mode toggle — does not collapse trees in other spaces" [mn]
      (await-true "return !!window.gjoaTest && !!window.Spaces;" 3000)
@@ -141,7 +139,7 @@
        (js/await (to-vertical! mn))
        ;; The Work tree (other space) must be untouched.
        (let [w (chrome-eval (read-root-js stamp "work"))]
-         (expect-eq (.-collapsed w) false "a tree in a non-active space must never be collapsed by a toggle"))))
+         (expect-eq (js/get w .collapsed) false "a tree in a non-active space must never be collapsed by a toggle"))))
 
    (deftest "mode toggle — horizontal layout-collapse is transient, never written to the saved tree" [mn]
      (await-true "return !!window.gjoaTest;" 3000)
@@ -158,8 +156,8 @@
        ;; In horizontal, inactive tree B is layout-collapsed (transient) but its
        ;; PERSISTED collapsed must remain false.
        (let [b (chrome-eval (read-root-js stamp "B"))]
-         (expect-eq (.-layoutCollapsed b) true "inactive tree should be layout-collapsed in horizontal")
-         (expect-eq (.-collapsed b) false "but the saved/persisted collapsed must stay false"))
+         (expect-eq (js/get b .layoutCollapsed) true "inactive tree should be layout-collapsed in horizontal")
+         (expect-eq (js/get b .collapsed) false "but the saved/persisted collapsed must stay false"))
        ;; And the saver snapshot must not see the layout collapse.
        (let [saved (chrome-eval
                      (str
@@ -190,8 +188,8 @@
                    "    const id = window.gjoaTest.treeOf.get(sel) ? window.gjoaTest.treeOf.get(sel).id : null;\n"
                    "    const row = [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row\")].find(x => x._tab === sel);\n"
                    "    return { sameId: id === window.__mtSelId, hidden: row ? row.hidden : true };\n"))]
-         (expect-eq (.-sameId r) true "the same tab must remain selected after a round-trip")
-         (expect-eq (.-hidden r) false "the selected tab's row must be visible"))))
+         (expect-eq (js/get r .sameId) true "the same tab must remain selected after a round-trip")
+         (expect-eq (js/get r .hidden) false "the selected tab's row must be visible"))))
 
    (deftest "mode toggle — repeated toggling is idempotent (collapsed map unchanged)" [mn]
      (await-true "return !!window.gjoaTest;" 3000)

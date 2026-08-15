@@ -10,15 +10,13 @@
 ;;     takes "sibling" (default) | "root" | "child".
 (ns gjoa.tests.integration.new-tab-no-indent-chain
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect expect-eq wait-for]]))
-(define-mode strict)
 
 ;; IntegrationTest / MarionetteClient are TypeScript type-only imports —
 ;; no runtime presence, so nothing to require here.
 
 ;; Reset the pref + spaces between subtests.
-(defn reset [mn :- Any] :- Any
-  (js/await (.executeScript mn
-    (str "\n"
+(defn reset [(mn Any)] Any
+  (js/await (js/call mn .executeScript (str "\n"
          "    try { Services.prefs.clearUserPref(\"gjoa.tabs.newTabPosition\"); } catch {}\n"
          "    if (window.Spaces) {\n"
          "      const main = window.Spaces.list().find(s => s.name === \"Main\") || window.Spaces.list()[0];\n"
@@ -29,7 +27,7 @@
          "    }\n"
          "  "))))
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "tabpos default — successive Ctrl+T-style at root spawns siblings at root (no indent chain)" [mn]
      (await-true "return !!document.getElementById(\"gjoa-tab-panel\");" 2000)
      (js/await (reset mn))
@@ -65,12 +63,12 @@
                     "          };\n"
                     "        });\n"
                     "      "))]
-       (when (not= (.-length data) 4)
-         (throw (Error. (str "expected 4 marker tabs, got " (.-length data) ": " (JSON/stringify data)))))
+       (when (not= (js/get data .length) 4)
+         (throw (js/new Error (str "expected 4 marker tabs, got " (js/get data .length) ": " (JSON/stringify data)))))
        ;; Root-level rows have padding-inline-start = 8px (level 0 * 14 + 8).
-       (let [non-root (.filter data (fn [r] (or (not= (.-pad r) 8) (not= (.-parentId r) nil))))]
-         (when (> (.-length non-root) 0)
-           (throw (Error. (str "expected all root (pad=8, parentId=null); got: " (JSON/stringify data))))))))
+       (let [non-root (js/call data .filter (fn [r] Any (or (not= (js/get r .pad) 8) (not= (js/get r .parentId) nil))))]
+         (when (> (js/get non-root .length) 0)
+           (throw (js/new Error (str "expected all root (pad=8, parentId=null); got: " (JSON/stringify data))))))))
 
    (deftest "tabpos default — Ctrl+T while a CHILD tab is selected spawns a sibling at same depth" [mn]
      (await-true "return !!document.getElementById(\"gjoa-tab-panel\");" 2000)
@@ -116,10 +114,9 @@
                       "          parentOfChild: window.gjoaTest.treeOf.get(child).parentId,\n"
                       "        };\n"
                       "      "))]
-         (when (not= (.-parentOfSib data) (.-parentOfChild data))
-           (throw (Error.
-                    (str "Ctrl+T while child selected should produce a sibling of child. "
-                         "sib.parentId=" (.-parentOfSib data) ", child.parentId=" (.-parentOfChild data))))))))
+         (when (not= (js/get data .parentOfSib) (js/get data .parentOfChild))
+           (throw (js/new Error (str "Ctrl+T while child selected should produce a sibling of child. "
+                         "sib.parentId=" (js/get data .parentOfSib) ", child.parentId=" (js/get data .parentOfChild))))))))
 
    (deftest ":tabpos root — switching the pref makes new tabs go to root regardless of selected tab" [mn]
      (await-true "return !!window.gjoaTest && !!window.gjoaTest.vim;" 2000)
@@ -127,7 +124,7 @@
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"tabpos root\");")
      (let [pref (chrome-eval "return Services.prefs.getCharPref(\"gjoa.tabs.newTabPosition\");")]
        (when (not= pref "root")
-         (throw (Error. (str "pref not set: " pref))))
+         (throw (js/new Error (str "pref not set: " pref))))
 
        ;; Open: parent → child → grandchild via the pref. With "root",
        ;; EVERY new tab should be at parentId=null even when an ownerTab
@@ -153,9 +150,9 @@
                            "          .filter(t => t.getAttribute && (t.getAttribute(\"gjoa-test-marker\") || \"\").startsWith(\"" stamp "\"))\n"
                            "          .map(t => ({ m: t.getAttribute(\"gjoa-test-marker\"), p: window.gjoaTest.treeOf.get(t).parentId }));\n"
                            "      "))
-               non-root (.filter parents (fn [r] (not= (.-p r) nil)))]
-           (when (> (.-length non-root) 0)
-             (throw (Error. (str ":tabpos root broken — non-root tabs: " (JSON/stringify parents)))))))))
+               non-root (js/call parents .filter (fn [r] Any (not= (js/get r .p) nil)))]
+           (when (> (js/get non-root .length) 0)
+             (throw (js/new Error (str ":tabpos root broken — non-root tabs: " (JSON/stringify parents)))))))))
 
    (deftest ":tabpos child — switching the pref makes new tabs nest under their owner" [mn]
      (await-true "return !!window.gjoaTest;" 2000)
@@ -182,8 +179,8 @@
                       "          expectedParent: window.gjoaTest.treeOf.get(p).id,\n"
                       "        };\n"
                       "      "))]
-         (when (not= (.-parentId data) (.-expectedParent data))
-           (throw (Error. (str ":tabpos child broken — got parentId=" (.-parentId data) ", expected " (.-expectedParent data))))))))
+         (when (not= (js/get data .parentId) (js/get data .expectedParent))
+           (throw (js/new Error (str ":tabpos child broken — got parentId=" (js/get data .parentId) ", expected " (js/get data .expectedParent))))))))
 
    (deftest ":tabpos with no arg reports current value" [mn]
      (js/await (reset mn))
@@ -193,7 +190,7 @@
      ;; just that the pref is unchanged (no-op behavior of bare :tabpos).
      (let [pref (chrome-eval "return Services.prefs.getCharPref(\"gjoa.tabs.newTabPosition\");")]
        (when (not= pref "sibling")
-         (throw (Error. (str "bare :tabpos should be read-only, pref changed to " pref))))))
+         (throw (js/new Error (str "bare :tabpos should be read-only, pref changed to " pref))))))
 
    (deftest ":tabpos rejects invalid arg" [mn]
      (js/await (reset mn))
@@ -201,6 +198,6 @@
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"tabpos garbage\");")
      (let [pref (chrome-eval "return Services.prefs.getCharPref(\"gjoa.tabs.newTabPosition\");")]
        (when (not= pref "sibling")
-         (throw (Error. (str ":tabpos garbage should be rejected, pref was " pref))))))]))
+         (throw (js/new Error (str ":tabpos garbage should be rejected, pref was " pref))))))]))
 
 (js/export-default tests)

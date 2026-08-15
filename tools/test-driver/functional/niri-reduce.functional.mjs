@@ -10,7 +10,7 @@
 //
 // Fixtures are the live-captured niri `niri msg event-stream` event shapes.
 
-import { reduce_event, switch_to_target, frame_lines } from "../../../.beagle-out/spaces/niri.js";
+import { reduce_event, switch_to_target, frame_lines } from "../../../.beagle-out/gjoa/spaces/niri.js";
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; } else { fail++; console.log("FAIL:", msg); } };

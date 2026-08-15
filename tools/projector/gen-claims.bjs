@@ -10,20 +10,19 @@
             [path :refer [join dirname]]
             [gjoa.tools.prep.sh :refer [sh]]
             [gjoa.tools.projector.claims :refer [build-doc]]))
-(define-mode strict)
 (declare-extern [process console JSON] Any)
 
-(def REPO :- String (.cwd process))
-(def REL :- String "browser/components/newtab/AboutNewTabRedirector.sys.mjs")
-(def ANCHORS :- Any [{:class "AboutNewTabRedirectorParent" :method "newChannel"}
+(def REPO String (js/call process .cwd))
+(def REL String "browser/components/newtab/AboutNewTabRedirector.sys.mjs")
+(def ANCHORS Any [{:class "AboutNewTabRedirectorParent" :method "newChannel"}
                      {:class "AboutNewTabRedirectorChild" :method "newChannel"}])
-(def OUT :- String (join REPO "patches" "0003-newtab-redirector-gjoa.claims.json"))
-(def FF-SRC :- String (join (.-HOME (.-env process)) "code" "reference" "firefox"))
-(def TMP :- String "/tmp/gjoa-gen")
+(def OUT String (join REPO "patches" "0003-newtab-redirector-gjoa.claims.json"))
+(def FF-SRC String (join (js/get (js/get process .env) .HOME) "code" "resources" "firefox"))
+(def TMP String "/tmp/gjoa-gen")
 
-(defn main! [] :- Any
-  (let [v (.-version (.-firefox (.parse JSON (readFileSync (join REPO "gjoa.json") "utf8"))))
-        tag (str "FIREFOX_" (.replaceAll v "." "_") "_RELEASE")
+(defn main! [] Any
+  (let [v (js/get (js/get (js/call JSON .parse (readFileSync (join REPO "gjoa.json") "utf8")) .firefox) .version)
+        tag (str "FIREFOX_" (js/call v .replaceAll "." "_") "_RELEASE")
         dir (join TMP (dirname REL))]
     (sh (str "rm -rf " TMP " && mkdir -p " dir) nil)
     (sh (str "git -C " FF-SRC " show " tag ":" REL " > " (join TMP "pristine.mjs")) nil)
@@ -33,8 +32,8 @@
           pristine (readFileSync (join TMP "pristine.mjs") "utf8")
           edits (build-doc patched pristine ANCHORS)
           artifact {:file REL :edits edits}]
-      (writeFileSync OUT (str (JSON/stringify artifact nil 2) "\n"))
-      (console/error (str "wrote " OUT "  (" (.-length edits) " set-body verbs, anchored @ " tag ")")))))
+      (writeFileSync OUT (str (js/call JSON .stringify artifact nil 2) "\n"))
+      (console/error (str "wrote " OUT "  (" (js/get edits .length) " set-body verbs, anchored @ " tag ")")))))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (main!))

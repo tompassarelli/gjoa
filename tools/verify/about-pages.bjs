@@ -17,22 +17,20 @@
             [fs :as fs]
             [os :as os]
             [path :as path]
-            [gjoa.tools.test-driver.marionette :refer [connect-marionette]]))
-(define-mode strict)
+            [gjoa.tools.test-driver.marionette :refer [connect-marionette!]]))
 (declare-extern [process console JSON Promise Error setTimeout Object] Any)
 
-(defn sleep [ms :- Any] :- Any
-  (Promise. (fn [r] (setTimeout (fn [] (r nil)) ms))))
+(defn sleep [(ms Any)] Any
+  (js/new Promise (fn [r] Any (setTimeout (fn [] Any (r nil)) ms))))
 
-(defn make-profile! [] :- String
-  (let [dir (.mkdtempSync fs (.join path (.tmpdir os) "gjoa-verify-"))]
-    (.writeFileSync fs (.join path dir "prefs.js")
-      (str "user_pref(\"marionette.port\", 2828);\n"
+(defn make-profile! [] String
+  (let [dir (js/call fs .mkdtempSync (js/call path .join (js/call os .tmpdir) "gjoa-verify-"))]
+    (js/call fs .writeFileSync (js/call path .join dir "prefs.js") (str "user_pref(\"marionette.port\", 2828);\n"
            "user_pref(\"marionette.enabled\", true);\n"))
     dir))
 
 ;; Chrome-context: does each about: name resolve to a live nsIAboutModule?
-(def ABOUT-PROBE :- String
+(def ABOUT-PROBE String
   (str "const out = [];\n"
        "for (const what of ['sovereignty','gjoa']) {\n"
        "  const contract = '@mozilla.org/network/protocol/about;1?what=' + what;\n"
@@ -47,7 +45,7 @@
        "return out;"))
 
 ;; Chrome-context async: open about:preferences and wait for the actor to inject.
-(def POINTER-PROBE :- String
+(def POINTER-PROBE String
   (str "const done = arguments[arguments.length - 1];\n"
        "const win = Services.wm.getMostRecentWindow('navigator:browser');\n"
        "const tab = win.gBrowser.addTab('about:preferences', {triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal()});\n"
@@ -64,11 +62,11 @@
        "  }\n"
        "}, 250);"))
 
-(defn run! [] :- Any
-  (when (not (or (aget (.-argv process) 2) (get (.-env process) "GJOA_BIN")))
-    (.error console "usage: about-pages <gjoa-bin>  (or set $GJOA_BIN)")
-    (.exit process 2))
-  (let [bin (or (aget (.-argv process) 2) (get (.-env process) "GJOA_BIN"))
+(defn run! [] Any
+  (when (not (or (aget (js/get process .argv) 2) (get (js/get process .env) "GJOA_BIN")))
+    (js/call console .error "usage: about-pages <gjoa-bin>  (or set $GJOA_BIN)")
+    (js/call process .exit 2))
+  (let [bin (or (aget (js/get process .argv) 2) (get (js/get process .env) "GJOA_BIN"))
         profile (make-profile!)
         child (spawn bin
                      ;; --no-remote: never hand off to a stray running instance.
@@ -77,23 +75,22 @@
                      ["--profile" profile "--marionette" "--no-remote"
                       "--remote-allow-system-access" "--headless"]
                      {:stdio "ignore"
-                      :env (.assign Object {} (.-env process)
-                             {"GJOA_ALLOW_INSECURE" "1" "MOZ_HEADLESS" "1"})})
-        client (js/await (connect-marionette {:connectTimeoutMs 45000}))
-        _sess (js/await (.newSession client))
-        _ctx (js/await (.setContext client "chrome"))
-        about (js/await (.executeScript client ABOUT-PROBE []))
-        pointer (js/await (.executeAsyncScript client POINTER-PROBE []))
-        _log (.log console (JSON/stringify {:about about :pointer pointer} nil 2))
-        _quit (js/await (.quit client ["eForceQuit"]))
-        _disc (.disconnect client)
-        _kill (.kill child)
-        ok-about (.every about (fn [r :- Any] :- Any (.-registered r)))
-        ok-ptr (.-pointer pointer)]
-    (.log console (str "\nVERDICT: about-pages=" (if ok-about "PASS" "FAIL")
+                      :env (js/call Object .assign {} (js/get process .env) {"GJOA_ALLOW_INSECURE" "1" "MOZ_HEADLESS" "1"})})
+        client (js/await (connect-marionette! {:connectTimeoutMs 45000}))
+        _sess (js/await (js/call client .newSession))
+        _ctx (js/await (js/call client .setContext "chrome"))
+        about (js/await (js/call client .executeScript ABOUT-PROBE []))
+        pointer (js/await (js/call client .executeAsyncScript POINTER-PROBE []))
+        _log (js/call console .log (js/call JSON .stringify {:about about :pointer pointer} nil 2))
+        _quit (js/await (js/call client .quit ["eForceQuit"]))
+        _disc (js/call client .disconnect)
+        _kill (js/call child .kill)
+        ok-about (js/call about .every (fn [(r Any)] Any (js/get r .registered)))
+        ok-ptr (js/get pointer .pointer)]
+    (js/call console .log (str "\nVERDICT: about-pages=" (if ok-about "PASS" "FAIL")
                        "  settings-pointer=" (if ok-ptr "PASS" "FAIL")))
-    (.exit process (if (and ok-about ok-ptr) 0 1))))
+    (js/call process .exit (if (and ok-about ok-ptr) 0 1))))
 
-(.catch (run!) (fn [e :- Any] :- Any
-                 (.error console (str "verify failed: " (or (.-stack e) e)))
-                 (.exit process 1)))
+(js/call (run!) .catch (fn [(e Any)] Any
+                 (js/call console .error (str "verify failed: " (or (js/get e .stack) e)))
+                 (js/call process .exit 1)))

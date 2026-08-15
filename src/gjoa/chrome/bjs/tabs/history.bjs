@@ -2,7 +2,6 @@
 (ns gjoa.tabs.history
   (:require [gjoa.macros :refer [pref-str set-pref-str! bool]]
             [gjoa.tabs.log :refer [create-logger!]]))
-(define-mode strict)
 
 ;; Temporal workspace history — gjoa's append-only event log over SQLite.
 ;;
@@ -16,12 +15,12 @@
 ;; touching the DB so we don't pay a write cost for no-op saves.
 
 (declare-extern [Services Ci PathUtils ChromeUtils crypto String] Any)
-(def INSTANCE-ID-PREF :- String "gjoa.instance.id")
+(def INSTANCE-ID-PREF String "gjoa.instance.id")
 
 ;; Note: Sqlite.sys.mjs rejects SQL strings matching /\bLIKE\b\s(?![@:?])/i
 ;; — including in COMMENTS. Schema SQL is kept comment-free.
-(def fts-available :- Any {:v false})
-(def SCHEMA :- Any
+(def fts-available Any {:v false})
+(def SCHEMA Any
   ["CREATE TABLE IF NOT EXISTS events (
     id        INTEGER PRIMARY KEY,
     timestamp INTEGER NOT NULL,
@@ -43,22 +42,22 @@
    "CREATE INDEX IF NOT EXISTS esc_url ON events_search_content(url)"
    "CREATE INDEX IF NOT EXISTS esc_label ON events_search_content(label)"])
 
-(def log :- Any (create-logger! "history"))
-(def state :- Any {:conn nil :lastHash nil :instanceId nil})
-(defn load-instance-id! [] :- String
-  (or (.-instanceId state)
+(def log Any (create-logger! "history"))
+(def state Any {:conn nil :lastHash nil :instanceId nil})
+(defn load-instance-id! [] String
+  (or (js/get state .instanceId)
       (let [id-from-pref (pref-str INSTANCE-ID-PREF "")]
         (if (not= id-from-pref "")
-          (do (set! (.-instanceId state) id-from-pref)
+          (do (js/set! state .instanceId id-from-pref)
               id-from-pref)
-          (let [fresh (.randomUUID crypto)]
+          (let [fresh (js/call crypto .randomUUID)]
             (set-pref-str! INSTANCE-ID-PREF fresh)
             (log "instanceId:generated" {:id fresh})
-            (set! (.-instanceId state) fresh)
+            (js/set! state .instanceId fresh)
             fresh)))))
 ;; Stable stringify — JSON.stringify with sorted keys at every level.
 ;; {a:1,b:2} and {b:2,a:1} dedupe identically.
-(defn canonicalize [value :- Any] :- String
+(defn canonicalize [(value Any)] String
   (cond
     ;; `undefined` is NOT valid JSON. JSON.stringify omits undefined object
     ;; values and maps undefined array elements to null — mirror that, or a
@@ -68,13 +67,13 @@
     (= value nil)                       "null"
     (not= (js/typeof value) "object")   (JSON/stringify value)
     (Array/isArray value)
-      (str "[" (.join (.map value #(canonicalize %)) ",") "]")
+      (str "[" (js/call (js/call value .map (fn [%1] Any (canonicalize %1))) .join ",") "]")
     :else
-      (let [keys (.filter (.sort (Object/keys value))
-                   #(not= (js/typeof (aget value %)) "undefined"))]
+      (let [keys (js/call (js/call (Object/keys value) .sort) .filter
+                   (fn [%1] Any (not= (js/typeof (aget value %1)) "undefined")))]
         (str "{"
-             (.join (.map keys
-                      #(str (JSON/stringify %) ":" (canonicalize (aget value %))))
+             (js/call (js/call keys .map
+                      (fn [%1] Any (str (JSON/stringify %1) ":" (canonicalize (aget value %1))))) .join
                     ",")
              "}"))))
 
@@ -82,200 +81,198 @@
 ;; canonical JSON form (keys sorted) so structurally-equal snapshots dedupe
 ;; even if key order in the source object differs.
 ;; Returns a promise that resolves to the hex string.
-(defn sha256-hex [text :- String] :- Any
-  (let [data (.encode (TextEncoder.) text)]
-    (-> (.digest (.-subtle crypto) "SHA-256" data)
-        (.then #(let [bytes (Uint8Array. %)
+(defn sha256-hex [(text String)] Any
+  (let [data (js/call (js/new TextEncoder) .encode text)]
+    (-> (js/call (js/get crypto .subtle) .digest "SHA-256" data)
+        (js/call .then (fn [%1] Any (let [bytes (js/new Uint8Array %1)
                       hex-parts []]
-                  (.forEach bytes
-                    (fn [b] (.push hex-parts (.padStart (.toString b 16) 2 "0"))))
-                  (.join hex-parts ""))))))
-(defn execute-stmts [conn :- Any stmts :- Any idx :- Int] :- Any
-  (when (< idx (.-length stmts))
-    (-> (.execute conn (aget stmts idx))
-        (.then #(execute-stmts conn stmts (+ idx 1))))))
+                  (js/call bytes .forEach
+                    (fn [b] Any (js/call hex-parts .push (js/call (js/call b .toString 16) .padStart 2 "0"))))
+                  (js/call hex-parts .join "")))))))
+(defn execute-stmts [(conn Any) (stmts Any) (idx Int)] Any
+  (when (< idx (js/get stmts .length))
+    (-> (js/call conn .execute (aget stmts idx))
+        (js/call .then (fn [] Any (execute-stmts conn stmts (+ idx 1)))))))
 
-(defn try-create-fts [conn :- Any] :- Any
-  (-> (.execute conn
+(defn try-create-fts! [(conn Any)] Any
+  (-> (js/call conn .execute
         "CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(url, label, content=events_search_content, content_rowid=rowid)")
-      (.then #(do (set! (.-v fts-available) true)
-                  (.execute conn "INSERT INTO events_fts(events_fts) VALUES('rebuild')")))
-      (.then #(log "fts5" {:status "ready"}))
-      (.catch #(do (set! (.-v fts-available) false)
-                   (log "fts5" {:status "unavailable" :error (String %)})))))
+      (js/call .then (fn [] Any (do (js/set! fts-available .v true)
+                  (js/call conn .execute "INSERT INTO events_fts(events_fts) VALUES('rebuild')"))))
+      (js/call .then (fn [] Any (log "fts5" {:status "ready"})))
+      (js/call .catch (fn [%1] Any (do (js/set! fts-available .v false)
+                   (log "fts5" {:status "unavailable" :error (String %1)}))))))
 
-(defn initialize-schema [conn :- Any] :- Any
-  (-> (.executeTransaction conn #(execute-stmts conn SCHEMA 0))
-      (.then #(try-create-fts conn))))
+(defn initialize-schema! [(conn Any)] Any
+  (-> (js/call conn .executeTransaction (fn [] Any (execute-stmts conn SCHEMA 0)))
+      (js/call .then (fn [] Any (try-create-fts! conn)))))
 
-(defn prime-last-hash [conn :- Any] :- Any
-  (-> (.execute conn "SELECT hash FROM events ORDER BY id DESC LIMIT 1")
-      (.then #(when (and % (.-length %))
-                (set! (.-lastHash state) (.getResultByName (aget % 0) "hash"))))))
+(defn prime-last-hash! [(conn Any)] Any
+  (-> (js/call conn .execute "SELECT hash FROM events ORDER BY id DESC LIMIT 1")
+      (js/call .then (fn [%1] Any (when (and %1 (js/get %1 .length))
+                (js/set! state .lastHash (js/call (aget %1 0) .getResultByName "hash")))))))
 
-(defn open-connection [] :- Any
-  (if (.-conn state)
-    (.resolve js/Promise (.-conn state))
-    (let [sqlite-mod (.importESModule ChromeUtils
+(defn open-connection! [] Any
+  (if (js/get state .conn)
+    (Promise/resolve (js/get state .conn))
+    (let [sqlite-mod (js/call ChromeUtils .importESModule
                        "resource://gre/modules/Sqlite.sys.mjs")
-          sqlite (.-Sqlite sqlite-mod)
-          prof-dir (.-path (.get (.-dirsvc Services) "ProfD" (.-nsIFile Ci)))
-          path (.join PathUtils prof-dir "gjoa-history.sqlite")]
-      (-> (.openConnection sqlite {:path path})
-          (.then #(do (log "openConnection" {:path path}) %))
-          (.then #(-> (.execute % "PRAGMA journal_mode = WAL")
-                      (.then (fn [] (.execute % "PRAGMA foreign_keys = ON")))
-                      (.then (fn [] (initialize-schema %)))
-                      (.then (fn []
-                        (set! (.-conn state) %)
-                        (prime-last-hash %)))
-                      (.then (fn [] %))))))))
-(defn date-label [d :- Any] :- String
-  (let [dt (or d (Date.))
-        day-short (.toLocaleDateString dt "en-US" {:weekday "short"})
-        yyyy (.getFullYear dt)
-        mm (.padStart (String (+ (.getMonth dt) 1)) 2 "0")
-        dd (.padStart (String (.getDate dt)) 2 "0")
-        hh (.padStart (String (.getHours dt)) 2 "0")
-        min (.padStart (String (.getMinutes dt)) 2 "0")]
+          sqlite (js/get sqlite-mod .Sqlite)
+          prof-dir (js/get (js/call (js/get Services .dirsvc) .get "ProfD" (js/get Ci .nsIFile)) .path)
+          path (js/call PathUtils .join prof-dir "gjoa-history.sqlite")]
+      (-> (js/call sqlite .openConnection {:path path})
+          (js/call .then (fn [%1] Any (do (log "openConnection" {:path path}) %1)))
+          (js/call .then (fn [%1] Any (-> (js/call %1 .execute "PRAGMA journal_mode = WAL")
+                      (js/call .then (fn [] Any (js/call %1 .execute "PRAGMA foreign_keys = ON")))
+                      (js/call .then (fn [] Any (initialize-schema! %1)))
+                      (js/call .then (fn [] Any
+                        (js/set! state .conn %1)
+                        (prime-last-hash! %1)))
+                      (js/call .then (fn [] Any %1)))))))))
+(defn date-label [(d Any)] String
+  (let [dt (or d (js/new Date))
+        day-short (js/call dt .toLocaleDateString "en-US" {:weekday "short"})
+        yyyy (js/call dt .getFullYear)
+        mm (js/call (String (+ (js/call dt .getMonth) 1)) .padStart 2 "0")
+        dd (js/call (String (js/call dt .getDate)) .padStart 2 "0")
+        hh (js/call (String (js/call dt .getHours)) .padStart 2 "0")
+        min (js/call (String (js/call dt .getMinutes)) .padStart 2 "0")]
     (str "Session - " day-short " " yyyy "/" mm "/" dd " " hh ":" min)))
 
-(defn decode-row [row :- Any] :- Any
-  {:id (.getResultByName row "id")
-   :timestamp (.getResultByName row "timestamp")
-   :hash (.getResultByName row "hash")
-   :snapshot (JSON/parse (.getResultByName row "snapshot"))
-   :tag (.getResultByName row "tag")
-   :instanceId (.getResultByName row "instance_id")})
+(defn decode-row [(row Any)] Any
+  {:id (js/call row .getResultByName "id")
+   :timestamp (js/call row .getResultByName "timestamp")
+   :hash (js/call row .getResultByName "hash")
+   :snapshot (JSON/parse (js/call row .getResultByName "snapshot"))
+   :tag (js/call row .getResultByName "tag")
+   :instanceId (js/call row .getResultByName "instance_id")})
 
 ;; Extract (url, label) pairs from a snapshot for search indexing.
-(defn extract-searchable-rows [snapshot :- Any] :- Any
+(defn extract-searchable-rows [(snapshot Any)] Any
   (let [out []]
-    (.forEach (.-nodes snapshot)
-      #(let [url (or (.-url %) "")
-             label (or (.-name %) "")]
+    (js/call (js/get snapshot .nodes) .forEach
+      (fn [%1] Any (let [url (or (js/get %1 .url) "")
+             label (or (js/get %1 .name) "")]
          (when (or url label)
-           (.push out {:url url :label label}))))
+           (js/call out .push {:url url :label label})))))
     out))
 
 ;; Insert search content rows sequentially via recursion.
-(defn insert-search-rows [conn :- Any event-id :- Any rows :- Any idx :- Int] :- Any
-  (when (< idx (.-length rows))
+(defn insert-search-rows [(conn Any) (event-id Any) (rows Any) (idx Int)] Any
+  (when (< idx (js/get rows .length))
     (let [row (aget rows idx)]
-      (-> (.execute conn
+      (-> (js/call conn .execute
             "INSERT INTO events_search_content(event_id, url, label) VALUES (?, ?, ?)"
-            [event-id (.-url row) (.-label row)])
-          (.then #(when (.-v fts-available)
-                    (.execute conn
+            [event-id (js/get row .url) (js/get row .label)])
+          (js/call .then (fn [] Any (when (js/get fts-available .v)
+                    (js/call conn .execute
                       "INSERT INTO events_fts(rowid, url, label) VALUES (last_insert_rowid(), ?, ?)"
-                      [(.-url row) (.-label row)])))
-          (.catch #(log "insert-search-rows:fts-sync" {:error (String %)}))
-          (.then #(insert-search-rows conn event-id rows (+ idx 1)))))))
+                      [(js/get row .url) (js/get row .label)]))))
+          (js/call .catch (fn [%1] Any (log "insert-search-rows:fts-sync" {:error (String %1)})))
+          (js/call .then (fn [] Any (insert-search-rows conn event-id rows (+ idx 1))))))))
 
 ;; Build search conditions from tokens; returns {conditions, params}.
-(defn build-search-query [tokens :- Any] :- Any
-  (let [escape-like (fn [s]
-                      (.replace s (RegExp. "([%_\\\\])" "g") "\\$1"))
+(defn build-search-query [(tokens Any)] Any
+  (let [escape-like (fn [s] Any
+                      (js/call s .replace (js/new RegExp "([%_\\\\])" "g") "\\$1"))
         conditions []
         params []]
-    (.forEach tokens
-      #(let [pat (str "%" (escape-like %) "%")]
-         (.push conditions "(esc.url LIKE ? ESCAPE '\\' OR esc.label LIKE ? ESCAPE '\\')")
-         (.push params pat)
-         (.push params pat)))
+    (js/call tokens .forEach
+      (fn [%1] Any (let [pat (str "%" (escape-like %1) "%")]
+         (js/call conditions .push "(esc.url LIKE ? ESCAPE '\\' OR esc.label LIKE ? ESCAPE '\\')")
+         (js/call params .push pat)
+         (js/call params .push pat))))
     {:conditions conditions :params params}))
-(defn with-conn [f :- Any] :- Any (-> (open-connection) (.then f)))
-(def EVENTS-COLS :- String "SELECT id, timestamp, hash, snapshot, tag, instance_id FROM events")
-(defn query-rows [sql :- String params :- Any] :- Any
-  (-> (with-conn #(.execute % sql params))
-      (.then #(.map % decode-row))))
-(defn query-one [sql :- String params :- Any] :- Any
-  (-> (with-conn #(.execute % sql params))
-      (.then #(when (.-length %) (decode-row (aget % 0))))))
-(defn read-changes [rows :- Any] :- Int
-  (if (and rows (.-length rows) (aget rows 0))
-    (or (.getResultByName (aget rows 0) "c") 0)
+(defn with-conn! [(f Any)] Any (-> (open-connection!) (js/call .then f)))
+(def EVENTS-COLS String "SELECT id, timestamp, hash, snapshot, tag, instance_id FROM events")
+(defn query-rows! [(sql String) (params Any)] Any
+  (-> (with-conn! (fn [%1] Any (js/call %1 .execute sql params)))
+      (js/call .then (fn [%1] Any (js/call %1 .map decode-row)))))
+(defn query-one! [(sql String) (params Any)] Any
+  (-> (with-conn! (fn [%1] Any (js/call %1 .execute sql params)))
+      (js/call .then (fn [%1] Any (when (js/get %1 .length) (decode-row (aget %1 0)))))))
+(defn read-changes [(rows Any)] Int
+  (if (and rows (js/get rows .length) (aget rows 0))
+    (or (js/call (aget rows 0) .getResultByName "c") 0)
     0))
-(js/export (defn make-history! [] :- Any
+(js/export (defn make-history! [] Any
   {:appendEvent
-   (fn [snapshot]
-     (with-conn #(let [canon (canonicalize snapshot)]
+   (fn [snapshot] Any
+     (with-conn! (fn [%1] Any (let [canon (canonicalize snapshot)]
            (-> (sha256-hex canon)
-               (.then (fn [hash]
-                 (when (not= hash (.-lastHash state))
+               (js/call .then (fn [hash] Any
+                 (when (not= hash (js/get state .lastHash))
                    (let [ts (Date/now)
                          inst-id (load-instance-id!)
                          result {:insertedId nil}]
-                     (.then
-                      (.executeTransaction %
-                        (fn []
-                          (-> (.execute %
+                     (js/call (js/call %1 .executeTransaction
+                        (fn [] Any
+                          (-> (js/call %1 .execute
                                 "INSERT OR IGNORE INTO events(timestamp, hash, snapshot, tag, instance_id) VALUES (?, ?, ?, NULL, ?)"
                                 [ts hash canon inst-id])
-                              (.then (fn []
-                                (.execute %
+                              (js/call .then (fn [] Any
+                                (js/call %1 .execute
                                   "SELECT id FROM events WHERE hash = ?"
                                   [hash])))
-                              (.then (fn [id-rows]
-                                (when (.-length id-rows)
-                                  (set! (.-insertedId result)
-                                        (.getResultByName (aget id-rows 0) "id"))
-                                  (insert-search-rows %
-                                    (.-insertedId result)
+                              (js/call .then (fn [id-rows] Any
+                                (when (js/get id-rows .length)
+                                  (js/set! result .insertedId
+                                        (js/call (aget id-rows 0) .getResultByName "id"))
+                                  (insert-search-rows %1
+                                    (js/get result .insertedId)
                                     (extract-searchable-rows snapshot)
-                                    0)))))))
-                      (fn []
-                        (when (not= (.-insertedId result) nil)
-                          (set! (.-lastHash state) hash)
+                                    0))))))) .then
+                      (fn [] Any
+                        (when (not= (js/get result .insertedId) nil)
+                          (js/set! state .lastHash hash)
                           (log "appendEvent"
-                               {:id (.-insertedId result)
+                               {:id (js/get result .insertedId)
                                 :ts ts
-                                :hashHead (.slice hash 0 12)}))
-                        (.-insertedId result)))))))))))
+                                :hashHead (js/call hash .slice 0 12)}))
+                        (js/get result .insertedId))))))))))))
 
    :tagLatest
-   (fn [kind label]
-     (with-conn #(let [final-label (or label
+   (fn [kind label] Any
+     (with-conn! (fn [%1] Any (let [final-label (or label
                                        (if (= kind "session")
                                          (date-label nil)
                                          "Untitled"))
                        tag-value (str kind ":" final-label)]
-           (-> (.execute %
+           (-> (js/call %1 .execute
                  "UPDATE events SET tag = ? WHERE id = (SELECT MAX(id) FROM events)"
                  [tag-value])
-               (.then (fn []
-                 (.execute %
+               (js/call .then (fn [] Any
+                 (js/call %1 .execute
                    "SELECT id FROM events ORDER BY id DESC LIMIT 1")))
-               (.then (fn [id-rows]
-                 (let [id (and id-rows (.-length id-rows) (aget id-rows 0)
-                               (.getResultByName (aget id-rows 0) "id"))]
+               (js/call .then (fn [id-rows] Any
+                 (let [id (and id-rows (js/get id-rows .length) (aget id-rows 0)
+                               (js/call (aget id-rows 0) .getResultByName "id"))]
                    (log "tagLatest" {:id id :tagValue tag-value})
-                   id)))))))
+                   id))))))))
 
    :getTagged
-   (fn [limit]
-     (query-rows (str EVENTS-COLS " WHERE tag IS NOT NULL ORDER BY timestamp DESC LIMIT ?")
+   (fn [limit] Any
+     (query-rows! (str EVENTS-COLS " WHERE tag IS NOT NULL ORDER BY timestamp DESC LIMIT ?")
                  [(or limit 50)]))
 
    :getById
-   (fn [id] (query-one (str EVENTS-COLS " WHERE id = ?") [id]))
+   (fn [id] Any (query-one! (str EVENTS-COLS " WHERE id = ?") [id]))
 
    :getRecent
-   (fn [limit]
-     (query-rows (str EVENTS-COLS " ORDER BY timestamp DESC LIMIT ?")
+   (fn [limit] Any
+     (query-rows! (str EVENTS-COLS " ORDER BY timestamp DESC LIMIT ?")
                  [(or limit 50)]))
 
    :search
-   (fn [query opts]
-     (let [tagged-only (bool (and opts (.-taggedOnly opts)))
-           lim (or (and opts (.-limit opts)) 50)
-           trimmed (.trim query)]
+   (fn [query opts] Any
+     (let [tagged-only (bool (and opts (js/get opts .taggedOnly)))
+           lim (or (and opts (js/get opts .limit)) 50)
+           trimmed (js/call query .trim)]
        (if (= trimmed "")
-         (.resolve js/Promise [])
-         (if (.-v fts-available)
-           (let [match-expr (.join
-                              (.map (.filter (.split trimmed (RegExp. "\\s+")) Boolean)
-                                #(str "\"" (.replace % (RegExp. "\"" "g") "\"\"") "\"" " *"))
+         (Promise/resolve [])
+         (if (js/get fts-available .v)
+           (let [match-expr (js/call (js/call (js/call (js/call trimmed .split (js/new RegExp "\\s+")) .filter Boolean) .map
+                                (fn [%1] Any (str "\"" (js/call %1 .replace (js/new RegExp "\"" "g") "\"\"") "\"" " *"))) .join
                               " ")
                  tagged-clause (if tagged-only " AND e.tag IS NOT NULL" "")
                  sql (str "SELECT e.id, e.timestamp, e.hash, e.snapshot, e.tag, e.instance_id"
@@ -287,10 +284,10 @@
                           tagged-clause
                           " ORDER BY e.timestamp DESC"
                           " LIMIT ?")]
-             (query-rows sql [match-expr lim]))
-           (let [tokens (.filter (.split trimmed (RegExp. "\\s+")) Boolean)
+             (query-rows! sql [match-expr lim]))
+           (let [tokens (js/call (js/call trimmed .split (js/new RegExp "\\s+")) .filter Boolean)
                  qr (build-search-query tokens)
-                 where-clause (.join (.-conditions qr) " AND ")
+                 where-clause (js/call (js/get qr .conditions) .join " AND ")
                  tagged-clause (if tagged-only " AND events.tag IS NOT NULL" "")
                  sql (str "SELECT events.id, events.timestamp, events.hash, events.snapshot, events.tag, events.instance_id"
                           " FROM events"
@@ -300,51 +297,51 @@
                           " GROUP BY events.id"
                           " ORDER BY events.timestamp DESC"
                           " LIMIT ?")
-                 params (.-params qr)]
-             (.push params lim)
-             (query-rows sql params))))))
+                 params (js/get qr .params)]
+             (js/call params .push lim)
+             (query-rows! sql params))))))
 
    :runRetention
-   (fn [opts]
-     (with-conn #(let [days (or (and opts (.-retainDays opts))
-                                (.getIntPref (.-prefs Services) "gjoa.history.retainDays" 30))
-                       max-rows (or (and opts (.-maxRows opts))
-                                    (.getIntPref (.-prefs Services) "gjoa.history.maxRows" 10000))
+   (fn [opts] Any
+     (with-conn! (fn [%1] Any (let [days (or (and opts (js/get opts .retainDays))
+                                (js/call (js/get Services .prefs) .getIntPref "gjoa.history.retainDays" 30))
+                       max-rows (or (and opts (js/get opts .maxRows))
+                                    (js/call (js/get Services .prefs) .getIntPref "gjoa.history.maxRows" 10000))
                        cutoff (- (Date/now) (* days 24 60 60 1000))
                        result {:deleted 0}]
-           (-> (.executeTransaction %
-                 (fn []
-                   (-> (.execute %
+           (-> (js/call %1 .executeTransaction
+                 (fn [] Any
+                   (-> (js/call %1 .execute
                          "DELETE FROM events WHERE tag IS NULL AND timestamp < ?"
                          [cutoff])
-                       (.then (fn [] (.execute % "SELECT changes() AS c")))
-                       (.then (fn [r] (set! (.-deleted result) (+ (.-deleted result) (read-changes r)))))
-                       (.then (fn []
-                         (.execute %
+                       (js/call .then (fn [] Any (js/call %1 .execute "SELECT changes() AS c")))
+                       (js/call .then (fn [r] Any (js/set! result .deleted (+ (js/get result .deleted) (read-changes r)))))
+                       (js/call .then (fn [] Any
+                         (js/call %1 .execute
                            "DELETE FROM events WHERE tag IS NULL AND id IN (SELECT id FROM events WHERE tag IS NULL ORDER BY timestamp ASC LIMIT MAX(0, (SELECT COUNT(*) FROM events WHERE tag IS NULL) - ?))"
                            [max-rows])))
-                       (.then (fn [] (.execute % "SELECT changes() AS c")))
-                       (.then (fn [r] (set! (.-deleted result) (+ (.-deleted result) (read-changes r))))))))
-               (.then (fn []
-                 (when (.-deleted result)
+                       (js/call .then (fn [] Any (js/call %1 .execute "SELECT changes() AS c")))
+                       (js/call .then (fn [r] Any (js/set! result .deleted (+ (js/get result .deleted) (read-changes r))))))))
+               (js/call .then (fn [] Any
+                 (when (js/get result .deleted)
                    (log "runRetention"
-                        {:deleted (.-deleted result)
+                        {:deleted (js/get result .deleted)
                          :retainDays days
                          :maxRows max-rows}))
-                 (.-deleted result)))))))
+                 (js/get result .deleted))))))))
 
    :lastHash
-   (fn [] (.-lastHash state))
+   (fn [] Any (js/get state .lastHash))
 
    :instanceId
-   (fn [] (load-instance-id!))
+   (fn [] Any (load-instance-id!))
 
    :close
-   (fn []
-     (if (.-conn state)
-       (-> (.close (.-conn state))
-           (.catch (fn [_e] nil))
-           (.then (fn []
-             (set! (.-conn state) nil)
-             (set! (.-lastHash state) nil))))
-       (.resolve js/Promise nil)))}))
+   (fn [] Any
+     (if (js/get state .conn)
+       (-> (js/call (js/get state .conn) .close)
+           (js/call .catch (fn [_e] Any nil))
+           (js/call .then (fn [] Any
+             (js/set! state .conn nil)
+             (js/set! state .lastHash nil))))
+       (Promise/resolve nil)))}))

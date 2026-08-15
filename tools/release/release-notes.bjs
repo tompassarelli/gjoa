@@ -10,74 +10,73 @@
 (ns gjoa.tools.release.release-notes
   (:require [fs :refer [readFileSync existsSync]]
             [gjoa.tools.prep.sh :refer [sh]]))
-(define-mode strict)
 (declare-extern [process console RegExp] Any)
 
-(def PLACEHOLDER :- String "Draft assembled by CI")
+(def PLACEHOLDER String "Draft assembled by CI")
 
 ;; conventional-commit type -> section heading, in display order.
-(def SECTIONS :- Any
+(def SECTIONS Any
   [["feat" "Features"] ["harden" "Security & hardening"] ["fix" "Fixes"]
    ["perf" "Performance"] ["refactor" "Refactors"] ["revert" "Reverts"]
    ["build" "Build"] ["docs" "Docs"] ["chore" "Chores"]])
 
-(defn known-type? [ty :- String] :- Bool
-  (.some SECTIONS (fn [s :- Any] :- Bool (= (aget s 0) ty))))
+(defn known-type? [(ty String)] Bool
+  (js/call SECTIONS .some (fn [(s Any)] Bool (= (aget s 0) ty))))
 
-(defn last-tag [] :- String
-  (.trim (sh "git tag --list 'v*' --sort=-v:refname | head -1" {:quiet true})))
+(defn last-tag [] String
+  (js/call (sh "git tag --list 'v*' --sort=-v:refname | head -1" {:quiet true}) .trim))
 
 ;; commit subject -> {type scope subject pr}. Non-conventional -> type "other".
-(defn parse-subject [s :- String] :- Any
-  (let [m (.match s (RegExp. "^([a-z]+)(?:\\(([^)]+)\\))?!?:\\s*(.+?)(?:\\s*\\(#([0-9]+)\\))?$"))]
+(defn parse-subject [(s String)] Any
+  (let [m (js/call s .match (js/new RegExp "^([a-z]+)(?:\\(([^)]+)\\))?!?:\\s*(.+?)(?:\\s*\\(#([0-9]+)\\))?$"))]
     (if (not m)
-      {:type "other" :scope nil :subject (.trim s) :pr nil}
+      {:type "other" :scope nil :subject (js/call s .trim) :pr nil}
       {:type (aget m 1) :scope (aget m 2) :subject (aget m 3) :pr (aget m 4)})))
 
-(defn fmt-row [p :- Any] :- String
-  (str "- " (if (.-scope p) (str "**" (.-scope p) "**: ") "") (.-subject p)
-       (if (.-pr p) (str " (#" (.-pr p) ")") "")))
+(defn fmt-row [(p Any)] String
+  (str "- " (if (js/get p .scope) (str "**" (js/get p .scope) "**: ") "") (js/get p .subject)
+       (if (js/get p .pr) (str " (#" (js/get p .pr) ")") "")))
 
-(defn section! [heading :- String rows :- Any] :- Any
-  (when (> (.-length rows) 0)
+(defn section! [(heading String) (rows Any)] Any
+  (when (> (js/get rows .length) 0)
     (console/log (str "### " heading))
     (doseq [p rows] (console/log (fmt-row p)))
     (console/log "")))
 
-(defn generate! [prev :- String end :- String] :- Any
+(defn generate! [(prev String) (end String)] Any
   (let [range (str (if (= prev "") "" (str prev "..")) end)
         raw (sh (str "git log " range " --no-merges --pretty=format:%s") {:quiet true})
-        subjects (.filter (.split raw "\n") (fn [s :- String] :- Bool (> (.-length (.trim s)) 0)))
-        parsed (.map subjects parse-subject)]
+        subjects (js/call (js/call raw .split "\n") .filter (fn [(s String)] Bool (> (js/get (js/call s .trim) .length) 0)))
+        parsed (js/call subjects .map parse-subject)]
     (console/log (str "## Changes since " (if (= prev "") "the beginning" prev)
-                      "  (" (.-length parsed) " commits)\n"))
+                      "  (" (js/get parsed .length) " commits)\n"))
     (doseq [section SECTIONS]
       (section! (aget section 1)
-                (.filter parsed (fn [p :- Any] :- Bool (= (.-type p) (aget section 0))))))
+                (js/call parsed .filter (fn [(p Any)] Bool (= (js/get p .type) (aget section 0))))))
     ;; conventional types not in SECTIONS (test/ci/style/...)
     (section! "Other"
-              (.filter parsed (fn [p :- Any] :- Bool (and (not= (.-type p) "other")
-                                                          (not (known-type? (.-type p)))))))
+              (js/call parsed .filter (fn [(p Any)] Bool (and (not= (js/get p .type) "other")
+                                                          (not (known-type? (js/get p .type)))))))
     ;; non-conventional commits — list plainly rather than narrate (honest)
     (section! "Uncategorized (non-conventional commits)"
-              (.filter parsed (fn [p :- Any] :- Bool (= (.-type p) "other"))))
+              (js/call parsed .filter (fn [(p Any)] Bool (= (js/get p .type) "other"))))
     (console/log "_Generated from the merged commit log — factual changelog, not announcement copy._")))
 
-(defn gate! [target :- String] :- Any
+(defn gate! [(target String)] Any
   (let [body (if (existsSync target) (readFileSync target "utf8") target)]
-    (if (.includes body PLACEHOLDER)
+    (if (js/call body .includes PLACEHOLDER)
       (do (console/error (str "release-notes: body still contains the CI placeholder (\""
                               PLACEHOLDER "\") — refusing. Generate real notes first."))
-          (.exit process 1))
+          (js/call process .exit 1))
       (console/log "release-notes: OK — no CI placeholder in the body."))))
 
-(defn main! [] :- Any
-  (let [argv (.-argv process) cmd (aget argv 2)]
+(defn main! [] Any
+  (let [argv (js/get process .argv) cmd (aget argv 2)]
     (cond
       (= cmd "check") (gate! (or (aget argv 3) ""))
       ;; release-notes [<prev-tag> [<end-ref>]] — defaults: last tag .. HEAD.
       ;; e.g. `release-notes v0.3.2 v0.3.3` regenerates a past release's notes.
       :else (generate! (or cmd (last-tag)) (or (aget argv 3) "HEAD")))))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (main!))

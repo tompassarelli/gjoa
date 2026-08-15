@@ -30,27 +30,24 @@
             [fs :refer [existsSync readFileSync]]
             [fs/promises :refer [readdir]]
             [path :refer [join basename]]
-            [gjoa.tools.test-driver.marionette :refer [connect-marionette]]
+            [gjoa.tools.test-driver.marionette :refer [connect-marionette!]]
             [gjoa.tools.test-driver.profile :refer [create-profile]]
             [gjoa.tools.test-driver.gjoa-locator :refer [locate-gjoa]]))
-(define-mode strict)
 
-(declare-extern [process] Any)
+(declare-extern [process String] Any)
 
-;; SkipError: the original was a `class extends Error` with name "SkipError".
-;; Beagle has no JS-class form, so this is a factory that builds an Error and
-;; stamps `name`. Detection downstream is by `(.-name e)` rather than
-;; `instanceof` (which beagle also has no form for).
-(js/export (defn SkipError! [reason :- String] :- Any
-  (let [e (Error. reason)]
-    (set! (.-name e) "SkipError")
+;; SkipError factory. Detection downstream reads `(js/get e .name)` so the
+;; emitted value stays an ordinary Error with the expected stack behavior.
+(js/export (defn SkipError! [(reason String)] Any
+  (let [e (js/new Error reason)]
+    (js/set! e .name "SkipError")
     e)))
 
-(defn emit [ev :- Any] :- Any
-  (.write (.-stdout process) (str (JSON/stringify ev) "\n")))
+(defn emit [(ev Any)] Any
+  (js/call (js/get process .stdout) .write (str (js/call JSON .stringify ev) "\n")))
 
-(defn logErr [line :- String] :- Any
-  (.write (.-stderr process) (str "[runner] " line "\n")))
+(defn logErr [(line String)] Any
+  (js/call (js/get process .stderr) .write (str "[runner] " line "\n")))
 
 ;; Per-test baseline reset (a de-facto beforeEach), run in chrome context before
 ;; EVERY test so the suite stays order-independent (#102). Best-effort: every
@@ -69,7 +66,7 @@
 ;;     OpenBrowserWindow) — collapse to the marionette-current window first, so a
 ;;     test that fails before closing its own window can't pollute the next test
 ;;     with an extra navigator:browser (the window-scoped form of the leak above).
-(def RESET-JS :- String
+(def RESET-JS String
   (str
     "try {\n"
     "  try { for (var w of [...Services.wm.getEnumerator('navigator:browser')]) { if (w !== window) { try { w.close(); } catch (e) {} } } } catch (e) {}\n"
@@ -97,20 +94,18 @@
 
 ;; Dynamic `import(path)` — beagle's static `import` form can't express a
 ;; runtime module load, so build the dynamic importer via Function.
-(def dynImport :- Any (Function. "p" "return import(p)"))
+(def dynImport Any (js/new Function "p" "return import(p)"))
 
-(defn loadTests [testDir :- String] :- Any
+(defn loadTests [(testDir String)] Any
   (let [entries
         (js/await
           (try
             (js/await (readdir testDir))
-            (catch Any e
-              (throw (Error. (str "could not read " testDir ": " (.-message e)))))))
-        files (.filter entries
-                (fn [f]
-                  (and (.test (RegExp. "\\.(ts|tsx|mjs|js)$") f)
-                       (not (.endsWith f ".d.ts")))))
-        n (.-length files)
+            (catch (e Any)
+              (throw (js/new Error (str "could not read " testDir ": " (js/get e .message)))))))
+        files (js/call entries .filter (fn [f] Any (and (js/call (js/new RegExp "\\.(ts|tsx|mjs|js)$") .test f)
+                       (not (js/call f .endsWith ".d.ts")))))
+        n (js/get files .length)
         out []]
     ;; Sequential, awaited load (one dynamic import at a time). A `doseq`
     ;; here compiles to a non-awaited forEach (fire-and-forget) which would
@@ -122,28 +117,28 @@
           (let [f (aget files i)
                 path (join testDir f)
                 testMod (js/await (dynImport path))
-                tests (or (.-default testMod) [])
-                _push (if (not (Array/isArray tests))
+                tests (or (js/get testMod .default) [])
+                _push (if (not (js/call Array .isArray tests))
                         (logErr (str "skipping " f " — default export is not an array"))
-                        (.push out {:file (basename f) :tests tests}))]
+                        (js/call out .push {:file (basename f) :tests tests}))]
             (recur (+ i 1))))))
     out))
 
 ;; tags.json lives next to the .bjs SOURCE tests (tests/integration/), not in
 ;; the compiled .beagle-tools/ mirror. Read it from cwd. Absent/malformed →
 ;; empty maps (no filtering) so the runner degrades safely.
-(defn load-tags [] :- Any
-  (let [p (join (.cwd process) "tests" "integration" "tags.json")]
+(defn load-tags [] Any
+  (let [p (join (js/call process .cwd) "tests" "integration" "tags.json")]
     (if (existsSync p)
       (try
-        (JSON/parse (readFileSync p "utf8"))
-        (catch Any e
-          (logErr (str "tags.json parse failed: " (.-message e)))
+        (js/call JSON .parse (readFileSync p "utf8"))
+        (catch (e Any)
+          (logErr (str "tags.json parse failed: " (js/get e .message)))
           {:subsystems {} :lanes {} :sources {}}))
       {:subsystems {} :lanes {} :sources {}})))
 
-(defn strip-ext [f :- String] :- String
-  (.replace f (RegExp. "\\.[^.]+$") ""))
+(defn strip-ext [(f String)] String
+  (js/call f .replace (js/new RegExp "\\.[^.]+$") ""))
 
 ;; Resolve --files/--subsystem/--lane/--exclude-lane into a directive describing
 ;; which suite basenames to keep. Returns:
@@ -151,49 +146,46 @@
 ;;   {:keep <Set>}              keep only these basenames (positive selection)
 ;;   {:exclude <Set>}           keep everything NOT in this set (exclude-only)
 ;; A positive selection always wins; any --exclude-lane is subtracted from it.
-(defn suite-keepset [tags :- Any opts :- Any] :- Any
-  (let [subs (or (.-subsystems tags) {})
-        lanes (or (.-lanes tags) {})
-        keep (Set.)
-        excl (Set.)
+(defn suite-keepset [(tags Any) (opts Any)] Any
+  (let [subs (or (js/get tags .subsystems) {})
+        lanes (or (js/get tags .lanes) {})
+        keep (js/new Set)
+        excl (js/new Set)
         ;; A positive selection was requested iff any of these flags is present.
-        any (boolean (or (.-files opts) (.-subsystem opts) (.-lane opts)))]
+        any (boolean (or (js/get opts .files) (js/get opts .subsystem) (js/get opts .lane)))]
     ;; --files a,b (explicit basenames)
-    (when (.-files opts)
-      (doseq [n (.split (.-files opts) ",")]
-        (when (.trim n) (.add keep (.trim n)))))
+    (when (js/get opts .files)
+      (doseq [n (js/call (js/get opts .files) .split ",")]
+        (when (js/call n .trim) (js/call keep .add (js/call n .trim)))))
     ;; --subsystem name(s) (comma-joined)
-    (when (.-subsystem opts)
-      (doseq [s (.split (.-subsystem opts) ",")]
-        (doseq [n (or (get subs (.trim s)) [])] (.add keep n))))
+    (when (js/get opts .subsystem)
+      (doseq [s (js/call (js/get opts .subsystem) .split ",")]
+        (doseq [n (or (get subs (js/call s .trim)) [])] (js/call keep .add n))))
     ;; --lane name(s) → keep union of those lanes
-    (when (.-lane opts)
-      (doseq [l (.split (.-lane opts) ",")]
-        (doseq [n (or (get lanes (.trim l)) [])] (.add keep n))))
+    (when (js/get opts .lane)
+      (doseq [l (js/call (js/get opts .lane) .split ",")]
+        (doseq [n (or (get lanes (js/call l .trim)) [])] (js/call keep .add n))))
     ;; --exclude-lane name(s) → drop those
-    (when (.-excludeLane opts)
-      (doseq [l (.split (.-excludeLane opts) ",")]
-        (doseq [n (or (get lanes (.trim l)) [])] (.add excl n))))
+    (when (js/get opts .excludeLane)
+      (doseq [l (js/call (js/get opts .excludeLane) .split ",")]
+        (doseq [n (or (get lanes (js/call l .trim)) [])] (js/call excl .add n))))
     (cond
       ;; explicit keep set wins; subtract excludes from it
       any
-      (do (doseq [n (Array/from excl)] (.delete keep n))
+      (do (doseq [n (js/call Array .from excl)] (js/call keep .delete n))
           {:keep keep})
       ;; exclude-only → keep everything NOT excluded (caller filters the full list)
-      (> (.-size excl) 0) {:exclude excl}
+      (> (js/get excl .size) 0) {:exclude excl}
       :else nil)))
 
-(defn spawnGjoa [opts :- Any] :- Any
+(defn spawnGjoa [(opts Any)] Any
   ;; --remote-allow-system-access is required for privileged ("chrome")
   ;; context script eval — landed in Firefox 128+ as a safety gate.
-  (let [verbose (.-verbose opts)
-        args (.concat
-               ["--profile" (.-profilePath opts)
-                "--marionette"]
-               (if (.-headed opts) [] ["--headless"])
-               ["--no-remote"
+  (let [verbose (js/get opts .verbose)
+        args (js/call ["--profile" (js/get opts .profilePath)
+                "--marionette"] .concat (if (js/get opts .headed) [] ["--headless"]) ["--no-remote"
                 "--remote-allow-system-access"
-                "-marionette-port" (String (.-marionettePort opts))])
+                "-marionette-port" (String (js/get opts .marionettePort))])
         ;; Pass GJOA_ALLOW_INSECURE=1 unconditionally so the in-process
         ;; security gate (src/gjoa/chrome/bjs/security/index.bjs) doesn't
         ;; quit the test browser. The test environment runs against
@@ -202,26 +194,26 @@
         ;; GJOA_DEV_LOADER=1: the F4 opt-in gate means the dev chrome bundles
         ;; (the gjoa-dev/ symlink) only load when this is set. The suite drives
         ;; the dev build, so it must opt in or no gjoa chrome loads at all.
-        env (.assign Object {} (.-env process) {"GJOA_ALLOW_INSECURE" "1" "GJOA_DEV_LOADER" "1"})
-        child (spawn (.-gjoaBin opts) args
+        env (js/call Object .assign {} (js/get process .env) {"GJOA_ALLOW_INSECURE" "1" "GJOA_DEV_LOADER" "1"})
+        child (spawn (js/get opts .gjoaBin) args
                      {:stdio (if verbose "inherit" "pipe")
                       :env env})]
     (when (not verbose)
-      (let [out (.-stdout child)]
-        (when out (.resume out)))
-      (let [err (.-stderr child)]
-        (when err (.resume err))))
-    (.once child "error" (fn [e] (logErr (str "gjoa spawn error: " (.-message e)))))
+      (let [out (js/get child .stdout)]
+        (when out (js/call out .resume)))
+      (let [err (js/get child .stderr)]
+        (when err (js/call err .resume))))
+    (js/call child .once "error" (fn [e] Any (logErr (str "gjoa spawn error: " (js/get e .message)))))
     child))
 
-(js/export (defn run-all! [opts0 :- Any] :- Any
+(js/export (defn run-all! [(opts0 Any)] Any
   (let [opts (or opts0 {})
-        gjoaBin (or (.-gjoaBin opts) (.-path (locate-gjoa)))
+        gjoaBin (or (js/get opts .gjoaBin) (js/get (locate-gjoa) .path))
         ;; Compiled test suites live under .beagle-tools/ (the source is .bjs).
-        testDir (or (.-testDir opts) (join (.cwd process) ".beagle-tools" "gjoa" "tests" "integration"))
-        marionettePort (or (.-marionettePort opts) 2828)]
+        testDir (or (js/get opts .testDir) (join (js/call process .cwd) ".beagle-tools" "gjoa" "tests" "integration"))
+        marionettePort (or (js/get opts .marionettePort) 2828)]
 
-    (when (.-headed opts)
+    (when (js/get opts .headed)
       (logErr "WARNING: --headed mode will pop a real gjoa window on your display."))
 
     (let [allSuites (js/await (loadTests testDir))
@@ -229,26 +221,22 @@
           tags (load-tags)
           keep (suite-keepset tags opts)
           suites (if keep
-                   (.filter allSuites
-                     (fn [s]
-                       (let [base (strip-ext (.-file s))]
-                         (if (.-exclude keep)
-                           (not (.has (.-exclude keep) base))
-                           (.has (.-keep keep) base)))))
+                   (js/call allSuites .filter (fn [s] Any (let [base (strip-ext (js/get s .file))]
+                         (if (js/get keep .exclude)
+                           (not (js/call (js/get keep .exclude) .has base))
+                           (js/call (js/get keep .keep) .has base)))))
                    allSuites)]
       ;; --grep composes on top: a test-name filter within the surviving files.
-      (when (.-grep opts)
-        (let [needle (.toLowerCase (.-grep opts))]
+      (when (js/get opts .grep)
+        (let [needle (js/call (js/get opts .grep) .toLowerCase)]
           (doseq [s suites]
-            (set! (.-tests s)
-                  (.filter (.-tests s)
-                           (fn [t] (.includes (.toLowerCase (.-name t)) needle)))))))
-      (let [totalCount (.reduce suites (fn [n s] (+ n (.-length (.-tests s)))) 0)]
+            (js/set! s .tests (js/call (js/get s .tests) .filter (fn [t] Any (js/call (js/call (js/get t .name) .toLowerCase) .includes needle)))))))
+      (let [totalCount (js/call suites .reduce (fn [n s] Any (+ n (js/get (js/get s .tests) .length))) 0)]
         (if (= totalCount 0)
           (do
             (emit {:type "summary" :pass 0 :fail 0 :skip 0 :durationMs 0
-                   :note (if (.-grep opts)
-                           (str "no tests match --grep \"" (.-grep opts) "\"")
+                   :note (if (js/get opts .grep)
+                           (str "no tests match --grep \"" (js/get opts .grep) "\"")
                            "no tests found")})
             {:pass 0 :fail 0 :skip 0})
 
@@ -258,53 +246,50 @@
                 pass (atom 0)
                 fail (atom 0)
                 skip (atom 0)
-                start (Date/now)]
+                start (js/call Date .now)]
 
             (let [killGjoa
-                  (fn [] :- Any
+                  (fn [] Any
                     (let [g (deref gjoa)]
-                      (when (and g (not (.-killed g)))
-                        (.kill g "SIGTERM")
+                      (when (and g (not (js/get g .killed)))
+                        (js/call g .kill "SIGTERM")
                         (js/await
-                          (Promise.
-                            (fn [r]
-                              (let [timer (setTimeout
-                                            (fn []
-                                              (try (.kill g "SIGKILL") (catch Any _ nil))
+                          (js/new Promise (fn [r] Any (let [timer (setTimeout
+                                            (fn [] Any (try (js/call g .kill "SIGKILL") (catch (_ Any) nil))
                                               (r))
                                             3000)]
-                                (.once g "exit" (fn [] (clearTimeout timer) (r))))))))))
+                                (js/call g .once "exit" (fn [] Any (clearTimeout timer) (r))))))))))
 
                   bootGjoa
-                  (fn [profilePath] :- Any
+                  (fn [profilePath] Any
                     (let [g (js/await
                             (spawnGjoa {:gjoaBin gjoaBin
                                         :profilePath profilePath
                                         :marionettePort marionettePort
-                                        :verbose (.-verbose opts)
-                                        :headed (.-headed opts)}))]
+                                        :verbose (js/get opts .verbose)
+                                        :headed (js/get opts .headed)}))]
                     (reset! gjoa g))
-                    (let [client (js/await (connect-marionette {:port marionettePort}))]
-                      (js/await (.newSession client))
-                      (js/await (.setContext client "chrome"))
+                    (let [client (js/await (connect-marionette! {:port marionettePort}))]
+                      (js/await (js/call client .newSession))
+                      (js/await (js/call client .setContext "chrome"))
                       client))
 
                   ;; Run a single test: emit start, run, tally pass/skip/fail.
                   ;; Extracted to a fn so the suite/test iteration can be a
                   ;; clean awaited loop (recur as sole tail form).
                   runOneTest
-                  (fn [file :- String t :- Any] :- Any
-                    (emit {:type "test:start" :name (.-name t) :file file})
-                    (let [tStart (Date/now)
-                          ctx {:profilePath (.-path (deref profile))
-                               :headed (boolean (.-headed opts))
-                               :skip (fn [reason] (throw (SkipError! reason)))
+                  (fn [(file String) (t Any)] Any
+                    (emit {:type "test:start" :name (js/get t .name) :file file})
+                    (let [tStart (js/call Date .now)
+                          ctx {:profilePath (js/get (deref profile) .path)
+                               :headed (boolean (js/get opts .headed))
+                               :skip (fn [reason] Any (throw (SkipError! reason)))
                                :restartGjoa
-                               (fn [] :- Any
-                                 (try (js/await (.quit (deref mn))) (catch Any _ nil))
-                                 (.disconnect (deref mn))
+                               (fn [] Any
+                                 (try (js/await (js/call (deref mn) .quit)) (catch (_ Any) nil))
+                                 (js/call (deref mn) .disconnect)
                                  (js/await (killGjoa))
-                                 (let [m (js/await (bootGjoa (.-path (deref profile))))]
+                                 (let [m (js/await (bootGjoa (js/get (deref profile) .path)))]
                                    (reset! mn m))
                                  (deref mn))}]
                       (try
@@ -314,39 +299,39 @@
                           ;; http URL). Re-assert chrome before every test so each
                           ;; one runs against the browser window (window.Spaces,
                           ;; #gjoa-tab-panel, Services) rather than a stale page.
-                          (try (js/await (.setContext (deref mn) "chrome"))
-                               (catch Any _ nil))
+                          (try (js/await (js/call (deref mn) .setContext "chrome"))
+                               (catch (_ Any) nil))
                           ;; Reset to a clean baseline before each test so tests
                           ;; stay order-independent (#102). See RESET-JS above for
                           ;; the full set of cross-test leaks this clears. Best-
                           ;; effort: no-op when the chrome APIs aren't present
                           ;; (e.g. the sqlite probe).
-                          (try (js/await (.executeScript (deref mn) RESET-JS))
-                               (catch Any _ nil))
-                          (js/await (.run t (deref mn) ctx))
-                          (emit {:type "test:pass" :name (.-name t) :file file
-                                 :durationMs (- (Date/now) tStart)})
+                          (try (js/await (js/call (deref mn) .executeScript RESET-JS))
+                               (catch (_ Any) nil))
+                          (js/await (js/call t .run (deref mn) ctx))
+                          (emit {:type "test:pass" :name (js/get t .name) :file file
+                                 :durationMs (- (js/call Date .now) tStart)})
                           (swap! pass inc))
-                        (catch Any e
-                          (if (= (.-name e) "SkipError")
+                        (catch (e Any)
+                          (if (= (js/get e .name) "SkipError")
                             (do
-                              (emit {:type "test:skip" :name (.-name t) :file file
-                                     :durationMs (- (Date/now) tStart)
-                                     :reason (.-message e)})
+                              (emit {:type "test:skip" :name (js/get t .name) :file file
+                                     :durationMs (- (js/call Date .now) tStart)
+                                     :reason (js/get e .message)})
                               (swap! skip inc))
                             (do
-                              (emit {:type "test:fail" :name (.-name t) :file file
-                                     :durationMs (- (Date/now) tStart)
-                                     :error (or (.-message e) (String e))
-                                     :stack (.-stack e)})
+                              (emit {:type "test:fail" :name (js/get t .name) :file file
+                                     :durationMs (- (js/call Date .now) tStart)
+                                     :error (or (js/get e .message) (String e))
+                                     :stack (js/get e .stack)})
                               (swap! fail inc)))))))
 
                   ;; Sequential over all tests in a suite (awaited).
                   runSuite
-                  (fn [suite :- Any] :- Any
-                    (let [file (.-file suite)
-                          ts (.-tests suite)
-                          m (.-length ts)]
+                  (fn [(suite Any)] Any
+                    (let [file (js/get suite .file)
+                          ts (js/get suite .tests)
+                          m (js/get ts .length)]
                       (js/await
                         (loop [j 0]
                           (when (< j m)
@@ -357,118 +342,109 @@
                (try
                 (do
                   (let [p (js/await (create-profile {:marionettePort marionettePort}))] (reset! profile p))
-                  (when (.-verbose opts) (logErr (str "profile: " (.-path (deref profile)))))
-                  (when (.-verbose opts) (logErr (str "binary:  " gjoaBin)))
-                  (let [m (js/await (bootGjoa (.-path (deref profile))))] (reset! mn m))
+                  (when (js/get opts .verbose) (logErr (str "profile: " (js/get (deref profile) .path))))
+                  (when (js/get opts .verbose) (logErr (str "binary:  " gjoaBin)))
+                  (let [m (js/await (bootGjoa (js/get (deref profile) .path)))] (reset! mn m))
 
                   ;; Sequential over all suites (awaited).
                   (js/await
                     (loop [si 0]
-                      (when (< si (.-length suites))
+                      (when (< si (js/get suites .length))
                         (let [_suite (js/await (runSuite (aget suites si)))]
                           (recur (+ si 1)))))))
-                (catch Any e
-                  (logErr (str "runner failure: " (or (.-stack e) (.-message e))))
+                (catch (e Any)
+                  (logErr (str "runner failure: " (or (js/get e .stack) (js/get e .message))))
                   (swap! fail inc))
                 (finally
                   (when (deref mn)
-                    (try (js/await (.deleteSession (deref mn))) (catch Any _ nil))
-                    (.disconnect (deref mn)))
+                    (try (js/await (js/call (deref mn) .deleteSession)) (catch (_ Any) nil))
+                    (js/call (deref mn) .disconnect))
                   (js/await (killGjoa))
                   (when (deref profile)
-                    (if (.-verbose opts)
-                      (logErr (str "profile preserved at " (.-path (deref profile)) " for inspection"))
-                      (try (js/await (.cleanup (deref profile))) (catch Any _ nil))))))))
+                    (if (js/get opts .verbose)
+                      (logErr (str "profile preserved at " (js/get (deref profile) .path) " for inspection"))
+                      (try (js/await (js/call (deref profile) .cleanup)) (catch (_ Any) nil))))))))
 
             (emit {:type "summary" :pass (deref pass) :fail (deref fail) :skip (deref skip)
-                   :durationMs (- (Date/now) start) :binary gjoaBin})
+                   :durationMs (- (js/call Date .now) start) :binary gjoaBin})
             {:pass (deref pass) :fail (deref fail) :skip (deref skip)})))))))
 
 ;; CLI entrypoint. The original guarded this with `import.meta.main`; beagle
 ;; has no import.meta, and no module imports `run-all` at runtime (the integration
 ;; tests import only the type-only `IntegrationTest`), so the block runs
 ;; unconditionally — equivalent to running the file as a script.
-(def cliArgs :- Any (.slice (.-argv process) 2))
-(def cliVerbose :- Any (.includes cliArgs "--verbose"))
-(def cliHeaded :- Any (.includes cliArgs "--headed"))
-(def cliGrep :- Any
+(def cliArgs Any (js/call (js/get process .argv) .slice 2))
+(def cliVerbose Any (js/call cliArgs .includes "--verbose"))
+(def cliHeaded Any (js/call cliArgs .includes "--headed"))
+(def cliGrep Any
   (loop [i 0 grep nil]
-    (if (>= i (.-length cliArgs))
+    (if (>= i (js/get cliArgs .length))
       grep
       (let [a (aget cliArgs i)]
         (cond
           (and (= a "--grep") (aget cliArgs (+ i 1)))
           (recur (+ i 2) (aget cliArgs (+ i 1)))
-          (.startsWith a "--grep=")
-          (recur (+ i 1) (.slice a (.-length "--grep=")))
+          (js/call a .startsWith "--grep=")
+          (recur (+ i 1) (js/call a .slice (js/get "--grep=" .length)))
           :else
           (recur (+ i 1) grep))))))
 
 ;; Generic `--flag <value>` / `--flag=value` reader. Single value per flag;
 ;; package.json passes comma-joined for repeatable lanes/subsystems.
-(defn cli-val [args :- Any flag :- String] :- Any
+(defn cli-val [(args Any) (flag String)] Any
   (loop [i 0]
-    (if (>= i (.-length args))
+    (if (>= i (js/get args .length))
       nil
       (let [a (aget args i)]
         (cond
           (and (= a flag) (aget args (+ i 1))) (aget args (+ i 1))
-          (.startsWith a (str flag "=")) (.slice a (+ (.-length flag) 1))
+          (js/call a .startsWith (str flag "=")) (js/call a .slice (+ (js/get flag .length) 1))
           :else (recur (+ i 1)))))))
 
-(def cliSubsystem :- Any (cli-val cliArgs "--subsystem"))
-(def cliLane :- Any (cli-val cliArgs "--lane"))
-(def cliExcludeLane :- Any (cli-val cliArgs "--exclude-lane"))
-(def cliFiles :- Any (cli-val cliArgs "--files"))
-(def cliListLanes :- Any (.includes cliArgs "--list-lanes"))
+(def cliSubsystem Any (cli-val cliArgs "--subsystem"))
+(def cliLane Any (cli-val cliArgs "--lane"))
+(def cliExcludeLane Any (cli-val cliArgs "--exclude-lane"))
+(def cliFiles Any (cli-val cliArgs "--files"))
+(def cliListLanes Any (js/call cliArgs .includes "--list-lanes"))
 
 ;; Marionette port — env GJOA_MARIONETTE_PORT (or --marionette-port) overrides the
 ;; 2828 default so agents sharing one working tree can run the suite CONCURRENTLY
 ;; without colliding on a single port (the profile dir is already per-run unique and
 ;; the fixture servers are shareable, so the port was the only contention point).
 ;; Unset = 2828 — identical single-agent behavior, zero change for existing callers.
-(def cliMarionettePort :- Any
-  (let [v (or (cli-val cliArgs "--marionette-port") (.-GJOA_MARIONETTE_PORT (.-env process)))]
+(def cliMarionettePort Any
+  (let [v (or (cli-val cliArgs "--marionette-port") (js/get (js/get process .env) .GJOA_MARIONETTE_PORT))]
     (if v (parseInt v 10) nil)))
 
 ;; --list-lanes: resolve the keep-set against tags.json + the on-disk suite
 ;; list and print it WITHOUT booting gjoa. Cheap manifest sanity-check.
-(defn list-lanes! [opts :- Any] :- Any
-  (let [testDir (join (.cwd process) ".beagle-tools" "gjoa" "tests" "integration")
+(defn list-lanes! [(opts Any)] Any
+  (let [testDir (join (js/call process .cwd) ".beagle-tools" "gjoa" "tests" "integration")
         suites (js/await (loadTests testDir))
         tags (load-tags)
         keep (suite-keepset tags opts)
-        bases (.map suites (fn [s] (strip-ext (.-file s))))
+        bases (js/call suites .map (fn [s] Any (strip-ext (js/get s .file))))
         kept (if keep
-               (.filter bases
-                 (fn [b]
-                   (if (.-exclude keep)
-                     (not (.has (.-exclude keep) b))
-                     (.has (.-keep keep) b))))
+               (js/call bases .filter (fn [b] Any (if (js/get keep .exclude)
+                     (not (js/call (js/get keep .exclude) .has b))
+                     (js/call (js/get keep .keep) .has b))))
                bases)]
-    (console/log (JSON/stringify
-                    {:filter (cond (.-files opts) (str "--files " (.-files opts))
-                                   (.-subsystem opts) (str "--subsystem " (.-subsystem opts))
-                                   (.-lane opts) (str "--lane " (.-lane opts))
-                                   (.-excludeLane opts) (str "--exclude-lane " (.-excludeLane opts))
+    (console/log (js/call JSON .stringify {:filter (cond (js/get opts .files) (str "--files " (js/get opts .files))
+                                   (js/get opts .subsystem) (str "--subsystem " (js/get opts .subsystem))
+                                   (js/get opts .lane) (str "--lane " (js/get opts .lane))
+                                   (js/get opts .excludeLane) (str "--exclude-lane " (js/get opts .excludeLane))
                                    :else "none (all)")
-                     :total (.-length bases)
-                     :kept (.-length (.sort (.slice kept)))
-                     :files (.sort (.slice kept))}
-                    nil 2))))
+                     :total (js/get bases .length)
+                     :kept (js/get (js/call (js/call kept .slice) .sort) .length)
+                     :files (js/call (js/call kept .slice) .sort)} nil 2))))
 
 ;; Run the suite only when invoked directly (tests import this module for types).
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (let [opts {:verbose cliVerbose :grep cliGrep :headed cliHeaded
               :subsystem cliSubsystem :lane cliLane
               :excludeLane cliExcludeLane :files cliFiles
               :marionettePort cliMarionettePort}]
     (if cliListLanes
-      (.catch (list-lanes! opts)
-        (fn [e] (logErr (str "fatal: " (or (.-stack e) e))) (.exit process 1)))
-      (.catch
-        (.then (run-all! opts)
-               (fn [res] (.exit process (if (> (.-fail res) 0) 1 0))))
-        (fn [e]
-          (logErr (str "fatal: " (or (.-stack e) e)))
-          (.exit process 1))))))
+      (js/call (list-lanes! opts) .catch (fn [e] Any (logErr (str "fatal: " (or (js/get e .stack) e))) (js/call process .exit 1)))
+      (js/call (js/call (run-all! opts) .then (fn [res] Any (js/call process .exit (if (> (js/get res .fail) 0) 1 0)))) .catch (fn [e] Any (logErr (str "fatal: " (or (js/get e .stack) e)))
+          (js/call process .exit 1))))))

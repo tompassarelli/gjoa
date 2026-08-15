@@ -23,21 +23,20 @@
             [fs/promises :refer [rm symlink cp]]
             [path :refer [join]]
             [child_process :refer [spawnSync]]))
-(define-mode strict)
 (declare-extern [process] Any)
 
 ;; tools/chrome-bundle/install.ts used resolve(import.meta.dir, "..", "..")
 ;; to reach the repo root. Tools run via `bun run` from the repo root, so
 ;; cwd IS the repo root.
-(def REPO-ROOT :- String (.cwd process))
-(def DIST-CHROME :- String (join REPO-ROOT "dist" "chrome"))
+(def REPO-ROOT String (js/call process .cwd))
+(def DIST-CHROME String (join REPO-ROOT "dist" "chrome"))
 
-(def REPO-OBJDIR :- String (join REPO-ROOT "engine" "obj-x86_64-pc-linux-gnu"))
-(def ENV-OBJDIR :- Any (.-MOZ_OBJDIR (.-env process)))
-(def MOZ-OBJDIR :- Any
-  (if (and ENV-OBJDIR (.startsWith ENV-OBJDIR REPO-ROOT)) ENV-OBJDIR REPO-OBJDIR))
-(def INSTALL-ROOT :- String (join MOZ-OBJDIR "dist" "bin"))
-(def GJOA-DEV :- String (join INSTALL-ROOT "gjoa-dev"))
+(def REPO-OBJDIR String (join REPO-ROOT "engine" "obj-x86_64-pc-linux-gnu"))
+(def ENV-OBJDIR Any (js/get (js/get process .env) .MOZ_OBJDIR))
+(def MOZ-OBJDIR Any
+  (if (and ENV-OBJDIR (js/call ENV-OBJDIR .startsWith REPO-ROOT)) ENV-OBJDIR REPO-OBJDIR))
+(def INSTALL-ROOT String (join MOZ-OBJDIR "dist" "bin"))
+(def GJOA-DEV String (join INSTALL-ROOT "gjoa-dev"))
 
 ;; The LOOSE toolkit overlays (dark-mode actor + cosmetic actor + fixes JSON)
 ;; live at engine/toolkit/, which the objdir symlinks into dist/bin/modules/.
@@ -47,8 +46,8 @@
 ;; went light again" / "my cosmetic fix didn't take" class: a chrome change
 ;; landed, a toolkit change silently didn't. Mirror them here so one `gjoa
 ;; sync` keeps chrome AND toolkit overlays current.
-(def SRC-TOOLKIT :- String (join REPO-ROOT "src" "gjoa" "toolkit"))
-(def ENG-TOOLKIT :- String (join REPO-ROOT "engine" "toolkit"))
+(def SRC-TOOLKIT String (join REPO-ROOT "src" "gjoa" "toolkit"))
+(def ENG-TOOLKIT String (join REPO-ROOT "engine" "toolkit"))
 
 ;; GjoaLoader.bjs is the OTHER half of the same recurring class: it compiles to
 ;; engine/.../GjoaLoader.sys.mjs (symlinked live into the dev binary), but ONLY
@@ -56,54 +55,53 @@
 ;; binary on a STALE loader (e.g. a newly-registered window actor never loads).
 ;; Recompile it here too, staleness-gated, so one `gjoa sync` is genuinely
 ;; complete: chrome bundles + toolkit overlays + the loader.
-(def SRC-LOADER :- String
+(def SRC-LOADER String
   (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "GjoaLoader.bjs"))
-(def ENG-LOADER :- String
+(def ENG-LOADER String
   (join REPO-ROOT "engine" "browser" "components" "gjoa" "GjoaLoader.sys.mjs"))
-(def ENG-LOADER-STRAY :- String
+(def ENG-LOADER-STRAY String
   (join REPO-ROOT "engine" "browser" "components" "gjoa" "GjoaLoader.bjs"))
-(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
-(def BEAGLE-REF :- String
-  (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
-        ref (.find lines (fn [l :- String] :- Bool
-                           (and (> (.-length (.trim l)) 0)
-                                (not (.startsWith (.trim l) "#")))))]
+(def BEAGLE-REF-FILE String (join REPO-ROOT "configs" "beagle.ref"))
+(def BEAGLE-REF String
+  (let [lines (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
+        ref (js/call lines .find (fn [(l String)] Bool
+                           (and (> (js/get (js/call l .trim) .length) 0)
+                                (not (js/call (js/call l .trim) .startsWith "#")))))]
     (if ref
-      (.trim ref)
-      (throw (Error. "configs/beagle.ref has no Beagle object ID")))))
-(def BEAGLE-PIN-ROOT :- String
-  (or (.-BEAGLE_PIN_ROOT (.-env process))
-      (join (.-HOME (.-env process)) "code" "beagle" "pins" BEAGLE-REF)))
-(def BEAGLE-BUILD :- String
+      (js/call ref .trim)
+      (throw (js/new Error "configs/beagle.ref has no Beagle object ID")))))
+(def BEAGLE-PIN-ROOT String
+  (or (js/get (js/get process .env) .BEAGLE_PIN_ROOT)
+      (join (js/get (js/get process .env) .HOME) "code" "beagle" "pins" BEAGLE-REF)))
+(def BEAGLE-BUILD String
   (join BEAGLE-PIN-ROOT "bin" "beagle-build"))
 
 ;; Recompile GjoaLoader.bjs → its .sys.mjs iff the source is newer (or output is
 ;; missing). Mirrors tools/prep/overlay.bjs' beagle-build invocation, incl. the
 ;; runtime-prefix remap Firefox's chrome ES loader needs.
-(defn refresh-loader! [] :- Any
+(defn refresh-loader! [] Any
   (when (and (existsSync SRC-LOADER)
              (or (not (existsSync ENG-LOADER))
-                 (> (.-mtimeMs (statSync SRC-LOADER)) (.-mtimeMs (statSync ENG-LOADER)))))
+                 (> (js/get (statSync SRC-LOADER) .mtimeMs) (js/get (statSync ENG-LOADER) .mtimeMs))))
     (let [r (spawnSync "bash" [BEAGLE-BUILD SRC-LOADER ENG-LOADER]
                        {:cwd REPO-ROOT
-                        :env (.assign Object {} (.-env process)
-                               {"BEAGLE_JS_RUNTIME_PREFIX" "resource:///modules/gjoa/beagle/"})
+                        :env (js/call Object .assign {} (js/get process .env) {"BEAGLE_JS_RUNTIME_PREFIX" "resource:///modules/gjoa/beagle/"})
                         :stdio "inherit"})]
-      (when (not= (.-status r) 0)
+      (when (not= (js/get r .status) 0)
         (console/error "✗ GjoaLoader.bjs recompile failed")
-        (.exit process 1))
+        (js/call process .exit 1))
       (js/await (rm ENG-LOADER-STRAY {:force true}))
       (console/log "✓ recompiled GjoaLoader.bjs → engine (loader symlinked live into the dev binary)"))))
 
-(defn main! [] :- Any
+(defn main! [] Any
   (when (not (existsSync DIST-CHROME))
     (console/error "✗ dist/chrome/ not built — run `bun run chrome:dist` first")
-    (.exit process 1))
+    (js/call process .exit 1))
   (when (not (existsSync INSTALL-ROOT))
     (console/error
       (str "✗ install root not found at " INSTALL-ROOT " — has gjoa been built "
            "via mach? (`cd engine && ./mach build`)"))
-    (.exit process 1))
+    (js/call process .exit 1))
 
   ;; Replace any existing symlink/dir so re-runs are idempotent.
   (when (existsSync GJOA-DEV)

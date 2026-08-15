@@ -17,134 +17,134 @@
             [gjoa.tabs.layout :refer [make-layout!]]
             [gjoa.spaces.manager :refer [make-spaces!]]
             [gjoa.tabs.state :refer [closed-tabs row-of saved-tab-queue selection state tree-of]]))
-(define-mode strict)
 
 ;; Browser globals (all-tabs left as extern: collides — exported by both
 ;; gjoa.firefox.tabs and gjoa.tabs.helpers, both in this bundle).
-(declare-extern [window document gBrowser gBrowserInit Services all-tabs] Any)
+(declare-extern [window document gBrowser gBrowserInit Services all-tabs
+                 requestAnimationFrame] Any)
 
 ;; Module deps — no import, declared extern
-(def pfx-log :- Any (create-logger! "tabs"))
+(def pfx-log Any (create-logger! "tabs"))
 
 ;; sidebar-main is looked up once; the boot function exits if nil.
-(def sidebar-main :- Any (by-id "sidebar-container"))
+(def sidebar-main Any (by-id "sidebar-container"))
 
 ;; --- Selection helpers (small — vim + drag both consume) ---
 
-(defn clear-selection [] :- Any
-  (.forEach (Array/from selection)
-    #(rmattr! % "gjoa-multi"))
-  (.clear selection))
+(defn clear-selection [] Any
+  (js/call (Array/from selection) .forEach
+    (fn [%1] Any (rmattr! %1 "gjoa-multi")))
+  (js/call selection .clear))
 
-(defn select-range [to-row :- Any] :- Any
-  (let [from-row (or (.-cursor state) (.get row-of (.-selectedTab gBrowser)))]
+(defn select-range [(to-row Any)] Any
+  (let [from-row (or (js/get state .cursor) (js/call row-of .get (js/get gBrowser .selectedTab)))]
     (when from-row
-      (let [rows (.filter (all-rows) #(not (.-hidden %)))
-            from-idx (.indexOf rows from-row)
-            to-idx (.indexOf rows to-row)]
+      (let [rows (js/call (all-rows) .filter (fn [%1] Any (not (js/get %1 .hidden))))
+            from-idx (js/call rows .indexOf from-row)
+            to-idx (js/call rows .indexOf to-row)]
         (when (and (>= from-idx 0) (>= to-idx 0))
           (clear-selection)
           (let [start (Math/min from-idx to-idx)
                 end (Math/max from-idx to-idx)]
-            (.forEach (.slice rows start (+ end 1))
-              (fn [r]
-                (.add selection r)
+            (js/call (js/call rows .slice start (+ end 1)) .forEach
+              (fn [r] Any
+                (js/call selection .add r)
                 (attr! r "gjoa-multi" "true")))))))))
 
 ;; --- Recursive DOM-removal helper ---
 
-(defn remove-children! [container stop-el] :- Any
+(defn remove-children! [container stop-el] Any
   (loop []
-    (when (and (.-firstChild container) (not= (.-firstChild container) stop-el))
-      (.remove (.-firstChild container))
+    (when (and (js/get container .firstChild) (not= (js/get container .firstChild) stop-el))
+      (js/call (js/get container .firstChild) .remove)
       (recur))))
 
-(defn clear-all-rows! [] :- Any
-  (remove-children! (.-panel state) (.-spacer state))
-  (remove-children! (.-pinnedContainer state) nil))
+(defn clear-all-rows! [] Any
+  (remove-children! (js/get state .panel) (js/get state .spacer))
+  (remove-children! (js/get state .pinnedContainer) nil))
 
 ;; --- buildPanel — removes children before spacer, creates rows ---
 
-(defn build-panel! [rows-api :- Any] :- Any
+(defn build-panel! [(rows-api Any)] Any
   (clear-all-rows!)
-  (.forEach (tabs!)
-    (fn [tab]
-      (let [row (.createTabRow rows-api tab)]
-        (if (and (.-pinned tab) (.-pinnedContainer state))
-          (.appendChild (.-pinnedContainer state) row)
-          (.insertBefore (.-panel state) row (.-spacer state))))))
-  (when (.-pinnedContainer state)
-    (set! (.-hidden (.-pinnedContainer state))
-      (not (q (.-pinnedContainer state) ".gjoa-tab-row"))))
-  (.updateVisibility rows-api))
+  (js/call (tabs!) .forEach
+    (fn [tab] Any
+      (let [row (js/call rows-api .createTabRow tab)]
+        (if (and (js/get tab .pinned) (js/get state .pinnedContainer))
+          (js/call (js/get state .pinnedContainer) .appendChild row)
+          (js/call (js/get state .panel) .insertBefore row (js/get state .spacer))))))
+  (when (js/get state .pinnedContainer)
+    (js/set! (js/get state .pinnedContainer) .hidden
+      (not (q (js/get state .pinnedContainer) ".gjoa-tab-row"))))
+  (js/call rows-api .updateVisibility))
 
 ;; --- Persistence ---
 
-(def history :- Any (make-history!))
-(def content-focus :- Any (make-content-focus!))
+(def history Any (make-history!))
+(def content-focus Any (make-content-focus!))
 
-(def gjoa-api :- Any (make-gjoa! {:history history}))
-(set! (.-Gjoa window) gjoa-api)
+(def gjoa-api Any (make-gjoa! {:history history}))
+(js/set! window .Gjoa gjoa-api)
 
 ;; Forward refs for cyclic deps
-(def rows-ref :- Any {:v nil})
-(def vim-ref :- Any {:v nil})
+(def rows-ref Any {:v nil})
+(def vim-ref Any {:v nil})
 
 ;; updateSpaceHeader — reflect active space name into sidebar header
-(defn update-space-header [] :- Any
-  (let [el (.-spaceHeader state)
-        label (some-> el (.querySelector "#gjoa-space-header-label"))]
+(defn update-space-header [] Any
+  (let [el (js/get state .spaceHeader)
+        label (some-> el (js/call .querySelector "#gjoa-space-header-label"))]
     (when (and el label)
-      (attr! label "value" (.-name (.active spaces))))))
+      (attr! label "value" (js/get (js/call spaces .active) .name)))))
 
 ;; Spaces (workspaces)
-(def spaces :- Any
+(def spaces Any
   (make-spaces!
-    {:onChange (fn []
-       (when (.-v rows-ref) (.scheduleTreeResync (.-v rows-ref)))
+    {:onChange (fn [] Any
+       (when (js/get rows-ref .v) (js/call (js/get rows-ref .v) .scheduleTreeResync))
        (when schedule-save (schedule-save))
        (update-space-header)
        ;; #89 — broadcast the space ROSTER to sibling windows so all windows on
        ;; the same workspace stay consistent. Skip while applying a remote
        ;; snapshot (else hydrate->onChange->broadcast echoes into a storm). The
        ;; active-id is omitted: receivers keep their own active space (Q1).
-       (when (not (.isApplying spaces))
-         (let [snap {:spaces (.list spaces)
-                     :tabSpaces (.map (tabs!)
-                                  (fn [t]
-                                    [(.-id (tree-data! t)) (.spaceOf spaces t)]))}
-               e (.getEnumerator (.-wm Services) "navigator:browser")]
+       (when (not (js/call spaces .isApplying))
+         (let [snap {:spaces (js/call spaces .list)
+                     :tabSpaces (js/call (tabs!) .map
+                                  (fn [t] Any
+                                    [(js/get (tree-data! t) .id) (js/call spaces .spaceOf t)]))}
+               e (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
            (loop []
-             (when (.hasMoreElements e)
-               (let [w (.getNext e)]
-                 (when (and (not (Object/is w window)) (.-Spaces w))
-                   (.applyRemoteSpaces (.-Spaces w) snap)))
+             (when (js/call e .hasMoreElements)
+               (let [w (js/call e .getNext)]
+                 (when (and (not (Object/is w window)) (js/get w .Spaces))
+                   (js/call (js/get w .Spaces) .applyRemoteSpaces snap)))
                (recur))))))
-     :onActivated (fn [_prev next]
-       (let [current (.-selectedTab gBrowser)]
-         (when (not (and current (= (.spaceOf spaces current) next)))
-           (let [in-next (.filter (tabs!)
-                           #(= (.spaceOf spaces %) next))]
-             (when (> (.-length in-next) 0)
-               (set! (.-selectedTab gBrowser) (aget in-next 0)))))))
-     :tabById (fn [gjoa-id]
-       (.find (tabs!)
-         #(let [td (tree-data! %)]
-            (and td (= (.-id td) gjoa-id)))))}))
+     :onActivated (fn [_prev next] Any
+       (let [current (js/get gBrowser .selectedTab)]
+         (when (not (and current (= (js/call spaces .spaceOf current) next)))
+           (let [in-next (js/call (tabs!) .filter
+                           (fn [%1] Any (= (js/call spaces .spaceOf %1) next)))]
+             (when (> (js/get in-next .length) 0)
+               (js/set! gBrowser .selectedTab (aget in-next 0)))))))
+     :tabById (fn [gjoa-id] Any
+       (js/call (tabs!) .find
+         (fn [%1] Any (let [td (tree-data! %1)]
+            (and td (= (js/get td .id) gjoa-id))))))}))
 
-(set! (.-Spaces window) spaces)
+(js/set! window .Spaces spaces)
 
 ;; #89 — inherit the space ROSTER from an existing sibling window (if any) so all
 ;; windows on the same workspace share ONE space-id namespace; each window
 ;; otherwise mints rival uuids for its default 'Main'. Roster only (empty
 ;; tabSpaces); applyRemoteSpaces keeps active-id local (lands on the shared first
 ;; space). No-op for the first/only window.
-(let [e (.getEnumerator (.-wm Services) "navigator:browser")]
+(let [e (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
   (loop []
-    (when (.hasMoreElements e)
-      (let [w (.getNext e)]
-        (if (and (not (Object/is w window)) (.-Spaces w))
-          (.applyRemoteSpaces spaces {:spaces (.list (.-Spaces w)) :tabSpaces []})
+    (when (js/call e .hasMoreElements)
+      (let [w (js/call e .getNext)]
+        (if (and (not (Object/is w window)) (js/get w .Spaces))
+          (js/call spaces .applyRemoteSpaces {:spaces (js/call (js/get w .Spaces) .list) :tabSpaces []})
           (recur))))))
 
 ;; Mirror the OS (niri) virtual-workspace name onto the active gjoa space. No-ops
@@ -155,7 +155,7 @@
 ;; #148: hide chrome until the layout has been applied once, ONLY on a narrow
 ;; (will-go-horizontal) launch. Wide/vertical spawns resolve correctly pre-paint
 ;; and stay untouched — so we don't pay the reveal fade for them.
-(js/export (defn should-defer-reveal? [dynamic-on? :- Bool narrow? :- Bool] :- Bool
+(js/export (defn should-defer-reveal? [(dynamic-on? Bool) (narrow? Bool)] Bool
   (and dynamic-on? narrow?)))
 
 ;; Dynamic orientation (#99): vertical tabs on a wide/full window, horizontal on
@@ -164,11 +164,11 @@
 ;; switch survives until the next crossing; honours the master pref each time.
 (when (pref-bool "gjoa.layout.dynamicOrientation" true)
   (let [threshold (pref-int "gjoa.layout.narrowThreshold" 1000)
-        mq (.matchMedia window (str "(max-width: " threshold "px)"))
+        mq (js/call window .matchMedia (str "(max-width: " threshold "px)"))
         apply-orientation
-        (fn []
+        (fn [] Any
           (when (pref-bool "gjoa.layout.dynamicOrientation" true)
-            (let [want-horizontal (.-matches mq)
+            (let [want-horizontal (js/get mq .matches)
                   is-vertical (pref-bool "sidebar.verticalTabs" true)]
               (when (= is-vertical want-horizontal)
                 (set-pref-bool! "sidebar.verticalTabs" (not want-horizontal))))))]
@@ -176,94 +176,95 @@
     ;; delayedStartupFinished + rAF), so first paint shows vertical-then-horizontal warp.
     ;; Stamp gjoa-booting pre-paint to hide #browser until positionPanel has run once
     ;; (cleared in init!). Failsafe timeout so a thrown init never leaves chrome hidden.
-    (when (.-matches mq)
-      (attr! (.-documentElement document) "gjoa-booting" "")
-      (setTimeout #(rmattr! (.-documentElement document) "gjoa-booting") 1200))
+    (when (js/get mq .matches)
+      (attr! (js/get document .documentElement) "gjoa-booting" "")
+      (setTimeout (fn [] Any (rmattr! (js/get document .documentElement) "gjoa-booting")) 1200))
     ;; #126: decide SYNCHRONOUSLY at chrome-init (not setTimeout 0, which ran after first
     ;; paint and let the persisted vertical strip flash before flipping to horizontal on a
     ;; narrow spawn). Setting the pref now means the window resolves to the right mode up
     ;; front, so the strip never appears on a restricted-space spawn.
     (apply-orientation)
-    (.addEventListener mq "change" apply-orientation)))
+    (js/call mq .addEventListener "change" apply-orientation)))
 
 ;; Card gap (#125): ONE user-adjustable gjoa gap value (about:gjoa → gjoa.layout.cardGap)
 ;; drives the --gjoa-card-gap CSS var used for EVERY inset/gap in the floating-card
 ;; layout — window↔sidebar, sidebar↔content, content↔edge, and top/bottom are all
 ;; exactly this value. Live-updates on change (no restart).
-(let [apply-gap (fn []
-                  (.setProperty (.-style (.-documentElement document))
+(let [apply-gap (fn [] Any
+                  (js/call (js/get (js/get document .documentElement) .style) .setProperty
                                 "--gjoa-card-gap"
                                 (str (pref-int "gjoa.layout.cardGap" 8) "px")))
-      gap-observer {:observe (fn [_s _t _d] (apply-gap))}]
+      gap-observer {:observe (fn [_s _t _d] Any (apply-gap))}]
   (apply-gap)
-  (.addObserver (.-prefs Services) "gjoa.layout.cardGap" gap-observer))
+  (js/call (js/get Services .prefs) .addObserver "gjoa.layout.cardGap" gap-observer))
 
 ;; Write-on-every-change saver
-(def schedule-save :- Any
+(def schedule-save Any
   (make-saver!
-    (fn []
+    (fn [] Any
       (let [snap {:tabs (tabs!)
-                  :rows #(all-rows)
+                  :rows (fn [] Any (all-rows))
                   :savedTabQueue saved-tab-queue
                   :closedTabs closed-tabs
-                  :nextTabId (.-nextTabId state)
+                  :nextTabId (js/get state .nextTabId)
                   :tabUrl tab-url
                   :treeData tree-data!
-                  :spaces {:spaces (.list spaces)
-                           :activeId (.activeId spaces)
-                           :tabSpaces (.map (tabs!)
-                                        (fn [t]
-                                          (let [id (.-id (tree-data! t))
-                                                sp (.spaceOf spaces t)]
+                  :spaces {:spaces (js/call spaces .list)
+                           :activeId (js/call spaces .activeId)
+                           :tabSpaces (js/call (tabs!) .map
+                                        (fn [t] Any
+                                          (let [id (js/get (tree-data! t) .id)
+                                                sp (js/call spaces .spaceOf t)]
                                             [id sp])))}}]
         snap))
-    history))
+    history
+    nil))
 
 ;; Re-assert the load-bearing invariant "the selected tab lives in the active
 ;; space". If a visibility pass (e.g. a mode toggle) would otherwise hide the
 ;; selected row, pick a visible tab in the active space; if the active space is
 ;; empty, follow the selection to its own space rather than strand it. No-op in
 ;; the normal case, so it is safe to call after any updateVisibility.
-(defn reconcile-selection! [] :- Any
-  (let [sel (.-selectedTab gBrowser)
-        active (.activeId spaces)]
-    (when (and sel (not= (.spaceOf spaces sel) active))
-      (let [in-active (.find (tabs!) #(= (.spaceOf spaces %) active))]
+(defn reconcile-selection! [] Any
+  (let [sel (js/get gBrowser .selectedTab)
+        active (js/call spaces .activeId)]
+    (when (and sel (not= (js/call spaces .spaceOf sel) active))
+      (let [in-active (js/call (tabs!) .find (fn [%1] Any (= (js/call spaces .spaceOf %1) active)))]
         (if in-active
-          (set! (.-selectedTab gBrowser) in-active)
-          (.setActive spaces (.spaceOf spaces sel)))))))
+          (js/set! gBrowser .selectedTab in-active)
+          (js/call spaces .setActive (js/call spaces .spaceOf sel)))))))
 
 ;; --- Factory wiring (drag <-> rows <-> vim cycle) ---
 
-(def drag :- Any
+(def drag Any
   (make-drag!
     {:clearSelection clear-selection
-     :scheduleTreeResync #(.scheduleTreeResync (.-v rows-ref))
+     :scheduleTreeResync (fn [] Any (js/call (js/get rows-ref .v) .scheduleTreeResync))
      :scheduleSave schedule-save}))
 
-(set! (.-v rows-ref)
+(js/set! rows-ref .v
   (make-rows!
-    {:setupDrag (.-setupDrag drag)
-     :activateVim #(.activateVim (.-v vim-ref) %)
+    {:setupDrag (js/get drag .setupDrag)
+     :activateVim (fn [%1] Any (js/call (js/get vim-ref .v) .activateVim %1))
      :selectRange select-range
      :clearSelection clear-selection
-     :cloneAsSibling #(.cloneAsSibling (.-v vim-ref) %)
-     :startRename #(.startRename (.-v vim-ref) %)
+     :cloneAsSibling (fn [%1] Any (js/call (js/get vim-ref .v) .cloneAsSibling %1))
+     :startRename (fn [%1] Any (js/call (js/get vim-ref .v) .startRename %1))
      :scheduleSave schedule-save
-     :isTabInActiveSpace #(.isVisible spaces %)
-     :getActiveSpaceId #(.activeId spaces)
-     :isGroupInActiveSpace #(.isSpaceActive spaces (.-spaceId %))}))
+     :isTabInActiveSpace (fn [%1] Any (js/call spaces .isVisible %1))
+     :getActiveSpaceId (fn [] Any (js/call spaces .activeId))
+     :isGroupInActiveSpace (fn [%1] Any (js/call spaces .isSpaceActive (js/get %1 .spaceId)))}))
 
-(def layout :- Any
+(def layout Any
   (make-layout!
     {:sidebarMain sidebar-main
-     :rows (.-v rows-ref)
-     :isTabInActiveSpace #(.isVisible spaces %)
+     :rows (js/get rows-ref .v)
+     :isTabInActiveSpace (fn [%1] Any (js/call spaces .isVisible %1))
      :reconcileSelection reconcile-selection!}))
 
-(set! (.-v vim-ref)
+(js/set! vim-ref .v
   (make-vim!
-    {:rows (.-v rows-ref)
+    {:rows (js/get rows-ref .v)
      :layout layout
      :scheduleSave schedule-save
      :clearSelection clear-selection
@@ -273,261 +274,260 @@
      :contentFocus content-focus
      :spaces spaces}))
 
-(def events :- Any
+(def events Any
   (make-events!
-    {:rows (.-v rows-ref)
-     :vim (.-v vim-ref)
+    {:rows (js/get rows-ref .v)
+     :vim (js/get vim-ref .v)
      :scheduleSave schedule-save
      :spaces spaces}))
 
 ;; --- loadFromHistory — promise chain ---
 
 ;; Recursive pairwise matching of saved nodes to live tabs
-(defn match-tabs-loop! [tab-nodes :- Any tabs :- Any ni :- Int li-ref :- Any
-                       applied :- Any apply-fn :- Any] :- Any
-  (when (and (< ni (.-length tab-nodes)) (< (.-v li-ref) (.-length tabs)))
+(defn match-tabs-loop! [(tab-nodes Any) (tabs Any) (ni Int) (li-ref Any)
+                       (applied Any) (apply-fn Any)] Any
+  (when (and (< ni (js/get tab-nodes .length)) (< (js/get li-ref .v) (js/get tabs .length)))
     (let [s (aget tab-nodes ni)
-          live (aget tabs (.-v li-ref))
-          live-url (or (some-> live .-linkedBrowser .-currentURI .-spec) "")
+          live (aget tabs (js/get li-ref .v))
+          live-url (or (some-> live (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec)) "")
           pending (= live-url "about:blank")]
-      (if (or (= live-url (.-url s)) pending)
+      (if (or (= live-url (js/get s .url)) pending)
         (do (apply-fn live s ni)
-            (set! (.-v li-ref) (+ (.-v li-ref) 1))
+            (js/set! li-ref .v (+ (js/get li-ref .v) 1))
             (match-tabs-loop! tab-nodes tabs (+ ni 1) li-ref applied apply-fn))
         (let [off (loop [j 1]
                     (cond
-                      (or (> j 5) (>= (+ (.-v li-ref) j) (.-length tabs))) 0
-                      (= (or (some-> (aget tabs (+ (.-v li-ref) j)) .-linkedBrowser .-currentURI .-spec) "")
-                         (.-url s)) j
+                      (or (> j 5) (>= (+ (js/get li-ref .v) j) (js/get tabs .length))) 0
+                      (= (or (some-> (aget tabs (+ (js/get li-ref .v) j)) (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec)) "")
+                         (js/get s .url)) j
                       :else (recur (+ j 1))))]
           (when (> off 0)
-            (apply-fn (aget tabs (+ (.-v li-ref) off)) s ni)
-            (set! (.-v li-ref) (+ (.-v li-ref) off 1)))
+            (apply-fn (aget tabs (+ (js/get li-ref .v) off)) s ni)
+            (js/set! li-ref .v (+ (js/get li-ref .v) off 1)))
           (match-tabs-loop! tab-nodes tabs (+ ni 1) li-ref applied apply-fn))))))
 
-(def loaded-nodes-ref :- Any {:v nil})
+(def loaded-nodes-ref Any {:v nil})
 
-(defn load-from-history [] :- Any
-  (-> (.getRecent history 1)
-      (.then (fn [recent]
-        (when (> (.-length recent) 0)
-          (let [env (.-snapshot (aget recent 0))]
+(defn load-from-history! [] Any
+  (-> (js/call history .getRecent 1)
+      (js/call .then (fn [recent] Any
+        (when (> (js/get recent .length) 0)
+          (let [env (js/get (aget recent 0) .snapshot)]
             (try
               (do
-                (when (not= (.-nextTabId env) nil)
-                  (set! (.-nextTabId state) (.-nextTabId env)))
-                (set! (.-length closed-tabs) 0)
-                (.apply (.-push closed-tabs) closed-tabs (.-closedTabs env))
+                (when (not= (js/get env .nextTabId) nil)
+                  (js/set! state .nextTabId (js/get env .nextTabId)))
+                (js/set! closed-tabs .length 0)
+                (js/call (js/get closed-tabs .push) .apply closed-tabs (js/get env .closedTabs))
 
                 (let [tabs (all-tabs)
-                      tab-nodes (.map
-                                  (.filter (.-nodes env)
-                                    #(not= (.-type %) "group"))
-                                  #(clone-node-fields %))]
+                      tab-nodes (js/call (js/call (js/get env .nodes) .filter
+                                    (fn [%1] Any (not= (js/get %1 .type) "group"))) .map
+                                  (fn [%1] Any (clone-node-fields %1)))]
 
                   ;; Store last loaded nodes
-                  (set! (.-lastLoadedNodes state)
-                    (.map tab-nodes #(clone-node-fields %)))
+                  (js/set! state .lastLoadedNodes
+                    (js/call tab-nodes .map (fn [%1] Any (clone-node-fields %1))))
 
                   ;; Advance nextTabId past all saved node IDs
-                  (.forEach tab-nodes
-                    (fn [s]
-                      (when (and (.-id s) (>= (.-id s) (.-nextTabId state)))
-                        (set! (.-nextTabId state) (+ (.-id s) 1)))))
+                  (js/call tab-nodes .forEach
+                    (fn [s] Any
+                      (when (and (js/get s .id) (>= (js/get s .id) (js/get state .nextTabId)))
+                        (js/set! state .nextTabId (+ (js/get s .id) 1)))))
 
                   (pfx-log "loadFromHistory"
-                    {:nextTabId (.-nextTabId state)
-                     :savedNextTabId (.-nextTabId env)
-                     :tabNodes (.-length tab-nodes)
-                     :liveTabs (.-length tabs)
-                     :tabNodeIds (.map tab-nodes #(.-id %))
-                     :liveTabPfxIds (.map tabs #(or (and (.-getAttribute %) (.getAttribute % "gjoa-id")) 0))})
+                    {:nextTabId (js/get state .nextTabId)
+                     :savedNextTabId (js/get env .nextTabId)
+                     :tabNodes (js/get tab-nodes .length)
+                     :liveTabs (js/get tabs .length)
+                     :tabNodeIds (js/call tab-nodes .map (fn [%1] Any (js/get %1 .id)))
+                     :liveTabPfxIds (js/call tabs .map (fn [%1] Any (or (and (js/get %1 .getAttribute) (js/call %1 .getAttribute "gjoa-id")) 0)))})
 
-                  (let [applied (Set.)
-                        apply-fn (fn [tab s i]
-                                   (let [id (or (.-id s) (let [nid (.-nextTabId state)]
-                                                           (set! (.-nextTabId state) (+ nid 1))
+                  (let [applied (js/new Set)
+                        apply-fn (fn [tab s i] Any
+                                   (let [id (or (js/get s .id) (let [nid (js/get state .nextTabId)]
+                                                           (js/set! state .nextTabId (+ nid 1))
                                                            nid))]
-                                     (.set tree-of tab
+                                     (js/call tree-of .set tab
                                        {:id id
-                                        :parentId (or (.-parentId s) nil)
-                                        :name (or (.-name s) nil)
-                                        :state (or (.-state s) nil)
-                                        :collapsed (bool (.-collapsed s))})
+                                        :parentId (or (js/get s .parentId) nil)
+                                        :name (or (js/get s .name) nil)
+                                        :state (or (js/get s .state) nil)
+                                        :collapsed (bool (js/get s .collapsed))})
                                      (pin-tab-id tab id)
-                                     (.add applied i)))
+                                     (js/call applied .add i)))
                         li-ref {:v 0}]
 
                     ;; Pairwise matching
                     (match-tabs-loop! tab-nodes tabs 0 li-ref applied apply-fn)
 
                     (console/log
-                      (str "gjoa-tabs: loaded " (.-length tab-nodes) " saved tab nodes, "
-                           "matched " (.-size applied) " to live tabs (of " (.-length tabs) ")."))
+                      (str "gjoa-tabs: loaded " (js/get tab-nodes .length) " saved tab nodes, "
+                           "matched " (js/get applied .size) " to live tabs (of " (js/get tabs .length) ")."))
 
                     ;; Leftover nodes
-                    (set! (.-length saved-tab-queue) 0)
-                    (.forEach tab-nodes
-                      (fn [s i]
-                        (when (not (.has applied i))
-                          (set! (.-_origIdx s) i)
-                          (.push saved-tab-queue s))))
+                    (js/set! saved-tab-queue .length 0)
+                    (js/call tab-nodes .forEach
+                      (fn [s i] Any
+                        (when (not (js/call applied .has i))
+                          (js/set! s ._origIdx i)
+                          (js/call saved-tab-queue .push s))))
 
                     ;; Spaces hydration
-                    (when (.-spaces env)
-                      (let [tab-by-gjoa-id (fn [gjoa-id]
-                                            (.find tabs
-                                              #(let [td (.get tree-of %)]
-                                                 (and td (= (.-id td) gjoa-id)))))]
-                        (.hydrate spaces (.-spaces env) tab-by-gjoa-id)))
+                    (when (js/get env .spaces)
+                      (let [tab-by-gjoa-id (fn [gjoa-id] Any
+                                            (js/call tabs .find
+                                              (fn [%1] Any (let [td (js/call tree-of .get %1)]
+                                                 (and td (= (js/get td .id) gjoa-id))))))]
+                        (js/call spaces .hydrate (js/get env .spaces) tab-by-gjoa-id)))
 
                     ;; Full node list for buildFromSaved
-                    (set! (.-v loaded-nodes-ref) (.-nodes env)))))
-              (catch Any e
+                    (js/set! loaded-nodes-ref .v (js/get env .nodes)))))
+              (catch (e Any)
                 (console/error "gjoa-tabs: loadFromHistory apply error" e)))))))))
 
 ;; --- buildFromSaved — groups + tab order from saved data ---
 
-(defn build-from-saved! [] :- Bool
-  (let [loaded-nodes (.-v loaded-nodes-ref)]
-    (if (or (not loaded-nodes) (not (.-panel state)))
+(defn build-from-saved! [] Bool
+  (let [loaded-nodes (js/get loaded-nodes-ref .v)]
+    (if (or (not loaded-nodes) (not (js/get state .panel)))
       false
-      (let [rows-api (.-v rows-ref)
-            group-nodes (.filter loaded-nodes #(= (.-type %) "group"))
+      (let [rows-api (js/get rows-ref .v)
+            group-nodes (js/call loaded-nodes .filter (fn [%1] Any (= (js/get %1 .type) "group")))
             leading-groups []
             gafter {:entries []}]
 
         ;; Bucket groups by anchor
-        (.forEach group-nodes
-          (fn [g]
-            (if (= (.-afterTabId g) nil)
-              (.push leading-groups g)
-              (let [entry (.find (.-entries gafter) #(= (aget % 0) (.-afterTabId g)))]
+        (js/call group-nodes .forEach
+          (fn [g] Any
+            (if (= (js/get g .afterTabId) nil)
+              (js/call leading-groups .push g)
+              (let [entry (js/call (js/get gafter .entries) .find (fn [%1] Any (= (aget %1 0) (js/get g .afterTabId))))]
                 (if entry
-                  (.push (aget entry 1) g)
+                  (js/call (aget entry 1) .push g)
                   (let [arr [g]]
-                    (.push (.-entries gafter) [(.-afterTabId g) arr])))))))
+                    (js/call (js/get gafter .entries) .push [(js/get g .afterTabId) arr])))))))
 
-        (let [mk-group (fn [g]
-                         (let [row (.createGroupRow rows-api (or (.-name g) "") (or (.-level g) 0))]
-                           (set! (.-state (.-_group row)) (or (.-state g) nil))
-                           (set! (.-collapsed (.-_group row)) (bool (.-collapsed g)))
-                           (when (.-spaceId g)
-                             (set! (.-spaceId (.-_group row)) (.-spaceId g)))
-                           (.syncGroupRow rows-api row)
+        (let [mk-group (fn [g] Any
+                         (let [row (js/call rows-api .createGroupRow (or (js/get g .name) "") (or (js/get g .level) 0))]
+                           (js/set! (js/get row ._group) .state (or (js/get g .state) nil))
+                           (js/set! (js/get row ._group) .collapsed (bool (js/get g .collapsed)))
+                           (when (js/get g .spaceId)
+                             (js/set! (js/get row ._group) .spaceId (js/get g .spaceId)))
+                           (js/call rows-api .syncGroupRow row)
                            row))]
 
           ;; Remove existing children
           (clear-all-rows!)
 
           ;; Insert leading groups
-          (.forEach leading-groups
-            #(.insertBefore (.-panel state) (mk-group %) (.-spacer state)))
+          (js/call leading-groups .forEach
+            (fn [%1] Any (js/call (js/get state .panel) .insertBefore (mk-group %1) (js/get state .spacer))))
 
           ;; Insert tabs + trailing groups
-          (.forEach (tabs!)
-            (fn [tab]
-              (let [row (.createTabRow rows-api tab)]
-                (if (and (.-pinned tab) (.-pinnedContainer state))
-                  (.appendChild (.-pinnedContainer state) row)
+          (js/call (tabs!) .forEach
+            (fn [tab] Any
+              (let [row (js/call rows-api .createTabRow tab)]
+                (if (and (js/get tab .pinned) (js/get state .pinnedContainer))
+                  (js/call (js/get state .pinnedContainer) .appendChild row)
                   (do
-                    (.insertBefore (.-panel state) row (.-spacer state))
-                    (let [tid (.-id (tree-data! tab))
-                          entry (.find (.-entries gafter) #(= (aget % 0) tid))]
+                    (js/call (js/get state .panel) .insertBefore row (js/get state .spacer))
+                    (let [tid (js/get (tree-data! tab) .id)
+                          entry (js/call (js/get gafter .entries) .find (fn [%1] Any (= (aget %1 0) tid)))]
                       (when entry
-                        (.forEach (aget entry 1)
-                          #(.insertBefore (.-panel state) (mk-group %) (.-spacer state))))))))))
+                        (js/call (aget entry 1) .forEach
+                          (fn [%1] Any (js/call (js/get state .panel) .insertBefore (mk-group %1) (js/get state .spacer)))))))))))
 
-          (when (.-pinnedContainer state)
-            (set! (.-hidden (.-pinnedContainer state))
-              (not (q (.-pinnedContainer state) ".gjoa-tab-row"))))
+          (when (js/get state .pinnedContainer)
+            (js/set! (js/get state .pinnedContainer) .hidden
+              (not (q (js/get state .pinnedContainer) ".gjoa-tab-row"))))
 
-          (set! (.-v loaded-nodes-ref) nil)
-          (.scheduleTreeResync rows-api)
-          (.updateVisibility rows-api)
+          (js/set! loaded-nodes-ref .v nil)
+          (js/call rows-api .scheduleTreeResync)
+          (js/call rows-api .updateVisibility)
           true)))))
 
 ;; --- describe helper for dev debug API ---
 
-(defn describe [el :- Any] :- String
+(defn describe [(el Any)] String
   (if (not el)
     "null"
-    (let [tag (or (some-> el .-tagName .toLowerCase) "?")
-          id-str (if (.-id el) (str "#" (.-id el)) "")
-          raw (when (= (js/typeof (.-className el)) "string") (.trim (.-className el)))
-          cls (if raw (str "." (.join (.slice (.split raw (RegExp. "\\s+")) 0 2) ".")) "")]
+    (let [tag (or (some-> el (js/get .tagName) (js/call .toLowerCase)) "?")
+          id-str (if (js/get el .id) (str "#" (js/get el .id)) "")
+          raw (when (= (js/typeof (js/get el .className)) "string") (js/call (js/get el .className) .trim))
+          cls (if raw (str "." (js/call (js/call (js/call raw .split (js/new RegExp "\\s+")) .slice 0 2) .join ".")) "")]
       (str tag id-str cls))))
 
 ;; --- init — the bootstrap, converted from async to promise chains ---
 
-(defn init! [] :- Any
+(defn init! [] Any
   ;; Defensive: pre-panel steps wrapped in try/catch
   (try (ensure-vertical-tabs-default)
-    (catch Any e (console/error "gjoa-tabs: ensureVerticalTabsDefault threw — continuing" e)))
+    (catch (e Any) (console/error "gjoa-tabs: ensureVerticalTabsDefault threw — continuing" e)))
   (try (apply-menubar-default document)
-    (catch Any e (console/error "gjoa-tabs: applyMenubarDefault threw — continuing" e)))
+    (catch (e Any) (console/error "gjoa-tabs: applyMenubarDefault threw — continuing" e)))
   (try (try-register-pin-attr!)
-    (catch Any e (console/error "gjoa-tabs: tryRegisterPinAttr threw — continuing" e)))
+    (catch (e Any) (console/error "gjoa-tabs: tryRegisterPinAttr threw — continuing" e)))
 
-  (-> (-> (load-from-history)
-          (.catch #(console/error "gjoa-tabs: loadFromHistory threw — init proceeds with empty state" %)))
-      (.then (fn []
+  (-> (-> (load-from-history!)
+          (js/call .catch (fn [%1] Any (console/error "gjoa-tabs: loadFromHistory threw — init proceeds with empty state" %1))))
+      (js/call .then (fn [] Any
         ;; await requestAnimationFrame
-        (-> (Promise. #(requestAnimationFrame %))
-            (.then (fn []
-              (let [rows-api (.-v rows-ref)
-                    vim-api (.-v vim-ref)]
+        (-> (js/new Promise (fn [%1] Any (requestAnimationFrame %1)))
+            (js/call .then (fn [] Any
+              (let [rows-api (js/get rows-ref .v)
+                    vim-api (js/get vim-ref .v)]
 
                 ;; A hot-reload re-runs init! without the previous bundle removing what
                 ;; it built; a live holder of one of these ids is that stale node, and
                 ;; leaving it stacks a second panel/header into the drawer column.
                 (doseq [id ["gjoa-pinned-container" "gjoa-tab-panel" "gjoa-space-header"]]
-                  (some-> (by-id id) .remove))
+                  (some-> (by-id id) (js/call .remove)))
 
                 ;; Create pinned container
-                (set! (.-pinnedContainer state) (xul-id "vbox" "gjoa-pinned-container"))
-                (set! (.-hidden (.-pinnedContainer state)) true)
-                (.setupPinnedContainerDrop drag (.-pinnedContainer state))
+                (js/set! state .pinnedContainer (xul-id "vbox" "gjoa-pinned-container"))
+                (js/set! (js/get state .pinnedContainer) .hidden true)
+                (js/call drag .setupPinnedContainerDrop (js/get state .pinnedContainer))
 
                 ;; Create panel
-                (set! (.-panel state) (xul-id "vbox" "gjoa-tab-panel"))
+                (js/set! state .panel (xul-id "vbox" "gjoa-tab-panel"))
 
                 ;; Create spacer
-                (set! (.-spacer state) (xul-id "box" "gjoa-tab-spacer"))
-                (attr! (.-spacer state) "flex" "1")
-                (.appendChild (.-panel state) (.-spacer state))
-                (.setupPanelDrop drag (.-panel state))
+                (js/set! state .spacer (xul-id "box" "gjoa-tab-spacer"))
+                (attr! (js/get state .spacer) "flex" "1")
+                (js/call (js/get state .panel) .appendChild (js/get state .spacer))
+                (js/call drag .setupPanelDrop (js/get state .panel))
 
                 ;; Space header
-                (set! (.-spaceHeader state) (xul-id "hbox" "gjoa-space-header"))
+                (js/set! state .spaceHeader (xul-id "hbox" "gjoa-space-header"))
                 (let [header-label (xul-id "label" "gjoa-space-header-label")]
-                  (.appendChild (.-spaceHeader state) header-label))
-                (on! (.-spaceHeader state) "click"
-                  (fn []
-                    (try (.runExCommand (.-v vim-ref) "space list")
-                      (catch Any e (console/error "gjoa: space header click failed" e)))))
+                  (js/call (js/get state .spaceHeader) .appendChild header-label))
+                (on! (js/get state .spaceHeader) "click"
+                  (fn [] Any
+                    (try (js/call (js/get vim-ref .v) .runExCommand "space list")
+                      (catch (e Any) (console/error "gjoa: space header click failed" e)))))
                 (update-space-header)
 
                 ;; Position panel
-                (.positionPanel layout)
+                (js/call layout .positionPanel)
 
                 ;; #148: DOM is now in final arrangement — reveal chrome on the next
                 ;; frame (no-op if gjoa-booting was never stamped, e.g. wide spawn).
-                (requestAnimationFrame #(rmattr! (.-documentElement document) "gjoa-booting"))
+                (requestAnimationFrame (fn [] Any (rmattr! (js/get document .documentElement) "gjoa-booting")))
 
                 ;; MutationObserver for sidebar attribute changes. Use the
                 ;; rAF-coalesced wrapper: compact mode bursts these attributes in
                 ;; one turn, so the un-coalesced positionPanel would re-enter
                 ;; several times per frame and could read a half-applied set.
-                (let [obs (MutationObserver. #(.requestPositionPanel layout))
+                (let [obs (js/new MutationObserver (fn [] Any (js/call layout .requestPositionPanel)))
                       opts {:childList true
                             :attributes true
                             :attributeFilter ["sidebar-launcher-expanded" "data-gjoa-compact" "gjoa-has-hover"]}]
-                  (.observe obs sidebar-main opts))
+                  (js/call obs .observe sidebar-main opts))
 
                 ;; Pref observer for vertical tabs
-                (.addObserver (.-prefs Services) "sidebar.verticalTabs"
-                  {:observe #(.requestPositionPanel layout)})
+                (js/call (js/get Services .prefs) .addObserver "sidebar.verticalTabs"
+                  {:observe (fn [] Any (js/call layout .requestPositionPanel))})
 
                 ;; Build from saved or fresh
                 (when (not (build-from-saved!))
@@ -535,116 +535,115 @@
 
                 ;; Context menus
                 (build-context-menu!
-                  {:startRename (.-startRename vim-api)
-                   :toggleCollapse (.-toggleCollapse rows-api)
-                   :createGroupRow (.-createGroupRow rows-api)
-                   :setCursor (.-setCursor vim-api)
-                   :updateVisibility (.-updateVisibility rows-api)
-                   :scheduleTreeResync (.-scheduleTreeResync rows-api)
+                  {:startRename (js/get vim-api .startRename)
+                   :toggleCollapse (js/get rows-api .toggleCollapse)
+                   :createGroupRow (js/get rows-api .createGroupRow)
+                   :setCursor (js/get vim-api .setCursor)
+                   :updateVisibility (js/get rows-api .updateVisibility)
+                   :scheduleTreeResync (js/get rows-api .scheduleTreeResync)
                    :scheduleSave schedule-save})
                 (build-group-context-menu!
-                  {:startRename (.-startRename vim-api)
-                   :toggleCollapse (.-toggleCollapse rows-api)
-                   :syncGroupRow (.-syncGroupRow rows-api)
-                   :updateVisibility (.-updateVisibility rows-api)
+                  {:startRename (js/get vim-api .startRename)
+                   :toggleCollapse (js/get rows-api .toggleCollapse)
+                   :syncGroupRow (js/get rows-api .syncGroupRow)
+                   :updateVisibility (js/get rows-api .updateVisibility)
                    :scheduleSave schedule-save})
                 (let [panel-menu (build-panel-context-menu!
-                                  {:createGroupRow (.-createGroupRow rows-api)
-                                   :startRename (.-startRename vim-api)
-                                   :setCursor (.-setCursor vim-api)
-                                   :updateVisibility (.-updateVisibility rows-api)
+                                  {:createGroupRow (js/get rows-api .createGroupRow)
+                                   :startRename (js/get vim-api .startRename)
+                                   :setCursor (js/get vim-api .setCursor)
+                                   :updateVisibility (js/get rows-api .updateVisibility)
                                    :scheduleSave schedule-save})]
 
-                  (.createModeline vim-api)
-                  (.setupVimKeys vim-api)
-                  (.setupGlobalKeys vim-api)
-                  (.focusPanelUnlessUrlbar vim-api)
+                  (js/call vim-api .createModeline)
+                  (js/call vim-api .setupVimKeys)
+                  (js/call vim-api .setupGlobalKeys)
+                  (js/call vim-api .focusPanelUnlessUrlbar)
 
                   ;; Install event listeners
-                  (let [teardown-events (.install events)]
+                  (let [teardown-events (js/call events .install)]
 
                     ;; Catch-up: create rows for tabs added between init and install
-                    (.forEach (tabs!)
-                      (fn [t]
-                        (when (not (.has row-of t))
-                          (let [row (.createTabRow rows-api t)]
-                            (if (.-pinned t)
-                              (.appendChild (.-pinnedContainer state) row)
-                              (.insertBefore (.-panel state) row (.-spacer state)))))))
+                    (js/call (tabs!) .forEach
+                      (fn [t] Any
+                        (when (not (js/call row-of .has t))
+                          (let [row (js/call rows-api .createTabRow t)]
+                            (if (js/get t .pinned)
+                              (js/call (js/get state .pinnedContainer) .appendChild row)
+                              (js/call (js/get state .panel) .insertBefore row (js/get state .spacer)))))))
 
                     ;; Ensure selected tab in active space
                     (reconcile-selection!)
-                    (.updateVisibility rows-api)
+                    (js/call rows-api .updateVisibility)
 
                     ;; Spacer click -> activate vim with last visible row
-                    (on! (.-spacer state) "click"
-                      (fn []
-                        (let [visible (.filter (all-rows) #(not (.-hidden %)))]
-                          (when (> (.-length visible) 0)
-                            (.activateVim vim-api (last-of visible))))))
+                    (on! (js/get state .spacer) "click"
+                      (fn [] Any
+                        (let [visible (js/call (all-rows) .filter (fn [%1] Any (not (js/get %1 .hidden))))]
+                          (when (> (js/get visible .length) 0)
+                            (js/call vim-api .activateVim (last-of visible))))))
 
                     ;; Spacer right-click -> panel context menu
-                    (on! (.-spacer state) "contextmenu"
-                      (fn [e]
-                        (.preventDefault e)
-                        (.stopPropagation e)
-                        (.openPopupAtScreen panel-menu (.-screenX e) (.-screenY e) true)))
+                    (on! (js/get state .spacer) "contextmenu"
+                      (fn [e] Any
+                        (js/call e .preventDefault)
+                        (js/call e .stopPropagation)
+                        (js/call panel-menu .openPopupAtScreen (js/get e .screenX) (js/get e .screenY) true)))
 
                     ;; Unload teardown
                     (on1! window "unload" teardown-events)
 
                     ;; Session tagger — tag latest event on quit-application
                     (let [session-tagger
-                            {:observe (fn [_subject topic]
+                            {:observe (fn [_subject topic] Any
                                (when (= topic "quit-application")
-                                 (.catch
-                                   (.tagLatest history "session")
-                                   #(console/error "gjoa-tabs: tagLatest on quit failed" %))))}]
-                      (.addObserver (.-obs Services) session-tagger "quit-application")
+                                 (js/call (js/call history .tagLatest "session") .catch
+                                   (fn [%1] Any (console/error "gjoa-tabs: tagLatest on quit failed" %1)))))}]
+                      (js/call (js/get Services .obs) .addObserver session-tagger "quit-application")
                       (on1! window "unload"
-                        #(.removeObserver (.-obs Services) session-tagger "quit-application")))
+                        (fn [] Any (js/call (js/get Services .obs) .removeObserver session-tagger "quit-application"))))
 
                     ;; Retention timer — prune old events
                     (setTimeout
-                      #(.catch (.runRetention history)
-                          (fn [e] (console/error "gjoa-tabs: initial retention pass failed" e)))
+                      (fn [] Any (js/call (js/call history .runRetention) .catch
+                          (fn [e] Any (console/error "gjoa-tabs: initial retention pass failed" e))))
                       30000)
                     (let [retention-timer
                             (setInterval
-                              #(.catch (.runRetention history) (fn [] nil))
+                              (fn [] Any (js/call (js/call history .runRetention) .catch (fn [] Any nil)))
                               (* 10 60 1000))]
                       (on1! window "unload"
-                        (fn []
+                        (fn [] Any
                           (clearInterval retention-timer)
-                          (.catch (.close history) (fn [] nil))
-                          (.destroy content-focus)
-                          (.destroy gjoa-api))))
+                          (js/call (js/call history .close) .catch (fn [] Any nil))
+                          (js/call content-focus .destroy)
+                          (js/call gjoa-api .destroy))))
 
                     ;; Test-only debug API
                     (when (pref-bool "gjoa.test.exposeAPI" false)
-                      (set! (.-gjoaTest window)
+                      (js/set! window .gjoaTest
                         {:state state
                          :treeOf tree-of
                          :rowOf row-of
-                         :cursorId (fn []
-                                     (let [r (.-cursor state)]
-                                       (when (and r (.-_tab r))
-                                         (let [td (.get tree-of (.-_tab r))]
-                                           (and td (.-id td))))))
-                         :snapshotTree (fn []
+                         :cursorId (fn [] Any
+                                     (let [r (js/get state .cursor)]
+                                       (when (and r (js/get r ._tab))
+                                         (let [td (js/call tree-of .get (js/get r ._tab))]
+                                           (and td (js/get td .id))))))
+                         :snapshotTree (fn [] Any
                                          (let [out []]
-                                           (.forEach (tabs!)
-                                             (fn [t]
-                                               (let [td (.get tree-of t)]
+                                           (js/call (tabs!) .forEach
+                                             (fn [t] Any
+                                               (let [td (js/call tree-of .get t)]
                                                  (when td
-                                                   (.push out
-                                                     {:id (.-id td)
-                                                      :parentId (.-parentId td)
-                                                      :name (.-name td)
-                                                      :collapsed (.-collapsed td)
-                                                      :pinned (bool (.-pinned t))
-                                                      :url (or (some-> t .-linkedBrowser .-currentURI .-spec) "")
-                                                      :label (.-label t)})))))
+                                                   (js/call out .push
+                                                     {:id (js/get td .id)
+                                                      :parentId (js/get td .parentId)
+                                                      :name (js/get td .name)
+                                                      :collapsed (js/get td .collapsed)
+                                                      :pinned (bool (js/get t .pinned))
+                                                      :url (or (some-> t (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec)) "")
+                                                      :label (js/get t .label)})))))
                                            out))
                          :vim vim-api
                          :rows rows-api
@@ -652,43 +651,43 @@
                          :scheduleSave schedule-save
                          :history history
                          :contentFocus content-focus
-                         :contentInputFocused #(.contentInputFocused content-focus)
-                         :contentFocusDiag #(.diag content-focus)
+                         :contentInputFocused (fn [] Any (js/call content-focus .contentInputFocused))
+                         :contentFocusDiag (fn [] Any (js/call content-focus .diag))
                          :Gjoa gjoa-api})
                       (console/log "gjoa-tabs: gjoaTest debug API exposed"))
 
                     ;; Dev helpers (window.pfx)
                     (when (pref-bool "gjoa.debug" false)
-                      (let [pfx-ns (or (.-pfx window) (do (set! (.-pfx window) {}) (.-pfx window)))]
+                      (let [pfx-ns (or (js/get window .pfx) (do (js/set! window .pfx {}) (js/get window .pfx)))]
 
-                        (set! (.-measure pfx-ns)
-                          (fn [& els]
-                            (.map els (fn [el i]
-                              (let [r (some-> el .getBoundingClientRect)]
+                        (js/set! pfx-ns .measure
+                          (fn [& els] Any
+                            (js/call els .map (fn [el i] Any
+                              (let [r (some-> el (js/call .getBoundingClientRect))]
                                 (if (= r nil)
                                   {:i i :tag (describe el) :error "no rect"}
                                   {:i i
                                    :tag (describe el)
-                                   :x (Math/round (.-left r))
-                                   :y (Math/round (.-top r))
-                                   :w (Math/round (.-width r))
-                                   :h (Math/round (.-height r))
-                                   :right (Math/round (.-right r))
-                                   :bottom (Math/round (.-bottom r))}))))))
+                                   :x (Math/round (js/get r .left))
+                                   :y (Math/round (js/get r .top))
+                                   :w (Math/round (js/get r .width))
+                                   :h (Math/round (js/get r .height))
+                                   :right (Math/round (js/get r .right))
+                                   :bottom (Math/round (js/get r .bottom))}))))))
 
-                        (set! (.-gaps pfx-ns)
-                          (fn [& els]
-                            (.map (.slice els 1) (fn [el i]
-                              (let [a (some-> (aget els i) .getBoundingClientRect)
-                                    b (some-> el .getBoundingClientRect)]
+                        (js/set! pfx-ns .gaps
+                          (fn [& els] Any
+                            (js/call (js/call els .slice 1) .map (fn [el i] Any
+                              (let [a (some-> (aget els i) (js/call .getBoundingClientRect))
+                                    b (some-> el (js/call .getBoundingClientRect))]
                                 (if (or (= a nil) (= b nil))
                                   {:i i :error "no rect"}
                                   {:i i
                                    :between (str (describe (aget els i)) " -> " (describe el))
-                                   :gapY (Math/round (- (.-top b) (.-bottom a)))
-                                   :gapX (Math/round (- (.-left b) (.-right a)))
-                                   :sameY (= (Math/round (.-top a)) (Math/round (.-top b)))
-                                   :sameX (= (Math/round (.-left a)) (Math/round (.-left b)))}))))))
+                                   :gapY (Math/round (- (js/get b .top) (js/get a .bottom)))
+                                   :gapX (Math/round (- (js/get b .left) (js/get a .right)))
+                                   :sameY (= (Math/round (js/get a .top)) (Math/round (js/get b .top)))
+                                   :sameX (= (Math/round (js/get a .left)) (Math/round (js/get b .left)))}))))))
 
                         (console/log "gjoa-tabs: dev helpers (window.pfx) exposed (gjoa.debug=true)")))
 
@@ -696,9 +695,9 @@
 
 ;; --- safeInit — wraps init in catch-all ---
 
-(defn safe-init [] :- Any
+(defn safe-init! [] Any
   (-> (init!)
-      (.then (fn [_]
+      (js/call .then (fn [_] Any
                ;; First load: FF152's blank-page urlbar-focus treatment no longer
                ;; recognizes the gjoa newtab (about:newtab is redirected to a
                ;; chrome:// doc), so Firefox focuses the content <browser> and vim
@@ -706,52 +705,52 @@
                ;; like stock Firefox). Put the cursor in the urlbar, and re-assert
                ;; ONCE if Firefox steals focus to the <browser> while the newtab
                ;; content loads. One-shot + hard stop so it never fights a real click.
-               (let [u (.-gURLBar window)]
+               (let [u (js/get window .gURLBar)]
                  (when u
-                   (let [blank? (fn [] :- Bool
-                                  (let [spec (or (some-> gBrowser .-selectedBrowser .-currentURI .-spec) "")]
-                                    (or (.startsWith spec "chrome://gjoa-newtab")
+                   (let [blank? (fn [] Bool
+                                  (let [spec (or (some-> gBrowser (js/get .selectedBrowser) (js/get .currentURI) (js/get .spec)) "")]
+                                    (or (js/call spec .startsWith "chrome://gjoa-newtab")
                                         (= spec "about:newtab") (= spec "about:home")
                                         (= spec "about:blank"))))
-                         focus-it! (fn []
-                                     (when (and (blank?) (= (or (.-value u) "") ""))
-                                       (try (.focus u) (.select u) (catch Any _e nil))))
+                         focus-it! (fn [] Any
+                                     (when (and (blank?) (= (or (js/get u .value) "") ""))
+                                       (try (js/call u .focus) (js/call u .select) (catch (_e Any) nil))))
                          holder {:fn nil}
-                         stop! (fn []
-                                 (when (.-fn holder)
-                                   (.removeEventListener window "focusin" (.-fn holder) true)
-                                   (set! (.-fn holder) nil)))]
-                     (set! (.-fn holder)
-                       (fn [e]
-                         (when (= (some-> e .-target .-tagName) "browser")
+                         stop! (fn [] Any
+                                 (when (js/get holder .fn)
+                                   (js/call window .removeEventListener "focusin" (js/get holder .fn) true)
+                                   (js/set! holder .fn nil)))]
+                     (js/set! holder .fn
+                       (fn [e] Any
+                         (when (= (some-> e (js/get .target) (js/get .tagName)) "browser")
                            (focus-it!)
                            (stop!))))
-                     (.addEventListener window "focusin" (.-fn holder) true)
-                     (.setTimeout window stop! 2500)
-                     (.setTimeout window focus-it! 120)
-                     (.setTimeout window
-                       (fn [] (console/log (str "gjoa-urlbar-focus FINAL active="
-                                                (some-> window .-document .-activeElement .-tagName))))
+                     (js/call window .addEventListener "focusin" (js/get holder .fn) true)
+                     (js/call window .setTimeout stop! 2500)
+                     (js/call window .setTimeout focus-it! 120)
+                     (js/call window .setTimeout
+                       (fn [] Any (console/log (str "gjoa-urlbar-focus FINAL active="
+                                                (some-> window (js/get .document) (js/get .activeElement) (js/get .tagName)))))
                        2200))))))
-      (.catch #(console/error "gjoa-tabs: init() threw — sidebar may be empty" %))))
+      (js/call .catch (fn [%1] Any (console/error "gjoa-tabs: init() threw — sidebar may be empty" %1)))))
 
 ;; --- clone-node-fields: copy the 6 persistence fields into a fresh object ---
 
-(defn clone-node-fields [src :- Any] :- Any
-  {:id        (.-id src)
-   :parentId  (.-parentId src)
-   :url       (.-url src)
-   :name      (.-name src)
-   :state     (.-state src)
-   :collapsed (.-collapsed src)})
+(defn clone-node-fields [(src Any)] Any
+  {:id        (js/get src .id)
+   :parentId  (js/get src .parentId)
+   :url       (js/get src .url)
+   :name      (js/get src .name)
+   :state     (js/get src .state)
+   :collapsed (js/get src .collapsed)})
 
 ;; --- Boot gate: sidebar-main check + delayed startup ---
 
 (when sidebar-main
-  (if (.-delayedStartupFinished gBrowserInit)
-    (safe-init)
-    (let [obs (fn [subject topic]
+  (if (js/get gBrowserInit .delayedStartupFinished)
+    (safe-init!)
+    (let [obs (fn [subject topic] Any
                 (when (and (= topic "browser-delayed-startup-finished") (= subject window))
-                  (.removeObserver (.-obs Services) obs topic)
-                  (safe-init)))]
-      (.addObserver (.-obs Services) obs "browser-delayed-startup-finished"))))
+                  (js/call (js/get Services .obs) .removeObserver obs topic)
+                  (safe-init!)))]
+      (js/call (js/get Services .obs) .addObserver obs "browser-delayed-startup-finished"))))

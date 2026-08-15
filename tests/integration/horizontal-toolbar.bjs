@@ -9,14 +9,13 @@
 ;; the urlbar; see task #122 transition instability).
 (ns gjoa.tests.integration.horizontal-toolbar
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval expect expect-eq await-true wait-for]]))
-(define-mode strict)
 
 ;; Returns {horizontal, missing:[...]} — `missing` names any expected toolbar icon
 ;; that is absent OR not visible (display:none / zero-width). Empty == healthy.
 ;; The sidebar slot accepts EITHER id: install! swaps the native #sidebar-button
 ;; for #gjoa-sidebar-button and display:none's the original, so asserting the
 ;; native node is visible would fail on every profile where the swap ran.
-(def buttonsCheck :- String "
+(def buttonsCheck String "
   const want = {
     'back-button': 'back', 'forward-button': 'forward', 'stop-reload-button': 'refresh',
     'urlbar-container': 'urlbar', 'gjoa-sidebar-button|sidebar-button': 'sidebar',
@@ -45,13 +44,13 @@
   return { horizontal: document.documentElement.hasAttribute('gjoa-horizontal-tabs'), missing: missing };
 ")
 
-(defn assert-full-toolbar [r :- Any ctx :- String] :- Any
-  (expect (.-horizontal r) (str ctx ": not in horizontal mode (gjoa-horizontal-tabs unset)"))
-  (expect (= 0 (.-length (.-missing r)))
-    (str ctx ": horizontal toolbar is missing expected icons: " (JSON/stringify (.-missing r)) ". "
+(defn assert-full-toolbar [(r Any) (ctx String)] Any
+  (expect (js/get r .horizontal) (str ctx ": not in horizontal mode (gjoa-horizontal-tabs unset)"))
+  (expect (= 0 (js/get (js/get r .missing) .length))
+    (str ctx ": horizontal toolbar is missing expected icons: " (JSON/stringify (js/get r .missing)) ". "
          "Expected left→right: back forward refresh urlbar sidebar extensions hamburger.")))
 
-(def tests :- Any
+(def tests Any
   [(deftest "horizontal nav-bar keeps back/forward/refresh/urlbar/sidebar/ext/hamburger" [mn]
      ;; Force horizontal from the current state; disable dynamic-orientation so the
      ;; window width can't flip it back mid-assert.
@@ -63,22 +62,22 @@
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
      (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r1 (chrome-eval "const m = document.getElementById('gjoa-sidebar-button-menu'); m.dispatchEvent(new Event('popupshowing')); const s = document.getElementById('gjoa-toggle-strip'); return { hidden: s.hidden };")]
-       (expect (.-hidden r1) "strip menu item should be hidden in vertical mode"))
+       (expect (js/get r1 .hidden) "strip menu item should be hidden in vertical mode"))
      (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', false); Services.prefs.setBoolPref('gjoa.layout.horizontalSidebarStrip', false); return true;")
      (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r2 (chrome-eval "const m = document.getElementById('gjoa-sidebar-button-menu'); m.dispatchEvent(new Event('popupshowing')); const s = document.getElementById('gjoa-toggle-strip'); return { hidden: s.hidden, label: s.getAttribute('label') };")]
-       (expect (not (.-hidden r2)) "strip menu item should be visible in horizontal mode")
-       (expect-eq (.-label r2) "Show Strip" "label should read Show Strip when the strip pref is off"))
+       (expect (not (js/get r2 .hidden)) "strip menu item should be visible in horizontal mode")
+       (expect-eq (js/get r2 .label) "Show Strip" "label should read Show Strip when the strip pref is off"))
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.horizontalSidebarStrip', true); return true;")
      (let [r3 (chrome-eval "const m = document.getElementById('gjoa-sidebar-button-menu'); m.dispatchEvent(new Event('popupshowing')); const s = document.getElementById('gjoa-toggle-strip'); return { label: s.getAttribute('label') };")]
-       (expect-eq (.-label r3) "Hide Strip" "label should read Hide Strip when the strip pref is on"))
+       (expect-eq (js/get r3 .label) "Hide Strip" "label should read Hide Strip when the strip pref is on"))
      (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', true); Services.prefs.clearUserPref('gjoa.layout.horizontalSidebarStrip'); Services.prefs.clearUserPref('gjoa.layout.dynamicOrientation'); return true;"))
 
    (deftest "strip-hide button is horizontal-only and hides the strip on click" [mn]
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
      (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (let [r (chrome-eval "const b = document.getElementById('gjoa-strip-hide-button'); return { display: getComputedStyle(b).display };")]
-       (expect-eq (.-display r) "none" "strip-hide button should be display:none in vertical mode"))
+       (expect-eq (js/get r .display) "none" "strip-hide button should be display:none in vertical mode"))
      (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', false); Services.prefs.setBoolPref('gjoa.layout.horizontalSidebarStrip', true); return true;")
      (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
      (await-true "return getComputedStyle(document.getElementById('gjoa-strip-hide-button')).display !== 'none';" 4000)

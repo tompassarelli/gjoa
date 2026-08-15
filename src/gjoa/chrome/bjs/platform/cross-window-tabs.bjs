@@ -1,55 +1,54 @@
 #lang beagle/js
 (ns gjoa.platform.cross-window-tabs)
-(define-mode strict)
 
-(js/export (defn make-cross-window-tabs [] :- Any
-  {:all (fn []
+(js/export (defn make-cross-window-tabs [] Any
+  {:all (fn [] Any
     (let [out []]
       (try
-        (loop [e (.getEnumerator (.-wm Services) "navigator:browser")]
-          (if (.hasMoreElements e)
+        (loop [e (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
+          (if (js/call e .hasMoreElements)
             (do
-              (let [w (.getNext e)
-                    p (.-Gjoa w)]
+              (let [w (js/call e .getNext)
+                    p (js/get w .Gjoa)]
                 (when p
                   ;; per-window try: a window still initializing (no windows.current
                   ;; / tabs.list yet) must NOT abort the whole all-windows walk —
                   ;; otherwise one not-ready window blanks the entire shift+T picker.
                   (try
-                    (let [win (.current (.-windows p))
-                          tabs (.list (.-tabs win))]
-                      (.forEach tabs
-                        (fn [t]
-                          (.push out {:id (.-id t)
-                                      :url (.-url t)
-                                      :label (.-label t)
-                                      :customName (.-customName t)
-                                      :pinned (.-pinned t)
-                                      :selected (.-selected t)
-                                      :hidden (.-hidden t)
-                                      :parentId (.-parentId t)
-                                      :depth (.-depth t)
-                                      :windowId (.-windowId win)}))))
-                    (catch Any _e nil))))
+                    (let [win (js/call (js/get p .windows) .current)
+                          tabs (js/call (js/get win .tabs) .list)]
+                      (js/call tabs .forEach
+                        (fn [t] Any
+                          (js/call out .push {:id (js/get t .id)
+                                      :url (js/get t .url)
+                                      :label (js/get t .label)
+                                      :customName (js/get t .customName)
+                                      :pinned (js/get t .pinned)
+                                      :selected (js/get t .selected)
+                                      :hidden (js/get t .hidden)
+                                      :parentId (js/get t .parentId)
+                                      :depth (js/get t .depth)
+                                      :windowId (js/get win .windowId)}))))
+                    (catch (_e Any) nil))))
               (recur e))
             out))
-        (catch Any err
+        (catch (err Any)
           (console/error "[Gjoa.tabs.all] enumerate failed" err)))
       out))
 
-   :activate (fn [gjoa-id window-id]
+   :activate (fn [gjoa-id window-id] Any
     (try
-      (loop [e (.getEnumerator (.-wm Services) "navigator:browser")]
-        (if (.hasMoreElements e)
-          (let [w (.getNext e)
-                p (.-Gjoa w)]
+      (loop [e (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
+        (if (js/call e .hasMoreElements)
+          (let [w (js/call e .getNext)
+                p (js/get w .Gjoa)]
             (if p
-              (let [win (.current (.-windows p))]
-                (if (= (.-windowId win) window-id)
-                  (.activate (.-tabs win) gjoa-id)
+              (let [win (js/call (js/get p .windows) .current)]
+                (if (= (js/get win .windowId) window-id)
+                  (js/call (js/get win .tabs) .activate gjoa-id)
                   (recur e)))
               (recur e)))
           false))
-      (catch Any err
+      (catch (err Any)
         (console/error "[Gjoa.tabs.activate] failed" err)
         false)))}))

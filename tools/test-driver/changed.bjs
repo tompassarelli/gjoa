@@ -13,111 +13,107 @@
   (:require [fs :refer [existsSync readFileSync]]
             [path :refer [join]]
             [child_process :refer [spawnSync]]))
-(define-mode strict)
 (declare-extern [process] Any)
 
-(def REPO-ROOT :- String (.cwd process))
-(def RUNNER :- String (join REPO-ROOT ".beagle-tools" "gjoa" "tools" "test-driver" "runner.js"))
-(def TAGS :- String (join REPO-ROOT "tests" "integration" "tags.json"))
+(def REPO-ROOT String (js/call process .cwd))
+(def RUNNER String (join REPO-ROOT ".beagle-tools" "gjoa" "tools" "test-driver" "runner.js"))
+(def TAGS String (join REPO-ROOT "tests" "integration" "tags.json"))
 
 ;; Shared-infra prefixes: any change here invalidates the whole suite, so
 ;; we can't safely scope — run the full fast lane instead.
-(def INFRA-PREFIXES :- Any
+(def INFRA-PREFIXES Any
   ["tools/test-driver/" "tools/chrome-bundle/" "tests/dsl"
    "tests/integration/marionette" "tests/integration/tags.json"])
 
-(defn git [args :- Any] :- Any
+(defn git [(args Any)] Any
   (try
     (let [r (spawnSync "git" args {:cwd REPO-ROOT :encoding "utf8"})]
-      (if (= (.-status r) 0) (.-stdout r) ""))
-    (catch Any e "")))
+      (if (= (js/get r .status) 0) (js/get r .stdout) ""))
+    (catch (e Any) "")))
 
-(defn lines [s :- Any] :- Any
-  (.filter (.split (or s "") "\n") (fn [l] (not= (.trim l) ""))))
+(defn lines [(s Any)] Any
+  (js/call (js/call (or s "") .split "\n") .filter (fn [l] Any (not= (js/call l .trim) ""))))
 
 ;; Union of committed-since-main and uncommitted changes.
-(defn changed-files [] :- Any
-  (let [base (.trim (git ["merge-base" "HEAD" "main"]))
+(defn changed-files [] Any
+  (let [base (js/call (git ["merge-base" "HEAD" "main"]) .trim)
         committed (if (= base "")
                     []
                     (lines (git ["diff" "--name-only" (str base "...HEAD")])))
         ;; porcelain lines are "XY <path>"; slice the status prefix
-        dirty (.map (lines (git ["status" "--porcelain"]))
-                (fn [l] (.trim (.slice l 3))))
-        set (Set.)]
-    (doseq [f committed] (.add set f))
-    (doseq [f dirty] (.add set f))
-    (Array/from set)))
+        dirty (js/call (lines (git ["status" "--porcelain"])) .map (fn [l] Any (js/call (js/call l .slice 3) .trim)))
+        set (js/new Set)]
+    (doseq [f committed] (js/call set .add f))
+    (doseq [f dirty] (js/call set .add f))
+    (js/call Array .from set)))
 
-(defn load-tags [] :- Any
+(defn load-tags [] Any
   (if (existsSync TAGS)
-    (try (JSON/parse (readFileSync TAGS "utf8")) (catch Any e {:sources {}}))
+    (try (js/call JSON .parse (readFileSync TAGS "utf8")) (catch (e Any) {:sources {}}))
     {:sources {}}))
 
-(defn infra? [path :- String] :- Bool
-  (let [hit (.find INFRA-PREFIXES (fn [p] (.startsWith path p)))]
+(defn infra? [(path String)] Bool
+  (let [hit (js/call INFRA-PREFIXES .find (fn [p] Any (js/call path .startsWith p)))]
     (boolean hit)))
 
-(defn strip-ext [f :- String] :- String
-  (.replace f (RegExp. "\\.[^.]+$") ""))
+(defn strip-ext [(f String)] String
+  (js/call f .replace (js/new RegExp "\\.[^.]+$") ""))
 
 ;; Resolve the changed set → {:files <Set> :subs <Set> :infra <bool>}.
-(defn resolve-impacted [files :- Any tags :- Any] :- Any
-  (let [sources (or (.-sources tags) {})
-        srcKeys (.keys Object sources)
-        fileSet (Set.)
-        subSet (Set.)
+(defn resolve-impacted [(files Any) (tags Any)] Any
+  (let [sources (or (js/get tags .sources) {})
+        srcKeys (js/call Object .keys sources)
+        fileSet (js/new Set)
+        subSet (js/new Set)
         ;; infra is a pure predicate over the changed set — no mutation needed.
-        infra (boolean (.some files (fn [f] (infra? f))))]
+        infra (boolean (js/call files .some (fn [f] Any (infra? f))))]
     (doseq [f files]
       (cond
         ;; a test file changed → run it directly
-        (and (.startsWith f "tests/integration/") (.endsWith f ".bjs"))
-        (.add fileSet (strip-ext (.replace f "tests/integration/" "")))
+        (and (js/call f .startsWith "tests/integration/") (js/call f .endsWith ".bjs"))
+        (js/call fileSet .add (strip-ext (js/call f .replace "tests/integration/" "")))
         ;; shared infra is handled by `infra` above — skip here
         (infra? f) nil
         ;; chrome source dir → subsystem(s)
         :else
         (doseq [k srcKeys]
-          (when (.startsWith f k)
+          (when (js/call f .startsWith k)
             (let [v (get sources k)]
-              (if (Array/isArray v)
-                (doseq [s v] (.add subSet s))
-                (.add subSet v)))))))
+              (if (js/call Array .isArray v)
+                (doseq [s v] (js/call subSet .add s))
+                (js/call subSet .add v)))))))
     {:files fileSet :subs subSet :infra infra}))
 
-(defn run-runner! [args :- Any] :- Any
-  (let [r (spawnSync "bun" (.concat [RUNNER] args) {:cwd REPO-ROOT :stdio "inherit"})]
-    (.exit process (or (.-status r) 0))))
+(defn run-runner! [(args Any)] Any
+  (let [r (spawnSync "bun" (js/call [RUNNER] .concat args) {:cwd REPO-ROOT :stdio "inherit"})]
+    (js/call process .exit (or (js/get r .status) 0))))
 
-(defn main! [] :- Any
+(defn main! [] Any
   (let [tags (load-tags)
         files (changed-files)
         impacted (resolve-impacted files tags)
-        fset (.-files impacted)
-        sset (.-subs impacted)]
+        fset (js/get impacted .files)
+        sset (js/get impacted .subs)]
     (cond
       ;; infra change OR nothing resolved → full fast lane
-      (or (.-infra impacted)
-          (and (= (.-size fset) 0) (= (.-size sset) 0)))
+      (or (js/get impacted .infra)
+          (and (= (js/get fset .size) 0) (= (js/get sset .size) 0)))
       (do
-        (.write (.-stderr process)
-          (str "[changed] "
-               (if (.-infra impacted)
+        (js/call (js/get process .stderr) .write (str "[changed] "
+               (if (js/get impacted .infra)
                  "shared infra changed → full fast lane\n"
                  "no impacted subsystem resolved → full fast lane\n")))
         (run-runner! ["--exclude-lane" "slow,network"]))
       :else
       (let [args []]
-        (when (> (.-size fset) 0)
-          (.push args "--files")
-          (.push args (.join (Array/from fset) ",")))
-        (when (> (.-size sset) 0)
-          (.push args "--subsystem")
-          (.push args (.join (Array/from sset) ",")))
-        (.write (.-stderr process)
-          (str "[changed] running: " (.join args " ") "\n"))
+        (when (> (js/get fset .size) 0)
+          (js/call args .push "--files")
+          (js/call args .push (js/call (js/call Array .from fset) .join ",")))
+        (when (> (js/get sset .size) 0)
+          (js/call args .push "--subsystem")
+          (js/call args .push (js/call (js/call Array .from sset) .join ",")))
+        (js/call (js/get process .stderr) .write (str "[changed] running: " (js/call args .join " ") "\n"))
         (run-runner! args)))))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (main!))

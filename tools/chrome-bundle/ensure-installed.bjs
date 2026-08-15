@@ -21,128 +21,127 @@
             [path :refer [join dirname relative]]
             [crypto :refer [createHash]]
             [child_process :refer [spawnSync]]))
-(define-mode strict)
 (declare-extern [process] Any)
 
-(def REPO-ROOT :- String (.cwd process))
-(def BJS-ROOT :- String (join REPO-ROOT "src" "gjoa" "chrome" "bjs"))
-(def CSS-ROOT :- String (join REPO-ROOT "src" "gjoa" "chrome" "css"))
-(def BUNDLE-TOOLS :- String (join REPO-ROOT "tools" "chrome-bundle"))
-(def STAMP :- String (join REPO-ROOT ".cache" "gjoa" "chrome-install.stamp"))
+(def REPO-ROOT String (js/call process .cwd))
+(def BJS-ROOT String (join REPO-ROOT "src" "gjoa" "chrome" "bjs"))
+(def CSS-ROOT String (join REPO-ROOT "src" "gjoa" "chrome" "css"))
+(def BUNDLE-TOOLS String (join REPO-ROOT "tools" "chrome-bundle"))
+(def STAMP String (join REPO-ROOT ".cache" "gjoa" "chrome-install.stamp"))
 ;; The OTHER dev-chrome sources install.bjs now refreshes — editing them must
 ;; bust the cache too, or the harness runs a stale loader/actor (the recurring
 ;; "registered a new actor but it didn't load" / "actor edit didn't take" trap).
 ;; GjoaLoader.bjs → live .sys.mjs; toolkit = loose actors + fixes JSON.
-(def SRC-LOADER :- String
+(def SRC-LOADER String
   (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "GjoaLoader.bjs"))
-(def SRC-TOOLKIT :- String (join REPO-ROOT "src" "gjoa" "toolkit"))
+(def SRC-TOOLKIT String (join REPO-ROOT "src" "gjoa" "toolkit"))
 
 ;; Resolved gjoa-dev symlink (mirrors install.bjs target derivation). If the
 ;; objdir or symlink is gone, fingerprinting its readlink yields "" → busts
 ;; the cache so a fresh objdir re-installs even on a pure source hit.
-(def REPO-OBJDIR :- String (join REPO-ROOT "engine" "obj-x86_64-pc-linux-gnu"))
-(def ENV-OBJDIR :- Any (.-MOZ_OBJDIR (.-env process)))
-(def MOZ-OBJDIR :- Any
-  (if (and ENV-OBJDIR (.startsWith ENV-OBJDIR REPO-ROOT)) ENV-OBJDIR REPO-OBJDIR))
-(def GJOA-DEV :- String (join MOZ-OBJDIR "dist" "bin" "gjoa-dev"))
+(def REPO-OBJDIR String (join REPO-ROOT "engine" "obj-x86_64-pc-linux-gnu"))
+(def ENV-OBJDIR Any (js/get (js/get process .env) .MOZ_OBJDIR))
+(def MOZ-OBJDIR Any
+  (if (and ENV-OBJDIR (js/call ENV-OBJDIR .startsWith REPO-ROOT)) ENV-OBJDIR REPO-OBJDIR))
+(def GJOA-DEV String (join MOZ-OBJDIR "dist" "bin" "gjoa-dev"))
 
 ;; A sentinel OUTPUT bundle that must exist for the install to count as valid.
 ;; The input fingerprint alone is NOT enough: if dist/chrome is emptied (a clean,
 ;; a `rm -rf dist/chrome`, a failed bake) while the inputs are unchanged, the
 ;; stamp still matches and we'd skip the rebuild — leaving the dev binary with NO
 ;; chrome (the bug that broke gjoa hotreload). So we also require the output to exist.
-(def DIST-CHROME :- String (join REPO-ROOT "dist" "chrome"))
-(def OUT-SENTINEL :- String (join DIST-CHROME "JS" "gjoa-tabs.uc.js"))
-(def DEV-SENTINEL :- String (join GJOA-DEV "JS" "gjoa-tabs.uc.js"))
+(def DIST-CHROME String (join REPO-ROOT "dist" "chrome"))
+(def OUT-SENTINEL String (join DIST-CHROME "JS" "gjoa-tabs.uc.js"))
+(def DEV-SENTINEL String (join GJOA-DEV "JS" "gjoa-tabs.uc.js"))
 
 ;; Mirror compile.bjs `should-skip`: test-only edits must NOT bust the cache.
-(defn should-skip-rel [rel :- String] :- Bool
+(defn should-skip-rel [(rel String)] Bool
   (cond
     (= rel "macros.bjs") true
-    (.startsWith rel "test/") true
-    (.endsWith rel ".test.bjs") true
+    (js/call rel .startsWith "test/") true
+    (js/call rel .endsWith ".test.bjs") true
     :else false))
 
 ;; Recursively collect file paths under `dir` (synchronous — small tree).
-(defn walk [dir :- String] :- Any
+(defn walk [(dir String)] Any
   (let [out []]
     (when (existsSync dir)
       (let [entries (readdirSync dir {:withFileTypes true})
-            n (.-length entries)]
+            n (js/get entries .length)]
         (loop [i 0]
           (when (< i n)
             (let [entry (aget entries i)
-                  full (join dir (.-name entry))]
-              (if (.isDirectory entry)
+                  full (join dir (js/get entry .name))]
+              (if (js/call entry .isDirectory)
                 (let [sub (walk full)
-                      m (.-length sub)]
+                      m (js/get sub .length)]
                   (loop [j 0]
                     (when (< j m)
-                      (.push out (aget sub j))
+                      (js/call out .push (aget sub j))
                       (recur (+ j 1)))))
-                (.push out full))
+                (js/call out .push full))
               (recur (+ i 1)))))))
     out))
 
 ;; Collect the fingerprint input file set, filtered.
-(defn input-files [] :- Any
+(defn input-files [] Any
   (let [out []]
     ;; chrome .bjs (minus macros/test/*.test.bjs)
     (doseq [f (walk BJS-ROOT)]
-      (when (and (.endsWith f ".bjs")
+      (when (and (js/call f .endsWith ".bjs")
                  (not (should-skip-rel (relative BJS-ROOT f))))
-        (.push out f)))
+        (js/call out .push f)))
     ;; chrome CSS (all of it)
-    (doseq [f (walk CSS-ROOT)] (.push out f))
+    (doseq [f (walk CSS-ROOT)] (js/call out .push f))
     ;; the bundler tools themselves — output changes if they change
     (doseq [f (walk BUNDLE-TOOLS)]
-      (when (.endsWith f ".bjs") (.push out f)))
+      (when (js/call f .endsWith ".bjs") (js/call out .push f)))
     ;; GjoaLoader.bjs (install recompiles it to the live .sys.mjs) + the loose
     ;; toolkit overlays (actors + fixes JSON that install mirrors into engine).
-    (when (existsSync SRC-LOADER) (.push out SRC-LOADER))
+    (when (existsSync SRC-LOADER) (js/call out .push SRC-LOADER))
     (doseq [f (walk SRC-TOOLKIT)]
-      (when (or (.endsWith f ".sys.mjs") (.endsWith f ".json")) (.push out f)))
+      (when (or (js/call f .endsWith ".sys.mjs") (js/call f .endsWith ".json")) (js/call out .push f)))
     out))
 
 ;; sha256 over sorted `path:mtimeMs:size` lines + the symlink target line.
-(defn fingerprint [] :- String
-  (let [files (.sort (input-files))
+(defn fingerprint [] String
+  (let [files (js/call (input-files) .sort)
         h (createHash "sha256")
         link (if (existsSync GJOA-DEV)
-               (try (readlinkSync GJOA-DEV) (catch Any e "")) "")]
+               (try (readlinkSync GJOA-DEV) (catch (e Any) "")) "")]
     (doseq [f files]
       (let [st (statSync f)]
-        (.update h (str (relative REPO-ROOT f) ":" (.-mtimeMs st) ":" (.-size st) "\n"))))
-    (.update h (str "gjoa-dev->" link "\n"))
-    (.digest h "hex")))
+        (js/call h .update (str (relative REPO-ROOT f) ":" (js/get st .mtimeMs) ":" (js/get st .size) "\n"))))
+    (js/call h .update (str "gjoa-dev->" link "\n"))
+    (js/call h .digest "hex")))
 
 ;; Run `bun run <script>` synchronously; throw on nonzero exit.
-(defn run-script! [name :- String] :- Any
+(defn run-script! [(name String)] Any
   (let [r (spawnSync "bun" ["run" name]
                      {:cwd REPO-ROOT :stdio "inherit"})]
-    (when (not= (.-status r) 0)
-      (throw (Error. (str "`bun run " name "` failed (exit " (.-status r) ")"))))))
+    (when (not= (js/get r .status) 0)
+      (throw (js/new Error (str "`bun run " name "` failed (exit " (js/get r .status) ")"))))))
 
 ;; The install is valid only if the baked bundle AND the symlinked dev bundle
 ;; both exist — guards against a stamp-matches-but-output-missing state.
-(defn outputs-present? [] :- Bool
+(defn outputs-present? [] Bool
   (and (existsSync OUT-SENTINEL) (existsSync DEV-SENTINEL)))
 
-(defn main! [] :- Any
+(defn main! [] Any
   (let [h (fingerprint)
-        prev (if (existsSync STAMP) (.trim (readFileSync STAMP "utf8")) "")
-        force (.-GJOA_CHROME_FORCE (.-env process))]
+        prev (if (existsSync STAMP) (js/call (readFileSync STAMP "utf8") .trim) "")
+        force (js/get (js/get process .env) .GJOA_CHROME_FORCE)]
     (if (and (not force) (= prev h) (outputs-present?))
-      (console/log (str "chrome bundle up to date (stamp " (.slice h 0 8) ") — skipping dist+install"))
+      (console/log (str "chrome bundle up to date (stamp " (js/call h .slice 0 8) ") — skipping dist+install"))
       (do
         (run-script! "chrome:dist")
         (run-script! "chrome:install")
         (mkdirSync (dirname STAMP) {:recursive true})
         (writeFileSync STAMP h)
-        (console/log (str "chrome bundle installed (stamp " (.slice h 0 8) ")"))))))
+        (console/log (str "chrome bundle installed (stamp " (js/call h .slice 0 8) ")"))))))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (try (main!)
-    (catch Any e
-      (console/error (str "ensure-installed failed: " (or (.-message e) e)))
-      (.exit process 1))))
+    (catch (e Any)
+      (console/error (str "ensure-installed failed: " (or (js/get e .message) e)))
+      (js/call process .exit 1))))

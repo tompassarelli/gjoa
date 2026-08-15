@@ -1,108 +1,104 @@
 #lang beagle/js
 (ns gjoa.platform.scheduler
   (:require [gjoa.tabs.log :refer [create-logger!]]))
-(define-mode strict)
 
-(declare-extern [performance String] Any)
+(declare-extern [performance String undefined] Any)
 
-(js/export (def DOMAIN-ORDER :- Any ["prefs" "windows" "tabs" "snapshots" "sidebar" "command"]))
+(js/export (def DOMAIN-ORDER Any ["prefs" "windows" "tabs" "snapshots" "sidebar" "command"]))
 
-(js/export (defn make-scheduler! [] :- Any
+(js/export (defn make-scheduler! [] Any
   (let [log (create-logger! "scheduler")
-        reconcilers (Map.)
-        pending (Map.)
+        reconcilers (js/new Map)
+        pending (js/new Map)
         state {:pendingFlush nil
                :pendingResolve nil
                :lastReconcileMs nil
                :destroyed false}]
 
-    (let [get-dirty (fn [domain]
-                      (or (.get pending domain)
+    (letfn [(get-dirty [domain] Any
+                      (or (js/call pending .get domain)
                           (let [fresh []]
-                            (.set pending domain fresh)
+                            (js/call pending .set domain fresh)
                             fresh)))
 
-          run-once (fn []
-                     (when (not (.-destroyed state))
-                       (let [started-at (.now performance)
-                             snapshot (Map. pending)]
-                         (.clear pending)
-                         (.forEach DOMAIN-ORDER (fn [domain]
-                           (let [reasons (.get snapshot domain)]
-                             (when (and reasons (not= (.-length reasons) 0))
-                               (let [handlers (or (.get reconcilers domain) [])]
-                                 (.forEach handlers
-                                   #(try (.run % reasons)
-                                      (catch Any e
+          (run-once [] Any
+                     (when (not (js/get state .destroyed))
+                       (let [started-at (js/call performance .now)
+                             snapshot (js/new Map pending)]
+                         (js/call pending .clear)
+                         (js/call DOMAIN-ORDER .forEach (fn [domain] Any
+                           (let [reasons (js/call snapshot .get domain)]
+                             (when (and reasons (not= (js/get reasons .length) 0))
+                               (let [handlers (or (js/call reconcilers .get domain) [])]
+                                 (js/call handlers .forEach
+                                   (fn [%1] Any (try (js/call %1 .run reasons)
+                                      (catch (e Any)
                                         (log "reconciler:error"
                                              {:domain domain
                                               :reasons reasons
-                                              :msg (String e)})))))))))
-                         (set! (.-lastReconcileMs state) (- (.now performance) started-at))
-                         (log "reconcile:done" {:ms (.-lastReconcileMs state)}))))
+                                              :msg (String e)}))))))))))
+                         (js/set! state .lastReconcileMs (- (js/call performance .now) started-at))
+                         (log "reconcile:done" {:ms (js/get state .lastReconcileMs)}))))
 
-          schedule (fn []
-                     (when (not (or (.-pendingFlush state) (.-destroyed state)))
-                       (set! (.-pendingFlush state)
-                             (Promise. (fn [resolve]
-                               (set! (.-pendingResolve state) resolve)
-                               (queueMicrotask (fn []
+          (schedule [] Any
+                     (when (not (or (js/get state .pendingFlush) (js/get state .destroyed)))
+                       (js/set! state .pendingFlush
+                             (js/new Promise (fn [resolve] Any
+                               (js/set! state .pendingResolve resolve)
+                               (queueMicrotask (fn [] Any
                                  (try (run-once)
                                    (finally
-                                     (let [co :- Any {:v false}]
-                                       (.forEach pending
-                                         #(when (> (.-length %) 0)
-                                            (set! (.-v co) true)))
-                                       (set! (.-pendingFlush state) nil)
-                                       (let [local-resolve (.-pendingResolve state)]
-                                         (set! (.-pendingResolve state) nil)
-                                         (when (.-v co) (schedule))
+                                     (let [(co Any) {:v false}]
+                                       (js/call pending .forEach
+                                         (fn [%1] Any (when (> (js/get %1 .length) 0)
+                                            (js/set! co .v true))))
+                                       (js/set! state .pendingFlush nil)
+                                       (let [local-resolve (js/get state .pendingResolve)]
+                                         (js/set! state .pendingResolve nil)
+                                         (when (js/get co .v) (schedule))
                                          (when local-resolve (local-resolve)))))))))))))
 
-          register (fn [reconciler]
-                     (let [list (or (.get reconcilers (.-domain reconciler))
+          (register [reconciler] Any
+                     (let [list (or (js/call reconcilers .get (js/get reconciler .domain))
                                    (let [fresh []]
-                                     (.set reconcilers (.-domain reconciler) fresh)
+                                     (js/call reconcilers .set (js/get reconciler .domain) fresh)
                                      fresh))]
-                       (.push list reconciler))
-                     (log "register" {:domain (.-domain reconciler)})
-                     (fn []
-                       (let [arr (.get reconcilers (.-domain reconciler))]
+                       (js/call list .push reconciler))
+                     (log "register" {:domain (js/get reconciler .domain)})
+                     (fn [] Any
+                       (let [arr (js/call reconcilers .get (js/get reconciler .domain))]
                          (when arr
-                           (let [i (.indexOf arr reconciler)]
-                             (when (>= i 0) (.splice arr i 1)))))))
+                           (let [i (js/call arr .indexOf reconciler)]
+                             (when (>= i 0) (js/call arr .splice i 1)))))))
 
-          mark-dirty (fn [domain reason]
-                       (when (not (.-destroyed state))
-                         (.push (get-dirty domain) reason)
+          (mark-dirty [domain reason] Any
+                       (when (not (js/get state .destroyed))
+                         (js/call (get-dirty domain) .push reason)
                          (schedule)))
 
-          flush (fn []
-                  (if (not (.-pendingFlush state))
-                    ;; CHORE(pin-bump): drop the explicit `js/undefined` when the
-                    ;; pinned compiler accepts zero-arg Promise/resolve. Beagle
-                    ;; 3e942ba still declares its argument as required.
-                    (Promise/resolve js/undefined)
-                    (.then (.-pendingFlush state)
-                      #(when (.-pendingFlush state)
-                         (flush)))))
+          (flush! [] Any
+                  (if (not (js/get state .pendingFlush))
+                    (Promise/resolve undefined)
+                    (js/call (js/get state .pendingFlush) .then
+                      (fn [] Any (when (js/get state .pendingFlush)
+                         (flush!))))))
 
-          diag (fn []
-                 (let [out (reduce (fn [acc domain]
-                                     (assoc acc domain (or (.get pending domain) [])))
+          (diag [] Any
+                 (let [out (reduce (fn [acc domain] Any
+                                     (assoc acc domain (or (js/call pending .get domain) [])))
                                    {}
                                    DOMAIN-ORDER)]
                    {:pending out
-                    :nextFlushPending (not= (.-pendingFlush state) nil)
-                    :lastReconcileMs (.-lastReconcileMs state)}))
+                    :nextFlushPending (not= (js/get state .pendingFlush) nil)
+                    :lastReconcileMs (js/get state .lastReconcileMs)}))
 
-          destroy (fn []
-                    (set! (.-destroyed state) true)
-                    (.clear pending)
-                    (.clear reconcilers))]
+          (destroy [] Any
+                    (js/set! state .destroyed true)
+                    (js/call pending .clear)
+                    (js/call reconcilers .clear))]
 
       {:register register
        :markDirty mark-dirty
-       :flush flush
+       :flush flush!
        :diag diag
        :destroy destroy}))))

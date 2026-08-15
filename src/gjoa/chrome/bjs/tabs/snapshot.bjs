@@ -2,112 +2,110 @@
 (ns gjoa.tabs.snapshot
   (:require [gjoa.macros :refer [bool]]
             [gjoa.tabs.constants :refer [CLOSED-MEMORY]]))
-(define-mode strict)
 
-(js/export (defn build-envelope [snapshot :- Any] :- Any
-  (let [tab-space-map (Map.)]
-    (when (and (.-spaces snapshot) (.-tabSpaces (.-spaces snapshot)))
-      (.forEach (.-tabSpaces (.-spaces snapshot))
-        #(.set tab-space-map (aget % 0) (aget % 1))))
-    (let [tabEntries (.map (.-tabs snapshot)
-                     #(let [d (.treeData snapshot %)
-                            sp (.get tab-space-map (.-id d))]
-                        {:id (.-id d)
-                         :parentId (.-parentId d)
-                         :url (.tabUrl snapshot %)
-                         :name (.-name d)
-                         :state (.-state d)
-                         :collapsed (.-collapsed d)
-                         :spaceId sp}))
+(js/export (defn build-envelope! [(snapshot Any)] Any
+  (let [tab-space-map (js/new Map)]
+    (when (and (js/get snapshot .spaces) (js/get (js/get snapshot .spaces) .tabSpaces))
+      (js/call (js/get (js/get snapshot .spaces) .tabSpaces) .forEach
+        (fn [%1] Any (js/call tab-space-map .set (aget %1 0) (aget %1 1)))))
+    (let [tabEntries (js/call (js/get snapshot .tabs) .map
+                     (fn [%1] Any (let [d (js/call snapshot .treeData %1)
+                            sp (js/call tab-space-map .get (js/get d .id))]
+                        {:id (js/get d .id)
+                         :parentId (js/get d .parentId)
+                         :url (js/call snapshot .tabUrl %1)
+                         :name (js/get d .name)
+                         :state (js/get d .state)
+                         :collapsed (js/get d .collapsed)
+                         :spaceId sp})))
 
         groupEntries []
         lastSeen {:id nil}]
 
     ;; Walk rows — track last tab id, push group entries
-    (.forEach (Array/from (.rows snapshot))
-      #(if (.-_tab %)
-         (set! (.-id lastSeen) (.-id (.treeData snapshot (.-_tab %))))
-         (when (.-_group %)
-           (.push groupEntries
+    (js/call (Array/from (js/call snapshot .rows)) .forEach
+      (fn [%1] Any (if (js/get %1 ._tab)
+         (js/set! lastSeen .id (js/get (js/call snapshot .treeData (js/get %1 ._tab)) .id))
+         (when (js/get %1 ._group)
+           (js/call groupEntries .push
              {:id 0
               :parentId nil
               :type "group"
-              :name (.-name (.-_group %))
-              :level (.-level (.-_group %))
-              :state (.-state (.-_group %))
-              :collapsed (.-collapsed (.-_group %))
-              :spaceId (.-spaceId (.-_group %))
-              :afterTabId (.-id lastSeen)}))))
+              :name (js/get (js/get %1 ._group) .name)
+              :level (js/get (js/get %1 ._group) .level)
+              :state (js/get (js/get %1 ._group) .state)
+              :collapsed (js/get (js/get %1 ._group) .collapsed)
+              :spaceId (js/get (js/get %1 ._group) .spaceId)
+              :afterTabId (js/get lastSeen .id)})))))
 
     ;; Filter unconsumed saved entries whose URL doesn't collide with live tabs
-    (let [liveUrls (Set. (.filter (.map tabEntries #(.-url %))
+    (let [liveUrls (js/new Set (js/call (js/call tabEntries .map (fn [%1] Any (js/get %1 .url))) .filter
                            Boolean))
-          leftovers (.map
-                      (.filter (.-savedTabQueue snapshot)
-                        #(or (not (.-url %))
-                             (not (.has liveUrls (.-url %)))))
-                      #(Object/assign {} %))
+          leftovers (js/call (js/call (js/get snapshot .savedTabQueue) .filter
+                        (fn [%1] Any (or (not (js/get %1 .url))
+                             (not (js/call liveUrls .has (js/get %1 .url)))))) .map
+                      (fn [%1] Any (Object/assign {} %1)))
 
-          out (.concat tabEntries groupEntries leftovers)]
+          out (js/call tabEntries .concat groupEntries leftovers)]
 
       {:nodes out
-       :closedTabs (.slice (.-closedTabs snapshot) (- 0 CLOSED-MEMORY))
-       :nextTabId (.-nextTabId snapshot)
-       :spaces (.-spaces snapshot)})))))
-(defn do-save! [flags :- Any getSnapshot :- Any history :- Any onErr :- Any] :- Any
-  (if (.-inFlight flags)
-    (set! (.-pending flags) true)
+       :closedTabs (js/call (js/get snapshot .closedTabs) .slice (- 0 CLOSED-MEMORY))
+       :nextTabId (js/get snapshot .nextTabId)
+       :spaces (js/get snapshot .spaces)})))))
+(defn do-save! [(flags Any) (getSnapshot Any) (history Any) (onErr Any)] Any
+  (if (js/get flags .inFlight)
+    (js/set! flags .pending true)
     (do
-      (set! (.-inFlight flags) true)
-      (-> (.appendEvent history (build-envelope (getSnapshot)))
-          (.catch #(onErr %))
-          (.then (fn []
-            (set! (.-inFlight flags) false)
-            (when (.-pending flags)
-              (set! (.-pending flags) false)
+      (js/set! flags .inFlight true)
+      (-> (js/call history .appendEvent (build-envelope! (getSnapshot)))
+          (js/call .catch (fn [%1] Any (onErr %1)))
+          (js/call .then (fn [] Any
+            (js/set! flags .inFlight false)
+            (when (js/get flags .pending)
+              (js/set! flags .pending false)
               (do-save! flags getSnapshot history onErr))))))))
 
-(js/export (defn make-saver! [getSnapshot :- Any history :- Any onError :- Any] :- Any
-  (let [fallback #(console/error "gjoa-tabs: save chain" %)
+(js/export (defn make-saver! [(getSnapshot Any) (history Any) (onError Any)] Any
+  (let [fallback (fn [%1] Any (console/error "gjoa-tabs: save chain" %1))
         onErr (or onError fallback)
         flags {:inFlight false :pending false}]
-    #(do-save! flags getSnapshot history onErr))))
-(js/export (defn pop-saved-by-url [queue :- Any url :- Any] :- Any
+    (fn [] Any (do-save! flags getSnapshot history onErr)))))
+(js/export (defn pop-saved-by-url [(queue Any) (url Any)] Any
   (when url
-    (let [i (.findIndex queue #(= (.-url %) url))]
-      (when (>= i 0) (aget (.splice queue i 1) 0))))))
+    (let [i (js/call queue .findIndex (fn [%1] Any (= (js/get %1 .url) url)))]
+      (when (>= i 0) (aget (js/call queue .splice i 1) 0))))))
 
-(js/export (defn pop-saved-by-index [queue :- Any idx :- Int] :- Any
+(js/export (defn pop-saved-by-index [(queue Any) (idx Int)] Any
   (when (>= idx 0)
-    (let [i (.findIndex queue #(= (.-_origIdx %) idx))]
-      (when (>= i 0) (aget (.splice queue i 1) 0))))))
+    (let [i (js/call queue .findIndex (fn [%1] Any (= (js/get %1 ._origIdx) idx)))]
+      (when (>= i 0) (aget (js/call queue .splice i 1) 0))))))
 
 ;; popSavedForTab — combined helper for session-restore reconciliation
 ;; Priority: 1) gjoa-id, 2) URL match, 3) FIFO (session-restore only)
-(js/export (defn pop-saved-for-tab [queue :- Any ctx :- Any] :- Any
-  (let [currentIdx (.-currentIdx ctx)
-        pinnedId (.-pinnedId ctx)
-        url (.-url ctx)
-        inSessionRestore (.-inSessionRestore ctx)
-        log (.-log ctx)
-        try-url-fifo (fn []
+(js/export (defn pop-saved-for-tab [(queue Any) (ctx Any)] Any
+  (let [currentIdx (js/get ctx .currentIdx)
+        pinnedId (js/get ctx .pinnedId)
+        url (js/get ctx .url)
+        inSessionRestore (js/get ctx .inSessionRestore)
+        log (js/get ctx .log)
+        try-url-fifo (fn [] Any
           (if (and url (not= url "about:blank"))
             (let [node (pop-saved-by-url queue url)]
               (when log (log "popSavedForTab:url"
                              {:idx currentIdx :url url :found (bool node)}))
               node)
             (when inSessionRestore
-              (let [node (when (.-length queue) (.shift queue))]
+              (let [node (when (js/get queue .length) (js/call queue .shift))]
                 (when log (log "popSavedForTab:fifo"
                                {:idx currentIdx :pfxId pinnedId :url url
-                                :nodeId (and node (.-id node))
-                                :nodeOrigIdx (and node (.-_origIdx node))}))
+                                :nodeId (and node (js/get node .id))
+                                :nodeOrigIdx (and node (js/get node ._origIdx))}))
                 node))))]
     (if pinnedId
-      (let [i (.findIndex queue #(= (.-id %) pinnedId))]
+      (let [i (js/call queue .findIndex (fn [%1] Any (= (js/get %1 .id) pinnedId)))]
         (if (>= i 0)
           (do (when log (log "popSavedForTab:pfxId"
                              {:idx currentIdx :pfxId pinnedId :url url}))
-              (aget (.splice queue i 1) 0))
+              (aget (js/call queue .splice i 1) 0))
           (try-url-fifo)))
       (try-url-fifo)))))

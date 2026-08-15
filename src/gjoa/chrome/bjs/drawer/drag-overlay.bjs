@@ -1,12 +1,12 @@
 #lang beagle/js
 (ns gjoa.drawer.drag-overlay
-  (:require [gjoa.macros :refer [qa by-id xul-new pref-bool]]))
-(define-mode strict)
+  (:require [gjoa.macros :refer [qa by-id xul-new pref-bool]]
+            [gjoa.tabs.log :refer [create-logger!]]))
 
 
-(def PREF :- String "gjoa.view.draggable-sidebar")
+(def PREF String "gjoa.view.draggable-sidebar")
 
-(def st :- Any
+(def st Any
   {:overlay nil
    :resize-obs nil
    :mutation-obs nil
@@ -15,73 +15,73 @@
    :observer nil
    :log nil})
 
-(defn update! [] :- Any
-  (let [ov (.-overlay st)
-        asb (.-arrowscrollbox st)]
+(defn update! [] Any
+  (let [ov (js/get st .overlay)
+        asb (js/get st .arrowscrollbox)]
     (when (and ov asb)
-      (let [container-rect (.getBoundingClientRect (.-sidebar-main st))
-            asb-rect (.getBoundingClientRect asb)
+      (let [container-rect (js/call (js/get st .sidebar-main) .getBoundingClientRect)
+            asb-rect (js/call asb .getBoundingClientRect)
             tabs (qa asb "tab.tabbrowser-tab")
-            last-tab (if (> (.-length tabs) 0)
-                       (aget tabs (- (.-length tabs) 1))
+            last-tab (if (> (js/get tabs .length) 0)
+                       (aget tabs (- (js/get tabs .length) 1))
                        nil)
             top (if last-tab
-                  (.-bottom (.getBoundingClientRect last-tab))
-                  (.-top asb-rect))
-            bottom (.-bottom asb-rect)
+                  (js/get (js/call last-tab .getBoundingClientRect) .bottom)
+                  (js/get asb-rect .top))
+            bottom (js/get asb-rect .bottom)
             height (Math/max 0 (- bottom top))]
-        (set! (.-left (.-style ov)) (str (- (.-left asb-rect) (.-left container-rect)) "px"))
-        (set! (.-top (.-style ov)) (str (- top (.-top container-rect)) "px"))
-        (set! (.-width (.-style ov)) (str (.-width asb-rect) "px"))
-        (set! (.-height (.-style ov)) (str height "px"))
-        (set! (.-display (.-style ov)) (if (> height 0) "" "none"))))))
+        (js/set! (js/get ov .style) .left (str (- (js/get asb-rect .left) (js/get container-rect .left)) "px"))
+        (js/set! (js/get ov .style) .top (str (- top (js/get container-rect .top)) "px"))
+        (js/set! (js/get ov .style) .width (str (js/get asb-rect .width) "px"))
+        (js/set! (js/get ov .style) .height (str height "px"))
+        (js/set! (js/get ov .style) .display (if (> height 0) "" "none"))))))
 
-(defn enable! [] :- Any
-  (when (not (.-overlay st))
+(defn enable! [] Any
+  (when (not (js/get st .overlay))
     (let [el (xul-new "box")
-          asb (.-arrowscrollbox st)
-          log (.-log st)]
-      (set! (.-id el) "gjoa-drag-overlay")
-      (.appendChild (.-sidebar-main st) el)
-      (set! (.-overlay st) el)
+          asb (js/get st .arrowscrollbox)
+          log (js/get st .log)]
+      (js/set! el .id "gjoa-drag-overlay")
+      (js/call (js/get st .sidebar-main) .appendChild el)
+      (js/set! st .overlay el)
       (when asb
-        (let [ro (ResizeObserver. update!)]
-          (.observe ro asb)
-          (set! (.-resize-obs st) ro))
-        (let [mo (MutationObserver. update!)]
-          (.observe mo asb {:childList true})
-          (set! (.-mutation-obs st) mo)))
+        (let [ro (js/new ResizeObserver update!)]
+          (js/call ro .observe asb)
+          (js/set! st .resize-obs ro))
+        (let [mo (js/new MutationObserver update!)]
+          (js/call mo .observe asb {:childList true})
+          (js/set! st .mutation-obs mo)))
       (update!)
       (log "enable"))))
 
-(defn disable! [] :- Any
-  (when (.-overlay st)
-    (let [log (.-log st)]
-      (when (.-resize-obs st) (.disconnect (.-resize-obs st)))
-      (when (.-mutation-obs st) (.disconnect (.-mutation-obs st)))
-      (set! (.-resize-obs st) nil)
-      (set! (.-mutation-obs st) nil)
-      (.remove (.-overlay st))
-      (set! (.-overlay st) nil)
+(defn disable! [] Any
+  (when (js/get st .overlay)
+    (let [log (js/get st .log)]
+      (when (js/get st .resize-obs) (js/call (js/get st .resize-obs) .disconnect))
+      (when (js/get st .mutation-obs) (js/call (js/get st .mutation-obs) .disconnect))
+      (js/set! st .resize-obs nil)
+      (js/set! st .mutation-obs nil)
+      (js/call (js/get st .overlay) .remove)
+      (js/set! st .overlay nil)
       (log "disable"))))
 
-(defn destroy! [] :- Any
-  (try (.removeObserver (.-prefs Services) PREF (.-observer st))
-    (catch Any e nil))
+(defn destroy! [] Any
+  (try (js/call (js/get Services .prefs) .removeObserver PREF (js/get st .observer))
+    (catch (e Any) nil))
   (disable!))
 
-(js/export (defn make-drag-overlay! [deps] :- Any
-  (set! (.-log st) (create-logger! "drawer/drag-overlay"))
-  (set! (.-sidebar-main st) (.-sidebarMain deps))
-  (set! (.-arrowscrollbox st) (by-id "tabbrowser-arrowscrollbox"))
+(js/export (defn make-drag-overlay! [deps] Any
+  (js/set! st .log (create-logger! "drawer/drag-overlay"))
+  (js/set! st .sidebar-main (js/get deps .sidebarMain))
+  (js/set! st .arrowscrollbox (by-id "tabbrowser-arrowscrollbox"))
 
   (when (pref-bool PREF true) (enable!))
 
-  (let [obs {:observe (fn []
+  (let [obs {:observe (fn [] Any
               (if (pref-bool PREF true)
                 (enable!)
                 (disable!)))}]
-    (set! (.-observer st) obs)
-    (.addObserver (.-prefs Services) PREF obs))
+    (js/set! st .observer obs)
+    (js/call (js/get Services .prefs) .addObserver PREF obs))
 
   {:destroy destroy!}))

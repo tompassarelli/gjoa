@@ -14,9 +14,8 @@
 ;; native popup timing.
 (ns gjoa.tests.integration.compact-context-menu
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for sleep]]))
-(define-mode strict)
 
-(def ENABLE-COMPACT :- String "
+(def ENABLE-COMPACT String "
   Services.prefs.setBoolPref('sidebar.verticalTabs', true);
   Services.prefs.setBoolPref('gjoa.sidebar.compact', true);
   return true;
@@ -24,7 +23,7 @@
 
 ;; Reveal the sidebar (hover state), plant a live menupopup[state='showing'] (what a
 ;; context menu becomes), and fire the mouseleave that — pre-fix — scheduled collapse.
-(def OPEN-MENU-AND-LEAVE :- String "
+(def OPEN-MENU-AND-LEAVE String "
   const XUL='http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul';
   const sb=document.getElementById('sidebar-container');
   if(!sb) return {error:'no sidebar-main'};
@@ -36,7 +35,7 @@
   return { menuLive: !!document.querySelector(\"menupopup[state='showing'],menupopup[state='open']\") };
 ")
 
-(def CLOSE-MENU-AND-LEAVE :- String "
+(def CLOSE-MENU-AND-LEAVE String "
   const sb=document.getElementById('sidebar-container');
   const m=document.getElementById('gjoa-test-ctxmenu');
   if(m) m.setAttribute('state','closed');
@@ -47,17 +46,17 @@
 ;; ENABLE-COMPACT sets a PREF, and the runner's RESET does not clear it — leaving it
 ;; on puts every later file's sidebar off-canvas (urlbar-drawer's floating-palette
 ;; geometry fails outright). Each test restores it.
-(def DISABLE-COMPACT :- String "
+(def DISABLE-COMPACT String "
   Services.prefs.clearUserPref('gjoa.sidebar.compact');
   return true;
 ")
 
-(def HAS-HOVER :- String "return document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');")
+(def HAS-HOVER String "return document.getElementById('sidebar-container').hasAttribute('gjoa-has-hover');")
 
 ;; Same race as OPEN-MENU-AND-LEAVE, but with the drawer `e`-PINNED. Reads
 ;; [gjoa-pinned] immediately after the dispatch: the defect was a synchronous
 ;; removeAttribute at the top of on-sidebar-leave.
-(def PIN-THEN-MENU-AND-LEAVE :- String "
+(def PIN-THEN-MENU-AND-LEAVE String "
   const XUL='http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul';
   const sb=document.getElementById('sidebar-container');
   if(!sb) return {error:'no sidebar-main'};
@@ -73,12 +72,12 @@
            hasHover: sb.hasAttribute('gjoa-has-hover') };
 ")
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "compact — sidebar stays expanded while a context menu is open (#88)" [mn]
      (js/await (chrome-eval ENABLE-COMPACT))
      (js/await (await-true "return !!document.querySelector('#sidebar-container[data-gjoa-compact]');" 4000))
      (let [r (js/await (chrome-eval OPEN-MENU-AND-LEAVE))]
-       (expect (.-menuLive r) "precondition: a live menupopup[state=showing] should exist"))
+       (expect (js/get r .menuLive) "precondition: a live menupopup[state=showing] should exist"))
      ;; KEEP: negative assertion — no observable flag to await. The leave-collapse
      ;; opportunity is on-sidebar-leave's setTimeout(linger=150ms); we must let it FIRE
      ;; (then abort on the live menu) before asserting "still hovered". await-true on
@@ -103,11 +102,11 @@
      (js/await (chrome-eval ENABLE-COMPACT))
      (js/await (await-true "return !!document.querySelector('#sidebar-container[data-gjoa-compact]');" 4000))
      (let [r (js/await (chrome-eval PIN-THEN-MENU-AND-LEAVE))]
-       (expect (.-menuLive r) "precondition: a live menupopup[state=showing] should exist")
-       (expect (.-pinnedBefore r) "precondition: [gjoa-pinned] should be set before the leave")
+       (expect (js/get r .menuLive) "precondition: a live menupopup[state=showing] should exist")
+       (expect (js/get r .pinnedBefore) "precondition: [gjoa-pinned] should be set before the leave")
        ;; SYNCHRONOUS assertion: the defect stripped the attribute in the same tick as
        ;; the mouseleave dispatch, so this reads the value the bug destroyed.
-       (expect (.-pinnedAfter r)
+       (expect (js/get r .pinnedAfter)
          (str "REGRESSION #127: [gjoa-pinned] was stripped by mouseleave while a "
               "context menu was open — the compact drawer dismisses on right-click. "
               (JSON/stringify r))))

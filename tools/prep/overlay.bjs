@@ -12,36 +12,35 @@
             [path :refer [join resolve]]
             [gjoa.tools.prep.paths :refer [ENGINE-DIR REPO-ROOT SRC-DIR]]
             [gjoa.tools.prep.log :refer [log]]))
-(define-mode strict)
 (declare-extern [Bun process] Any)
 
 ;; Local builds derive the immutable content-addressed pin directly from the full
 ;; object ID in configs/beagle.ref. CI overrides BEAGLE_PIN_ROOT with its fresh
 ;; checkout of that same object. Never compile against the moving shared checkout.
-(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
+(def BEAGLE-REF-FILE String (join REPO-ROOT "configs" "beagle.ref"))
 
-(defn pinned-ref [] :- String
+(defn pinned-ref [] String
   (if (not (existsSync BEAGLE-REF-FILE))
-    (throw (Error. "configs/beagle.ref is missing"))
-    (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
-          ref (.find lines (fn [l :- String] :- Bool
-                             (and (> (.-length (.trim l)) 0)
-                                  (not (.startsWith (.trim l) "#")))))]
+    (throw (js/new Error "configs/beagle.ref is missing"))
+    (let [lines (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
+          ref (js/call lines .find (fn [(l String)] Bool
+                             (and (> (js/get (js/call l .trim) .length) 0)
+                                  (not (js/call (js/call l .trim) .startsWith "#")))))]
       (if ref
-        (.trim ref)
-        (throw (Error. "configs/beagle.ref has no Beagle object ID"))))))
+        (js/call ref .trim)
+        (throw (js/new Error "configs/beagle.ref has no Beagle object ID"))))))
 
-(def BEAGLE-PIN-ROOT :- String
-  (or (.-BEAGLE_PIN_ROOT (.-env process))
-      (resolve (.-HOME (.-env process)) "code" "beagle" "pins" (pinned-ref))))
+(def BEAGLE-PIN-ROOT String
+  (or (js/get (js/get process .env) .BEAGLE_PIN_ROOT)
+      (resolve (js/get (js/get process .env) .HOME) "code" "beagle" "pins" (pinned-ref))))
 
 ;; beagle-build compiles the chrome loader (.bjs) to the .sys.mjs that jar.mn
 ;; packages into omni.ja. Same resolution as tools/build-tools.bjs. It's a bash
 ;; script (no Windows shebang support), so it's launched via `bash` at the :cmd
-;; site; forward-slash the path for bash on Windows. (.fromCharCode String 92) is
+;; site; forward-slash the path for bash on Windows. (String/fromCharCode 92) is
 ;; a backslash; no-op on *nix.
-(def BEAGLE-BUILD :- String
-  (.replaceAll (resolve BEAGLE-PIN-ROOT "bin" "beagle-build") (.fromCharCode String 92) "/"))
+(def BEAGLE-BUILD String
+  (js/call (resolve BEAGLE-PIN-ROOT "bin" "beagle-build") .replaceAll (js/call String .fromCharCode 92) "/"))
 
 ;; ── Lockstep core.js vendoring ─────────────────────────────────────────────
 ;; The chrome (.bjs) is compiled against the pinned Beagle checkout and emits
@@ -52,16 +51,16 @@
 ;; we DON'T hand-copy it: every import re-vendors the pinned checkout's core.js
 ;; verbatim, with a provenance header recording configs/beagle.ref. The pin is
 ;; held at that ref, so this always vendors the pinned runtime.
-(def BEAGLE-CORE-SRC :- String
+(def BEAGLE-CORE-SRC String
   (resolve BEAGLE-PIN-ROOT "beagle-lib" "lib" "beagle" "core.js"))
-(def VENDORED-CORE-DST :- String
+(def VENDORED-CORE-DST String
   (join SRC-DIR "browser" "components" "gjoa" "beagle" "core.js"))
 
-(defn vendor-core-js! [] :- Any
+(defn vendor-core-js! [] Any
   (if (not (existsSync BEAGLE-CORE-SRC))
-    (throw (Error. (str "vendor-core-js!: " BEAGLE-CORE-SRC " not found — is the Beagle content pin (" BEAGLE-PIN-ROOT ") present?")))
+    (throw (js/new Error (str "vendor-core-js!: " BEAGLE-CORE-SRC " not found — is the Beagle content pin (" BEAGLE-PIN-ROOT ") present?")))
     (let [body (readFileSync BEAGLE-CORE-SRC "utf8")
-          ref (.slice (pinned-ref) 0 12)
+          ref (js/call (pinned-ref) .slice 0 12)
           header (str "// AUTO-VENDORED by tools/prep/overlay.bjs from "
                       "$BEAGLE_PIN_ROOT/beagle-lib/lib/beagle/core.js (configs/beagle.ref = " ref ").\n"
                       "// DO NOT EDIT BY HAND — re-vendored on every `bun run import` so the\n"
@@ -69,37 +68,36 @@
                       "// compiled against. Bump configs/beagle.ref + re-import to change it.\n")
           out (str header body)]
       (writeFileSync VENDORED-CORE-DST out)
-      (.step log (str "vendored beagle/core.js @ " ref)))))
+      (js/call log .step (str "vendored beagle/core.js @ " ref)))))
 
-(defn count-files [dir :- String] :- Any
+(defn count-files [(dir String)] Any
   (reduce
-    (fn [count name]
-      (let [path (join dir name)]
-        (if (.isDirectory (statSync path))
+    (fn [count name] Any (let [path (join dir name)]
+        (if (js/call (statSync path) .isDirectory)
           (+ count (count-files path))
           (+ count 1))))
     0
     (readdirSync dir)))
 
-(js/export (defn overlay-src! [] :- Any
+(js/export (defn overlay-src! [] Any
   (if (not (existsSync SRC-DIR))
     (do
-      (.info log "no src/gjoa/ overlays present, skipping")
+      (js/call log .info "no src/gjoa/ overlays present, skipping")
       nil)
     (let [entries (readdirSync SRC-DIR)]
-      (if (= (.-length entries) 0)
+      (if (= (js/get entries .length) 0)
         (do
-          (.info log "src/gjoa/ is empty, skipping overlay")
+          (js/call log .info "src/gjoa/ is empty, skipping overlay")
           nil)
         (do
-          (.step log "applying src/gjoa/ overlays")
+          (js/call log .step "applying src/gjoa/ overlays")
           ;; Re-vendor beagle/core.js into src/ FIRST, so the cp -a below carries
           ;; the freshly-vendored runtime into engine/ in the same pass. This is
           ;; the lockstep guarantee: runtime always matches the compiler.
           (vendor-core-js!)
           ;; -a preserves perms/timestamps; trailing slash on source so contents
           ;; merge into engine/ rather than creating engine/gjoa/.
-          (.spawnSync Bun ["cp" "-a" (str SRC-DIR "/.") (str ENGINE-DIR "/")])
+          (js/call Bun .spawnSync ["cp" "-a" (str SRC-DIR "/.") (str ENGINE-DIR "/")])
           ;; The chrome loader is authored in beagle. cp -a above copied the
           ;; .bjs source verbatim; compile it to the .sys.mjs ESM that jar.mn
           ;; packages, then drop the stray source so only the module ships.
@@ -114,16 +112,15 @@
               ;; placed beagle/core.js in engine/; moz.build registers it). The prefix
               ;; replaces `beagle/`, so beagle/core.js -> <prefix>core.js (and a future
               ;; beagle/hamt.js -> <prefix>hamt.js, no dangling specifier).
-              (let [proc (.spawnSync Bun {:cmd ["bash" BEAGLE-BUILD loader-src loader-out]
+              (let [proc (js/call Bun .spawnSync {:cmd ["bash" BEAGLE-BUILD loader-src loader-out]
                                           :cwd REPO-ROOT
-                                          :env (.assign Object {} (.-env process)
-                                                 {"BEAGLE_JS_RUNTIME_PREFIX"
+                                          :env (js/call Object .assign {} (js/get process .env) {"BEAGLE_JS_RUNTIME_PREFIX"
                                                   "resource:///modules/gjoa/beagle/"})
                                           :stdout "pipe"
                                           :stderr "pipe"})]
-                (when (not= (.-exitCode proc) 0)
-                  (throw (Error. (str "beagle-build failed compiling GjoaLoader.bjs:\n"
-                                      (.toString (.-stderr proc))))))
+                (when (not= (js/get proc .exitCode) 0)
+                  (throw (js/new Error (str "beagle-build failed compiling GjoaLoader.bjs:\n"
+                                      (js/call (js/get proc .stderr) .toString)))))
                 (when (existsSync stray) (rmSync stray)))))
           (let [file-count (count-files SRC-DIR)]
-            (.ok log (str "overlaid " file-count " file" (if (= file-count 1) "" "s"))))))))))
+            (js/call log .ok (str "overlaid " file-count " file" (if (= file-count 1) "" "s"))))))))))

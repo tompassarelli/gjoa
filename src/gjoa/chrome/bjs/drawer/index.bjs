@@ -7,12 +7,12 @@
             [gjoa.drawer.banner :refer [make-banner!]]
             [gjoa.drawer.omni-icon :refer [make-omni-icon!]]
             [gjoa.drawer.focus :refer [make-focus-guard!]]
-            [gjoa.drawer.layout :refer [make-layout!]]))
-(define-mode strict)
+            [gjoa.drawer.layout :refer [make-layout!]]
+            [gjoa.drawer.urlbar :refer [make-urlbar!]]))
 
 (declare-extern [document console window] Any)
 
-(defn init! [] :- Any
+(defn init! [] Any
   (let [sidebar-main (by-id "sidebar-container")
         navigator-toolbox (by-id "navigator-toolbox")
         urlbar-container (by-id "urlbar-container")
@@ -20,7 +20,7 @@
         urlbar (by-id "urlbar")]
 
     (if (or (not sidebar-main) (not navigator-toolbox) (not urlbar-container) (not nav-bar))
-      (.error console "gjoa-drawer: missing required elements")
+      (js/call console .error "gjoa-drawer: missing required elements")
 
       ;; BEFORE make-layout!: the layout's first act is the reparent, and the
       ;; guard must already hold any activation the user aimed at the urlbar.
@@ -41,25 +41,25 @@
             state {:urlbar-api nil :urlbar-key nil}]
 
         (when urlbar
-          (set! (.-urlbar-api state) (make-urlbar! {:urlbar urlbar}))
+          (js/set! state .urlbar-api (make-urlbar! {:urlbar urlbar}))
           ;; Held on `state` because the teardown MUST remove it: it lives on
           ;; `document`, which outlives the bundle across a hot-reload.
-          (set! (.-urlbar-key state)
-            (fn [e]
-              (let [accel (or (.-ctrlKey e) (.-metaKey e))]
-                (when (and accel (not (.-shiftKey e)) (not (.-altKey e)))
-                  (when (or (= (.-key e) "l") (= (.-key e) "L"))
-                    (.activateFloating (.-urlbar-api state) "current"))))))
-          (onc! document "keydown" (.-urlbar-key state)))
+          (js/set! state .urlbar-key
+            (fn [e] Any
+              (let [accel (or (js/get e .ctrlKey) (js/get e .metaKey))]
+                (when (and accel (not (js/get e .shiftKey)) (not (js/get e .altKey)))
+                  (when (or (= (js/get e .key) "l") (= (js/get e .key) "L"))
+                    (js/call (js/get state .urlbar-api) .activateFloating "current"))))))
+          (onc! document "keydown" (js/get state .urlbar-key)))
 
         ;; Expose the SAME compact API the sidebar button drives, so the vim
         ;; layer's Shift+E anchor/float toggle hits the identical code path
         ;; (.toggle) — no duplicated toggle logic. Mirrors gjoaBlocking /
         ;; gjoaDarkMode / gjoaTheme window-global convention.
-        (set! (.-gjoaCompact window) compact)
+        (js/set! window .gjoaCompact compact)
         ;; The guard's window closes seconds after startup; the handle is how a
         ;; test (or a hot-reload) re-opens it on a live window.
-        (set! (.-gjoaFocusGuard window) focus-guard)
+        (js/set! window .gjoaFocusGuard focus-guard)
 
         (let [sidebar-button (make-sidebar-button! {:sidebarMain sidebar-main
                                                     :compact compact})
@@ -68,26 +68,26 @@
           ;; Defensive: never let the omni-icon's creation break the rest of the
           ;; drawer (the unload teardown etc.). Logs the real error if it throws.
           (try (make-omni-icon! {})
-            (catch Any e (.error console "gjoa-drawer: omni-icon failed" e)))
+            (catch (e Any) (js/call console .error "gjoa-drawer: omni-icon failed" e)))
 
           ;; Teardown = the window-unload handler; on1! (macros.bjs) auto-registers it
           ;; in the loader's hot-reload registry too, so a dev bundle change tears this
           ;; down + re-runs init! cleanly (no stale bundle, no duplicate listeners/DOM).
           (on1! window "unload"
-            (fn []
-              (.destroy layout)
-              (.destroy drag-overlay)
-              (.destroy compact)
-              (set! (.-gjoaCompact window) nil)
-              (set! (.-gjoaFocusGuard window) nil)
-              (when (.-urlbar-key state)
-                (offc! document "keydown" (.-urlbar-key state))
-                (set! (.-urlbar-key state) nil))
-              (when (.-urlbar-api state) (.destroy (.-urlbar-api state)))
-              (.destroy sidebar-button)
-              (.destroy focus-guard)
-              (.destroy banner)))
+            (fn [] Any
+              (js/call layout .destroy)
+              (js/call drag-overlay .destroy)
+              (js/call compact .destroy)
+              (js/set! window .gjoaCompact nil)
+              (js/set! window .gjoaFocusGuard nil)
+              (when (js/get state .urlbar-key)
+                (offc! document "keydown" (js/get state .urlbar-key))
+                (js/set! state .urlbar-key nil))
+              (when (js/get state .urlbar-api) (js/call (js/get state .urlbar-api) .destroy))
+              (js/call sidebar-button .destroy)
+              (js/call focus-guard .destroy)
+              (js/call banner .destroy)))
 
-          (.log console "gjoa-drawer: initialized"))))))
+          (js/call console .log "gjoa-drawer: initialized"))))))
 
 (init!)

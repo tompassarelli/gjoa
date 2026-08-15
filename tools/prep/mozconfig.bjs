@@ -7,7 +7,6 @@
             [gjoa.tools.prep.paths :refer [ENGINE-DIR REPO-ROOT]]
             [gjoa.tools.prep.sh :refer [sh]]
             [gjoa.tools.prep.log :refer [log]]))
-(define-mode strict)
 (declare-extern [process] Any)
 
 ;; Derive the libclang path WITHOUT relying on the ambient env.
@@ -24,10 +23,10 @@
 ;;
 ;; `sh` is :quiet → returns "" if nix isn't on PATH / eval fails, so we degrade
 ;; to the LIBCLANG_PATH-or-warn path instead of crashing prep.
-(defn derive-libclang! [] :- Any
+(defn derive-libclang! [] Any
   (let [hook (sh "nix eval --raw .#devShells.x86_64-linux.mach.shellHook"
                  {:cwd REPO-ROOT :quiet true})
-        m (.match hook (RegExp. "LIBCLANG_PATH=\"([^\"]+)\""))]
+        m (js/call hook .match (js/new RegExp "LIBCLANG_PATH=\"([^\"]+)\""))]
     (if (and m (aget m 1)) (aget m 1) nil)))
 
 ;; Generate engine/mozconfig for direct mach builds (mach build / mach build
@@ -40,19 +39,17 @@
 ;; We expand $LIBCLANG_PATH at file-write time rather than relying on mach
 ;; to pick up the env var, because mach's configure subprocess doesn't
 ;; always inherit env vars cleanly through its virtualenv layers.
-(js/export (defn mozconfig! [] :- Any
+(js/export (defn mozconfig! [] Any
   (let [cfg (load-config!)
         ;; Prefer the ambient env (set by `.#mach`), else derive from flake.nix
         ;; so a default-shell `bun run import` still emits the libclang path.
-        env-libclang (.-LIBCLANG_PATH (.-env process))
+        env-libclang (js/get (js/get process .env) .LIBCLANG_PATH)
         libclang (or env-libclang (derive-libclang!))]
     (when (and libclang (not env-libclang))
-      (.ok log
-        (str "LIBCLANG_PATH not in env — derived from flake.nix mach shell: "
+      (js/call log .ok (str "LIBCLANG_PATH not in env — derived from flake.nix mach shell: "
              libclang)))
     (when (not libclang)
-      (.warn log
-        (str "LIBCLANG_PATH not set and could not derive it from flake.nix "
+      (js/call log .warn (str "LIBCLANG_PATH not set and could not derive it from flake.nix "
              "(is `nix` on PATH?) — engine/mozconfig will not include "
              "--with-libclang-path, and `mach configure` will fail to find "
              "libclang. Run prep from inside `nix develop .#mach`.")))
@@ -61,10 +58,10 @@
                  "# Used only for direct mach builds (cd engine && ./mach build [faster])."
                  "# `nix build .#gjoa` ignores this and uses buildMozillaMach's flags."
                  ""
-                 (str "ac_add_options --with-branding=browser/branding/" (.-binaryName cfg))
-                 (str "ac_add_options --with-distribution-id=org." (.-binaryName cfg))
-                 (str "ac_add_options --with-app-name=" (.-binaryName cfg))
-                 (str "ac_add_options --with-app-basename=" (.-shortName (.-branding cfg)))
+                 (str "ac_add_options --with-branding=browser/branding/" (js/get cfg .binaryName))
+                 (str "ac_add_options --with-distribution-id=org." (js/get cfg .binaryName))
+                 (str "ac_add_options --with-app-name=" (js/get cfg .binaryName))
+                 (str "ac_add_options --with-app-basename=" (js/get (js/get cfg .branding) .shortName))
                  ""
                  "# Skip wasm-sandboxed libraries (would need wasi-sysroot we don't ship)."
                  "ac_add_options --without-wasm-sandboxed-libraries"
@@ -82,16 +79,11 @@
                  ""]]
 
       (when libclang
-        (.splice lines
-          4
-          0
-          (str "ac_add_options --with-libclang-path=\"" libclang "\"")
-          ""))
+        (js/call lines .splice 4 0 (str "ac_add_options --with-libclang-path=\"" libclang "\"") ""))
 
       (let [path (join ENGINE-DIR "mozconfig")]
         (when (not (existsSync ENGINE-DIR))
-          (throw (Error. "engine/ does not exist — run `bun run download` first")))
-        (js/await (writeFile path (.join lines "\n")))
-        (.ok log
-          (str "wrote engine/mozconfig"
+          (throw (js/new Error "engine/ does not exist — run `bun run download` first")))
+        (js/await (writeFile path (js/call lines .join "\n")))
+        (js/call log .ok (str "wrote engine/mozconfig"
                (if libclang "" " (without libclang path — set LIBCLANG_PATH and re-run)"))))))))

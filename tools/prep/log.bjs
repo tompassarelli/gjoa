@@ -3,13 +3,12 @@
 ;; Prefixed with [prep] so output is identifiable when interleaved with
 ;; mach/nix output.
 (ns gjoa.tools.prep.log)
-(define-mode strict)
 
-(def PREFIX :- String "[2m[prep][0m")
+(def PREFIX String "[2m[prep][0m")
 
-(js/export (def log :- Any
-  {:info  (fn [msg] (console/error (str PREFIX " " msg)))
-   :warn  (fn [msg] (console/error (str PREFIX " [33mwarn:[0m " msg)))
-   :error (fn [msg] (console/error (str PREFIX " [31merror:[0m " msg)))
-   :step  (fn [msg] (console/error (str PREFIX " [1m→[0m " msg)))
-   :ok    (fn [msg] (console/error (str PREFIX " [32m✓[0m " msg)))}))
+(js/export (def log Any
+  {:info  (fn [msg] Any (console/error (str PREFIX " " msg)))
+   :warn  (fn [msg] Any (console/error (str PREFIX " [33mwarn:[0m " msg)))
+   :error (fn [msg] Any (console/error (str PREFIX " [31merror:[0m " msg)))
+   :step  (fn [msg] Any (console/error (str PREFIX " [1m→[0m " msg)))
+   :ok    (fn [msg] Any (console/error (str PREFIX " [32m✓[0m " msg)))}))

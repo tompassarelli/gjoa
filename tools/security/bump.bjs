@@ -11,35 +11,34 @@
   (:require [fs/promises :refer [readFile writeFile]]
             [path :refer [join]]
             [gjoa.tools.prep.paths :refer [REPO-ROOT]]))
-(define-mode strict)
 (declare-extern [fetch AbortSignal] Any)
 
-(def PRODUCT-DETAILS-URL :- String
+(def PRODUCT-DETAILS-URL String
   "https://product-details.mozilla.org/1.0/firefox_versions.json")
 
-(defn fetchVersions [] :- Any
-  (let [r (js/await (fetch PRODUCT-DETAILS-URL {:signal (.timeout AbortSignal 10000)}))]
-    (if (not (.-ok r))
-      (throw (Error. (str "product-details HTTP " (.-status r))))
+(defn fetchVersions [] Any
+  (let [r (js/await (fetch PRODUCT-DETAILS-URL {:signal (js/call AbortSignal .timeout 10000)}))]
+    (if (not (js/get r .ok))
+      (throw (js/new Error (str "product-details HTTP " (js/get r .status))))
       nil)
-    (js/await (.json r))))
+    (js/await (js/call r .json))))
 
-(defn main! [] :- Any
-  (let [esrMode (.includes (.-argv process) "--esr")
-        checkOnly (.includes (.-argv process) "--check")
+(defn main! [] Any
+  (let [esrMode (js/call (js/get process .argv) .includes "--esr")
+        checkOnly (js/call (js/get process .argv) .includes "--check")
         versions (js/await (fetchVersions))
         latest (if esrMode
-                 (.replace (.-FIREFOX_ESR versions) (RegExp. "esr$" "i") "")
-                 (.-LATEST_FIREFOX_VERSION versions))
+                 (js/call (js/get versions .FIREFOX_ESR) .replace (js/new RegExp "esr$" "i") "")
+                 (js/get versions .LATEST_FIREFOX_VERSION))
         path (join REPO-ROOT "gjoa.json")
         text (js/await (readFile path "utf8"))
-        cfg (JSON/parse text)
-        oldVersion (.-version (.-firefox cfg))]
+        cfg (js/call JSON .parse text)
+        oldVersion (js/get (js/get cfg .firefox) .version)]
 
     (if (= oldVersion latest)
       (do
         (console/error (str "[bump] gjoa.json already at " latest " — no change."))
-        (.exit process 0))
+        (js/call process .exit 0))
       nil)
 
     (console/error (str "[bump] " oldVersion "  →  " latest (if esrMode "  (ESR)" "")))
@@ -47,17 +46,17 @@
     (if checkOnly
       (do
         (console/error "[bump] --check: not writing. Re-run without --check to apply.")
-        (.exit process 0))
+        (js/call process .exit 0))
       nil)
 
-    (set! (.-version (.-firefox cfg)) latest)
-    (set! (.-candidate (.-firefox cfg)) latest)
-    (set! (.-candidateBuild (.-firefox cfg)) 1)
+    (js/set! (js/get cfg .firefox) .version latest)
+    (js/set! (js/get cfg .firefox) .candidate latest)
+    (js/set! (js/get cfg .firefox) .candidateBuild 1)
 
     ;; Preserve the user's indentation by re-stringifying with 2 spaces (the
     ;; existing file uses 2-space indent and ends with a single trailing
     ;; newline, per Mozilla convention).
-    (js/await (writeFile path (str (JSON/stringify cfg nil 2) "\n") "utf8"))
+    (js/await (writeFile path (str (js/call JSON .stringify cfg nil 2) "\n") "utf8"))
     (console/error "[bump] wrote gjoa.json")
     (console/error "")
     (console/error "Next steps:")
@@ -68,7 +67,5 @@
     (console/error "If the new version breaks something, restore the pin from git:")
     (console/error "  git checkout gjoa.json")))
 
-(.catch (main!)
-  (fn [err]
-    (console/error (str "[bump] failed: " (.-message err)))
-    (.exit process 1)))
+(js/call (main!) .catch (fn [err] Any (console/error (str "[bump] failed: " (js/get err .message)))
+    (js/call process .exit 1)))

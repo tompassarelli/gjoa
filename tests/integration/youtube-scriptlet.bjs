@@ -9,11 +9,10 @@
 ;; load or serves no player config.
 (ns gjoa.tests.integration.youtube-scriptlet
   (:require [gjoa.tests.dsl :refer [deftest expect]]))
-(define-mode strict)
 
-(def YT-URL :- String "https://www.youtube.com/watch?v=jNQXAC9IVRw")
+(def YT-URL String "https://www.youtube.com/watch?v=jNQXAC9IVRw")
 
-(def NAV-JS :- String
+(def NAV-JS String
   (str "\n"
     "  const [url, resolve] = arguments;\n"
     "  let done=false; const finish=v=>{if(!done){done=true;resolve(v);}};\n"
@@ -26,7 +25,7 @@
     "  b.addProgressListener(l, Ci.nsIWebProgress.NOTIFY_STATE_ALL);\n"
     "  setTimeout(()=>finish(false), 25000);\n"))
 
-(def PROBE :- String
+(def PROBE String
   (str "\n"
     "  const w = (typeof window.wrappedJSObject !== 'undefined' && window.wrappedJSObject) ? window.wrappedJSObject : window;\n"
     "  let jp=''; try { jp = String(w.JSON.parse); } catch(e){}\n"
@@ -38,24 +37,24 @@
     "    adPlacements: y ? (y.adPlacements===undefined ? 'pruned' : 'PRESENT') : 'none',\n"
     "  };"))
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "youtube: player-prune scriptlet strips adPlacements at document-start" [mn]
-     (js/await (.setContext mn "chrome"))
-     (let [navOk (js/await (.executeAsyncScript mn NAV-JS [YT-URL]))]
-       (js/await (.setContext mn "content"))
-       (js/await (.executeAsyncScript mn "const[r]=arguments; setTimeout(()=>r(true), 3000);"))
-       (let [info (js/await (.executeScript mn PROBE))]
+     (js/await (js/call mn .setContext "chrome"))
+     (let [navOk (js/await (js/call mn .executeAsyncScript NAV-JS [YT-URL]))]
+       (js/await (js/call mn .setContext "content"))
+       (js/await (js/call mn .executeAsyncScript "const[r]=arguments; setTimeout(()=>r(true), 3000);"))
+       (let [info (js/await (js/call mn .executeScript PROBE))]
          (cond
            (not navOk)
            (console/log "[youtube] SKIP — page did not load (network)")
-           (not (.-hasYtipr info))
-           (console/log (str "[youtube] SKIP — no player response (" (.-title info) ")"))
+           (not (js/get info .hasYtipr))
+           (console/log (str "[youtube] SKIP — no player response (" (js/get info .title) ")"))
            :else
            (do
-             (expect (.-jsonPatched info)
+             (expect (js/get info .jsonPatched)
                      "JSON.parse must be wrapped by the document-start scriptlet")
-             (expect (= (.-adPlacements info) "pruned")
+             (expect (= (js/get info .adPlacements) "pruned")
                      (str "ytInitialPlayerResponse.adPlacements must be pruned, got "
-                          (.-adPlacements info))))))))]))
+                          (js/get info .adPlacements))))))))]))
 
 (js/export-default tests)

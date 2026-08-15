@@ -17,23 +17,22 @@
   (:require [fs :refer [readFileSync writeFileSync]]
             [gjoa.tools.projector.claims :refer [build-doc replay doc->json json->doc]]
             [gjoa.tools.projector.set-body :refer [parses?]]))
-(define-mode strict)
 (declare-extern [process console] Any)
 
 ;; 0011's two identity anchors (same method name, two classes).
-(def ANCHORS :- Any
+(def ANCHORS Any
   [{:class "AboutNewTabRedirectorParent" :method "newChannel"}
    {:class "AboutNewTabRedirectorChild" :method "newChannel"}])
 
-(defn count-occurrences [s :- String needle :- String] :- Int
+(defn count-occurrences [(s String) (needle String)] Int
   (loop [from 0 n 0]
-    (let [i (.indexOf s needle from)]
+    (let [i (js/call s .indexOf needle from)]
       (if (< i 0) n (recur (+ i 1) (+ n 1))))))
 
-(defn main! [] :- Any
-  (let [pristine (readFileSync (aget (.-argv process) 2) "utf8")
-        patched (readFileSync (aget (.-argv process) 3) "utf8")
-        claim-path (or (aget (.-argv process) 4) "/tmp/0003.claims.json")
+(defn main! [] Any
+  (let [pristine (readFileSync (aget (js/get process .argv) 2) "utf8")
+        patched (readFileSync (aget (js/get process .argv) 3) "utf8")
+        claim-path (or (aget (js/get process .argv) 4) "/tmp/0003.claims.json")
         ;; build the claim-doc from the known-good patched output, persist to JSON,
         ;; then reload it — proving the edit round-trips through a portable artifact.
         doc0 (build-doc patched pristine ANCHORS)
@@ -42,36 +41,31 @@
         doc (json->doc (readFileSync claim-path "utf8"))
         ;; GATE 1 — replay the reloaded claim-doc onto pristine == patched?
         r1 (replay doc pristine)
-        equiv (and (.-ok r1) (= (.-src r1) patched))
+        equiv (and (js/get r1 .ok) (= (js/get r1 .src) patched))
         ;; GATE 2 — churn: (a) insert a sibling method above (offset) AND (b) edit a
         ;; body line the patch anchors on (forces a textual .rej); replay same doc.
-        churned (.replace
-                  (.replace pristine
-                    "  newChannel(uri, loadInfo) {"
-                    "  // FF153: upstream inserted a telemetry hook\n  _recordOpen(k) {\n    Glean.newtab.opened.add(1);\n  }\n\n  newChannel(uri, loadInfo) {")
-                  "let chromeURI = this.getChromeURI(uri);"
-                  "let chromeURI = this.getChromeURI(uri); // FF153 upstream reflow")
+        churned (js/call (js/call pristine .replace "  newChannel(uri, loadInfo) {" "  // FF153: upstream inserted a telemetry hook\n  _recordOpen(k) {\n    Glean.newtab.opened.add(1);\n  }\n\n  newChannel(uri, loadInfo) {") .replace "let chromeURI = this.getChromeURI(uri);" "let chromeURI = this.getChromeURI(uri); // FF153 upstream reflow")
         r2 (replay doc churned)
-        churn-ok (and (.-ok r2) (parses? (.-src r2)) (= (count-occurrences (.-src r2) "gjoa-newtab") 2))
+        churn-ok (and (js/get r2 .ok) (parses? (js/get r2 .src)) (= (count-occurrences (js/get r2 .src) "gjoa-newtab") 2))
         ;; GATE 3 — RENAME RECOVERY: upstream renames the target method (newChannel
         ;; -> createChannel). The textual patch .rej's; the claim recovers via the
         ;; structural anchor (params + body fingerprint) when confident + unambiguous.
-        renamed (.replaceAll pristine "newChannel(uri, loadInfo)" "createChannel(uri, loadInfo)")
+        renamed (js/call pristine .replaceAll "newChannel(uri, loadInfo)" "createChannel(uri, loadInfo)")
         r3 (replay doc renamed)
-        rename-ok (and (.-ok r3) (parses? (.-src r3))
-                       (= (count-occurrences (.-src r3) "gjoa-newtab") 2)
-                       (> (.-length (.-recoveries r3)) 0))]
-    (console/error (str "claim-doc: " (.-length doc) " set-body verbs, " (.-length json) " bytes JSON -> " claim-path))
+        rename-ok (and (js/get r3 .ok) (parses? (js/get r3 .src))
+                       (= (count-occurrences (js/get r3 .src) "gjoa-newtab") 2)
+                       (> (js/get (js/get r3 .recoveries) .length) 0))]
+    (console/error (str "claim-doc: " (js/get doc .length) " set-body verbs, " (js/get json .length) " bytes JSON -> " claim-path))
     (console/error (str "GATE 1  equivalence (claim-replay == patch 0003, byte-for-byte): " equiv))
     (console/error (str "GATE 2  churn-resilience (name-anchored claim survives reflow that .rej's the patch): " churn-ok))
     (console/error (str "GATE 3  rename-recovery (claim survives a method rename that .rej's the patch): " rename-ok))
     (when rename-ok
-      (doseq [rec (.-recoveries r3)] (console/error (str "          recovered: " rec))))
+      (doseq [rec (js/get r3 .recoveries)] (console/error (str "          recovered: " rec))))
     (when (not (and equiv churn-ok rename-ok))
       (console/error "PILOT FAILED")
-      (when (not (.-ok r1)) (console/error (str "  gate1: " (.-reason r1))))
-      (.exit process 1))
+      (when (not (js/get r1 .ok)) (console/error (str "  gate1: " (js/get r1 .reason))))
+      (js/call process .exit 1))
     (console/error "PILOT PASSED — 0011 as a claim-doc: equivalent, reflow-resilient, AND rename-recoverable.")))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (main!))

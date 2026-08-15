@@ -5,7 +5,6 @@
 ;; — the only pref channel packaged into omni.ja without a Mozilla-source patch.
 ;; (`;;` comments don't survive the beagle→js emit; rationale lives here.)
 (ns gjoa.defaults.pref.adblock)
-(define-mode strict)
 (declare-extern [pref] Any)
 
 ;; Master switch for the in-engine adblock-rust content classifier. ON by

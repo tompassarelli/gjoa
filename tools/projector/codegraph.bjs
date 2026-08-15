@@ -29,46 +29,45 @@
             [path :as path]
             [acorn :refer [parse]]
             [gjoa.tools.prep.sh :refer [sh]]))
-(define-mode strict)
 (declare-extern [process console JSON Object Array Set Map Error Number RegExp] Any)
 
-(def JS-DIR :- String "dist/chrome/JS")
-(def TOPLEVEL :- String "<toplevel>")
+(def JS-DIR String "dist/chrome/JS")
+(def TOPLEVEL String "<toplevel>")
 
-(defn node? [v :- Any] :- Bool
-  (and v (= (js/typeof v) "object") (not (Array/isArray v)) (= (js/typeof (.-type v)) "string")))
+(defn node? [(v Any)] Bool
+  (and v (= (js/typeof v) "object") (not (js/call Array .isArray v)) (= (js/typeof (js/get v .type)) "string")))
 
 ;; emitted JS identifier -> source Beagle symbol (best-effort, for display).
 ;; `?`/`!` are trailing by Beagle convention, so anchor those at end-of-string —
 ;; otherwise a mid-name "_p" (from a source "-p", e.g. focus-panel) is mistaken
 ;; for a "?". Remaining "_" came from "-".
-(defn demangle [s :- String] :- String
-  (-> s
-      (.replace (RegExp. "_bang$") "!")
-      (.replace (RegExp. "_p$") "?")
-      (.replaceAll "_GT_" "->")
-      (.replaceAll "_" "-")))
+(defn demangle [(s String)] String
+  (let [bang (js/call s .replace (js/new RegExp "_bang$") "!")
+        pred (js/call bang .replace (js/new RegExp "_p$") "?")
+        arrow (js/call pred .replaceAll "_GT_" "->")]
+    (js/call arrow .replaceAll "_" "-")))
 
 ;; source Beagle symbol -> emitted JS identifier (exact inverse; used by the gate
 ;; to compare beagle's source-name output in emitted-name space, unambiguously).
-(defn mangle [s :- String] :- String
-  (-> s
-      (.replaceAll "->" "_GT_")
-      (.replaceAll "-" "_")
-      (.replaceAll "?" "_p")
-      (.replaceAll "!" "_bang")
-      (.replaceAll "*" "_star")))
+(defn mangle [(s String)] String
+  (let [arrow (js/call s .replaceAll "->" "_GT_")
+        dash (js/call arrow .replaceAll "-" "_")
+        pred (js/call dash .replaceAll "?" "_p")
+        bang (js/call pred .replaceAll "!" "_bang")]
+    (js/call bang .replaceAll "*" "_star")))
 
-(defn module-of [file :- String] :- String
-  (-> (.basename path file) (.replace "gjoa-" "") (.replace ".uc.js" "")))
+(defn module-of [(file String)] String
+  (let [base (js/call path .basename file)
+        unprefixed (js/call base .replace "gjoa-" "")]
+    (js/call unprefixed .replace ".uc.js" "")))
 
 ;; Register a module-scope function name; also count occurrences so we can REPORT
 ;; the residual imprecision: two files bundled into one module that both define the
 ;; same top-level name land in separate per-file blocks (distinct JS scopes) but
 ;; share a node id here. Surfaced honestly via `stats`, never hidden.
-(defn register! [acc :- Any nm :- String] :- Any
-  (.add (.-names acc) nm)
-  (.set (.-counts acc) nm (+ 1 (or (.get (.-counts acc) nm) 0))))
+(defn register! [(acc Any) (nm String)] Any
+  (js/call (js/get acc .names) .add nm)
+  (js/call (js/get acc .counts) .set nm (+ 1 (or (js/call (js/get acc .counts) .get nm) 0))))
 
 ;; Recursively walk an acorn node. `acc` accumulates {:names Set :edges [[from to]]}.
 ;; `enclosing` is the nearest MODULE-SCOPE function we're inside (or TOPLEVEL).
@@ -80,22 +79,22 @@
 ;; NESTED functions (closures, callbacks, helpers inside another fn) do NOT become
 ;; nodes — their outgoing calls roll up to the module-scope function that owns them.
 ;; This is what makes resolution exact rather than name-flattened.
-(defn walk! [node :- Any enclosing :- String acc :- Any] :- Any
-  (let [t (.-type node)
+(defn walk! [(node Any) (enclosing String) (acc Any)] Any
+  (let [t (js/get node .type)
         top? (= enclosing TOPLEVEL)]
     (cond
       (= t "FunctionDeclaration")
-      (let [nm (and (.-id node) (.-name (.-id node)))
+      (let [nm (and (js/get node .id) (js/get (js/get node .id) .name))
             reg? (and nm top?)]
         (when reg? (register! acc nm))
         (walk-children! node (if reg? nm enclosing) acc))
 
       (= t "VariableDeclarator")
-      (let [init (.-init node)
-            id (.-id node)
-            nm (and id (= (.-type id) "Identifier") (.-name id))
-            is-fn (and init (or (= (.-type init) "ArrowFunctionExpression")
-                                (= (.-type init) "FunctionExpression")))
+      (let [init (js/get node .init)
+            id (js/get node .id)
+            nm (and id (= (js/get id .type) "Identifier") (js/get id .name))
+            is-fn (and init (or (= (js/get init .type) "ArrowFunctionExpression")
+                                (= (js/get init .type) "FunctionExpression")))
             reg? (and nm is-fn top?)]
         (when reg? (register! acc nm))
         ;; recurse the initializer under the binding name only if it's a
@@ -104,209 +103,213 @@
         nil)
 
       (= t "CallExpression")
-      (let [callee (.-callee node)]
-        (when (and callee (= (.-type callee) "Identifier"))
-          (.push (.-edges acc) [enclosing (.-name callee)]))
+      (let [callee (js/get node .callee)]
+        (when (and callee (= (js/get callee .type) "Identifier"))
+          (js/call (js/get acc .edges) .push [enclosing (js/get callee .name)]))
         (walk-children! node enclosing acc))
 
       :else
       (walk-children! node enclosing acc))))
 
-(defn walk-children! [node :- Any enclosing :- String acc :- Any] :- Any
-  (doseq [k (Object/keys node)]
+(defn walk-children! [(node Any) (enclosing String) (acc Any)] Any
+  (doseq [k (js/call Object .keys node)]
     (let [v (get node k)]
-      (when (Array/isArray v)
+      (when (js/call Array .isArray v)
         (doseq [el v] (when (node? el) (walk! el enclosing acc))))
-      (when (and (not (Array/isArray v)) (node? v))
+      (when (and (not (js/call Array .isArray v)) (node? v))
         (walk! v enclosing acc)))))
 
 ;; Parse one emitted module -> {:module m :names [..] :edges [[from to]..]} where
 ;; edges are kept only when BOTH ends are local function nodes (intra-module).
-(defn parse-module! [file :- String] :- Any
-  (let [src (.readFileSync fs file "utf8")
+(defn parse-module! [(file String)] Any
+  (let [src (js/call fs .readFileSync file "utf8")
         ast (parse src {:ecmaVersion "latest" :sourceType "script" :allowHashBang true})
-        acc {:names (Set.) :counts (Map.) :edges []}
+        acc {:names (js/new Set) :counts (js/new Map) :edges []}
         _walk (walk! ast TOPLEVEL acc)
-        names (.-names acc)
-        kept (.filter (.-edges acc)
-               (fn [e :- Any] :- Bool
-                 (and (.has names (aget e 1))
-                      (or (= (aget e 0) TOPLEVEL) (.has names (aget e 0))))))
-        merges (.filter (Array/from (.entries (.-counts acc)))
-                 (fn [kv :- Any] :- Bool (> (aget kv 1) 1)))]
-    {:module (module-of file) :names (Array/from names) :edges kept :merges merges}))
+        names (js/get acc .names)
+        kept (js/call (js/get acc .edges) .filter (fn [(e Any)] Bool
+                 (and (js/call names .has (aget e 1))
+                      (or (= (aget e 0) TOPLEVEL) (js/call names .has (aget e 0))))))
+        merges (js/call (js/call Array .from (js/call (js/get acc .counts) .entries)) .filter (fn [(kv Any)] Bool (> (aget kv 1) 1)))]
+    {:module (module-of file) :names (js/call Array .from names) :edges kept :merges merges}))
 
 ;; ── Graph assembly ────────────────────────────────────────────────────────
 ;; Node id = "<emittedName>@<module>" (collision-free). The graph carries
 ;; forward edges (caller->callee) and reverse edges (callee->callers) plus a
 ;; per-node display (de-mangled) name.
-(defn list-modules [] :- Any
-  (let [ensure (when (not (and (.existsSync fs JS-DIR)
-                               (> (.-length (.readdirSync fs JS-DIR)) 0)))
-                 (.log console "codegraph: dist/chrome empty — running `bun run chrome:dist`…")
+(defn list-modules [] Any
+  (let [ensure (when (not (and (js/call fs .existsSync JS-DIR)
+                               (> (js/get (js/call fs .readdirSync JS-DIR) .length) 0)))
+                 (js/call console .log "codegraph: dist/chrome empty — running `bun run chrome:dist`…")
                  (sh "bun run chrome:dist" {:quiet true}))]
-    (-> (.readdirSync fs JS-DIR)
-        (.filter (fn [f :- String] :- Bool (and (.startsWith f "gjoa-") (.endsWith f ".uc.js"))))
-        (.map (fn [f :- String] :- String (.join path JS-DIR f))))))
+    (let [files (js/call fs .readdirSync JS-DIR)
+          filtered (js/call files .filter
+                     (fn [(f String)] Bool
+                       (and (js/call f .startsWith "gjoa-")
+                            (js/call f .endsWith ".uc.js"))))]
+      (js/call filtered .map
+        (fn [(f String)] String (js/call path .join JS-DIR f))))))
 
-(defn build-graph [] :- Any
-  (let [mods (.map (list-modules) parse-module!)
-        fwd (Map.)   ;; id -> Set callee-id
-        rev (Map.)   ;; id -> Set caller-id
-        disp (Map.)  ;; id -> display name
-        mod-of (Map.) ;; id -> module
-        ensure-node (fn [id :- String m :- String nm :- String] :- Any
-                      (when (not (.has fwd id))
-                        (.set fwd id (Set.)) (.set rev id (Set.))
-                        (.set disp id (demangle nm)) (.set mod-of id m)))]
+(defn build-graph [] Any
+  (let [mods (js/call (list-modules) .map parse-module!)
+        fwd (js/new Map)   ;; id -> Set callee-id
+        rev (js/new Map)   ;; id -> Set caller-id
+        disp (js/new Map)  ;; id -> display name
+        mod-of (js/new Map) ;; id -> module
+        ensure-node (fn [(id String) (m String) (nm String)] Any
+                      (when (not (js/call fwd .has id))
+                        (js/call fwd .set id (js/new Set)) (js/call rev .set id (js/new Set))
+                        (js/call disp .set id (demangle nm)) (js/call mod-of .set id m)))]
     (doseq [pm mods]
-      (let [m (.-module pm)]
-        (doseq [nm (.-names pm)]
+      (let [m (js/get pm .module)]
+        (doseq [nm (js/get pm .names)]
           (ensure-node (str nm "@" m) m nm))
-        (.set fwd (str TOPLEVEL "@" m) (Set.))
-        (.set rev (str TOPLEVEL "@" m) (Set.))
-        (.set disp (str TOPLEVEL "@" m) (str "<toplevel:" m ">"))
-        (.set mod-of (str TOPLEVEL "@" m) m)
-        (doseq [e (.-edges pm)]
+        (js/call fwd .set (str TOPLEVEL "@" m) (js/new Set))
+        (js/call rev .set (str TOPLEVEL "@" m) (js/new Set))
+        (js/call disp .set (str TOPLEVEL "@" m) (str "<toplevel:" m ">"))
+        (js/call mod-of .set (str TOPLEVEL "@" m) m)
+        (doseq [e (js/get pm .edges)]
           (let [from (str (aget e 0) "@" m)
                 to (str (aget e 1) "@" m)]
-            (when (and (.has fwd from) (.has fwd to))
-              (.add (.get fwd from) to)
-              (.add (.get rev to) from))))))
+            (when (and (js/call fwd .has from) (js/call fwd .has to))
+              (js/call (js/call fwd .get from) .add to)
+              (js/call (js/call rev .get to) .add from))))))
     {:fwd fwd :rev rev :disp disp :modOf mod-of
-     :ids (Array/from (.keys fwd))}))
+     :ids (js/call Array .from (js/call fwd .keys))}))
 
 ;; Transitive closure over an adjacency Map from a seed id (BFS), excluding seed.
-(defn closure [adj :- Any seed :- String] :- Any
-  (let [seen (Set.) stack [seed]]
+(defn closure [(adj Any) (seed String)] Any
+  (let [seen (js/new Set) stack [seed]]
     (loop []
-      (when (> (.-length stack) 0)
-        (let [cur (.pop stack)]
-          (doseq [nxt (Array/from (or (.get adj cur) (Set.)))]
-            (when (not (.has seen nxt))
-              (.add seen nxt)
-              (.push stack nxt))))
+      (when (> (js/get stack .length) 0)
+        (let [cur (js/call stack .pop)]
+          (doseq [nxt (js/call Array .from (or (js/call adj .get cur) (js/new Set)))]
+            (when (not (js/call seen .has nxt))
+              (js/call seen .add nxt)
+              (js/call stack .push nxt))))
         (recur)))
     seen))
 
 ;; Resolve a query symbol (source or emitted name, with/without @module) to ids.
-(defn resolve-ids [graph :- Any sym :- String] :- Any
-  (let [ids (.-ids graph)
+(defn resolve-ids [(graph Any) (sym String)] Any
+  (let [ids (js/get graph .ids)
         want-mangled (mangle sym)]
-    (.filter ids
-      (fn [id :- String] :- Bool
-        (let [at (.indexOf id "@")
-              base (.substring id 0 at)]
+    (js/call ids .filter (fn [(id String)] Bool
+        (let [at (js/call id .indexOf "@")
+              base (js/call id .substring 0 at)]
           (or (= id sym)
               (= base sym)
               (= base want-mangled)
-              (= (.get (.-disp graph) id) sym)))))))
+              (= (js/call (js/get graph .disp) .get id) sym)))))))
 
 ;; ── Queries ──────────────────────────────────────────────────────────────
-(defn who-calls! [graph :- Any sym :- String] :- Any
+(defn who-calls! [(graph Any) (sym String)] Any
   (let [ids (resolve-ids graph sym)]
-    (when (= (.-length ids) 0) (.log console (str "no function matching '" sym "'")) (.exit process 1))
+    (when (= (js/get ids .length) 0) (js/call console .log (str "no function matching '" sym "'")) (js/call process .exit 1))
     (doseq [id ids]
-      (let [callers (Array/from (.get (.-rev graph) id))]
-        (.log console (str "\n" (.get (.-disp graph) id) "  (" (.get (.-modOf graph) id) ")  ← "
-                           (.-length callers) " direct caller(s):"))
-        (doseq [c (.sort (.map callers (fn [x :- String] :- String (.get (.-disp graph) x))))]
-          (.log console (str "  " c)))))))
+      (let [callers (js/call Array .from (js/call (js/get graph .rev) .get id))]
+        (js/call console .log (str "\n" (js/call (js/get graph .disp) .get id) "  (" (js/call (js/get graph .modOf) .get id) ")  ← "
+                           (js/get callers .length) " direct caller(s):"))
+        (doseq [c (js/call (js/call callers .map (fn [(x String)] String (js/call (js/get graph .disp) .get x))) .sort)]
+          (js/call console .log (str "  " c)))))))
 
-(defn blast-radius! [graph :- Any sym :- String] :- Any
+(defn blast-radius! [(graph Any) (sym String)] Any
   (let [ids (resolve-ids graph sym)]
-    (when (= (.-length ids) 0) (.log console (str "no function matching '" sym "'")) (.exit process 1))
+    (when (= (js/get ids .length) 0) (js/call console .log (str "no function matching '" sym "'")) (js/call process .exit 1))
     (doseq [id ids]
-      (let [deps (Array/from (closure (.-rev graph) id))]
-        (.log console (str "\n" (.get (.-disp graph) id) "  (" (.get (.-modOf graph) id) ")  blast-radius = "
-                           (.-length deps) " transitive dependent(s):"))
-        (doseq [d (.sort (.map deps (fn [x :- String] :- String (.get (.-disp graph) x))))]
-          (.log console (str "  " d)))))))
+      (let [deps (js/call Array .from (closure (js/get graph .rev) id))]
+        (js/call console .log (str "\n" (js/call (js/get graph .disp) .get id) "  (" (js/call (js/get graph .modOf) .get id) ")  blast-radius = "
+                           (js/get deps .length) " transitive dependent(s):"))
+        (doseq [d (js/call (js/call deps .map (fn [(x String)] String (js/call (js/get graph .disp) .get x))) .sort)]
+          (js/call console .log (str "  " d)))))))
 
-(defn leverage! [graph :- Any n :- Number] :- Any
-  (let [scored (.map (.filter (.-ids graph) (fn [id :- String] :- Bool (not (.startsWith id TOPLEVEL))))
-                 (fn [id :- String] :- Any
-                   {:id id :n (.-size (closure (.-rev graph) id))}))
-        ranked (.sort scored (fn [a :- Any b :- Any] :- Number (- (.-n b) (.-n a))))]
-    (.log console (str "\nTop " n " functions by blast-radius (transitive dependents):\n"))
-    (doseq [row (.slice ranked 0 n)]
-      (.log console (str "  " (.padStart (str (.-n row)) 4) "  "
-                         (.get (.-disp graph) (.-id row)) "  (" (.get (.-modOf graph) (.-id row)) ")")))))
+(defn leverage! [(graph Any) (n Number)] Any
+  (let [scored (js/call (js/call (js/get graph .ids) .filter (fn [(id String)] Bool (not (js/call id .startsWith TOPLEVEL)))) .map (fn [(id String)] Any
+                   {:id id :n (js/get (closure (js/get graph .rev) id) .size)}))
+        ranked (js/call scored .sort (fn [(a Any) (b Any)] Number (- (js/get b .n) (js/get a .n))))]
+    (js/call console .log (str "\nTop " n " functions by blast-radius (transitive dependents):\n"))
+    (doseq [row (js/call ranked .slice 0 n)]
+      (js/call console .log (str "  " (js/call (str (js/get row .n)) .padStart 4) "  "
+                         (js/call (js/get graph .disp) .get (js/get row .id)) "  (" (js/call (js/get graph .modOf) .get (js/get row .id)) ")")))))
 
 ;; ── Claim emission ─────────────────────────────────────────────────────────
 ;; Each function node and each call edge becomes a triple. Subject ids are the
 ;; node's integer index; predicates: kind/name/module/calls/leverage.
-(defn emit-claims! [graph :- Any] :- Any
-  (let [ids (.filter (.-ids graph) (fn [id :- String] :- Bool (not (.startsWith id TOPLEVEL))))
-        idx (Map.)
-        _n (doseq [i (.keys ids)] (.set idx (aget ids i) i))
+(defn emit-claims! [(graph Any)] Any
+  (let [ids (js/call (js/get graph .ids) .filter (fn [(id String)] Bool (not (js/call id .startsWith TOPLEVEL))))
+        idx (js/new Map)
+        _n (doseq [i (js/call ids .keys)] (js/call idx .set (aget ids i) i))
         rows []
-        push! (fn [s :- Number p :- String o :- Any link? :- Bool] :- Any
-                (.push rows {:s s :p p :o o :link link?}))]
-    (doseq [i (.keys ids)]
+        push! (fn [(s Number) (p String) (o Any) (link? Bool)] Any
+                (js/call rows .push {:s s :p p :o o :link link?}))]
+    (doseq [i (js/call ids .keys)]
       (let [id (aget ids i)]
         (push! i "kind" "function" false)
-        (push! i "name" (.get (.-disp graph) id) false)
-        (push! i "module" (.get (.-modOf graph) id) false)
-        (push! i "leverage" (.-size (closure (.-rev graph) id)) false)
-        (doseq [callee (Array/from (.get (.-fwd graph) id))]
-          (when (.has idx callee)
-            (push! i "calls" (.get idx callee) true)))))
+        (push! i "name" (js/call (js/get graph .disp) .get id) false)
+        (push! i "module" (js/call (js/get graph .modOf) .get id) false)
+        (push! i "leverage" (js/get (closure (js/get graph .rev) id) .size) false)
+        (doseq [callee (js/call Array .from (js/call (js/get graph .fwd) .get id))]
+          (when (js/call idx .has callee)
+            (push! i "calls" (js/call idx .get callee) true)))))
     (doseq [r rows]
-      (.log console (str "[" (.-s r) " " (JSON/stringify (.-p r)) " "
-                         (if (.-link r) (.-o r) (JSON/stringify (.-o r))) "]")))
-    (.error console (str "\n; " (.-length ids) " nodes, " (.-length rows) " claims"))))
+      (js/call console .log (str "[" (js/get r .s) " " (js/call JSON .stringify (js/get r .p)) " "
+                         (if (js/get r .link) (js/get r .o) (js/call JSON .stringify (js/get r .o))) "]")))
+    (js/call console .error (str "\n; " (js/get ids .length) " nodes, " (js/get rows .length) " claims"))))
 
-(defn stats! [graph :- Any] :- Any
-  (let [fns (.filter (.-ids graph) (fn [id :- String] :- Bool (not (.startsWith id TOPLEVEL))))
-        edges (.reduce fns (fn [a :- Number id :- String] :- Number (+ a (.-size (.get (.-fwd graph) id)))) 0)
-        mods (.map (list-modules) parse-module!)
-        merges (.flatMap mods (fn [m :- Any] :- Any
-                                (.map (.-merges m) (fn [kv :- Any] :- String
-                                                     (str (demangle (aget kv 0)) " (" (.-module m) ", ×" (aget kv 1) ")")))))]
-    (.log console (str "modules: " (.-length (list-modules))
-                       "\nfunction nodes: " (.-length fns)
+(defn stats! [(graph Any)] Any
+  (let [fns (js/call (js/get graph .ids) .filter (fn [(id String)] Bool (not (js/call id .startsWith TOPLEVEL))))
+        edges (js/call fns .reduce (fn [(a Number) (id String)] Number (+ a (js/get (js/call (js/get graph .fwd) .get id) .size))) 0)
+        mods (js/call (list-modules) .map parse-module!)
+        merges (js/call mods .flatMap (fn [(m Any)] Any
+                                (js/call (js/get m .merges) .map (fn [(kv Any)] String
+                                                     (str (demangle (aget kv 0)) " (" (js/get m .module) ", ×" (aget kv 1) ")")))))]
+    (js/call console .log (str "modules: " (js/get (list-modules) .length)
+                       "\nfunction nodes: " (js/get fns .length)
                        "\ncall edges (intra-module): " edges))
-    (.log console (str "within-bundle node merges (same top-level name in >1 bundled file): " (.-length merges)))
-    (doseq [m merges] (.log console (str "  - " m)))))
+    (js/call console .log (str "within-bundle node merges (same top-level name in >1 bundled file): " (js/get merges .length)))
+    (doseq [m merges] (js/call console .log (str "  - " m)))))
 
 ;; ── Ground-truth equivalence (used by GATE C in test-projector) ────────────
 ;; For symbol X, beagle's reported caller-fn names (source) — forward-mangled to
 ;; emitted space — MUST be a subset of the projected callers across all nodes
 ;; named X. (beagle under-reports; projected is the sound superset.)
-(js/export (defn beagle-callers [sym :- String] :- Any
+(js/export (defn beagle-callers [(sym String)] Any
   (let [out (sh (str "/home/tom/code/beagle/bin/beagle callers " sym " src/gjoa/chrome/bjs") {:quiet true})
-        lines (.filter (.split (or out "") "\n") (fn [l :- String] :- Bool (.includes l "  in  ")))]
-    (Array/from (Set. (.map lines (fn [l :- String] :- String
-                                    (-> (aget (.split l "  in  ") 1)
-                                        (.split "  (") (aget 0) (.trim)))))))))
+        lines (js/call (js/call (or out "") .split "\n") .filter (fn [(l String)] Bool (js/call l .includes "  in  ")))]
+    (js/call Array .from
+      (js/new Set
+        (js/call lines .map
+          (fn [(l String)] String
+            (let [location (aget (js/call l .split "  in  ") 1)
+                  callable (aget (js/call location .split "  (") 0)]
+              (js/call callable .trim)))))))))
 
-(js/export (defn projected-callers [graph :- Any sym :- String] :- Any
+(js/export (defn projected-callers [(graph Any) (sym String)] Any
   (let [ids (resolve-ids graph sym)
-        names (Set.)]
+        names (js/new Set)]
     (doseq [id ids]
-      (doseq [c (Array/from (.get (.-rev graph) id))]
-        (let [at (.indexOf c "@")]
-          (.add names (demangle (.substring c 0 at))))))
-    (Array/from names))))
+      (doseq [c (js/call Array .from (js/call (js/get graph .rev) .get id))]
+        (let [at (js/call c .indexOf "@")]
+          (js/call names .add (demangle (js/call c .substring 0 at))))))
+    (js/call Array .from names))))
 
-(js/export (defn build-graph! [] :- Any (build-graph)))
+(js/export (defn build-graph! [] Any (build-graph)))
 
-(defn usage! [] :- Any
-  (.log console "usage: codegraph <who-calls|blast-radius> <fn> | leverage [N] | emit | stats")
-  (.exit process 2))
+(defn usage! [] Any
+  (js/call console .log "usage: codegraph <who-calls|blast-radius> <fn> | leverage [N] | emit | stats")
+  (js/call process .exit 2))
 
-(defn main! [] :- Any
-  (let [argv (.-argv process)
+(defn main! [] Any
+  (let [argv (js/get process .argv)
         cmd (aget argv 2)
         arg (aget argv 3)
         graph (build-graph)]
     (cond
       (= cmd "who-calls") (if arg (who-calls! graph arg) (usage!))
       (= cmd "blast-radius") (if arg (blast-radius! graph arg) (usage!))
-      (= cmd "leverage") (leverage! graph (or (and arg (Number/parseInt arg 10)) 20))
+      (= cmd "leverage") (leverage! graph (or (and arg (js/call Number .parseInt arg 10)) 20))
       (= cmd "emit") (emit-claims! graph)
       (= cmd "stats") (stats! graph)
       :else (usage!))))
 
-(when (.-main (js/import-meta)) (main!))
+(when (js/get (js/import-meta) .main) (main!))

@@ -1,6 +1,5 @@
 #lang beagle/js
 (ns gjoa.test.harness)
-(define-mode strict)
 
 ;; Tier 2 test harness — happy-dom + chrome global mocks.
 ;;
@@ -17,126 +16,126 @@
 ;;   const harness = setup_harness();
 ;;   afterEach(() => harness.cleanup());
 
-(declare-extern [globalThis Boolean Number String] Any)
+(declare-extern [globalThis Boolean Number String undefined] Any)
 
 ;; NOTE: Window is from happy-dom npm package.
 ;; The generated JS needs this import prepended manually:
 ;;   import { Window } from "happy-dom";
 
-(def GLOBALS-TO-OVERRIDE :- Any
+(def GLOBALS-TO-OVERRIDE Any
   ["window" "document" "Services" "Ci" "Cu" "Cc"
    "ChromeUtils" "PathUtils" "IOUtils"
    "requestAnimationFrame" "cancelAnimationFrame"
    "getComputedStyle" "MutationObserver"])
 
-(js/export (defn setup-harness! [] :- Any
-  (let [happy-window (Window.)
-        happy-doc (.-document happy-window)
+(js/export (defn setup-harness! [] Any
+  (let [happy-window (js/new Window)
+        happy-doc (js/get happy-window .document)
 
-        prefs (Map.)
-        pref-observers (Map.)]
+        prefs (js/new Map)
+        pref-observers (js/new Map)]
 
     ;; Default prefs gjoa actually reads. Tests override via setPref.
-    (.set prefs "sidebar.verticalTabs" true)
-    (.set prefs "sidebar.position_start" true)
-    (.set prefs "gjoa.compact.hoverHackDelay" 0)
-    (.set prefs "gjoa.debug" false)
+    (js/call prefs .set "sidebar.verticalTabs" true)
+    (js/call prefs .set "sidebar.position_start" true)
+    (js/call prefs .set "gjoa.compact.hoverHackDelay" 0)
+    (js/call prefs .set "gjoa.debug" false)
 
-    (let [notify (fn [key]
-            (.forEach (or (.get pref-observers key) [])
-              #(try
-                 (.observe % nil key "")
-                 (catch Any e
-                   (console/error "[harness] pref observer threw" e)))))
+    (let [notify (fn [key] Any
+            (js/call (or (js/call pref-observers .get key) []) .forEach
+              (fn [%1] Any (try
+                 (js/call %1 .observe nil key "")
+                 (catch (e Any)
+                   (console/error "[harness] pref observer threw" e))))))
 
           services {:prefs
-                     {:getBoolPref #(if (.has prefs %1)
-                        (Boolean (.get prefs %1))
-                        (or %2 false))
-                      :setBoolPref (fn [key value]
-                        (.set prefs key value)
+                     {:getBoolPref (fn [%1 %2] Any (if (js/call prefs .has %1)
+                        (Boolean (js/call prefs .get %1))
+                        (or %2 false)))
+                      :setBoolPref (fn [key value] Any
+                        (js/call prefs .set key value)
                         (notify key))
-                      :getIntPref #(if (.has prefs %1)
-                        (Number (.get prefs %1))
-                        (or %2 0))
-                      :setIntPref (fn [key value]
-                        (.set prefs key value)
+                      :getIntPref (fn [%1 %2] Any (if (js/call prefs .has %1)
+                        (Number (js/call prefs .get %1))
+                        (or %2 0)))
+                      :setIntPref (fn [key value] Any
+                        (js/call prefs .set key value)
                         (notify key))
-                      :getCharPref #(if (.has prefs %1)
-                        (String (.get prefs %1))
-                        (or %2 ""))
-                      :setCharPref (fn [key value]
-                        (.set prefs key value)
+                      :getCharPref (fn [%1 %2] Any (if (js/call prefs .has %1)
+                        (String (js/call prefs .get %1))
+                        (or %2 "")))
+                      :setCharPref (fn [key value] Any
+                        (js/call prefs .set key value)
                         (notify key))
-                      :addObserver (fn [key observer]
-                        (when (not (.has pref-observers key))
-                          (.set pref-observers key (Set.)))
-                        (.add (.get pref-observers key) observer))
-                      :removeObserver #(let [s (.get pref-observers %1)]
-                          (when s (.delete s %2)))}
-                    :dirsvc {:get #(let [r {:path "/tmp"}] r)}}
+                      :addObserver (fn [key observer] Any
+                        (when (not (js/call pref-observers .has key))
+                          (js/call pref-observers .set key (js/new Set)))
+                        (js/call (js/call pref-observers .get key) .add observer))
+                      :removeObserver (fn [%1 %2] Any (let [s (js/call pref-observers .get %1)]
+                          (when s (js/call s .delete %2))))}
+                    :dirsvc {:get (fn [] Any (let [r {:path "/tmp"}] r))}}
 
           ;; Save current globals before overriding
-          saved (Map.)]
+          saved (js/new Map)]
 
-      (.forEach GLOBALS-TO-OVERRIDE
-        #(.set saved % (.get Reflect globalThis %)))
+      (js/call GLOBALS-TO-OVERRIDE .forEach
+        (fn [%1] Any (js/call saved .set %1 (js/call Reflect .get globalThis %1))))
 
       ;; Wire happy-dom into globals. (.set Reflect …) is Reflect.set — beagle
       ;; 77df8a9's aset is Int-indexed only; string property writes go through
       ;; Reflect.set / Reflect.get / Reflect.deleteProperty.
-      (.set Reflect globalThis "window" happy-window)
-      (.set Reflect globalThis "document" happy-doc)
-      (.set Reflect globalThis "Services" services)
-      (.set Reflect globalThis "Ci" {})
-      (.set Reflect globalThis "Cu" {})
-      (.set Reflect globalThis "Cc" {})
-      (.set Reflect globalThis "ChromeUtils"
-        {:importESModule #(let [r {:SessionStore nil}] r)})
-      (.set Reflect globalThis "PathUtils"
-        {:join (fn [& parts] (.join parts "/"))})
-      (.set Reflect globalThis "IOUtils"
-        {:writeUTF8 (fn [] nil)
-         :readUTF8 #(throw (Error. "no file"))
-         :write (fn [] nil)
-         :stat #(let [r {:size 0}] r)})
-      (.set Reflect globalThis "requestAnimationFrame"
-        (.bind (.-requestAnimationFrame happy-window) happy-window))
-      (.set Reflect globalThis "cancelAnimationFrame"
-        (.bind (.-cancelAnimationFrame happy-window) happy-window))
-      (.set Reflect globalThis "getComputedStyle"
-        (.bind (.-getComputedStyle happy-window) happy-window))
-      (.set Reflect globalThis "MutationObserver"
-        (.-MutationObserver happy-window))
+      (js/call Reflect .set globalThis "window" happy-window)
+      (js/call Reflect .set globalThis "document" happy-doc)
+      (js/call Reflect .set globalThis "Services" services)
+      (js/call Reflect .set globalThis "Ci" {})
+      (js/call Reflect .set globalThis "Cu" {})
+      (js/call Reflect .set globalThis "Cc" {})
+      (js/call Reflect .set globalThis "ChromeUtils"
+        {:importESModule (fn [] Any (let [r {:SessionStore nil}] r))})
+      (js/call Reflect .set globalThis "PathUtils"
+        {:join (fn [& parts] Any (js/call parts .join "/"))})
+      (js/call Reflect .set globalThis "IOUtils"
+        {:writeUTF8 (fn [] Any nil)
+         :readUTF8 (fn [] Any (throw (js/new Error "no file")))
+         :write (fn [] Any nil)
+         :stat (fn [] Any (let [r {:size 0}] r))})
+      (js/call Reflect .set globalThis "requestAnimationFrame"
+        (js/call (js/get happy-window .requestAnimationFrame) .bind happy-window))
+      (js/call Reflect .set globalThis "cancelAnimationFrame"
+        (js/call (js/get happy-window .cancelAnimationFrame) .bind happy-window))
+      (js/call Reflect .set globalThis "getComputedStyle"
+        (js/call (js/get happy-window .getComputedStyle) .bind happy-window))
+      (js/call Reflect .set globalThis "MutationObserver"
+        (js/get happy-window .MutationObserver))
 
       ;; Map createXULElement to createElement
-      (set! (.-createXULElement happy-doc)
-        #(.createElement happy-doc %))
+      (js/set! happy-doc .createXULElement
+        (fn [%1] Any (js/call happy-doc .createElement %1)))
 
       ;; Pre-populate elements compact mode binds to
-      (let [sidebar-main (.createElement happy-doc "div")]
-        (set! (.-id sidebar-main) "sidebar-container")
-        (.appendChild (.-body happy-doc) sidebar-main))
+      (let [sidebar-main (js/call happy-doc .createElement "div")]
+        (js/set! sidebar-main .id "sidebar-container")
+        (js/call (js/get happy-doc .body) .appendChild sidebar-main))
 
-      (let [navigator-toolbox (.createElement happy-doc "div")]
-        (set! (.-id navigator-toolbox) "navigator-toolbox")
-        (.appendChild (.-body happy-doc) navigator-toolbox))
+      (let [navigator-toolbox (js/call happy-doc .createElement "div")]
+        (js/set! navigator-toolbox .id "navigator-toolbox")
+        (js/call (js/get happy-doc .body) .appendChild navigator-toolbox))
 
       {:window happy-window
        :document happy-doc
        :prefs prefs
        :prefObservers pref-observers
-       :setPref (fn [key value]
-         (.set prefs key value)
+       :setPref (fn [key value] Any
+         (js/call prefs .set key value)
          (notify key))
-       :flushRAF (fn []
-         (let [abort (.-abort (.-happyDOM happy-window))]
+       :flushRAF (fn [] Any
+         (let [abort (js/get (js/get happy-window .happyDOM) .abort)]
            (when abort (abort))))
-       :cleanup (fn []
-         (.forEach GLOBALS-TO-OVERRIDE
-           #(if (= (.get saved %) js/undefined)
-              (.deleteProperty Reflect globalThis %)
-              (.set Reflect globalThis % (.get saved %))))
+       :cleanup (fn [] Any
+         (js/call GLOBALS-TO-OVERRIDE .forEach
+           (fn [%1] Any (if (= (js/call saved .get %1) undefined)
+              (js/call Reflect .deleteProperty globalThis %1)
+              (js/call Reflect .set globalThis %1 (js/call saved .get %1)))))
          (try
-           (.close happy-window)
-           (catch Any _e nil)))}))))
+           (js/call happy-window .close)
+           (catch (_e Any) nil)))}))))

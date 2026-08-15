@@ -3,32 +3,29 @@
 (ns gjoa.tools.security.mitigations
   (:require [fs :refer [existsSync readFileSync]]
             [path :refer [join]]))
-(define-mode strict)
 (declare-extern [describe expect test process JSON RegExp Object] Any)
 
-(def REPO :- String (.cwd process))
-(def MANIFEST :- String (join REPO "configs" "security-mitigations.json"))
+(def REPO String (js/call process .cwd))
+(def MANIFEST String (join REPO "configs" "security-mitigations.json"))
 
-(defn regex-from-literal [lit :- String] :- Any
-  (let [m (.match lit (RegExp. "^/(.*)/([a-z]*)$"))]
-    (if m (RegExp. (aget m 1) (aget m 2)) (RegExp. lit))))
+(defn regex-from-literal [(lit String)] Any
+  (let [m (js/call lit .match (js/new RegExp "^/(.*)/([a-z]*)$"))]
+    (if m (js/new RegExp (aget m 1) (aget m 2)) (js/new RegExp lit))))
 
 (describe "security mitigation contracts"
-  (fn []
-    (test "every source assertion and validator corpus holds"
-      (fn []
-        (.toBe (expect (existsSync MANIFEST)) true)
-        (let [mits (.-mitigations (.parse JSON (readFileSync MANIFEST "utf8")))]
-          (doseq [id (Object/keys mits)]
+  (fn [] Any (test "every source assertion and validator corpus holds"
+      (fn [] Any (js/call (expect (existsSync MANIFEST)) .toBe true)
+        (let [mits (js/get (js/call JSON .parse (readFileSync MANIFEST "utf8")) .mitigations)]
+          (doseq [id (js/call Object .keys mits)]
             (let [entry (get mits id)
-                  src (readFileSync (join REPO (.-file entry)) "utf8")]
-              (doseq [rx (or (.-mustMatch entry) [])]
-                (.toBe (expect (.test (RegExp. rx "m") src)) true))
-              (when (.-extractRegex entry)
-                (let [m (.match src (RegExp. (.-from (.-extractRegex entry))))]
-                  (.toBeTruthy (expect m))
+                  src (readFileSync (join REPO (js/get entry .file)) "utf8")]
+              (doseq [rx (or (js/get entry .mustMatch) [])]
+                (js/call (expect (js/call (js/new RegExp rx "m") .test src)) .toBe true))
+              (when (js/get entry .extractRegex)
+                (let [m (js/call src .match (js/new RegExp (js/get (js/get entry .extractRegex) .from)))]
+                  (js/call (expect m) .toBeTruthy)
                   (let [re (regex-from-literal (aget m 1))]
-                    (doseq [s (.-mustReject entry)]
-                      (.toBe (expect (.test re s)) true))
-                    (doseq [s (.-mustAccept entry)]
-                      (.toBe (expect (.test re s)) false))))))))))))
+                    (doseq [s (js/get entry .mustReject)]
+                      (js/call (expect (js/call re .test s)) .toBe true))
+                    (doseq [s (js/get entry .mustAccept)]
+                      (js/call (expect (js/call re .test s)) .toBe false))))))))))))

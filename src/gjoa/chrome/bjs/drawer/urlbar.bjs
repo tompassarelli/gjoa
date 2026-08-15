@@ -2,52 +2,51 @@
 (ns gjoa.drawer.urlbar
   (:require [gjoa.macros :refer [q by-id html-new htm xul-id attr! on! onc! offc! off! bool has? rmattr! css!]]
             [gjoa.tabs.log :refer [create-logger!]]))
-(define-mode strict)
 
 (declare-extern [document window String] Any)
 
 ;; The floating palette's hint footer, and the ONLY place its text is written.
 ;; Must stay a projection of handle-accel below: ctrl+j → selectBy(+1) = DOWN,
 ;; ctrl+k → selectBy(-1) = UP (vim convention), Escape → deactivate-floating.
-(def FLOATING-HINTS :- Any
+(def FLOATING-HINTS Any
   [{:key "ctrl+j" :act "down"}
    {:key "ctrl+k" :act "up"}
    {:key "esc"    :act "exit"}])
 
-(js/export (defn make-urlbar! [deps] :- Any
-  (let [urlbar (.-urlbar deps)
-        root (.-documentElement document)
+(js/export (defn make-urlbar! [deps] Any
+  (let [urlbar (js/get deps .urlbar)
+        root (js/get document .documentElement)
         log (create-logger! "urlbar")
         state {:activated false :intent "current" :backdrop nil :ghost nil :hints nil
                :healObs nil :healFn nil
                :urlbarH0 "" :containerH0 "" :stage nil :home nil
                :popover0 nil :pinObs nil}
 
-        intent-attr #(if (= % "newTab") "new-tab" "current")
+        intent-attr (fn [%1] Any (if (= %1 "newTab") "new-tab" "current"))
 
         ;; #urlbar-container — NOT `parentNode`, which is the stage while floating.
-        container (fn []
-          (or (some-> (.-home state) .-parent) (.-parentNode urlbar)))
+        container (fn [] Any
+          (or (some-> (js/get state .home) (js/get .parent)) (js/get urlbar .parentNode)))
 
         ;; Append the hint footer as #urlbar's LAST child so it lands below
         ;; .urlbarView (the results list). Idempotent — the re-arm path calls it
         ;; too, since a stale node can be orphaned by a raced teardown.
-        ensure-hints (fn []
-          (when (not (bool (some-> (.-hints state) .-isConnected)))
+        ensure-hints (fn [] Any
+          (when (not (bool (some-> (js/get state .hints) (js/get .isConnected))))
             (let [el (html-new "div")]
-              (set! (.-id el) "gjoa-urlbar-hints")
+              (js/set! el .id "gjoa-urlbar-hints")
               (attr! el "aria-hidden" "true")
-              (.forEach FLOATING-HINTS (fn [h]
+              (js/call FLOATING-HINTS .forEach (fn [h] Any
                 (let [pair (htm "span" "gjoa-urlbar-hint")
                       k (htm "span" "gjoa-urlbar-hint-key")
                       a (htm "span" "gjoa-urlbar-hint-act")]
-                  (set! (.-textContent k) (.-key h))
-                  (set! (.-textContent a) (.-act h))
-                  (.appendChild pair k)
-                  (.appendChild pair a)
-                  (.appendChild el pair))))
-              (.appendChild urlbar el)
-              (set! (.-hints state) el))))
+                  (js/set! k .textContent (js/get h .key))
+                  (js/set! a .textContent (js/get h .act))
+                  (js/call pair .appendChild k)
+                  (js/call pair .appendChild a)
+                  (js/call el .appendChild pair))))
+              (js/call urlbar .appendChild el)
+              (js/set! state .hints el))))
 
         ;; WINDOW-GLOBAL STAGE: documentElement is the only ancestor whose fixed
         ;; containing block is the viewport AND whose stacking context is above the
@@ -57,71 +56,71 @@
         ;; connectedCallback, which sets `#allowBreakout = !!this.closest("toolbar")`
         ;; — under a plain div that goes false and #stopBreakout() permanently kills
         ;; [breakout]/[breakout-extend], so the palette never expands for its results.
-        ensure-stage! (fn []
-          (when (not (bool (some-> (.-stage state) .-isConnected)))
+        ensure-stage! (fn [] Any
+          (when (not (bool (some-> (js/get state .stage) (js/get .isConnected))))
             (let [el (xul-id "toolbar" "gjoa-urlbar-stage")]
               (attr! el "customizable" "false")
-              (.appendChild root el)
-              (set! (.-stage state) el)))
-          (.-stage state))
+              (js/call root .appendChild el)
+              (js/set! state .stage el)))
+          (js/get state .stage))
 
         ;; Idempotent: records the home slot only on the move that actually leaves it,
         ;; so a re-summon or a heal can call this without clobbering the restore target.
         ;; `identical?` / `.contains`, never `=`: beagle's `=` is STRUCTURAL, and two
         ;; DOM nodes both have zero own enumerable keys, so `=` is true for any pair.
-        ensure-staged! (fn []
+        ensure-staged! (fn [] Any
           (let [st (ensure-stage!)]
-            (when (not (bool (.contains st urlbar)))
-              (set! (.-home state) {:parent (.-parentNode urlbar)
-                                    :next (.-nextSibling urlbar)})
-              (.appendChild st urlbar))))
+            (when (not (bool (js/call st .contains urlbar)))
+              (js/set! state .home {:parent (js/get urlbar .parentNode)
+                                    :next (js/get urlbar .nextSibling)})
+              (js/call st .appendChild urlbar))))
 
-        restore-home! (fn []
-          (let [h (.-home state)]
+        restore-home! (fn [] Any
+          (let [h (js/get state .home)]
             (when h
-              (set! (.-home state) nil)
-              (let [p (.-parent h) n (.-next h)]
+              (js/set! state .home nil)
+              (let [p (js/get h .parent) n (js/get h .next)]
                 (when p
-                  (if (and n (identical? (.-parentNode n) p))
-                    (.insertBefore p urlbar n)
-                    (.appendChild p urlbar)))))))
+                  (if (and n (identical? (js/get n .parentNode) p))
+                    (js/call p .insertBefore urlbar n)
+                    (js/call p .appendChild urlbar)))))))
 
         ;; HORIZONTAL ONLY. In the drawer the row height is a CSS constant gjoa owns
         ;; (`#gjoa-urlbar-toolbar #urlbar-container`); the nav-bar row has no such
         ;; constant, and Firefox's post-teardown measure lands on a frame with
         ;; [breakout] off the container — no in-flow child — so it latches the
         ;; collapsed box as the row height. One correction, then Firefox owns it again.
-        pin-container-height! (fn [c want]
-          (when (.-pinObs state)
-            (.disconnect (.-pinObs state))
-            (set! (.-pinObs state) nil))
+        pin-container-height! (fn [c want] Any
+          (when (js/get state .pinObs)
+            (js/call (js/get state .pinObs) .disconnect)
+            (js/set! state .pinObs nil))
           (when (and c (not= want ""))
-            (let [obs (MutationObserver.
-                        (fn []
-                          (when (not= (.getPropertyValue (.-style c) "--urlbar-container-height")
+            (let [obs (js/new MutationObserver
+                        (fn [] Any
+                          (when (not= (js/call (js/get c .style) .getPropertyValue "--urlbar-container-height")
                                       want)
-                            (.disconnect obs)
-                            (set! (.-pinObs state) nil)
-                            (.setProperty (.-style c) "--urlbar-container-height" want))))]
-              (.observe obs c {:attributes true :attributeFilter ["style"]})
-              (set! (.-pinObs state) obs)
-              (.setTimeout window
-                (fn [] (when (identical? (.-pinObs state) obs)
-                         (.disconnect obs)
-                         (set! (.-pinObs state) nil)))
+                            (js/call obs .disconnect)
+                            (js/set! state .pinObs nil)
+                            (js/call (js/get c .style) .setProperty "--urlbar-container-height" want))))]
+              (js/call obs .observe c {:attributes true :attributeFilter ["style"]})
+              (js/set! state .pinObs obs)
+              (js/call window .setTimeout
+                (fn [] Any (when (identical? (js/get state .pinObs) obs)
+                         (js/call obs .disconnect)
+                         (js/set! state .pinObs nil)))
                 1000))))
 
         ;; [popover] is Firefox's own markup on #urlbar and UrlbarInput calls
         ;; showPopover() unconditionally, but gjoa removes the attr to demote the bar
         ;; out of the top layer — so the promotion must no-op while demoted rather
         ;; than throw NotSupportedError and abort the rest of that frame's work.
-        install-popover-shim! (fn []
-          (when (not (.-gjoaPopoverShim urlbar))
-            (let [native (.-showPopover urlbar)]
+        install-popover-shim! (fn [] Any
+          (when (not (js/get urlbar .gjoaPopoverShim))
+            (let [native (js/get urlbar .showPopover)]
               (when native
-                (set! (.-gjoaPopoverShim urlbar) true)
-                (set! (.-showPopover urlbar)
-                  (fn [] (when (has? urlbar "popover") (.call native urlbar))))))))
+                (js/set! urlbar .gjoaPopoverShim true)
+                (js/set! urlbar .showPopover
+                  (fn [] Any (when (has? urlbar "popover") (js/call native .call urlbar))))))))
 
         ;; #149 ATOMIC TEARDOWN. The naive teardown removed `gjoa-urlbar-floating`
         ;; synchronously, which instantly reverted the urlbar from the centered
@@ -133,19 +132,19 @@
         ;; (after the hidden frame paints) actually remove the floating attrs and
         ;; tear down backdrop/ghost/popover behind the now-invisible box. So the
         ;; inline-restore reflow never paints.
-        finish-teardown (fn []
+        finish-teardown (fn [] Any
           ;; Bail if a re-summon raced in before this frame fired — activate-floating
           ;; set activated=true + re-added the floating attrs, so tearing down now
           ;; would clobber the fresh activation. Leave it fully armed.
-          (when (not (.-activated state))
+          (when (not (js/get state .activated))
             ;; Detach the top-layer watchdog FIRST — teardown deliberately hides the
             ;; popover and drops the floating attrs, and a live heal would fight it.
-            (when (.-healObs state)
-              (.disconnect (.-healObs state))
-              (set! (.-healObs state) nil))
-            (when (.-healFn state)
-              (off! urlbar "toggle" (.-healFn state))
-              (set! (.-healFn state) nil))
+            (when (js/get state .healObs)
+              (js/call (js/get state .healObs) .disconnect)
+              (js/set! state .healObs nil))
+            (when (js/get state .healFn)
+              (off! urlbar "toggle" (js/get state .healFn))
+              (js/set! state .healFn nil))
             ;; HIDE THE POPOVER FIRST, in EVERY mode (not just compact) — the
             ;; floating palette ALWAYS showPopover()s the urlbar into the top layer,
             ;; so a dismiss must take it back OUT or the resting urlbar stays a
@@ -165,46 +164,46 @@
             ;; cannot race here; leftover focus is the ONLY source of breakout-extend at
             ;; teardown, so close the view + hide the popover + clear breakout unconditionally.
             (try
-              (let [a (.-activeElement document)]
-                (when (and a (or (identical? a urlbar) (.contains urlbar a)))
+              (let [a (js/get document .activeElement)]
+                (when (and a (or (identical? a urlbar) (js/call urlbar .contains a)))
                   ;; announce the hand-off: the init-window focus guard rescues any
                   ;; content-focus taken while the palette is up, this one included.
-                  (some-> window .-gjoaFocusGuard .release)
-                  (some-> window .-gBrowser .-selectedBrowser .focus)))
+                  (some-> window (js/get .gjoaFocusGuard) (js/call .release))
+                  (some-> window (js/get .gBrowser) (js/get .selectedBrowser) (js/call .focus))))
               ;; Un-stage FIRST: everything below writes through `parentNode`/`container`
               ;; and must see the real #urlbar-container. Still behind the teardown
               ;; opacity:0 + the floating attrs, so the in-flow restore never paints
               ;; (the #149/#150 ordering).
               (restore-home!)
-              (some-> window .-gURLBar .-view .close)
-              (when (and (.matches urlbar ":popover-open") (.-hidePopover urlbar))
-                (.hidePopover urlbar))
+              (some-> window (js/get .gURLBar) (js/get .view) (js/call .close))
+              (when (and (js/call urlbar .matches ":popover-open") (js/get urlbar .hidePopover))
+                (js/call urlbar .hidePopover))
               ;; RESTORE the pre-summon promotion, never strip unconditionally: gjoa does
               ;; not own [popover] — drawer/compact promotes the resting bar whenever
               ;; compact is off (the steady state in horizontal tabs) and leaves it
               ;; demoted when compact is on.
-              (if (= (.-popover0 state) "manual")
+              (if (= (js/get state .popover0) "manual")
                 (do (attr! urlbar "popover" "manual")
-                    (when (and (not (bool (.matches urlbar ":popover-open")))
-                               (.-showPopover urlbar))
-                      (.showPopover urlbar)))
+                    (when (and (not (bool (js/call urlbar .matches ":popover-open")))
+                               (js/get urlbar .showPopover))
+                      (js/call urlbar .showPopover)))
                 (rmattr! urlbar "popover"))
               (rmattr! urlbar "breakout-extend")
               ;; [breakout] stays Firefox's: #updateLayoutBreakoutDimensions strips it and
               ;; re-adds a frame later, so any snapshot taken by a focusing summon reads a
               ;; transient "off". Only the height vars below are ours to undo — we caused
               ;; those writes by parking #urlbar on the viewport-sized stage.
-              (if (= (.-urlbarH0 state) "")
-                (.removeProperty (.-style urlbar) "--urlbar-height")
-                (.setProperty (.-style urlbar) "--urlbar-height" (.-urlbarH0 state)))
-              (when (.-parentNode urlbar)
-                (if (= (.-containerH0 state) "")
-                  (.removeProperty (.-style (.-parentNode urlbar))
+              (if (= (js/get state .urlbarH0) "")
+                (js/call (js/get urlbar .style) .removeProperty "--urlbar-height")
+                (js/call (js/get urlbar .style) .setProperty "--urlbar-height" (js/get state .urlbarH0)))
+              (when (js/get urlbar .parentNode)
+                (if (= (js/get state .containerH0) "")
+                  (js/call (js/get (js/get urlbar .parentNode) .style) .removeProperty
                                    "--urlbar-container-height")
-                  (.setProperty (.-style (.-parentNode urlbar))
-                                "--urlbar-container-height" (.-containerH0 state)))
-                (pin-container-height! (.-parentNode urlbar) (.-containerH0 state)))
-              (catch Any e
+                  (js/call (js/get (js/get urlbar .parentNode) .style) .setProperty
+                                "--urlbar-container-height" (js/get state .containerH0)))
+                (pin-container-height! (js/get urlbar .parentNode) (js/get state .containerH0)))
+              (catch (e Any)
                 (log "finishTeardown:collapse-error" {:msg (String e)})))
             ;; #150: suppress urlbar transitions for the restore frame so the resting
             ;; geometry reverts INSTANTLY (matching the ghost look-alike) instead of
@@ -215,28 +214,28 @@
             (rmattr! root "gjoa-urlbar-intent")
             (rmattr! root "gjoa-urlbar-teardown")
             (rmattr! root "gjoa-urlbar-arming")
-            (when (.-backdrop state)
-              (.remove (.-backdrop state))
-              (set! (.-backdrop state) nil))
-            (when (.-ghost state)
-              (.remove (.-ghost state))
-              (set! (.-ghost state) nil))
-            (when (.-hints state)
-              (.remove (.-hints state))
-              (set! (.-hints state) nil))
-            (when (.-stage state)
-              (.remove (.-stage state))
-              (set! (.-stage state) nil))
+            (when (js/get state .backdrop)
+              (js/call (js/get state .backdrop) .remove)
+              (js/set! state .backdrop nil))
+            (when (js/get state .ghost)
+              (js/call (js/get state .ghost) .remove)
+              (js/set! state .ghost nil))
+            (when (js/get state .hints)
+              (js/call (js/get state .hints) .remove)
+              (js/set! state .hints nil))
+            (when (js/get state .stage)
+              (js/call (js/get state .stage) .remove)
+              (js/set! state .stage nil))
             ;; release the snap after the instant revert has painted (double-rAF: frame
             ;; one applies the snapped resting layout, frame two re-enables transitions
             ;; so later focus/expand animations still work).
-            (.requestAnimationFrame window
-              (fn [] (.requestAnimationFrame window
-                       (fn [] (rmattr! root "gjoa-urlbar-snap")))))))
+            (js/call window .requestAnimationFrame
+              (fn [] Any (js/call window .requestAnimationFrame
+                       (fn [] Any (rmattr! root "gjoa-urlbar-snap")))))))
 
-        deactivate-floating (fn []
-          (when (.-activated state)
-            (set! (.-activated state) false)
+        deactivate-floating (fn [] Any
+          (when (js/get state .activated)
+            (js/set! state .activated false)
             (log "deactivateFloating")
             ;; Fade the floating bar/backdrop out (CSS transition on the teardown
             ;; attr, ~130ms), then restore resting geometry AFTER the fade so the
@@ -252,88 +251,88 @@
             ;; guard + removeEventListener; a fallback timer covers reduced-motion
             ;; (transition:none → no transitionend) and any dropped event.
             (let [h {:done false :f nil}
-                  fire (fn [e]
-                         (when (and (not (.-done h))
+                  fire (fn [(e Any)] Any
+                         (when (and (not (js/get h .done))
                                     (or (not e)
                                         ;; `identical?`: transitionend BUBBLES, so a descendant's
                                         ;; opacity fade must not fire the palette's teardown.
-                                        (and (identical? (.-target e) urlbar)
-                                             (= (.-propertyName e) "opacity"))))
-                           (set! (.-done h) true)
-                           (try (.removeEventListener urlbar "transitionend" (.-f h))
-                                (catch Any _ nil))
+                                        (and (identical? (js/get e .target) urlbar)
+                                             (= (js/get e .propertyName) "opacity"))))
+                           (js/set! h .done true)
+                           (try (js/call urlbar .removeEventListener "transitionend" (js/get h .f))
+                                (catch (_ Any) nil))
                            (finish-teardown)))]
-              (set! (.-f h) fire)
-              (.addEventListener urlbar "transitionend" fire)
-              (.setTimeout window (fn [] (fire nil)) 260))))
+              (js/set! h .f fire)
+              (js/call urlbar .addEventListener "transitionend" fire)
+              (js/call window .setTimeout (fn [] Any (fire nil)) 260))))
 
         ;; SINGLE OWNER of the top-layer promotion. Belt-and-braces since the stage
         ;; above owns centring + paint order; this only restores the [breakout] pair
         ;; (what makes .urlbar-background / .urlbarView render at all) and re-promotes.
-        ensure-floating-promoted (fn []
+        ensure-floating-promoted (fn [] Any
           (try
             (when (not (has? urlbar "breakout"))
               (attr! urlbar "breakout" "true"))
             (let [c (container)]
               (when (and c (not (has? c "breakout")))
                 (attr! c "breakout" "true")))
-            (when (not= (.getAttribute urlbar "popover") "manual")
+            (when (not= (js/call urlbar .getAttribute "popover") "manual")
               (attr! urlbar "popover" "manual"))
-            (when (and (not (bool (.matches urlbar ":popover-open"))) (.-showPopover urlbar))
-              (.showPopover urlbar))
-            (catch Any e
+            (when (and (not (bool (js/call urlbar .matches ":popover-open"))) (js/get urlbar .showPopover))
+              (js/call urlbar .showPopover))
+            (catch (e Any)
               (log "activateFloating:promote-error" {:msg (String e)})))
           ;; SEPARATE catch: sharing one with the promotion meant a showPopover throw
           ;; also skipped the focus, leaving a visible palette that swallowed typing.
           (try
-            (some-> window .-gURLBar .focus)
-            (some-> window .-gURLBar .select)
-            (catch Any e
+            (some-> window (js/get .gURLBar) (js/call .focus))
+            (some-> window (js/get .gURLBar) (js/call .select))
+            (catch (e Any)
               (log "activateFloating:focus-error" {:msg (String e)}))))
 
         ;; TOP-LAYER WATCHDOG: gjoa does not own `popover` on #urlbar — UrlbarInput's
         ;; #stopBreakout() evicts it (modal blocker, layout-breakout re-measure, urlbar
         ;; reparenting), so a one-shot promotion cannot hold. Re-assert on every popover
         ;; `toggle` and on any [popover]/[breakout] write.
-        heal (fn []
-          (when (and (.-activated state)
+        heal (fn [] Any
+          (when (and (js/get state .activated)
                      (has? root "gjoa-urlbar-floating")
                      (not (has? root "gjoa-urlbar-teardown")))
             ;; A modal dialog raises the blocker deliberately; dismiss rather than heal.
             ;; [window-modal-open] lands AFTER the increment, so gate on `.open` too.
-            (if (or (bool (some-> (by-id "window-modal-dialog") .-open))
+            (if (or (bool (some-> (by-id "window-modal-dialog") (js/get .open)))
                     (has? root "window-modal-open"))
               (do (log "heal:modal-dismiss")
                   (deactivate-floating))
-              (when (not (and (bool (.matches urlbar ":popover-open"))
+              (when (not (and (bool (js/call urlbar .matches ":popover-open"))
                               (has? urlbar "breakout")))
                 (log "heal:re-promote"
-                     {:popoverOpen (bool (.matches urlbar ":popover-open"))
+                     {:popoverOpen (bool (js/call urlbar .matches ":popover-open"))
                       :breakout (has? urlbar "breakout")})
                 (ensure-staged!)
                 (ensure-floating-promoted)))))
 
-        install-heal (fn []
-          (when (not (.-healFn state))
-            (set! (.-healFn state) heal)
+        install-heal (fn [] Any
+          (when (not (js/get state .healFn))
+            (js/set! state .healFn heal)
             (on! urlbar "toggle" heal))
-          (when (not (.-healObs state))
-            (let [obs (MutationObserver. heal)]
-              (.observe obs urlbar
+          (when (not (js/get state .healObs))
+            (let [obs (js/new MutationObserver heal)]
+              (js/call obs .observe urlbar
                 {:attributes true :attributeFilter ["popover" "breakout"]})
-              (set! (.-healObs state) obs))))
+              (js/set! state .healObs obs))))
 
-        activate-floating (fn [new-intent]
-          (set! (.-intent state) new-intent)
+        activate-floating (fn [new-intent] Any
+          (js/set! state .intent new-intent)
           ;; If a prior dismiss is still mid-teardown (teardown attr set, rAF
           ;; pending), a quick re-summon must clear it so the bar isn't stuck
           ;; opacity:0. The pending finish-teardown is then a near-no-op (attrs
           ;; already re-set by activate; it only re-removes the stale teardown
           ;; attr, which activate cleared anyway).
           (rmattr! root "gjoa-urlbar-teardown")
-          (let [attr-val (intent-attr (.-intent state))]
-            (if (.-activated state)
-              (do (log "activateFloating:re-arm" {:intent (.-intent state)})
+          (let [attr-val (intent-attr (js/get state .intent))]
+            (if (js/get state .activated)
+              (do (log "activateFloating:re-arm" {:intent (js/get state .intent)})
                   (attr! root "gjoa-urlbar-intent" attr-val)
                   ;; SELF-HEAL (2026-07-20): `activated` is a flag that can DESYNC from the
                   ;; real DOM state — the `popover` attr (what puts the palette in the top
@@ -347,23 +346,23 @@
                   (ensure-hints)
                   (ensure-staged!)
                   (ensure-floating-promoted))
-              (do (set! (.-activated state) true)
-                  (log "activateFloating" {:intent (.-intent state)})
+              (do (js/set! state .activated true)
+                  (log "activateFloating" {:intent (js/get state .intent)})
                   ;; Snapshot the resting geometry Firefox re-measures off the FLOATING box
                   ;; while we hold it, plus who owned the promotion (compact leaves none).
                   ;; `home` non-nil ⇒ still staged from an unfinished teardown, so these
                   ;; would capture the PALETTE's geometry as the resting geometry.
-                  (when (nil? (.-home state))
+                  (when (nil? (js/get state .home))
                     (let [c (container)]
-                      (set! (.-urlbarH0 state)
-                            (.getPropertyValue (.-style urlbar) "--urlbar-height"))
-                      (set! (.-containerH0 state)
+                      (js/set! state .urlbarH0
+                            (js/call (js/get urlbar .style) .getPropertyValue "--urlbar-height"))
+                      (js/set! state .containerH0
                             (if c
-                              (.getPropertyValue (.-style c) "--urlbar-container-height")
+                              (js/call (js/get c .style) .getPropertyValue "--urlbar-container-height")
                               ""))
                       ;; the ATTR, never `:popover-open`: #stopBreakout hidePopover()s on
                       ;; every focus, so the open state reads a transient false here.
-                      (set! (.-popover0 state) (.getAttribute urlbar "popover"))))
+                      (js/set! state .popover0 (js/call urlbar .getAttribute "popover"))))
                   ;; Leave a static look-alike (#gjoa-urlbar-ghost) in the resting
                   ;; slot so the real urlbar lifting to the centered palette doesn't
                   ;; collapse the slot / look like the bar "flew out" — the resting
@@ -383,15 +382,15 @@
                   ;; FAIL-SAFE: this runs BEFORE the stage/backdrop/floating attrs, so a
                   ;; throw would abort activation with `activated` already true — the
                   ;; urlbar left neither floated nor dismissable. A missing ghost is cosmetic.
-                  (when (and (not (.-ghost state)) (nil? (.-home state)))
+                  (when (and (not (js/get state .ghost)) (nil? (js/get state .home)))
                    (try
                     (let [parent (container)]
                       (when parent
-                        (let [rect (.getBoundingClientRect urlbar)
-                              cs (.getComputedStyle window urlbar)
+                        (let [rect (js/call urlbar .getBoundingClientRect)
+                              cs (js/call window .getComputedStyle urlbar)
                               g (html-new "div")
                               txt (html-new "div")
-                              ph (or (some-> window .-gURLBar .-inputField .-placeholder)
+                              ph (or (some-> window (js/get .gURLBar) (js/get .inputField) (js/get .placeholder))
                                      "Search with Google or enter address")
                               ;; #150c (2026-07-20): FREEZE the resting bar EXACTLY. The ghost
                               ;; fills the slot the instant the real urlbar lifts to float, so
@@ -406,138 +405,138 @@
                               ;; switcher renders its glyph in a shadow root, so light-DOM-only
                               ;; copying missed it, and cloneNode drops custom elements + un-hides
                               ;; state-hidden buttons; both verified in cage).
-                              container (or (.querySelector urlbar ".urlbar-input-container") urlbar)
-                              visible? (fn [el]
-                                         (let [r (.getBoundingClientRect el)
-                                               c (.getComputedStyle window el)]
-                                           (and (> (.-width r) 0) (> (.-height r) 0)
-                                                (not= (.-display c) "none")
-                                                (not= (.-visibility c) "hidden"))))
+                              container (or (js/call urlbar .querySelector ".urlbar-input-container") urlbar)
+                              visible? (fn [el] Any
+                                         (let [r (js/call el .getBoundingClientRect)
+                                               c (js/call window .getComputedStyle el)]
+                                           (and (> (js/get r .width) 0) (> (js/get r .height) 0)
+                                                (not= (js/get c .display) "none")
+                                                (not= (js/get c .visibility) "hidden"))))
                               ;; every node that can paint inside a leading child: its own light
                               ;; DOM plus its OPEN shadow root (moz-button renders the engine icon
                               ;; and the pill background in there).
-                              inner-nodes (fn [el]
-                                (let [sr (.-shadowRoot el)]
-                                  (.filter (.concat (.from Array (.querySelectorAll el "*"))
-                                                    (if sr (.from Array (.querySelectorAll sr "*")) []))
+                              inner-nodes (fn [el] Any
+                                (let [sr (js/get el .shadowRoot)]
+                                  (js/call (js/call (Array/from (js/call el .querySelectorAll "*")) .concat
+                                                    (if sr (Array/from (js/call sr .querySelectorAll "*")) [])) .filter
                                            visible?)))
                               ;; `contains` does not cross the shadow boundary, so ask the root too.
-                              inside? (fn [host n]
-                                (or (bool (.contains host n))
-                                    (bool (some-> (.-shadowRoot host) (.contains n)))))
+                              inside? (fn [host n] Any
+                                (or (bool (js/call host .contains n))
+                                    (bool (some-> (js/get host .shadowRoot) (js/call .contains n)))))
                               ;; url("…") out of a computed `content` — the chip's chevron paints
                               ;; that way, with no background/list-style/mask to copy.
-                              content-url (fn [c]
-                                (let [m (.exec (RegExp. "url\\(\"?([^\")]+)\"?\\)") (or (.-content c) ""))]
+                              content-url (fn [c] Any
+                                (let [m (js/call (js/new RegExp "url\\(\"?([^\")]+)\"?\\)") .exec (or (js/get c .content) ""))]
                                   (if m (aget m 1) nil)))
                               ;; CSS that repaints ONE element's glyph: an `iconsrc` attr
                               ;; (moz-button, e.g. the search-mode switcher's engine icon — a
                               ;; system blob:), an <img src>, or a computed content /
                               ;; list-style / background / mask image. nil = paints nothing.
-                              glyph-of (fn [el]
-                                (let [c (.getComputedStyle window el)
-                                      isrc (.getAttribute el "iconsrc")
+                              glyph-of (fn [el] Any
+                                (let [c (js/call window .getComputedStyle el)
+                                      isrc (js/call el .getAttribute "iconsrc")
                                       curl (content-url c)
                                       ;; the chrome document is XHTML — `tagName` keeps the
                                       ;; authored lowercase, so an "IMG" compare never matches.
-                                      src (if (= (.-localName el) "img") (.-src el) nil)]
+                                      src (if (= (js/get el .localName) "img") (js/get el .src) nil)]
                                   (cond
                                     (and isrc (not= isrc ""))
                                       {:css (str "background:url(\"" isrc "\") center/contain no-repeat;")}
                                     (and src (not= src ""))
                                       {:css (str "background:url(\"" src "\") center/contain no-repeat;")}
                                     curl
-                                      {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
+                                      {:css (str "-moz-context-properties:fill;fill:" (js/get c .fill) ";"
                                                  "background:url(\"" curl "\") center/contain no-repeat;")}
-                                    (not= (.-listStyleImage c) "none")
-                                      {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
-                                                 "background:" (.-listStyleImage c) " center/contain no-repeat;")}
-                                    (not= (.-backgroundImage c) "none")
-                                      {:css (str "-moz-context-properties:fill;fill:" (.-fill c) ";"
-                                                 "background:" (.-backgroundImage c) " center/contain no-repeat;")}
-                                    (not= (.-maskImage c) "none")
-                                      {:css (str "background-color:" (.-color c) ";"
-                                                 "mask:" (.-maskImage c) " center/contain no-repeat;"
-                                                 "-webkit-mask:" (.-maskImage c) " center/contain no-repeat;")}
+                                    (not= (js/get c .listStyleImage) "none")
+                                      {:css (str "-moz-context-properties:fill;fill:" (js/get c .fill) ";"
+                                                 "background:" (js/get c .listStyleImage) " center/contain no-repeat;")}
+                                    (not= (js/get c .backgroundImage) "none")
+                                      {:css (str "-moz-context-properties:fill;fill:" (js/get c .fill) ";"
+                                                 "background:" (js/get c .backgroundImage) " center/contain no-repeat;")}
+                                    (not= (js/get c .maskImage) "none")
+                                      {:css (str "background-color:" (js/get c .color) ";"
+                                                 "mask:" (js/get c .maskImage) " center/contain no-repeat;"
+                                                 "-webkit-mask:" (js/get c .maskImage) " center/contain no-repeat;")}
                                     :else nil)))
                               ;; text this element renders ITSELF (direct text nodes only, so a
                               ;; wrapper doesn't restate its children's label).
-                              own-text (fn [el]
-                                (.trim (.join (.map (.filter (.from Array (.-childNodes el))
-                                                             (fn [n] (= (.-nodeType n) 3)))
-                                                    (fn [n] (.-textContent n)))
-                                              "")))
+                              own-text (fn [el] Any
+                                (js/call (js/call (js/call (js/call (Array/from (js/get el .childNodes)) .filter
+                                                             (fn [n] Any (= (js/get n .nodeType) 3))) .map
+                                                    (fn [n] Any (js/get n .textContent))) .join
+                                              "") .trim))
                               ;; The rendered parts of a leading child, each at its own rect — the
                               ;; search-mode chip is compound (icon + chevron + name + exit), so one
                               ;; centred glyph cannot stand in for it. Innermost painter wins, or a
                               ;; host forwarding `iconsrc` to a shadow <img> paints twice.
-                              parts-of (fn [el]
+                              parts-of (fn [el] Any
                                 (let [nodes (inner-nodes el)
-                                      painter? (fn [n] (bool (glyph-of n)))
-                                      leaf-glyph? (fn [n]
+                                      painter? (fn [n] Any (bool (glyph-of n)))
+                                      leaf-glyph? (fn [n] Any
                                         (and (painter? n)
-                                             (not (bool (.some nodes
-                                                          (fn [m] (and (not= m n)
+                                             (not (bool (js/call nodes .some
+                                                          (fn [m] Any (and (not= m n)
                                                                        (inside? n m)
                                                                        (painter? m))))))))
                                       out []]
-                                  (.forEach nodes (fn [n]
+                                  (js/call nodes .forEach (fn [n] Any
                                     (let [t (own-text n)]
                                       (cond
                                         (leaf-glyph? n)
-                                          (.push out {:el n :css (.-css (glyph-of n))})
+                                          (js/call out .push {:el n :css (js/get (glyph-of n) .css)})
                                         (not= t "")
-                                          (let [c (.getComputedStyle window n)]
-                                            (.push out {:el n :text t
-                                                        :css (str "font:" (.-font c) ";color:" (.-color c) ";"
+                                          (let [c (js/call window .getComputedStyle n)]
+                                            (js/call out .push {:el n :text t
+                                                        :css (str "font:" (js/get c .font) ";color:" (js/get c .color) ";"
                                                                   "white-space:nowrap;overflow:hidden;")}))
                                         :else nil))))
                                   ;; nothing inside painted → the child paints its own glyph
-                                  (when (= (.-length out) 0)
+                                  (when (= (js/get out .length) 0)
                                     (let [g (glyph-of el)]
-                                      (when g (.push out {:el el :css (.-css g)}))))
+                                      (when g (js/call out .push {:el el :css (js/get g .css)}))))
                                   out))
                               ;; A chip's PILL: moz-button paints its background on a shadow
                               ;; <span class="button-background">, not on the host, so take the
                               ;; box chrome from whichever element actually fills the child's box.
-                              opaque? (fn [col] (and col (not= col "transparent")
-                                                     (not (.includes col ", 0)"))))
-                              box-chrome (fn [ch r]
-                                (let [hit (.find (.concat [ch] (inner-nodes ch))
-                                            (fn [n]
-                                              (let [nr (.getBoundingClientRect n)
-                                                    c (.getComputedStyle window n)]
-                                                (and (< (Math/abs (- (.-width nr) (.-width r))) 2)
-                                                     (< (Math/abs (- (.-height nr) (.-height r))) 2)
-                                                     (bool (opaque? (.-backgroundColor c)))))))]
+                              opaque? (fn [col] Any (and col (not= col "transparent")
+                                                     (not (js/call col .includes ", 0)"))))
+                              box-chrome (fn [ch r] Any
+                                (let [hit (js/call (js/call [ch] .concat (inner-nodes ch)) .find
+                                            (fn [n] Any
+                                              (let [nr (js/call n .getBoundingClientRect)
+                                                    c (js/call window .getComputedStyle n)]
+                                                (and (< (Math/abs (- (js/get nr .width) (js/get r .width))) 2)
+                                                     (< (Math/abs (- (js/get nr .height) (js/get r .height))) 2)
+                                                     (bool (opaque? (js/get c .backgroundColor)))))))]
                                   (if hit
-                                    (let [c (.getComputedStyle window hit)]
-                                      (str "background:" (.-backgroundColor c) ";"
-                                           "border-radius:" (.-borderRadius c) ";"))
+                                    (let [c (js/call window .getComputedStyle hit)]
+                                      (str "background:" (js/get c .backgroundColor) ";"
+                                           "border-radius:" (js/get c .borderRadius) ";"))
                                     "")))
                               ;; input-box = the container's direct child holding the field (for
                               ;; slicing the leading icons); text-el = the actual .urlbar-input the
                               ;; text renders in (its left is where the URL text starts — the
                               ;; moz-input-box wrapper has ~26px of leading padding, so measuring
                               ;; the wrapper would shift the ghost text left of the real text).
-                              input-box (.querySelector container "moz-input-box, .urlbar-input-box")
-                              text-el (or (some-> window .-gURLBar .-inputField)
-                                          (.querySelector urlbar ".urlbar-input")
+                              input-box (js/call container .querySelector "moz-input-box, .urlbar-input-box")
+                              text-el (or (some-> window (js/get .gURLBar) (js/get .inputField))
+                                          (js/call urlbar .querySelector ".urlbar-input")
                                           input-box)
                               input-left (if text-el
-                                           (- (.-left (.getBoundingClientRect text-el)) (.-left rect))
+                                           (- (js/get (js/call text-el .getBoundingClientRect) .left) (js/get rect .left))
                                            36)
-                              kids (.from Array (.-children container))
-                              input-idx (.indexOf kids input-box)
+                              kids (Array/from (js/get container .children))
+                              input-idx (js/call kids .indexOf input-box)
                               ;; EVERY visible leading child, search-mode switcher included — the
                               ;; resting bar shows that chip, so a ghost without it reads as the
                               ;; engine icon vanishing the instant the palette floats.
-                              leading (.filter (if (>= input-idx 0) (.slice kids 0 input-idx) kids)
+                              leading (js/call (if (>= input-idx 0) (js/call kids .slice 0 input-idx) kids) .filter
                                         visible?)
-                              value (or (some-> window .-gURLBar .-value) "")
-                              has-value? (not= (.trim value) "")
+                              value (or (some-> window (js/get .gURLBar) (js/get .value)) "")
+                              has-value? (not= (js/call value .trim) "")
                               text-str (if has-value? value ph)]
-                          (set! (.-id g) "gjoa-urlbar-ghost")
+                          (js/set! g .id "gjoa-urlbar-ghost")
                           (attr! g "aria-hidden" "true")
                           ;; LAYOUT-NEUTRAL like the bar it replaces (`.urlbar[breakout]` is
                           ;; absolute): an in-flow stand-in would hand the container content
@@ -545,43 +544,43 @@
                           ;; No offsets + inserted in the urlbar's own DOM slot below ⇒ its
                           ;; static position IS the urlbar's.
                           (css! g (str "position:absolute;display:block;box-sizing:border-box;padding:0;"
-                                       "width:" (.-width rect) "px;height:" (.-height rect) "px;"
+                                       "width:" (js/get rect .width) "px;height:" (js/get rect .height) "px;"
                                        "pointer-events:none;overflow:hidden;white-space:nowrap;"
-                                       "border:" (.-border cs) ";border-radius:" (.-borderRadius cs) ";"
-                                       "background:" (.-backgroundColor cs) ";"
-                                       "font:" (.-font cs) ";color:" (.-color cs) ";"))
+                                       "border:" (js/get cs .border) ";border-radius:" (js/get cs .borderRadius) ";"
+                                       "background:" (js/get cs .backgroundColor) ";"
+                                       "font:" (js/get cs .font) ";color:" (js/get cs .color) ";"))
                           ;; one ghost slot per visible leading child, at its real box, holding a
                           ;; still copy of every part that child actually paints (at ITS real box,
                           ;; not centred — a compound chip's icon is not at the chip's centre).
                           (doseq [ch leading]
-                            (let [r (.getBoundingClientRect ch)
+                            (let [r (js/call ch .getBoundingClientRect)
                                   parts (parts-of ch)
                                   slot (html-new "div")]
-                              (when (> (.-length parts) 0)
+                              (when (> (js/get parts .length) 0)
                                 (css! slot (str "position:absolute;box-sizing:border-box;"
-                                                "left:" (- (.-left r) (.-left rect)) "px;"
-                                                "top:" (- (.-top r) (.-top rect)) "px;"
-                                                "width:" (.-width r) "px;height:" (.-height r) "px;"
+                                                "left:" (- (js/get r .left) (js/get rect .left)) "px;"
+                                                "top:" (- (js/get r .top) (js/get rect .top)) "px;"
+                                                "width:" (js/get r .width) "px;height:" (js/get r .height) "px;"
                                                 (box-chrome ch r)))
                                 (doseq [p parts]
-                                  (let [pr (.getBoundingClientRect (.-el p))
+                                  (let [pr (js/call (js/get p .el) .getBoundingClientRect)
                                         ic (html-new "div")]
                                     (css! ic (str "position:absolute;box-sizing:border-box;"
-                                                  "left:" (- (.-left pr) (.-left r)) "px;"
-                                                  "top:" (- (.-top pr) (.-top r)) "px;"
-                                                  "width:" (.-width pr) "px;height:" (.-height pr) "px;"
-                                                  "opacity:.9;" (.-css p)))
-                                    (when (.-text p) (set! (.-textContent ic) (.-text p)))
-                                    (.appendChild slot ic)))
-                                (.appendChild g slot))))
-                          (set! (.-textContent txt) text-str)
+                                                  "left:" (- (js/get pr .left) (js/get r .left)) "px;"
+                                                  "top:" (- (js/get pr .top) (js/get r .top)) "px;"
+                                                  "width:" (js/get pr .width) "px;height:" (js/get pr .height) "px;"
+                                                  "opacity:.9;" (js/get p .css)))
+                                    (when (js/get p .text) (js/set! ic .textContent (js/get p .text)))
+                                    (js/call slot .appendChild ic)))
+                                (js/call g .appendChild slot))))
+                          (js/set! txt .textContent text-str)
                           (css! txt (str "position:absolute;top:0;bottom:0;display:flex;align-items:center;"
                                          "left:" input-left "px;right:8px;overflow:hidden;"
                                          "text-overflow:ellipsis;opacity:" (if has-value? ".95" ".55") ";"))
-                          (.appendChild g txt)
-                          (.insertBefore parent g urlbar)
-                          (set! (.-ghost state) g))))
-                    (catch Any e
+                          (js/call g .appendChild txt)
+                          (js/call parent .insertBefore g urlbar)
+                          (js/set! state .ghost g))))
+                    (catch (e Any)
                       (log "activateFloating:ghost-error" {:msg (String e)}))))
                   ;; #150b (2026-07-19): ARM opacity:0 (no transition) BEFORE the popover
                   ;; promotes to the top layer, then reveal on the next frame — so the
@@ -593,12 +592,12 @@
                   (attr! root "gjoa-urlbar-floating" "")
                   (attr! root "gjoa-urlbar-intent" attr-val)
 
-                  (when (not (.-backdrop state))
+                  (when (not (js/get state .backdrop))
                     (let [bd (html-new "div")]
-                      (set! (.-id bd) "gjoa-urlbar-backdrop")
-                      (on! bd "mousedown" #(deactivate-floating))
-                      (.appendChild root bd)
-                      (set! (.-backdrop state) bd)))
+                      (js/set! bd .id "gjoa-urlbar-backdrop")
+                      (on! bd "mousedown" (fn [] Any (deactivate-floating)))
+                      (js/call root .appendChild bd)
+                      (js/set! state .backdrop bd)))
 
                   ;; After the ghost capture (which needs the TRUE resting rect) and
                   ;; behind [gjoa-urlbar-arming]'s opacity:0, so the move never paints.
@@ -610,40 +609,40 @@
                   ;; reveal once the popover has promoted + positioned (double-rAF); a
                   ;; setTimeout fallback covers a starved rAF (e.g. uncomposited window) so
                   ;; the bar can never get stuck invisible.
-                  (let [reveal (fn [] (rmattr! root "gjoa-urlbar-arming"))]
-                    (.requestAnimationFrame window
-                      (fn [] (.requestAnimationFrame window reveal)))
-                    (.setTimeout window reveal 120))))))
+                  (let [reveal (fn [] Any (rmattr! root "gjoa-urlbar-arming"))]
+                    (js/call window .requestAnimationFrame
+                      (fn [] Any (js/call window .requestAnimationFrame reveal)))
+                    (js/call window .setTimeout reveal 120))))))
 
-        is-floating #(.-activated state)
+        is-floating (fn [] Any (js/get state .activated))
 
-        on-focus-out (fn [e]
-          (when (.-activated state)
-            (setTimeout (fn []
-              (when (.-activated state)
-                (let [a (.-activeElement document)]
-                  (when (not (bool (and a (or (identical? a urlbar) (.contains urlbar a)))))
+        on-focus-out (fn [e] Any
+          (when (js/get state .activated)
+            (setTimeout (fn [] Any
+              (when (js/get state .activated)
+                (let [a (js/get document .activeElement)]
+                  (when (not (bool (and a (or (identical? a urlbar) (js/call urlbar .contains a)))))
                     (deactivate-floating)))))
               0)))
 
-        handle-accel (fn [e]
-          (let [accel (or (.-ctrlKey e) (.-metaKey e))]
-            (when (and accel (not (.-shiftKey e)) (not (.-altKey e)))
-              (let [k (.-key e)]
+        handle-accel (fn [e] Any
+          (let [accel (or (js/get e .ctrlKey) (js/get e .metaKey))]
+            (when (and accel (not (js/get e .shiftKey)) (not (js/get e .altKey)))
+              (let [k (js/get e .key)]
                 (when (or (= k "j") (= k "k"))
-                  (let [view (some-> window .-gURLBar .-view)]
-                    (when (and view (.-selectBy view))
-                      (.preventDefault e)
-                      (.stopImmediatePropagation e)
-                      (try (.selectBy view (if (= k "j") 1 -1))
-                        (catch Any err
+                  (let [view (some-> window (js/get .gURLBar) (js/get .view))]
+                    (when (and view (js/get view .selectBy))
+                      (js/call e .preventDefault)
+                      (js/call e .stopImmediatePropagation)
+                      (try (js/call view .selectBy (if (= k "j") 1 -1))
+                        (catch (err Any)
                           (log "selectBy:error" {:msg (String err)})))
                       true)))))))
 
-        on-keydown (fn [e]
-          (when (and (not (bool (handle-accel e))) (.-activated state))
+        on-keydown (fn [e] Any
+          (when (and (not (bool (handle-accel e))) (js/get state .activated))
               (cond
-                (= (.-key e) "Escape")
+                (= (js/get e .key) "Escape")
                   (do
                     ;; We OWN the floating-palette dismiss. FF's UrlbarController
                     ;; Escape is a window-level BUBBLE listener that calls
@@ -653,45 +652,45 @@
                     ;; capture-phase on #urlbar, so it runs first; stop the event
                     ;; here and FF never closes the view — the whole palette
                     ;; (input + results) fades as ONE unit.
-                    (.preventDefault e)
-                    (.stopImmediatePropagation e)
+                    (js/call e .preventDefault)
+                    (js/call e .stopImmediatePropagation)
                     (deactivate-floating)
                     ;; Close the view + return focus to content AFTER the fade is
                     ;; visually done (opacity 0 by ~130ms) but BEFORE finish-teardown
                     ;; restores the resting geometry (150ms) — so the results
                     ;; neither snap early nor flash at the in-sidebar position. All
                     ;; of this happens behind opacity 0, invisibly.
-                    (setTimeout (fn []
+                    (setTimeout (fn [] Any
                       (try
-                        (some-> window .-gURLBar .-view .close)
-                        (let [a (.-activeElement document)]
-                          (when (and a (or (identical? a urlbar) (.contains urlbar a)))
-                            (some-> window .-gjoaFocusGuard .release)
-                            (some-> window .-gBrowser .-selectedBrowser .focus)))
-                        (catch Any err
+                        (some-> window (js/get .gURLBar) (js/get .view) (js/call .close))
+                        (let [a (js/get document .activeElement)]
+                          (when (and a (or (identical? a urlbar) (js/call urlbar .contains a)))
+                            (some-> window (js/get .gjoaFocusGuard) (js/call .release))
+                            (some-> window (js/get .gBrowser) (js/get .selectedBrowser) (js/call .focus))))
+                        (catch (err Any)
                           (log "escape:teardown-error" {:msg (String err)}))))
                       135))
 
-                (= (.-key e) "Enter")
+                (= (js/get e .key) "Enter")
                   (do
-                    (when (and (= (.-intent state) "newTab") (not (.-altKey e)))
-                      (.preventDefault e)
-                      (.stopImmediatePropagation e)
+                    (when (and (= (js/get state .intent) "newTab") (not (js/get e .altKey)))
+                      (js/call e .preventDefault)
+                      (js/call e .stopImmediatePropagation)
                       (log "intercept:newTab-enter")
-                      (let [target (.-target e)]
-                        (.dispatchEvent target (KeyboardEvent. "keydown"
+                      (let [target (js/get e .target)]
+                        (js/call target .dispatchEvent (js/new KeyboardEvent "keydown"
                           {:key "Enter" :code "Enter" :keyCode 13 :which 13
                            :altKey true :bubbles true :cancelable true :view window}))))
                     (setTimeout deactivate-floating 0))
 
                 :else nil)))
 
-        on-activate-request (fn [e]
-          (let [detail (.-detail e)]
+        on-activate-request (fn [e] Any
+          (let [detail (js/get e .detail)]
             (activate-floating
-              (if (and detail (= (.-intent detail) "newTab")) "newTab" "current"))))
+              (if (and detail (= (js/get detail .intent) "newTab")) "newTab" "current"))))
 
-        on-deactivate-request #(deactivate-floating)]
+        on-deactivate-request (fn [] Any (deactivate-floating))]
 
     (install-popover-shim!)
     (onc! urlbar "focusout" on-focus-out)
@@ -702,20 +701,20 @@
     {:activateFloating activate-floating
      :deactivateFloating deactivate-floating
      :isFloating is-floating
-     :destroy (fn []
+     :destroy (fn [] Any
        (offc! urlbar "focusout" on-focus-out)
        (offc! urlbar "keydown" on-keydown)
        (off! document "gjoa-urlbar-activate" on-activate-request)
        (off! document "gjoa-urlbar-deactivate" on-deactivate-request)
        ;; deactivate-floating's teardown is async (fade → transitionend), so detach the
        ;; watchdog here too or a hot-reload stacks observers on the next bundle.
-       (when (.-healObs state)
-         (.disconnect (.-healObs state))
-         (set! (.-healObs state) nil))
-       (when (.-healFn state)
-         (off! urlbar "toggle" (.-healFn state))
-         (set! (.-healFn state) nil))
-       (when (.-pinObs state)
-         (.disconnect (.-pinObs state))
-         (set! (.-pinObs state) nil))
+       (when (js/get state .healObs)
+         (js/call (js/get state .healObs) .disconnect)
+         (js/set! state .healObs nil))
+       (when (js/get state .healFn)
+         (off! urlbar "toggle" (js/get state .healFn))
+         (js/set! state .healFn nil))
+       (when (js/get state .pinObs)
+         (js/call (js/get state .pinObs) .disconnect)
+         (js/set! state .pinObs nil))
        (deactivate-floating))})))

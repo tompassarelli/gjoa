@@ -63,34 +63,33 @@
             [path :refer [join]]
             [gjoa.tools.prep.paths :refer [REPO-ROOT]]
             [gjoa.tools.prep.log :refer [log]]))
-(define-mode strict)
 (declare-extern [process Number] Any)
 
 ;; ---------------------------------------------------------------------------
 ;; Paths
 ;; ---------------------------------------------------------------------------
 
-(def SNAPSHOT-PATH :- String (join REPO-ROOT "tools" "prep" "darkreader-fixes.snapshot"))
-(def REGISTRY-PATH :- String
+(def SNAPSHOT-PATH String (join REPO-ROOT "tools" "prep" "darkreader-fixes.snapshot"))
+(def REGISTRY-PATH String
   (join REPO-ROOT "src" "gjoa" "toolkit" "components" "content-classifier" "darkmode-fixes.json"))
 
 ;; The Dark Reader release the committed snapshot was pulled from. The refresh
 ;; curl pins this tag (NOT `main`) so the upstream corpus can't shift under us.
-(def DARKREADER-PIN :- String "v4.9.127")
+(def DARKREADER-PIN String "v4.9.127")
 
 ;; SHA-256 of the committed snapshot at DARKREADER-PIN. --write verifies the
 ;; on-disk snapshot against this before generating any USER_SHEET CSS; a mismatch
 ;; (tampered / silently-refreshed corpus, or a refresh that forgot to update this
 ;; constant) aborts the write. Recompute with `sha256sum tools/prep/darkreader-fixes.snapshot`.
-(def EXPECTED-SNAPSHOT-SHA256 :- String
+(def EXPECTED-SNAPSHOT-SHA256 String
   "0e6d82b4df349edeb789e4dbb346f427caff4861f071020525fd81e6f50e638f")
 
 ;; Hex SHA-256 of a string, synchronously (Bun runtime — same hasher download.bjs uses).
 ;; Pure (no effect), so no `!` suffix.
-(defn sha256 [text :- String] :- String
-  (let [hash (Bun.CryptoHasher. "sha256")]
-    (.update hash text)
-    (.digest hash "hex")))
+(defn sha256 [(text String)] String
+  (let [hash (js/new Bun.CryptoHasher "sha256")]
+    (js/call hash .update text)
+    (js/call hash .digest "hex")))
 
 ;; ---------------------------------------------------------------------------
 ;; Color model: an [r g b a] tuple with r/g/b in 0..255 and a in 0..1.
@@ -99,7 +98,7 @@
 ;; The subset of CSS named colors Dark Reader actually emits as ${name} tokens
 ;; (surveyed from the snapshot). Each maps to its [r g b] sRGB value. `transparent`
 ;; is special-cased by the caller (it is not luminance-flipped).
-(def NAMED-COLORS :- Any
+(def NAMED-COLORS Any
   {"black"     [0 0 0]
    "white"     [255 255 255]
    "red"       [255 0 0]
@@ -124,14 +123,14 @@
    "aliceblue" [240 248 255]})
 
 ;; Clamp x into [lo hi].
-(defn clamp [x :- Any lo :- Any hi :- Any] :- Any
-  (Math.max lo (Math.min hi x)))
+(defn clamp [(x Any) (lo Any) (hi Any)] Any
+  (Math/max lo (Math/min hi x)))
 
 ;; Expand a hex string (already stripped of '#') to [r g b a]. Accepts 3, 4, 6, 8
 ;; digit forms. Returns nil if it isn't valid hex.
-(defn parse-hex [h :- String] :- Any
-  (let [n (.-length h)
-        valid (.test (RegExp. "^[0-9a-fA-F]+$") h)]
+(defn parse-hex [(h String)] Any
+  (let [n (js/get h .length)
+        valid (js/call (js/new RegExp "^[0-9a-fA-F]+$") .test h)]
     (cond
       (not valid) nil
       (= n 3) [(parseInt (str (aget h 0) (aget h 0)) 16)
@@ -142,79 +141,78 @@
                (parseInt (str (aget h 1) (aget h 1)) 16)
                (parseInt (str (aget h 2) (aget h 2)) 16)
                (/ (parseInt (str (aget h 3) (aget h 3)) 16) 255)]
-      (= n 6) [(parseInt (.slice h 0 2) 16)
-               (parseInt (.slice h 2 4) 16)
-               (parseInt (.slice h 4 6) 16)
+      (= n 6) [(parseInt (js/call h .slice 0 2) 16)
+               (parseInt (js/call h .slice 2 4) 16)
+               (parseInt (js/call h .slice 4 6) 16)
                1]
-      (= n 8) [(parseInt (.slice h 0 2) 16)
-               (parseInt (.slice h 2 4) 16)
-               (parseInt (.slice h 4 6) 16)
-               (/ (parseInt (.slice h 6 8) 16) 255)]
+      (= n 8) [(parseInt (js/call h .slice 0 2) 16)
+               (parseInt (js/call h .slice 2 4) 16)
+               (parseInt (js/call h .slice 4 6) 16)
+               (/ (parseInt (js/call h .slice 6 8) 16) 255)]
       :else nil)))
 
 ;; Split the inside of an rgb()/rgba()/hsl()/hsla() on commas OR whitespace
 ;; (CSS color level 4 allows both), trimming and dropping empties + a leading '/'
 ;; alpha separator.
-(defn split-args [body :- String] :- Any
-  (let [raw (.split (.trim body) (RegExp. "[\\s,/]+"))]
-    (.filter raw (fn [s] (> (.-length s) 0)))))
+(defn split-args [(body String)] Any
+  (let [raw (js/call (js/call body .trim) .split (js/new RegExp "[\\s,/]+"))]
+    (js/call raw .filter (fn [s] Any (> (js/get s .length) 0)))))
 
 ;; Parse one numeric component, honoring a trailing '%'. `whole` is the value a
 ;; bare 100% maps to (255 for rgb channels, 1 for alpha).
-(defn parse-component [s :- String whole :- Any] :- Any
-  (if (.endsWith s "%")
-    (* (/ (parseFloat (.slice s 0 -1)) 100) whole)
+(defn parse-component [(s String) (whole Any)] Any
+  (if (js/call s .endsWith "%")
+    (* (/ (parseFloat (js/call s .slice 0 -1)) 100) whole)
     (parseFloat s)))
 
 ;; Convert hsl(h s% l%) to [r g b]. h in degrees, s/l in 0..1.
-(defn hsl->rgb [h :- Any s :- Any l :- Any] :- Any
+(defn hsl->rgb [(h Any) (s Any) (l Any)] Any
   (let [hh (/ (mod (mod h 360) 360) 360)
         q (if (< l 0.5) (* l (+ 1 s)) (- (+ l s) (* l s)))
         p (- (* 2 l) q)
-        hue->rgb (fn [t0 :- Any]
-                   (let [t (cond (< t0 0) (+ t0 1) (> t0 1) (- t0 1) :else t0)]
+        hue->rgb (fn [(t0 Any)] Any (let [t (cond (< t0 0) (+ t0 1) (> t0 1) (- t0 1) :else t0)]
                      (cond
                        (< t (/ 1 6)) (+ p (* (- q p) 6 t))
                        (< t (/ 1 2)) q
                        (< t (/ 2 3)) (+ p (* (- q p) (- (/ 2 3) t) 6))
                        :else p)))]
     (if (= s 0)
-      [(Math.round (* l 255)) (Math.round (* l 255)) (Math.round (* l 255))]
-      [(Math.round (* (hue->rgb (+ hh (/ 1 3))) 255))
-       (Math.round (* (hue->rgb hh) 255))
-       (Math.round (* (hue->rgb (- hh (/ 1 3))) 255))])))
+      [(Math/round (* l 255)) (Math/round (* l 255)) (Math/round (* l 255))]
+      [(Math/round (* (hue->rgb (+ hh (/ 1 3))) 255))
+       (Math/round (* (hue->rgb hh) 255))
+       (Math/round (* (hue->rgb (- hh (/ 1 3))) 255))])))
 
 ;; Parse any single CSS color string (hex/rgb/rgba/hsl/hsla/named) to [r g b a].
 ;; Returns nil if unrecognized (caller leaves the token untouched).
-(defn parse-color [raw :- String] :- Any
-  (let [s (.trim raw)
-        lower (.toLowerCase s)]
+(defn parse-color [(raw String)] Any
+  (let [s (js/call raw .trim)
+        lower (js/call s .toLowerCase)]
     (cond
-      (.startsWith s "#")
-      (parse-hex (.slice s 1))
+      (js/call s .startsWith "#")
+      (parse-hex (js/call s .slice 1))
 
-      (or (.startsWith lower "rgb(") (.startsWith lower "rgba("))
-      (let [body (.slice s (+ (.indexOf s "(") 1) (.lastIndexOf s ")"))
+      (or (js/call lower .startsWith "rgb(") (js/call lower .startsWith "rgba("))
+      (let [body (js/call s .slice (+ (js/call s .indexOf "(") 1) (js/call s .lastIndexOf ")"))
             parts (split-args body)]
-        (when (>= (.-length parts) 3)
-          [(clamp (Math.round (parse-component (aget parts 0) 255)) 0 255)
-           (clamp (Math.round (parse-component (aget parts 1) 255)) 0 255)
-           (clamp (Math.round (parse-component (aget parts 2) 255)) 0 255)
-           (if (>= (.-length parts) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)]))
+        (when (>= (js/get parts .length) 3)
+          [(clamp (Math/round (parse-component (aget parts 0) 255)) 0 255)
+           (clamp (Math/round (parse-component (aget parts 1) 255)) 0 255)
+           (clamp (Math/round (parse-component (aget parts 2) 255)) 0 255)
+           (if (>= (js/get parts .length) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)]))
 
-      (or (.startsWith lower "hsl(") (.startsWith lower "hsla("))
-      (let [body (.slice s (+ (.indexOf s "(") 1) (.lastIndexOf s ")"))
+      (or (js/call lower .startsWith "hsl(") (js/call lower .startsWith "hsla("))
+      (let [body (js/call s .slice (+ (js/call s .indexOf "(") 1) (js/call s .lastIndexOf ")"))
             parts (split-args body)]
-        (when (>= (.-length parts) 3)
+        (when (>= (js/get parts .length) 3)
           (let [h (parseFloat (aget parts 0))
                 sat (/ (parse-component (aget parts 1) 100) 100)
                 lit (/ (parse-component (aget parts 2) 100) 100)
                 rgb (hsl->rgb h (clamp sat 0 1) (clamp lit 0 1))]
             [(aget rgb 0) (aget rgb 1) (aget rgb 2)
-             (if (>= (.-length parts) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)])))
+             (if (>= (js/get parts .length) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)])))
 
       ;; bare hex without '#', e.g. ${fff}
-      (.test (RegExp. "^[0-9a-fA-F]{3,8}$") s)
+      (js/call (js/new RegExp "^[0-9a-fA-F]{3,8}$") .test s)
       (parse-hex s)
 
       (get NAMED-COLORS lower)
@@ -229,51 +227,51 @@
 ;; ---------------------------------------------------------------------------
 
 ;; sRGB channel (0..255) → linear-light (WCAG `compute`).
-(defn compute [u :- Any] :- Any
+(defn compute [(u Any)] Any
   (let [f (/ u 255)]
     (if (<= f 0.03928)
       (/ f 12.92)
-      (Math.pow (/ (+ f 0.055) 1.055) 2.4))))
+      (Math/pow (/ (+ f 0.055) 1.055) 2.4))))
 
 ;; linear-light → sRGB byte, rounded + clamped (WCAG `decompute`).
-(defn decompute [x :- Any] :- Any
+(defn decompute [(x Any)] Any
   (let [s (if (<= x (/ 0.03928 12.92))
             (* x 12.92)
-            (- (* 1.055 (Math.pow x (/ 1 2.4))) 0.055))]
-    (clamp (Math.round (* s 255)) 0 255)))
+            (- (* 1.055 (Math/pow x (/ 1 2.4))) 0.055))]
+    (clamp (Math/round (* s 255)) 0 255)))
 
 ;; Flip one [r g b a]: invert WCAG relative luminance Y → 1-Y, preserving hue/sat
 ;; (single shared factor across channels) and alpha. Byte-identical to the engine.
-(defn flip-rgba [rgba :- Any] :- Any
+(defn flip-rgba [(rgba Any)] Any
   (let [r (aget rgba 0) g (aget rgba 1) b (aget rgba 2) a (aget rgba 3)
         lr (compute r) lg (compute g) lb (compute b)
         lum (+ (* 0.2126 lr) (* 0.7152 lg) (* 0.0722 lb))
         target (- 1 lum)
         factor (/ (+ target 0.05) (+ lum 0.05))
-        adj (fn [l :- Any] (decompute (Math.max 0 (- (* (+ l 0.05) factor) 0.05))))]
+        adj (fn [(l Any)] Any (decompute (Math/max 0 (- (* (+ l 0.05) factor) 0.05))))]
     [(adj lr) (adj lg) (adj lb) a]))
 
 ;; The relative luminance Y of an [r g b a] (used by the selftest assertions).
-(defn luminance [rgba :- Any] :- Any
+(defn luminance [(rgba Any)] Any
   (+ (* 0.2126 (compute (aget rgba 0)))
      (* 0.7152 (compute (aget rgba 1)))
      (* 0.0722 (compute (aget rgba 2)))))
 
 ;; Two-digit hex for a 0..255 byte.
-(defn byte->hex [n :- Any] :- String
-  (.padStart (.toString (clamp (Math.round n) 0 255) 16) 2 "0"))
+(defn byte->hex [(n Any)] String
+  (js/call (js/call (clamp (Math/round n) 0 255) .toString 16) .padStart 2 "0"))
 
 ;; Format an [r g b a] back to CSS. Solid → #rrggbb; alpha < 1 → rgba(...).
-(defn rgba->css [rgba :- Any] :- String
+(defn rgba->css [(rgba Any)] String
   (let [r (aget rgba 0) g (aget rgba 1) b (aget rgba 2) a (aget rgba 3)]
     (if (>= a 1)
       (str "#" (byte->hex r) (byte->hex g) (byte->hex b))
-      (str "rgba(" (clamp (Math.round r) 0 255) ", " (clamp (Math.round g) 0 255) ", "
-           (clamp (Math.round b) 0 255) ", " (Number (.toFixed a 3)) ")"))))
+      (str "rgba(" (clamp (Math/round r) 0 255) ", " (clamp (Math/round g) 0 255) ", "
+           (clamp (Math/round b) 0 255) ", " (Number (js/call a .toFixed 3)) ")"))))
 
 ;; Resolve one token's inner color text to flipped CSS. Returns nil if the inner
 ;; text is not a parseable color (e.g. `transparent`, or a var() — handled earlier).
-(defn resolve-token [inner :- String] :- Any
+(defn resolve-token [(inner String)] Any
   (let [parsed (parse-color inner)]
     (when parsed
       (rgba->css (flip-rgba parsed)))))
@@ -287,7 +285,7 @@
 ;; (background #181a1b, text #e8e6e3) and the engine's own dark-grey neutrals.
 ;; ---------------------------------------------------------------------------
 
-(def DARKREADER-VARS :- Any
+(def DARKREADER-VARS Any
   {"--darkreader-neutral-background"  "#181a1b"
    "--darkreader-neutral-text"        "#e8e6e3"
    "--darkreader-neutral-color"       "#e8e6e3"
@@ -304,49 +302,48 @@
 
 ;; The `m` (multiline) flag makes ^/$ match at each line boundary, so a separator
 ;; line (a run of '=') splits the file into blocks.
-(def SEPARATOR :- Any (RegExp. "^=+\\s*$" "m"))
+(def SEPARATOR Any (js/new RegExp "^=+\\s*$" "m"))
 ;; A section header is an all-caps line (letters + spaces) standing alone.
-(def SECTION-HEADER :- Any (RegExp. "^[A-Z][A-Z ]+$"))
+(def SECTION-HEADER Any (js/new RegExp "^[A-Z][A-Z ]+$"))
 
 ;; The section headers Dark Reader uses. A SECTION-HEADER-shaped line is only
 ;; treated as a new section if it is one of these — so a stray uppercase CSS
 ;; selector inside a CSS body is not misread as a header.
-(def KNOWN-SECTIONS :- Any
+(def KNOWN-SECTIONS Any
   ["INVERT" "CSS" "IGNORE INLINE STYLE" "IGNORE IMAGE ANALYSIS"
    "INVERT SIZE" "PLUS"])
 
 ;; Parse the whole snapshot into a vector of {:patterns [...] :sections {NAME text}}.
-(defn parse-snapshot! [text :- String] :- Any
-  (let [blocks (.split text SEPARATOR)
+(defn parse-snapshot! [(text String)] Any
+  (let [blocks (js/call text .split SEPARATOR)
         out []]
     (doseq [block blocks]
-      (let [lines (.split (.trimEnd block) "\n")
+      (let [lines (js/call (js/call block .trimEnd) .split "\n")
             patterns []
             sections (atom {})
             cur-name (atom nil)
             cur-lines (atom [])
-            flush! (fn []
-                     (when @cur-name
-                       (reset! sections (assoc @sections @cur-name (.trim (.join @cur-lines "\n")))))
+            flush! (fn [] Any (when @cur-name
+                       (reset! sections (assoc @sections @cur-name (js/call (js/call @cur-lines .join "\n") .trim))))
                      (reset! cur-lines []))]
         (doseq [line lines]
-          (let [trimmed (.trim line)]
+          (let [trimmed (js/call line .trim)]
             (cond
               ;; blank line outside any section → ignore; inside → keep (CSS layout)
               (and (= trimmed "") (not @cur-name)) nil
 
-              (and (.test SECTION-HEADER trimmed) (.includes KNOWN-SECTIONS trimmed))
+              (and (js/call SECTION-HEADER .test trimmed) (js/call KNOWN-SECTIONS .includes trimmed))
               (do (flush!) (reset! cur-name trimmed))
 
               ;; A URL-pattern line: we are before any section header.
               (and (not @cur-name) (not= trimmed ""))
-              (.push patterns trimmed)
+              (js/call patterns .push trimmed)
 
               :else
-              (.push @cur-lines line))))
+              (js/call @cur-lines .push line))))
         (flush!)
-        (when (> (.-length patterns) 0)
-          (.push out {:patterns patterns :sections @sections}))))
+        (when (> (js/get patterns .length) 0)
+          (js/call out .push {:patterns patterns :sections @sections}))))
     out))
 
 ;; ---------------------------------------------------------------------------
@@ -357,30 +354,28 @@
 ;; ---------------------------------------------------------------------------
 
 ;; Strip a DR pattern down to its host (drop scheme, path, query selectors).
-(defn pattern-host [pat :- String] :- String
-  (let [no-scheme (.replace pat (RegExp. "^[a-z]+://") "")
-        host (aget (.split no-scheme "/") 0)]
-    (.toLowerCase (.trim host))))
+(defn pattern-host [(pat String)] String
+  (let [no-scheme (js/call pat .replace (js/new RegExp "^[a-z]+://") "")
+        host (aget (js/call no-scheme .split "/") 0)]
+    (js/call (js/call host .trim) .toLowerCase)))
 
-(defn host-matches? [pat :- String host :- String] :- Any
+(defn host-matches? [(pat String) (host String)] Any
   (let [p (pattern-host pat)
-        h (.toLowerCase host)]
+        h (js/call host .toLowerCase)]
     (cond
       (= p "*") false ;; the global block; never a per-site match
       (= p h) true
-      (.startsWith p "*.")
-      (let [base (.slice p 2)]
-        (or (= h base) (.endsWith h (str "." base))))
+      (js/call p .startsWith "*.")
+      (let [base (js/call p .slice 2)]
+        (or (= h base) (js/call h .endsWith (str "." base))))
       ;; bare host pattern also matches subdomains of the query (DR semantics:
       ;; `reddit.com` covers `www.reddit.com`) — but require a dot boundary.
-      (.endsWith h (str "." p)) true
+      (js/call h .endsWith (str "." p)) true
       :else false)))
 
 ;; Find the first block whose patterns match `host`.
-(defn find-block [blocks :- Any host :- String] :- Any
-  (.find blocks
-         (fn [b]
-           (.some (.-patterns b) (fn [pat] (host-matches? pat host))))))
+(defn find-block [(blocks Any) (host String)] Any
+  (js/call blocks .find (fn [b] Any (js/call (js/get b .patterns) .some (fn [pat] Any (host-matches? pat host))))))
 
 ;; ---------------------------------------------------------------------------
 ;; CSS resolution: replace every ${...} token and var(--darkreader-*) reference.
@@ -388,27 +383,23 @@
 
 ;; Resolve all ${...} tokens in a CSS string. Unrecognized inners (transparent,
 ;; nested var) are left as their literal inner text so the rule still parses.
-(defn resolve-tokens [css :- String unresolved :- Any] :- String
-  (.replace css (RegExp. "\\$\\{([^}]*)\\}" "g")
-            (fn [_match inner]
-              (let [trimmed (.trim inner)]
+(defn resolve-tokens [(css String) (unresolved Any)] String
+  (js/call css .replace (js/new RegExp "\\$\\{([^}]*)\\}" "g") (fn [_match inner] Any (let [trimmed (js/call inner .trim)]
                 (cond
-                  (= (.toLowerCase trimmed) "transparent") "transparent"
+                  (= (js/call trimmed .toLowerCase) "transparent") "transparent"
                   :else
                   (let [resolved (resolve-token trimmed)]
                     (if resolved
                       resolved
-                      (do (.push unresolved trimmed) trimmed))))))))
+                      (do (js/call unresolved .push trimmed) trimmed))))))))
 
 ;; Substitute DR runtime vars with concrete dark values. Records any unmapped
 ;; --darkreader-* var so the human sees it during eyeball.
-(defn resolve-dr-vars [css :- String unmapped :- Any] :- String
-  (.replace css (RegExp. "var\\(\\s*(--darkreader-[A-Za-z0-9_-]+)\\s*(?:,[^)]*)?\\)" "g")
-            (fn [_match name]
-              (let [v (get DARKREADER-VARS name)]
+(defn resolve-dr-vars [(css String) (unmapped Any)] String
+  (js/call css .replace (js/new RegExp "var\\(\\s*(--darkreader-[A-Za-z0-9_-]+)\\s*(?:,[^)]*)?\\)" "g") (fn [_match name] Any (let [v (get DARKREADER-VARS name)]
                 (if v
                   v
-                  (do (.push unmapped name)
+                  (do (js/call unmapped .push name)
                       ;; fall back to neutral background so the rule still resolves
                       "#181a1b"))))))
 
@@ -418,24 +409,23 @@
 ;; of them, so finding one means the corpus carried something we won't ship — we
 ;; REJECT the entry (fail closed) rather than silently strip and emit a maybe-
 ;; broken rule. Matching is case-insensitive; whitespace is allowed before the '('.
-(def FORBIDDEN-CSS :- Any
-  (RegExp. "url\\s*\\(|@import\\b|expression\\s*\\(" "i"))
+(def FORBIDDEN-CSS Any
+  (js/new RegExp "url\\s*\\(|@import\\b|expression\\s*\\(" "i"))
 
 ;; Build the gjoa registry entry for a block's CSS section. Returns
 ;; {:css ... :unresolved [...] :unmapped-vars [...]}, {:rejected "reason"} if the
 ;; resolved CSS contains a forbidden construct, or nil if no CSS section.
-(defn build-entry [block :- Any] :- Any
-  (let [css (get (.-sections block) "CSS")]
-    (if (or (not css) (= (.trim css) ""))
+(defn build-entry [(block Any)] Any
+  (let [css (get (js/get block .sections) "CSS")]
+    (if (or (not css) (= (js/call css .trim) ""))
       nil
       (let [unresolved []
             unmapped []
             resolved (resolve-dr-vars (resolve-tokens css unresolved) unmapped)
             ;; collapse the multi-line CSS to a single compact line, matching the
             ;; existing registry entries' style (one rule run, spaces normalized).
-            compact (.trim (.replace (.replace resolved (RegExp. "\\s*\\n\\s*" "g") " ")
-                                     (RegExp. "  +" "g") " "))]
-        (if (.test FORBIDDEN-CSS compact)
+            compact (js/call (js/call (js/call resolved .replace (js/new RegExp "\\s*\\n\\s*" "g") " ") .replace (js/new RegExp "  +" "g") " ") .trim)]
+        (if (js/call FORBIDDEN-CSS .test compact)
           {:rejected "resolved CSS contains a forbidden construct (url()/@import/expression()) — not safe for a USER_SHEET"}
           {:css compact
            :entry {:mode "css" :override "active" :css compact}
@@ -446,7 +436,7 @@
 ;; Self-test: the flip on known values.
 ;; ---------------------------------------------------------------------------
 
-(defn selftest! [] :- Any
+(defn selftest! [] Any
   (let [white (flip-rgba [255 255 255 1])
         black (flip-rgba [0 0 0 1])
         grey  [119 119 119 1]
@@ -456,27 +446,26 @@
         black-lum (luminance black)
         grey-lum (luminance grey)
         grey-round-lum (luminance grey-round)
-        info (.-info log)
-        ok (.-ok log)
-        err (.-error log)
+        info (js/get log .info)
+        ok (js/get log .ok)
+        err (js/get log .error)
         failures (atom 0)
-        check! (fn [label :- String pass :- Any detail :- String]
-                 (if pass
+        check! (fn [(label String) (pass Any) (detail String)] Any (if pass
                    (ok (str label " — " detail))
                    (do (err (str label " FAILED — " detail))
                        (reset! failures (+ @failures 1)))))]
     (info "flip self-test (exact engine luminance port)")
-    (info (str "  flip(#ffffff) = " (rgba->css white) "  luminance=" (.toFixed white-lum 4)))
-    (info (str "  flip(#000000) = " (rgba->css black) "  luminance=" (.toFixed black-lum 4)))
-    (info (str "  flip(#777777) = " (rgba->css grey-flip) "  luminance=" (.toFixed (luminance grey-flip) 4)))
-    (info (str "  flip(flip(#777777)) = " (rgba->css grey-round) "  luminance=" (.toFixed grey-round-lum 4)))
+    (info (str "  flip(#ffffff) = " (rgba->css white) "  luminance=" (js/call white-lum .toFixed 4)))
+    (info (str "  flip(#000000) = " (rgba->css black) "  luminance=" (js/call black-lum .toFixed 4)))
+    (info (str "  flip(#777777) = " (rgba->css grey-flip) "  luminance=" (js/call (luminance grey-flip) .toFixed 4)))
+    (info (str "  flip(flip(#777777)) = " (rgba->css grey-round) "  luminance=" (js/call grey-round-lum .toFixed 4)))
     (check! "white→dark" (< white-lum 0.22)
-            (str "luminance " (.toFixed white-lum 4) " < 0.22"))
+            (str "luminance " (js/call white-lum .toFixed 4) " < 0.22"))
     (check! "black→light" (> black-lum 0.5)
-            (str "luminance " (.toFixed black-lum 4) " > 0.5"))
-    (check! "mid-grey round-trips" (< (Math.abs (- grey-round-lum grey-lum)) 0.05)
-            (str "|" (.toFixed grey-round-lum 4) " - " (.toFixed grey-lum 4) "| = "
-                 (.toFixed (Math.abs (- grey-round-lum grey-lum)) 4) " < 0.05"))
+            (str "luminance " (js/call black-lum .toFixed 4) " > 0.5"))
+    (check! "mid-grey round-trips" (< (Math/abs (- grey-round-lum grey-lum)) 0.05)
+            (str "|" (js/call grey-round-lum .toFixed 4) " - " (js/call grey-lum .toFixed 4) "| = "
+                 (js/call (Math/abs (- grey-round-lum grey-lum)) .toFixed 4) " < 0.05"))
     (if (> @failures 0)
       (do (err (str @failures " self-test assertion(s) failed")) 1)
       (do (ok "all self-test assertions passed") 0))))
@@ -485,8 +474,8 @@
 ;; CLI
 ;; ---------------------------------------------------------------------------
 
-(def USAGE :- String
-  (.trim "
+(def USAGE String
+  (js/call "
 gjoa darkmode-registry — Dark Reader → gjoa curated dark-mode entry generator
 
 Usage:
@@ -497,22 +486,22 @@ Usage:
 Default prints the generated JSON entry/entries for each host so a human can
 eyeball before --write merges them into darkmode-fixes.json (existing keys kept).
 Reads the local snapshot at tools/prep/darkreader-fixes.snapshot.
-"))
+" .trim))
 
-(defn read-snapshot! [] :- Any
+(defn read-snapshot! [] Any
   (when (not (existsSync SNAPSHOT-PATH))
-    (let [err (.-error log)]
+    (let [err (js/get log .error)]
       (err (str "snapshot not found at " SNAPSHOT-PATH))
       (err (str "refresh it (pinned): curl -sL https://raw.githubusercontent.com/darkreader/darkreader/"
                 DARKREADER-PIN
                 "/src/config/dynamic-theme-fixes.config -o tools/prep/darkreader-fixes.snapshot"))
       (err "then update EXPECTED-SNAPSHOT-SHA256 (sha256sum tools/prep/darkreader-fixes.snapshot)")
-      (.exit process 1)))
+      (js/call process .exit 1)))
   (readFileSync SNAPSHOT-PATH "utf8"))
 
 ;; Generate {:host :entry :unresolved :unmapped-vars :matched-by} for one host,
 ;; or {:host :missing true} if no block matched / no CSS section.
-(defn generate-for-host [blocks :- Any host :- String] :- Any
+(defn generate-for-host [(blocks Any) (host String)] Any
   (let [block (find-block blocks host)]
     (if (not block)
       {:host host :missing true :reason "no matching DR block"}
@@ -521,48 +510,48 @@ Reads the local snapshot at tools/prep/darkreader-fixes.snapshot.
           (not built)
           {:host host :missing true :reason "matched block has no CSS section (INVERT/IGNORE only)"}
 
-          (.-rejected built)
-          {:host host :missing true :reason (.-rejected built)}
+          (js/get built .rejected)
+          {:host host :missing true :reason (js/get built .rejected)}
 
           :else
           {:host host
-           :entry (.-entry built)
-           :unresolved (.-unresolved built)
-           :unmapped-vars (.-unmapped-vars built)
-           :matched-by (.join (.-patterns block) ", ")})))))
+           :entry (js/get built .entry)
+           :unresolved (js/get built .unresolved)
+           :unmapped-vars (js/get built .unmapped-vars)
+           :matched-by (js/call (js/get block .patterns) .join ", ")})))))
 
-(defn print-result! [r :- Any] :- Any
-  (let [info (.-info log)
-        warn (.-warn log)
-        step (.-step log)]
-    (if (.-missing r)
-      (warn (str (.-host r) ": skipped — " (.-reason r)))
+(defn print-result! [(r Any)] Any
+  (let [info (js/get log .info)
+        warn (js/get log .warn)
+        step (js/get log .step)]
+    (if (js/get r .missing)
+      (warn (str (js/get r .host) ": skipped — " (js/get r .reason)))
       (do
-        (step (str (.-host r) "  (matched DR patterns: " (.-matched-by r) ")"))
-        (when (> (.-length (.-unresolved r)) 0)
-          (warn (str "  unresolved tokens left literal: " (.join (.-unresolved r) ", "))))
-        (when (> (.-length (.-unmapped-vars r)) 0)
+        (step (str (js/get r .host) "  (matched DR patterns: " (js/get r .matched-by) ")"))
+        (when (> (js/get (js/get r .unresolved) .length) 0)
+          (warn (str "  unresolved tokens left literal: " (js/call (js/get r .unresolved) .join ", "))))
+        (when (> (js/get (js/get r .unmapped-vars) .length) 0)
           (warn (str "  unmapped --darkreader vars (fell back to neutral bg): "
-                     (.join (.-unmapped-vars r) ", "))))
-        (console/log (JSON/stringify {(.-host r) (.-entry r)} nil 2))))))
+                     (js/call (js/get r .unmapped-vars) .join ", "))))
+        (console/log (js/call JSON .stringify {(js/get r .host) (js/get r .entry)} nil 2))))))
 
-(defn main! [] :- Any
-  (let [argv (.slice (.-argv process) 2)
-        write? (.includes argv "--write")
-        selftest? (.includes argv "--selftest")
-        hosts (.filter argv (fn [a] (not (.startsWith a "--"))))]
+(defn main! [] Any
+  (let [argv (js/call (js/get process .argv) .slice 2)
+        write? (js/call argv .includes "--write")
+        selftest? (js/call argv .includes "--selftest")
+        hosts (js/call argv .filter (fn [a] Any (not (js/call a .startsWith "--"))))]
     (cond
       selftest?
-      (.exit process (selftest!))
+      (js/call process .exit (selftest!))
 
-      (= (.-length hosts) 0)
-      (do (console/log USAGE) (.exit process 0))
+      (= (js/get hosts .length) 0)
+      (do (console/log USAGE) (js/call process .exit 0))
 
       :else
       (let [snapshot (read-snapshot!)
             blocks (parse-snapshot! snapshot)
-            results (.map hosts (fn [h] (generate-for-host blocks h)))
-            generated (.filter results (fn [r] (not (.-missing r))))]
+            results (js/call hosts .map (fn [h] Any (generate-for-host blocks h)))
+            generated (js/call results .filter (fn [r] Any (not (js/get r .missing))))]
         (doseq [r results] (print-result! r))
         (when write?
           ;; Pin gate: refuse to write generated CSS into the registry unless the
@@ -571,25 +560,25 @@ Reads the local snapshot at tools/prep/darkreader-fixes.snapshot.
           ;; snapshot can be printed/eyeballed but never merged into the USER_SHEET.
           (let [actual (sha256 snapshot)]
             (when (not= actual EXPECTED-SNAPSHOT-SHA256)
-              (let [err (.-error log)]
+              (let [err (js/get log .error)]
                 (err (str "snapshot SHA-256 does not match the pinned hash for Dark Reader " DARKREADER-PIN ".\n"
                           "  expected: " EXPECTED-SNAPSHOT-SHA256 "\n"
                           "  got:      " actual "\n"
                           "  --write refused. Re-pin deliberately: refresh from the pinned tag, eyeball the diff,\n"
                           "  then update DARKREADER-PIN + EXPECTED-SNAPSHOT-SHA256 to match."))
-                (.exit process 1))))
-          (if (= (.-length generated) 0)
-            (let [warn (.-warn log)] (warn "nothing to write (no hosts produced entries)"))
+                (js/call process .exit 1))))
+          (if (= (js/get generated .length) 0)
+            (let [warn (js/get log .warn)] (warn "nothing to write (no hosts produced entries)"))
             (let [existing (atom (if (existsSync REGISTRY-PATH)
-                                   (JSON/parse (readFileSync REGISTRY-PATH "utf8"))
+                                   (js/call JSON .parse (readFileSync REGISTRY-PATH "utf8"))
                                    {}))
                   added []]
               (doseq [r generated]
-                (reset! existing (assoc @existing (.-host r) (.-entry r)))
-                (.push added (.-host r)))
-              (writeFileSync REGISTRY-PATH (str (JSON/stringify @existing nil 2) "\n"))
-              (let [ok (.-ok log)]
-                (ok (str "merged " (.-length added) " entr" (if (= (.-length added) 1) "y" "ies")
-                         " into darkmode-fixes.json: " (.join added ", ")))))))))))
+                (reset! existing (assoc @existing (js/get r .host) (js/get r .entry)))
+                (js/call added .push (js/get r .host)))
+              (writeFileSync REGISTRY-PATH (str (js/call JSON .stringify @existing nil 2) "\n"))
+              (let [ok (js/get log .ok)]
+                (ok (str "merged " (js/get added .length) " entr" (if (= (js/get added .length) 1) "y" "ies")
+                         " into darkmode-fixes.json: " (js/call added .join ", ")))))))))))
 
 (main!)

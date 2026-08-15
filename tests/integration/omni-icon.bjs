@@ -6,9 +6,8 @@
 ;; visual layout itself is pref-gated CSS, eyeballed live.)
 (ns gjoa.tests.integration.omni-icon
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect]]))
-(define-mode strict)
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "omni-icon button + its dropdown actions exist in the nav-bar" [mn]
      ;; The drawer userscript runs init! a tick after the static XUL (#nav-bar)
      ;; exists, so await the button itself — not just the nav-bar — to avoid
@@ -24,14 +23,14 @@
           menuPresent: !!menu,
           items,
         };")]
-       (expect (.-btnPresent r) "omni-icon button #gjoa-omni-icon-button must exist")
-       (expect (.-btnInNavBar r) "omni-icon button must live in the nav-bar")
-       (expect (.-menuPresent r) "omni-icon menu must exist")
-       (expect (.includes (.-items r) "Back")
-         (str "omni menu must include Back; got " (JSON/stringify (.-items r))))
-       (expect (.includes (.-items r) "Reload")
-         (str "omni menu must include Reload; got " (JSON/stringify (.-items r))))
-       (expect (.includes (.-items r) "Toggle sidebar")
-         (str "omni menu must include the sidebar toggle; got " (JSON/stringify (.-items r))))))]))
+       (expect (js/get r .btnPresent) "omni-icon button #gjoa-omni-icon-button must exist")
+       (expect (js/get r .btnInNavBar) "omni-icon button must live in the nav-bar")
+       (expect (js/get r .menuPresent) "omni-icon menu must exist")
+       (expect (js/call (js/get r .items) .includes "Back")
+         (str "omni menu must include Back; got " (JSON/stringify (js/get r .items))))
+       (expect (js/call (js/get r .items) .includes "Reload")
+         (str "omni menu must include Reload; got " (JSON/stringify (js/get r .items))))
+       (expect (js/call (js/get r .items) .includes "Toggle sidebar")
+         (str "omni menu must include the sidebar toggle; got " (JSON/stringify (js/get r .items))))))]))
 
 (js/export-default tests)

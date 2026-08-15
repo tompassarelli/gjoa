@@ -14,7 +14,6 @@
 ;; context-menu item, and no onboarding callout appear. (LinkPreview.init reads
 ;; lazy.enabled before wiring any listener, and shouldShowContextMenu checks it.)
 (ns gjoa.defaults.pref.genai)
-(define-mode strict)
 (declare-extern [pref] Any)
 
 ;; The master gate — false disables every Link Preview entry point.

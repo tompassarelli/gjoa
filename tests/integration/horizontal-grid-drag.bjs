@@ -15,15 +15,14 @@
 ;; grid + tree, not the data model, so a wrong landing fails the test.
 (ns gjoa.tests.integration.horizontal-grid-drag
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect expect-eq sleep]]))
-(define-mode strict)
 
-(defn to-horizontal! [mn :- Any] :- Any
+(defn to-horizontal! [(mn Any)] Any
   (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
   (await-true "return document.getElementById('gjoa-tab-panel').hasAttribute('gjoa-horizontal');" 3000))
 
 ;; Build N root marker tabs <stamp>-r0..r(n-1), each its own grid column, then
 ;; force the horizontal grid relayout.
-(defn build-roots-js [stamp :- String n :- Int] :- String
+(defn build-roots-js [(stamp String) (n Int)] String
   (str "
     const p = Services.scriptSecurityManager.getSystemPrincipal();
     const T = window.gjoaTest.treeOf;
@@ -37,14 +36,14 @@
     window.gjoaTest.rows.updateHorizontalGrid();
     return true;"))
 
-(defn find-tab-js [stamp :- String key :- String] :- String
+(defn find-tab-js [(stamp String) (key String)] String
   (str "[...gBrowser.tabs].find(t => t.getAttribute('gjoa-test-marker') === '" stamp "-" key "')"))
 
 ;; Drive the gjoa-tabs drag handlers: drag marker `src-key` onto marker
 ;; `tgt-key`, with the pointer at fractional (fx,fy) of the TARGET cell's rect.
 ;; Fires the full DragEvent sequence the handlers expect; coordinates flow into
 ;; the dragover hit-test exactly as a real pointer would deliver them.
-(defn synth-drag-js [stamp :- String src-key :- String tgt-key :- String fx :- Any fy :- Any] :- String
+(defn synth-drag-js [(stamp String) (src-key String) (tgt-key String) (fx Any) (fy Any)] String
   (str "
     const srcTab = " (find-tab-js stamp src-key) ";
     const tgtTab = " (find-tab-js stamp tgt-key) ";
@@ -67,24 +66,24 @@
     return true;"))
 
 ;; gridColumnStart of a marker tab's row (the column-major render truth).
-(defn grid-col-js [stamp :- String key :- String] :- String
+(defn grid-col-js [(stamp String) (key String)] String
   (str "
     const t = " (find-tab-js stamp key) ";
     return getComputedStyle(window.gjoaTest.rowOf.get(t)).gridColumnStart;"))
 
 ;; parentId of a marker tab as a string ('null' for a root).
-(defn parent-of-js [stamp :- String key :- String] :- String
+(defn parent-of-js [(stamp String) (key String)] String
   (str "
     const t = " (find-tab-js stamp key) ";
     const pid = window.gjoaTest.treeOf.get(t).parentId;
     return pid == null ? 'null' : String(pid);"))
 
-(defn id-of-js [stamp :- String key :- String] :- String
+(defn id-of-js [(stamp String) (key String)] String
   (str "
     const t = " (find-tab-js stamp key) ";
     return String(window.gjoaTest.treeOf.get(t).id);"))
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [;; The reported bug: dragging a tab onto another tab's PRECISE cell must
    ;; place it there as a SIBLING (taking that column), not get stolen into a
    ;; child of the target. Aim r2 at r1's upper-left quadrant → 'before' r1.
@@ -119,7 +118,7 @@
                r2-col1 (chrome-eval (grid-col-js stamp "r2"))]
            (expect-eq r2-col1 r1-col0
              (str "r2 must take r1's old column " r1-col0 " (got r2=" r2-col1 ")"))
-           (expect (> (Number. r1-col1) (Number. r2-col1))
+           (expect (> (js/new Number r1-col1) (js/new Number r2-col1))
              (str "r1 must shift to a later column than r2 (r1=" r1-col1 " r2=" r2-col1 ")"))))))
 
    ;; The shrunk child zone must still allow intentional nesting: aim the LOWER

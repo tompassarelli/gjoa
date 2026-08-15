@@ -108,7 +108,7 @@ A textual `.patch` is anchored to line numbers and surrounding context; when Moz
 
 Upstream churn isn't only Mozilla's. The `beagle` compiler and `fram` engine are dependencies that move too, and a compiler emit/runtime skew silently broke chrome four serial times. So gjoa **freezes** them:
 
-- `configs/beagle.ref` pins beagle — **compiler and runtime** — from canonical upstream `https://github.com/tompassarelli/beagle`; the file records the selected full object ID and its validation provenance. The immutable checkout at `~/code/beagle/pins/<full-object-id>` (never the moving shared checkout) supplies the compiler via `PLTCOLLECTS`, and `core.js` is vendored from that same object. **Gate M** is a HARD FAIL unless the checkout's full `HEAD` exactly equals the configured ID — a warn here is what let the four breaks ship.
+- `configs/beagle.ref` pins beagle — **compiler and runtime** — from canonical upstream `https://github.com/tompassarelli/beagle`. The immutable checkout at `~/code/beagle/pins/<full-object-id>` supplies the compiler via `PLTCOLLECTS`, and `core.js` is vendored from that same object. **Gate M** fails unless the checkout's full `HEAD` exactly equals the configured ID.
 
 This means Firefox churn and beagle churn are **decoupled**: a Firefox bump can't move the compiler, and a beagle bump is a deliberate, reviewed event (create a new content-addressed pin → update `configs/beagle.ref` → re-import → re-vendor), never an ambient surprise.
 

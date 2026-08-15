@@ -12,72 +12,70 @@
   (:require [fs :refer [readdirSync readFileSync]]
             [path :refer [join]]
             [gjoa.tools.prep.sh :refer [sh]]))
-(define-mode strict)
 (declare-extern [process] Any)
 
-(def REPO :- String (.cwd process))
-(def PATCHES-DIR :- String (join REPO "patches"))
-(def FF :- String (join (.-HOME (.-env process)) "code" "reference" "firefox"))
+(def REPO String (js/call process .cwd))
+(def PATCHES-DIR String (join REPO "patches"))
+(def FF String (join (js/get (js/get process .env) .HOME) "code" "resources" "firefox"))
 
 ;; version "152.0.1" -> mozilla release tag "FIREFOX_152_0_1_RELEASE".
 ;; `from`/`to` flow from the network (latest-stable) and gjoa.json into a git
 ;; shell-out, so reject anything that isn't a plain Firefox version before it can
 ;; reach the shell (command-injection guard).
-(defn version->tag [v :- String] :- String
-  (if (not (.match v (RegExp. "^[0-9]+(\\.[0-9]+){1,3}(esr)?$")))
-    (throw (Error. (str "refusing unsafe version string: " v)))
-    (str "FIREFOX_" (.replaceAll v "." "_") "_RELEASE")))
+(defn version->tag [(v String)] String
+  (if (not (js/call v .match (js/new RegExp "^[0-9]+(\\.[0-9]+){1,3}(esr)?$")))
+    (throw (js/new Error (str "refusing unsafe version string: " v)))
+    (str "FIREFOX_" (js/call v .replaceAll "." "_") "_RELEASE")))
 
-(defn gjoa-version [] :- String
-  (.-version (.-firefox (JSON/parse (readFileSync (join REPO "gjoa.json") "utf8")))))
+(defn gjoa-version [] String
+  (js/get (js/get (js/call JSON .parse (readFileSync (join REPO "gjoa.json") "utf8")) .firefox) .version))
 
-(defn latest-stable [] :- String
+(defn latest-stable [] String
   (let [out (sh "curl -s 'https://product-details.mozilla.org/1.0/firefox_versions.json' 2>/dev/null" {:quiet true})]
-    (if (= out "") "" (.-LATEST_FIREFOX_VERSION (JSON/parse out)))))
+    (if (= out "") "" (js/get (js/call JSON .parse out) .LATEST_FIREFOX_VERSION))))
 
 ;; mozilla files a patch touches (exclude the depends-on contract lines)
-(defn touches [text :- String] :- Any
+(defn touches [(text String)] Any
   (let [out []]
-    (doseq [m (.matchAll text (RegExp. "^#     - (\\S+/\\S+)\\s*$" "gm"))]
+    (doseq [m (js/call text .matchAll (js/new RegExp "^#     - (\\S+/\\S+)\\s*$" "gm"))]
       (let [p (aget m 1)]
-        (when (not (.test (RegExp. "^(rust-|cpp-|js-|webidl-)") p))
-          (.push out p))))
+        (when (not (js/call (js/new RegExp "^(rust-|cpp-|js-|webidl-)") .test p))
+          (js/call out .push p))))
     out))
 
-(defn rung-name [files :- Any] :- String
+(defn rung-name [(files Any)] String
   (cond
-    (.some files (fn [f :- String] :- Bool (.test (RegExp. "\\.(rs|cpp|cc|h|webidl)$") f))) "native-src"
-    (.some files (fn [f :- String] :- Bool (.test (RegExp. "\\.(mjs|js)$") f))) "sys.mjs"
+    (js/call files .some (fn [(f String)] Bool (js/call (js/new RegExp "\\.(rs|cpp|cc|h|webidl)$") .test f))) "native-src"
+    (js/call files .some (fn [(f String)] Bool (js/call (js/new RegExp "\\.(mjs|js)$") .test f))) "sys.mjs"
     :else "build"))
 
-(defn main! [] :- Any
-  (let [argv (.slice (.-argv process) 2)
+(defn main! [] Any
+  (let [argv (js/call (js/get process .argv) .slice 2)
         from (or (aget argv 0) (gjoa-version))
         to (or (aget argv 1) (latest-stable))]
     (cond
       (or (= from "") (= to "")) (console/log "forecast: could not determine from/to versions")
       (= from to) (console/log (str "forecast: already at " to " — nothing to forecast"))
       :else
-      (let [delta (.filter (.split (sh (str "git -C " FF " diff --name-only " (version->tag from) " " (version->tag to) " 2>/dev/null") {:quiet true}) "\n")
-                           (fn [s :- String] :- Bool (> (.-length s) 0)))]
-        (if (= (.-length delta) 0)
+      (let [delta (js/call (js/call (sh (str "git -C " FF " diff --name-only " (version->tag from) " " (version->tag to) " 2>/dev/null") {:quiet true}) .split "\n") .filter (fn [(s String)] Bool (> (js/get s .length) 0)))]
+        (if (= (js/get delta .length) 0)
           (console/log (str "forecast " from " -> " to ": empty delta — are the release tags present in " FF "?"))
           (do
-            (console/log (str "conflict forecast: Firefox " from " -> " to "  (" (.-length delta) " files changed upstream)\n"))
-            (let [names (.sort (.filter (readdirSync PATCHES-DIR) (fn [p :- String] :- Bool (.endsWith p ".patch"))))
+            (console/log (str "conflict forecast: Firefox " from " -> " to "  (" (js/get delta .length) " files changed upstream)\n"))
+            (let [names (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .sort)
                   affected []]
               (doseq [n names]
                 (let [files (touches (readFileSync (join PATCHES-DIR n) "utf8"))
-                      hits (.filter files (fn [f :- String] :- Bool (.includes delta f)))]
-                  (when (> (.-length hits) 0)
-                    (.push affected {:name n :rung (rung-name files) :hits hits}))))
-              (if (= (.-length affected) 0)
+                      hits (js/call files .filter (fn [(f String)] Bool (js/call delta .includes f)))]
+                  (when (> (js/get hits .length) 0)
+                    (js/call affected .push {:name n :rung (rung-name files) :hits hits}))))
+              (if (= (js/get affected .length) 0)
                 (console/log "  CLEAN — no gjoa patch touches a changed file. All patches apply unchanged.")
                 (do
-                  (console/log (str "  " (.-length affected) " patch(es) in the blast radius (review highest-tier first):"))
+                  (console/log (str "  " (js/get affected .length) " patch(es) in the blast radius (review highest-tier first):"))
                   (doseq [a affected]
-                    (console/log (str "    [" (.-rung a) "] " (.-name a)))
-                    (doseq [h (.-hits a)] (console/log (str "        ~ " h)))))))))))))
+                    (console/log (str "    [" (js/get a .rung) "] " (js/get a .name)))
+                    (doseq [h (js/get a .hits)] (console/log (str "        ~ " h)))))))))))))
 
-(when (.-main (js/import-meta))
+(when (js/get (js/import-meta) .main)
   (main!))

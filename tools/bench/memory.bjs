@@ -10,153 +10,148 @@
   (:require [util :refer [parseArgs]]
             [path :refer [join]]
             [gjoa.tools.bench.stats :refer [format-result]]))
-(define-mode strict)
-(declare-extern [Bun process] Any)
+(declare-extern [Bun process String Boolean] Any)
 
-(def parsed :- Any
-  (parseArgs {:args (.slice (.-argv Bun) 2)
+(def parsed Any
+  (parseArgs {:args (js/call (js/get Bun .argv) .slice 2)
               :strict false
               :options {:tabs {:type "string" :default "50"}
                         :gjoa-bin {:type "string"}
                         :firefox-bin {:type "string"}
                         :settle-time {:type "string" :default "10000"}}}))
 
-(def values :- Any (.-values parsed))
+(def values Any (js/get parsed .values))
 
-(def NUM-TABS :- Any (parseInt (get values "tabs") 10))
-(def SETTLE-MS :- Any (parseInt (get values "settle-time") 10))
+(def NUM-TABS Any (parseInt (get values "tabs") 10))
+(def SETTLE-MS Any (parseInt (get values "settle-time") 10))
 
-(defn findBinary [name :- String] :- String
+(defn findBinary [(name String)] String
   (let [local-result
         (when (= name "gjoa")
-          (let [local (str (.cwd process) "/result/bin/gjoa")]
+          (let [local (str (js/call process .cwd) "/result/bin/gjoa")]
             (try
-              (let [stat (.file Bun local)]
-                (when (> (.-size stat) 0)
+              (let [stat (js/call Bun .file local)]
+                (when (> (js/get stat .size) 0)
                   local))
-              (catch Error e nil))))]
+              (catch (e Error) nil))))]
     (if local-result
       local-result
-      (let [result (.spawnSync Bun ["which" name])
-            path (.trim (.toString (.-stdout result)))]
-        (if (and (= (.-exitCode result) 0) path)
+      (let [result (js/call Bun .spawnSync ["which" name])
+            path (js/call (js/call (js/get result .stdout) .toString) .trim)]
+        (if (and (= (js/get result .exitCode) 0) path)
           path
           (do
             (console/error (str "ERROR: cannot find " name " binary. Use --" name "-bin=<path>"))
-            (.exit process 1)))))))
+            (js/call process .exit 1)))))))
 
-(def GJOA-BIN :- Any (or (get values "gjoa-bin") (findBinary "gjoa")))
-(def FIREFOX-BIN :- Any (or (get values "firefox-bin") (findBinary "firefox")))
+(def GJOA-BIN Any (or (get values "gjoa-bin") (findBinary "gjoa")))
+(def FIREFOX-BIN Any (or (get values "firefox-bin") (findBinary "firefox")))
 
 ;; Get all PIDs in the process tree rooted at the given PID.
-(defn getProcessTree! [rootPid :- Any] :- Any
+(defn getProcessTree! [(rootPid Any)] Any
   (let [pids (atom [rootPid])
-        result (.spawnSync Bun ["pgrep" "-P" (String rootPid)])]
-    (when (= (.-exitCode result) 0)
-      (let [children (.filter (.split (.trim (.toString (.-stdout result))) "\n") Boolean)]
+        result (js/call Bun .spawnSync ["pgrep" "-P" (String rootPid)])]
+    (when (= (js/get result .exitCode) 0)
+      (let [children (js/call (js/call (js/call (js/call (js/get result .stdout) .toString) .trim) .split "\n") .filter Boolean)]
         (doseq [child children]
           (let [childPid (parseInt child 10)]
             (when (not (isNaN childPid))
-              (reset! pids (.concat @pids (getProcessTree! childPid))))))))
+              (reset! pids (js/call @pids .concat (getProcessTree! childPid))))))))
     @pids))
 
 ;; Sum PSS (in KB) from /proc/<pid>/smaps_rollup across all processes in the
 ;; tree. PSS divides each shared page among the processes that map it, so the
 ;; tree-wide sum reflects unique physical memory without double-counting
 ;; shared pages (unlike VmRSS).
-(defn getTreePssKB! [rootPid :- Any] :- Any
+(defn getTreePssKB! [(rootPid Any)] Any
   (let [pids (getProcessTree! rootPid)
         totalKB (atom 0)
-        re (RegExp. "^Pss:\\s+(\\d+)\\s+kB" "m")]
+        re (js/new RegExp "^Pss:\\s+(\\d+)\\s+kB" "m")]
     (doseq [pid pids]
       (try
-        (let [rollup (.spawnSync Bun ["cat" (str "/proc/" pid "/smaps_rollup")])
-              text (.toString (.-stdout rollup))
-              match (.match text re)]
+        (let [rollup (js/call Bun .spawnSync ["cat" (str "/proc/" pid "/smaps_rollup")])
+              text (js/call (js/get rollup .stdout) .toString)
+              match (js/call text .match re)]
           (when match
             (reset! totalKB (+ @totalKB (parseInt (get match 1) 10)))))
         ;; Process may have exited, or smaps_rollup is unreadable (permissions).
-        (catch Error e nil)))
+        (catch (e Error) nil)))
     @totalKB))
 
-(defn measureMemory! [binary :- String label :- String windowPattern :- String] :- Any
-  (let [profileDir (str (join (.cwd process) "tools" "bench") "/.bench-profile-mem-" (Date/now))]
-    (.spawnSync Bun ["mkdir" "-p" profileDir])
+(defn measureMemory! [(binary String) (label String) (windowPattern String)] Any
+  (let [profileDir (str (join (js/call process .cwd) "tools" "bench") "/.bench-profile-mem-" (js/call Date .now))]
+    (js/call Bun .spawnSync ["mkdir" "-p" profileDir])
     (try
       (console/log (str "\n  Launching " label "..."))
       (console/log (str "  Binary: " binary))
       (console/log (str "  Tabs to open: " NUM-TABS))
 
       ;; Build list of URLs — use about:blank for consistent measurement
-      (let [urls (Array/from {:length NUM-TABS} (fn [] "about:blank"))
+      (let [urls (js/call Array .from {:length NUM-TABS} (fn [] Any "about:blank"))
             ;; Launch with all tabs specified as arguments
-            browser (.spawn Bun (.concat [binary
+            browser (js/call Bun .spawn (js/call [binary
                                           "--no-remote"
-                                          "--profile" profileDir]
-                                         urls)
-                            {:stdout "ignore"
+                                          "--profile" profileDir] .concat urls) {:stdout "ignore"
                              :stderr "ignore"})
-            pid (.-pid browser)]
+            pid (js/get browser .pid)]
         (console/log (str "  PID: " pid))
 
         ;; Wait for window to appear
-        (let [xdotool (.spawn Bun ["xdotool" "search" "--sync" "--onlyvisible" "--name" windowPattern]
-                              {:stdout "ignore"
+        (let [xdotool (js/call Bun .spawn ["xdotool" "search" "--sync" "--onlyvisible" "--name" windowPattern] {:stdout "ignore"
                                :stderr "ignore"})
               ;; Timeout after 30 seconds — kill xdotool (and the browser) so we don't
               ;; hang or measure a process that never showed a window.
               state (atom false)
-              windowTimeout (setTimeout (fn []
-                                          (reset! state true)
-                                          (.kill xdotool)
-                                          (.kill browser))
+              windowTimeout (setTimeout (fn [] Any (reset! state true)
+                                          (js/call xdotool .kill)
+                                          (js/call browser .kill))
                                         30000)
-              windowExit (js/await (.-exited xdotool))]
+              windowExit (js/await (js/get xdotool .exited))]
           (clearTimeout windowTimeout)
 
           (when @state
-            (throw (Error. (str "xdotool timed out after 30s waiting for a window matching /" windowPattern "/. "
+            (throw (js/new Error (str "xdotool timed out after 30s waiting for a window matching /" windowPattern "/. "
                                 "Binary may have failed to launch, or the title pattern is wrong."))))
           (when (not= windowExit 0)
-            (throw (Error. (str "xdotool exited with code " windowExit " (no window matched /" windowPattern "/). "
+            (throw (js/new Error (str "xdotool exited with code " windowExit " (no window matched /" windowPattern "/). "
                                 "Refusing to record a bogus measurement."))))
 
           ;; Let the browser settle — tabs load, GC runs, etc.
           (console/log (str "  Waiting " (/ SETTLE-MS 1000) "s for settle..."))
-          (js/await (.sleep Bun SETTLE-MS))
+          (js/await (js/call Bun .sleep SETTLE-MS))
 
           ;; Measure PSS (proportional set size) across the process tree.
           (let [pssKB (getTreePssKB! pid)
                 totalMB (/ pssKB 1024)
                 perTabMB (/ totalMB NUM-TABS)]
-            (console/log (str "  Total RSS: " (.toFixed totalMB 1) " MB"))
-            (console/log (str "  Per-tab:   " (.toFixed perTabMB 2) " MB"))
+            (console/log (str "  Total RSS: " (js/call totalMB .toFixed 1) " MB"))
+            (console/log (str "  Per-tab:   " (js/call perTabMB .toFixed 2) " MB"))
 
             ;; Kill browser
-            (.kill browser)
-            (js/await (.-exited browser))
+            (js/call browser .kill)
+            (js/await (js/get browser .exited))
 
             {:totalMB totalMB :perTabMB perTabMB :tabCount NUM-TABS})))
       (finally
-        (.spawnSync Bun ["rm" "-rf" profileDir])))))
+        (js/call Bun .spawnSync ["rm" "-rf" profileDir])))))
 
 ;; Multiple samples for statistical significance
-(defn runBenchmark! [binary :- String label :- String windowPattern :- String runs :- Any] :- Any
+(defn runBenchmark! [(binary String) (label String) (windowPattern String) (runs Any)] Any
   (let [results (atom [])]
     (doseq [i (range runs)]
       (console/log (str "\n  --- " label " run " (+ i 1) "/" runs " ---"))
       (let [res (js/await (measureMemory! binary label windowPattern))]
-        (swap! results conj (.-totalMB res))
+        (swap! results conj (js/get res .totalMB))
         ;; Pause between runs
-        (js/await (.sleep Bun 2000))))
+        (js/await (js/call Bun .sleep 2000))))
     @results))
 
 ;; --- Main ---
 
 ;; Preflight: xdotool is required to detect window visibility.
-(when (= (.which Bun "xdotool") nil)
+(when (= (js/call Bun .which "xdotool") nil)
   (console/error "ERROR: xdotool not found on PATH. Install it (e.g. `apt install xdotool`).")
-  (.exit process 1))
+  (js/call process .exit 1))
 
 (console/log "=== Memory Benchmark ===")
 (console/log (str "  Tabs: " NUM-TABS))
@@ -164,16 +159,16 @@
 (console/log (str "  Gjoa:    " GJOA-BIN))
 (console/log (str "  Firefox: " FIREFOX-BIN))
 
-(def RUNS :- Any 3)
-(def gjoaResults :- Any (js/await (runBenchmark! GJOA-BIN "Gjoa" "Gjoa|gjoa" RUNS)))
-(def firefoxResults :- Any (js/await (runBenchmark! FIREFOX-BIN "Firefox" "Mozilla Firefox|Firefox" RUNS)))
+(def RUNS Any 3)
+(def gjoaResults Any (js/await (runBenchmark! GJOA-BIN "Gjoa" "Gjoa|gjoa" RUNS)))
+(def firefoxResults Any (js/await (runBenchmark! FIREFOX-BIN "Firefox" "Mozilla Firefox|Firefox" RUNS)))
 
 (console/log "\n=== Comparison ===\n")
 (console/log (format-result (str "Memory (" NUM-TABS " tabs, total PSS MB)") gjoaResults firefoxResults "MB"))
 
 ;; Per-tab summary
-(def gjoaPerTab :- Any (.map gjoaResults (fn [v] (/ v NUM-TABS))))
-(def firefoxPerTab :- Any (.map firefoxResults (fn [v] (/ v NUM-TABS))))
+(def gjoaPerTab Any (js/call gjoaResults .map (fn [v] Any (/ v NUM-TABS))))
+(def firefoxPerTab Any (js/call firefoxResults .map (fn [v] Any (/ v NUM-TABS))))
 (console/log "")
 (console/log (format-result "Memory (per-tab MB)" gjoaPerTab firefoxPerTab "MB"))
 (console/log "")

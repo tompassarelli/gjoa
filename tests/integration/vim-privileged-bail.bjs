@@ -3,9 +3,8 @@
 ;; This exercises both focus states on about:gjoa in one run.
 (ns gjoa.tests.integration.vim-privileged-bail
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect wait-for sleep]]))
-(define-mode strict)
 
-(def open-gjoa-js :- String
+(def open-gjoa-js String
   "
   const tab = gBrowser.addTab('about:gjoa', {
     triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
@@ -15,13 +14,13 @@
   return 1;
 ")
 
-(def on-gjoa-js :- String
+(def on-gjoa-js String
   "return gBrowser.selectedBrowser.currentURI.spec.startsWith('about:gjoa')
        && !!gBrowser.selectedBrowser.contentDocument
        && !!gBrowser.selectedBrowser.contentDocument.body;")
 
 ;; A: clear any editable focus, put focus on the content browser (no input).
-(def focus-neutral-js :- String
+(def focus-neutral-js String
   "
   const doc = gBrowser.selectedBrowser.contentDocument;
   try { const old = doc.getElementById('gjoa-test-input'); if (old) old.remove(); } catch(e){}
@@ -32,7 +31,7 @@
 
 ;; B: inject a real text input into the privileged page and focus it (deterministic —
 ;; does not depend on which form controls the settings page happens to render).
-(def focus-input-js :- String
+(def focus-input-js String
   "
   const doc = gBrowser.selectedBrowser.contentDocument;
   let inp = doc.getElementById('gjoa-test-input');
@@ -45,18 +44,18 @@
 ;; pickerEl.hidden=true) but leaves it in the DOM, so an existence check
 ;; false-positives on a closed/leaked picker and breaks negative assertions. The
 ;; vim '/' search input IS removed on close, so existence is fine there.
-(def pickerOpen-js :- String
+(def pickerOpen-js String
   "const p=document.getElementById('gjoa-picker'); return !!((p && !p.hidden) || document.querySelector('.gjoa-search-input'));")
 
 ;; Close reliably: Escape (proper dismiss if reachable) AND force the closed state.
-(def closePicker-js :- String
+(def closePicker-js String
   "try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));}catch(e){} try{const p=document.getElementById('gjoa-picker'); if(p) p.hidden=true; const s=document.querySelector('.gjoa-search-input'); if(s) s.remove();}catch(e){} return 1;")
 
-(defn key-action [ch :- String] :- Any
+(defn key-action [(ch String)] Any
   [{:type "key" :id "kbd"
     :actions [{:type "keyDown" :value ch} {:type "keyUp" :value ch}]}])
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "vim is live on about:gjoa but yields to its form fields" [mn]
      (await-true "return !!document.querySelector(\"#gjoa-tab-panel\");" 10000)
      (await-true "return !!(gBrowser && gBrowser.selectedTab && gBrowser.selectedBrowser);")
@@ -68,7 +67,7 @@
      ;; --- B FIRST (opens nothing → no fragile mid-test close): a form field is
      ;; focused, so the state manager must make vim YIELD ---
      (expect (chrome-eval focus-input-js) "could not focus an injected input in the about:gjoa document")
-     (js/await (.performActions mn (key-action "t")))
+     (js/await (js/call mn .performActions (key-action "t")))
      ;; negative assertion: no positive flag for "nothing opened" — settle to give
      ;; vim its full chance to (wrongly) open a picker before asserting it did not
      (js/await (sleep 1000))
@@ -76,7 +75,7 @@
        "vim 't' opened a picker while a form field was focused on about:gjoa — state manager failed to detect editing (typing would be eaten)")
      ;; --- A LAST: clear the form focus → vim WORKS on about:gjoa (no URL bail) ---
      (chrome-eval focus-neutral-js)
-     (js/await (.performActions mn (key-action "t")))
+     (js/await (js/call mn .performActions (key-action "t")))
      (await-true pickerOpen-js 4000)
      (expect (chrome-eval pickerOpen-js)
        "vim 't' did NOT open the picker on about:gjoa — vim is wrongly inert on an about page (must not bail)"))]))

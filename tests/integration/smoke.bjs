@@ -10,10 +10,9 @@
 ;; FATAL CI step (.github/workflows/build-linux.yml "Chrome-init smoke (FATAL)").
 (ns gjoa.tests.integration.smoke
   (:require [gjoa.tests.dsl :refer [deftest expect await-true wait-for]]))
-(define-mode strict)
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "smoke: gjoa chrome initialized (GjoaLoader + bundles loaded, no $$bc death)" [mn ctx]
-     (js/await (.setContext mn "chrome"))
+     (js/await (js/call mn .setContext "chrome"))
      ;; gjoaTest + Spaces are set on the navigator:browser window ONLY after
      ;; GjoaLoader runs the .uc.js bundles successfully. Resolve that window
      ;; explicitly because Marionette's chrome sandbox does not guarantee that

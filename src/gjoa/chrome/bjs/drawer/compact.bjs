@@ -3,116 +3,111 @@
   (:require [gjoa.macros :refer [q xul-new pref-bool pref-int set-pref-bool! on! off! has? attr! rmattr! bool]]
             [gjoa.tabs.log :refer [create-logger!]]
             [gjoa.drawer.timing :refer [collapse-protection-duration-ms]]))
-(define-mode strict)
 
-(declare-extern [document window Services requestAnimationFrame] Any)
+(declare-extern [document window Services requestAnimationFrame getComputedStyle] Any)
 
-(defn make-mode-ops! [cfg :- Any] :- Any
-  (let [st       (.-st cfg)
-        elem     (.-elem cfg)
-        check-el (.-check-el cfg)
-        attr     (.-attr cfg)
-        shared   (.-shared cfg)
-        dbg      (.-dbg cfg)
-        dbg1     (.-dbg1 cfg)
-        recon-counter (.-reconcile-counter cfg)
-        guarded? (.-is-guarded cfg)
-        fwd {:schedule-watchdog nil}
-
-        set-hover (fn [value]
+(defn make-mode-ops! [(cfg Any)] Any
+  (let [st       (js/get cfg .st)
+        elem     (js/get cfg .elem)
+        check-el (js/get cfg .check-el)
+        attr     (js/get cfg .attr)
+        shared   (js/get cfg .shared)
+        dbg      (js/get cfg .dbg)
+        dbg1     (js/get cfg .dbg1)
+        recon-counter (js/get cfg .reconcile-counter)
+        guarded? (js/get cfg .is-guarded)]
+    (letfn [(set-hover [value] Any
           (dbg "setHover" {:value value})
           (cond
-            (and value (.-ignore-next-hover shared))
+            (and value (js/get shared .ignore-next-hover))
             (rmattr! elem "gjoa-has-hover")
             value
-            (let [cr (- (.-collapse-until st) (Date/now))]
+            (let [cr (- (js/get st .collapse-until) (Date/now))]
               (if (> cr 0)
                 (do
                   (dbg "setHover:revealDropped" {:collapseRemaining cr})
-                  (when (.-retry-timer st) (clearTimeout (.-retry-timer st)))
-                  (set! (.-retry-timer st)
-                    (setTimeout (fn []
-                      (set! (.-retry-timer st) nil)
+                  (when (js/get st .retry-timer) (clearTimeout (js/get st .retry-timer)))
+                  (js/set! st .retry-timer
+                    (setTimeout (fn [] Any
+                      (js/set! st .retry-timer nil)
                       (when (not (has? elem "gjoa-has-hover"))
-                        (let [wanted (or (.-flash-timer st)
-                                         (.matches elem ":hover")
-                                         (some-> st .-strip (.matches ":hover")))]
+                        (let [wanted (or (js/get st .flash-timer)
+                                         (js/call elem .matches ":hover")
+                                         (some-> st (js/get .strip) (js/call .matches ":hover")))]
                           (dbg "setHover:retry" {:stillWanted wanted})
                           (when wanted (set-hover true)))))
                       (+ cr 16))))
                 (do
                   (attr! elem "gjoa-has-hover" "true")
-                  (when (.-retry-timer st)
-                    (clearTimeout (.-retry-timer st))
-                    (set! (.-retry-timer st) nil)))))
+                  (when (js/get st .retry-timer)
+                    (clearTimeout (js/get st .retry-timer))
+                    (js/set! st .retry-timer nil)))))
             :else
             (when (has? elem "gjoa-has-hover")
               (rmattr! elem "gjoa-has-hover")
-              (set! (.-collapse-until st) (+ (Date/now) (collapse-protection-duration-ms))))))
+              (js/set! st .collapse-until (+ (Date/now) (collapse-protection-duration-ms))))))
 
-        clear-flash (fn []
-          (when (.-flash-timer st) (clearTimeout (.-flash-timer st)))
-          (set! (.-flash-timer st) nil))
+            (clear-flash [] Any
+          (when (js/get st .flash-timer) (clearTimeout (js/get st .flash-timer)))
+          (js/set! st .flash-timer nil))
 
-        cancel-watchdog (fn []
-          (when (.-watchdog st) (clearTimeout (.-watchdog st)) (set! (.-watchdog st) nil)))
+            (cancel-watchdog [] Any
+          (when (js/get st .watchdog) (clearTimeout (js/get st .watchdog)) (js/set! st .watchdog nil)))
 
-        flash (fn [duration]
-          (if (.-flash-timer st)
-            (do (clearTimeout (.-flash-timer st)) (dbg "flash:extend" {:duration duration}))
+            (flash [duration] Any
+          (if (js/get st .flash-timer)
+            (do (clearTimeout (js/get st .flash-timer)) (dbg "flash:extend" {:duration duration}))
             (do (dbg "flash:show" {:duration duration})
-                (requestAnimationFrame #(set-hover true))))
-          (set! (.-flash-timer st)
-            (setTimeout (fn []
-              (requestAnimationFrame (fn []
+                (requestAnimationFrame (fn [] Any (set-hover true)))))
+          (js/set! st .flash-timer
+            (setTimeout (fn [] Any
+              (requestAnimationFrame (fn [] Any
                 (recon-counter)
                 (if (guarded?)
-                  (do (dbg1 "flash:hide-blocked") (.schedule-watchdog fwd))
+                  (do (dbg1 "flash:hide-blocked") (schedule-watchdog))
                   (set-hover false))
-                (set! (.-flash-timer st) nil))))
+                (js/set! st .flash-timer nil))))
               duration)))
 
-        reconcile (fn [trigger]
+            (reconcile [trigger] Any
           (when (has? check-el attr)
             (let [before {:hover (has? elem "gjoa-has-hover")
-                          :flashPending (bool (.-flash-timer st))
-                          :ignoreNextHover (.-ignore-next-hover shared)
-                          :openPopups (.-open-popups shared)}]
-              (set! (.-ignore-next-hover shared) false)
+                          :flashPending (bool (js/get st .flash-timer))
+                          :ignoreNextHover (js/get shared .ignore-next-hover)
+                          :openPopups (js/get shared .open-popups)}]
+              (js/set! shared .ignore-next-hover false)
               (recon-counter)
-              (let [cursor-over (or (.matches elem ":hover")
-                                     (some-> st .-strip (.matches ":hover")))
+              (let [cursor-over (or (js/call elem .matches ":hover")
+                                     (some-> st (js/get .strip) (js/call .matches ":hover")))
                     guarded (guarded?)]
                 (cond
                   (or guarded cursor-over)
                   (do (when (not (has? elem "gjoa-has-hover"))
                         (attr! elem "gjoa-has-hover" "true"))
-                      (.schedule-watchdog fwd))
-                  (.-flash-timer st)
+                      (schedule-watchdog))
+                  (js/get st .flash-timer)
                   (dbg1 "reconcile:flashPending")
                   :else
                   (do (set-hover false) (cancel-watchdog)))
                 (dbg "reconcile"
                   {:trigger trigger :before before :cursorOver cursor-over :guarded guarded
                    :after {:hover (has? elem "gjoa-has-hover")
-                           :flashPending (bool (.-flash-timer st))
-                           :ignoreNextHover (.-ignore-next-hover shared)}})))))
+                           :flashPending (bool (js/get st .flash-timer))
+                           :ignoreNextHover (js/get shared .ignore-next-hover)}})))))
 
-        schedule-watchdog (fn []
-          (when (not (.-watchdog st))
-            (set! (.-watchdog st)
-              (setTimeout (fn [] (set! (.-watchdog st) nil) (reconcile "hide-watchdog-1s")) 1000))))]
+            (schedule-watchdog [] Any
+          (when (not (js/get st .watchdog))
+            (js/set! st .watchdog
+              (setTimeout (fn [] Any (js/set! st .watchdog nil) (reconcile "hide-watchdog-1s")) 1000))))]
+      {:set-hover set-hover :flash flash :reconcile reconcile
+       :schedule-watchdog schedule-watchdog :clear-flash clear-flash
+       :cancel-watchdog cancel-watchdog})))
 
-    (set! (.-schedule-watchdog fwd) schedule-watchdog)
-    {:set-hover set-hover :flash flash :reconcile reconcile
-     :schedule-watchdog schedule-watchdog :clear-flash clear-flash
-     :cancel-watchdog cancel-watchdog}))
-
-(js/export (defn make-compact! [deps :- Any] :- Any
-  (let [sidebar-main (.-sidebarMain deps)
-        navigator-toolbox (.-navigatorToolbox deps)
-        urlbar (.-urlbar deps)
-        doc-el (.-documentElement document)
+(js/export (defn make-compact! [(deps Any)] Any
+  (let [sidebar-main (js/get deps .sidebarMain)
+        navigator-toolbox (js/get deps .navigatorToolbox)
+        urlbar (js/get deps .urlbar)
+        doc-el (js/get document .documentElement)
 
         COMPACT-PREF "gjoa.sidebar.compact"
         HORIZONTAL-COMPACT-PREF "gjoa.toolbar.compact"
@@ -120,7 +115,7 @@
         OFFSCREEN-SHOW-DURATION 1000
         FLASH-DURATION 800
 
-        hover-hack-delay #(pref-int "gjoa.compact.hoverHackDelay" 0)
+        hover-hack-delay (fn [] Any (pref-int "gjoa.compact.hoverHackDelay" 0))
 
         log (create-logger! "compact")
 
@@ -133,66 +128,49 @@
 
         ;; SYNCHRONOUS menu probe. openPopupAtScreen sets menupopup state before the
         ;; async popupshown that bumps open-popups, so the counter alone loses the race.
-        menu-open? (fn []
+        menu-open? (fn [] Any
           (bool (q document
                    "menupopup:is([state='open'],[state='showing'],[open]), panel[panelopen]")))
 
-        ensure-popover (fn []
-          (when (not (.matches urlbar ":popover-open")) (.showPopover urlbar)))
+        ensure-popover (fn [] Any
+          (when (not (js/call urlbar .matches ":popover-open")) (js/call urlbar .showPopover)))
 
-        dbg (fn [event data]
+        dbg (fn [event data] Any
           (log event
             (Object/assign
               {:compact (has? sidebar-main "data-gjoa-compact")
                :compactHz (has? doc-el "data-gjoa-compact-horizontal")
                :hover (has? sidebar-main "gjoa-has-hover")
                :hoverHz (has? navigator-toolbox "gjoa-has-hover")
-               :openPopups (.-open-popups shared)
-               :flashPending (bool (.-flash-timer vstate))}
+               :openPopups (js/get shared .open-popups)
+               :flashPending (bool (js/get vstate .flash-timer))}
               data)))
 
-        dbg1 #(dbg % {})
+        dbg1 (fn [%1] Any (dbg %1 {}))
 
-        is-ignored-popup (fn [e]
-          (let [path (some-> e .-composedPath (.composedPath))
-                el (if (and path (aget path 0)) (aget path 0) (.-target e))]
-            (or (= (.-localName el) "tooltip") (= (.-id el) "tab-preview-panel"))))
+        is-ignored-popup (fn [e] Any
+          (let [path (some-> e (js/get .composedPath) (js/call .composedPath))
+                el (if (and path (aget path 0)) (aget path 0) (js/get e .target))]
+            (or (= (js/get el .localName) "tooltip") (= (js/get el .id) "tab-preview-panel"))))
 
-        on-popup-shown (fn [e]
+        on-popup-shown (fn [e] Any
           (when (not (is-ignored-popup e))
-            (set! (.-open-popups shared) (+ (.-open-popups shared) 1))
-            (let [t (.-target e)]
-              (dbg "popupshown" {:id (.-id t) :tag (.-localName t) :_openPopups (.-open-popups shared)}))))
+            (js/set! shared .open-popups (+ (js/get shared .open-popups) 1))
+            (let [t (js/get e .target)]
+              (dbg "popupshown" {:id (js/get t .id) :tag (js/get t .localName) :_openPopups (js/get shared .open-popups)}))))
 
-        on-popup-hidden (fn [e]
-          (when (not (is-ignored-popup e))
-            (set! (.-open-popups shared) (Math/max 0 (- (.-open-popups shared) 1)))
-            (let [t (.-target e)]
-              (dbg "popuphidden" {:id (.-id t) :tag (.-localName t) :_openPopups (.-open-popups shared)}))
-            ;; Release a pin whose clear on-sidebar-leave deferred, once the menu is
-            ;; really gone and the pointer is off the sidebar — otherwise a right-click
-            ;; that only opened the menu leaves the drawer pinned forever.
-            (when (and (.-pin-release-deferred shared)
-                       (has? sidebar-main "gjoa-pinned")
-                       (not (menu-open?))
-                       (not (.matches sidebar-main ":hover")))
-              (set! (.-pin-release-deferred shared) false)
-              (rmattr! sidebar-main "gjoa-pinned")
-              (dbg1 "popuphidden:pin-release")
-              (reconcile-compact-state "popuphidden-pin-release"))))
-
-        reconcile-counter-if-stale (fn []
-          (when (> (.-open-popups shared) 0)
+        reconcile-counter-if-stale (fn [] Any
+          (when (> (js/get shared .open-popups) 0)
             (let [live (q document
                          (str "panel[panelopen='true'], panel[open='true'], "
                               "menupopup[state='open'], menupopup[state='showing'], "
                               "menupopup[open='true']"))]
               (when (not live)
-                (dbg "reconcileCounterIfStale:reset" {:stale (.-open-popups shared)})
-                (set! (.-open-popups shared) 0)))))
+                (dbg "reconcileCounterIfStale:reset" {:stale (js/get shared .open-popups)})
+                (js/set! shared .open-popups 0)))))
 
-        is-guarded (fn []
-          (bool (or (> (.-open-popups shared) 0)
+        is-guarded (fn [] Any
+          (bool (or (> (js/get shared .open-popups) 0)
                     ;; #127: `e` (or a future toolbar action) can PIN the overlay open in
                     ;; compact mode — keep it revealed regardless of cursor/menus.
                     (has? sidebar-main "gjoa-pinned")
@@ -213,12 +191,12 @@
                              :dbg dbg :dbg1 dbg1
                              :reconcile-counter reconcile-counter-if-stale
                              :is-guarded is-guarded})
-        set-hover (.-set-hover vops)
-        clear-flash (.-clear-flash vops)
-        cancel-hide-watchdog (.-cancel-watchdog vops)
-        flash-sidebar (.-flash vops)
-        reconcile-compact-state (.-reconcile vops)
-        schedule-hide-watchdog (.-schedule-watchdog vops)
+        set-hover (js/get vops .set-hover)
+        clear-flash (js/get vops .clear-flash)
+        cancel-hide-watchdog (js/get vops .cancel-watchdog)
+        flash-sidebar (js/get vops .flash)
+        reconcile-compact-state (js/get vops .reconcile)
+        schedule-hide-watchdog (js/get vops .schedule-watchdog)
 
         hops (make-mode-ops! {:st hstate :elem navigator-toolbox
                              :check-el doc-el
@@ -226,34 +204,51 @@
                              :dbg dbg :dbg1 dbg1
                              :reconcile-counter reconcile-counter-if-stale
                              :is-guarded is-guarded})
-        set-toolbox-hover (.-set-hover hops)
-        clear-flash-toolbox (.-clear-flash hops)
-        cancel-hide-watchdog-hz (.-cancel-watchdog hops)
-        flash-toolbox (.-flash hops)
-        reconcile-compact-state-horizontal (.-reconcile hops)]
+        set-toolbox-hover (js/get hops .set-hover)
+        clear-flash-toolbox (js/get hops .clear-flash)
+        cancel-hide-watchdog-hz (js/get hops .cancel-watchdog)
+        flash-toolbox (js/get hops .flash)
+        reconcile-compact-state-horizontal (js/get hops .reconcile)
 
-    (let [on-sidebar-enter (fn [event]
+        on-popup-hidden (fn [e] Any
+          (when (not (is-ignored-popup e))
+            (js/set! shared .open-popups (Math/max 0 (- (js/get shared .open-popups) 1)))
+            (let [t (js/get e .target)]
+              (dbg "popuphidden" {:id (js/get t .id) :tag (js/get t .localName) :_openPopups (js/get shared .open-popups)}))
+            ;; Release a pin whose clear on-sidebar-leave deferred, once the menu is
+            ;; really gone and the pointer is off the sidebar — otherwise a right-click
+            ;; that only opened the menu leaves the drawer pinned forever.
+            (when (and (js/get shared .pin-release-deferred)
+                       (has? sidebar-main "gjoa-pinned")
+                       (not (menu-open?))
+                       (not (js/call sidebar-main .matches ":hover")))
+              (js/set! shared .pin-release-deferred false)
+              (rmattr! sidebar-main "gjoa-pinned")
+              (dbg1 "popuphidden:pin-release")
+              (reconcile-compact-state "popuphidden-pin-release"))))]
+
+    (let [on-sidebar-enter (fn [event] Any
             ;; a fresh sidebar interaction owns the pin; a deferred clear is stale.
-            (set! (.-pin-release-deferred shared) false)
-            (let [target (.-target event)
-                  target-id (or (.-id target) (.-localName target))]
-              (dbg "onSidebarEnter:entry" {:targetId target-id :_ignoreNextHover (.-ignore-next-hover shared) :flashPending (bool (.-flash-timer vstate))})
-              (when (> (.-collapse-until vstate) (Date/now))
+            (js/set! shared .pin-release-deferred false)
+            (let [target (js/get event .target)
+                  target-id (or (js/get target .id) (js/get target .localName))]
+              (dbg "onSidebarEnter:entry" {:targetId target-id :_ignoreNextHover (js/get shared .ignore-next-hover) :flashPending (bool (js/get vstate .flash-timer))})
+              (when (> (js/get vstate .collapse-until) (Date/now))
                 (dbg "onSidebarEnter:cancel-collapse-protection-sync"
-                  {:remainingMs (- (.-collapse-until vstate) (Date/now)) :targetId target-id})
-                (set! (.-collapse-until vstate) 0))
-              (setTimeout (fn []
+                  {:remainingMs (- (js/get vstate .collapse-until) (Date/now)) :targetId target-id})
+                (js/set! vstate .collapse-until 0))
+              (setTimeout (fn [] Any
                 (cond
-                  (not (.matches target ":hover"))
+                  (not (js/call target .matches ":hover"))
                   (do (dbg "onSidebarEnter:abort" {:reason "not-hovered-after-tick" :targetId target-id})
                       (reconcile-compact-state "sidebar-enter-not-hovered"))
-                  (.closest target "panel")
+                  (js/call target .closest "panel")
                   (dbg "onSidebarEnter:abort" {:reason "from-panel" :targetId target-id})
                   :else
                   (do (clear-flash)
-                      (requestAnimationFrame (fn []
+                      (requestAnimationFrame (fn [] Any
                         (cond
-                          (.-ignore-next-hover shared)
+                          (js/get shared .ignore-next-hover)
                           (dbg "onSidebarEnter:abort" {:reason "ignore-next-hover-rAF" :targetId target-id})
                           (has? sidebar-main "gjoa-has-hover")
                           (dbg "onSidebarEnter:abort" {:reason "already-has-hover" :targetId target-id})
@@ -262,25 +257,25 @@
                               (set-hover true))))))))
                 (hover-hack-delay))))
 
-          on-sidebar-leave (fn [event]
+          on-sidebar-leave (fn [event] Any
             ;; #127: leaving the sidebar dismisses an `e`-pinned reveal — clearing the pin
             ;; here drops the is-guarded hold so the normal leave→hide path runs. NOT while
             ;; a menu is open: a right-click's openPopupAtScreen fires this in the same
             ;; tick, and this clear runs BEFORE the is-guarded check below ever sees it.
             ;; on-popup-hidden performs the deferred clear.
             (if (menu-open?)
-              (set! (.-pin-release-deferred shared) true)
+              (js/set! shared .pin-release-deferred true)
               (rmattr! sidebar-main "gjoa-pinned"))
-            (let [target (.-target event)
-                  target-id (or (.-id target) (.-localName target))
-                  exited-window (not (.-relatedTarget event))
+            (let [target (js/get event .target)
+                  target-id (or (js/get target .id) (js/get target .localName))
+                  exited-window (not (js/get event .relatedTarget))
                   linger-ms (if exited-window OFFSCREEN-SHOW-DURATION KEEP-HOVER-DURATION)]
-              (dbg "onSidebarLeave:entry" {:targetId target-id :_ignoreNextHover (.-ignore-next-hover shared) :exitedWindow exited-window :lingerMs linger-ms})
-              (setTimeout (fn []
+              (dbg "onSidebarLeave:entry" {:targetId target-id :_ignoreNextHover (js/get shared .ignore-next-hover) :exitedWindow exited-window :lingerMs linger-ms})
+              (setTimeout (fn [] Any
                 (cond
-                  (.matches target ":hover")
+                  (js/call target .matches ":hover")
                   (dbg "onSidebarLeave:abort" {:reason "still-hovered-after-tick" :targetId target-id})
-                  (.-ignore-next-hover shared)
+                  (js/get shared .ignore-next-hover)
                   (dbg "onSidebarLeave:abort" {:reason "ignore-next-hover" :targetId target-id})
                   (is-guarded)
                   (dbg "onSidebarLeave:abort" {:reason "guarded" :targetId target-id})
@@ -289,73 +284,71 @@
                       (flash-sidebar linger-ms))))
                 (hover-hack-delay))))
 
-          on-doc-mouse-leave (fn [e]
+          on-doc-mouse-leave (fn [e] Any
             (when (and (has? sidebar-main "data-gjoa-compact")
                        (not (has? sidebar-main "gjoa-has-hover"))
-                       (not (.-ignore-next-hover shared)))
+                       (not (js/get shared .ignore-next-hover)))
               (let [trigger-width (parseInt
-                                    (or (.getPropertyValue
-                                          (getComputedStyle doc-el)
+                                    (or (js/call (getComputedStyle doc-el) .getPropertyValue
                                           "--gjoa-compact-trigger-width")
                                         "8")
                                     10)
                     on-left (pref-bool "sidebar.position_start" true)
                     near-edge (if on-left
-                                (<= (.-clientX e) (* trigger-width 3))
-                                (>= (.-clientX e) (- (.-innerWidth window) (* trigger-width 3))))]
+                                (<= (js/get e .clientX) (* trigger-width 3))
+                                (>= (js/get e .clientX) (- (js/get window .innerWidth) (* trigger-width 3))))]
                 (when near-edge
-                  (dbg "onDocMouseLeave:show" {:clientX (.-clientX e) :onLeft on-left})
+                  (dbg "onDocMouseLeave:show" {:clientX (js/get e .clientX) :onLeft on-left})
                   (flash-sidebar OFFSCREEN-SHOW-DURATION)))))
 
-          on-toolbox-enter (fn [event]
-            (let [target (.-target event)]
-              (when (> (.-collapse-until hstate) (Date/now))
-                (set! (.-collapse-until hstate) 0))
-              (setTimeout (fn []
+          on-toolbox-enter (fn [event] Any
+            (let [target (js/get event .target)]
+              (when (> (js/get hstate .collapse-until) (Date/now))
+                (js/set! hstate .collapse-until 0))
+              (setTimeout (fn [] Any
                 (cond
-                  (not (.matches target ":hover"))
+                  (not (js/call target .matches ":hover"))
                   (reconcile-compact-state-horizontal "toolbox-enter-not-hovered")
-                  (.closest target "panel") nil
+                  (js/call target .closest "panel") nil
                   :else
                   (do (clear-flash-toolbox)
-                      (requestAnimationFrame (fn []
-                        (when (and (not (.-ignore-next-hover shared))
+                      (requestAnimationFrame (fn [] Any
+                        (when (and (not (js/get shared .ignore-next-hover))
                                    (not (has? navigator-toolbox "gjoa-has-hover")))
                           (set-toolbox-hover true)))))))
                 (hover-hack-delay))))
 
-          on-toolbox-leave (fn [event]
-            (let [target (.-target event)
-                  exited-window (not (.-relatedTarget event))
+          on-toolbox-leave (fn [event] Any
+            (let [target (js/get event .target)
+                  exited-window (not (js/get event .relatedTarget))
                   linger-ms (if exited-window OFFSCREEN-SHOW-DURATION KEEP-HOVER-DURATION)]
-              (setTimeout (fn []
-                (when (and (not (.matches target ":hover"))
-                           (not (.-ignore-next-hover shared))
+              (setTimeout (fn [] Any
+                (when (and (not (js/call target .matches ":hover"))
+                           (not (js/get shared .ignore-next-hover))
                            (not (is-guarded)))
                   (flash-toolbox linger-ms)))
                 (hover-hack-delay))))
 
-          on-doc-mouse-leave-top (fn [e]
+          on-doc-mouse-leave-top (fn [e] Any
             (when (and (has? doc-el "data-gjoa-compact-horizontal")
                        (not (has? navigator-toolbox "gjoa-has-hover"))
-                       (not (.-ignore-next-hover shared)))
+                       (not (js/get shared .ignore-next-hover)))
               (let [trigger-height (parseInt
-                                     (or (.getPropertyValue
-                                           (getComputedStyle doc-el)
+                                     (or (js/call (getComputedStyle doc-el) .getPropertyValue
                                            "--gjoa-compact-trigger-width")
                                          "8")
                                      10)]
-                (when (<= (.-clientY e) (* trigger-height 3))
-                  (dbg "onDocMouseLeaveTop:show" {:clientY (.-clientY e)})
+                (when (<= (js/get e .clientY) (* trigger-height 3))
+                  (dbg "onDocMouseLeaveTop:show" {:clientY (js/get e .clientY)})
                   (flash-toolbox OFFSCREEN-SHOW-DURATION)))))
 
-          compact-enable (fn []
+          compact-enable (fn [] Any
             (dbg1 "compactEnable")
             (attr! sidebar-main "data-gjoa-compact" "")
-            (when (and urlbar (not (.-urlbar-obs vstate)))
+            (when (and urlbar (not (js/get vstate .urlbar-obs)))
               (rmattr! urlbar "popover")
-              (set! (.-urlbar-obs vstate)
-                (MutationObserver. (fn []
+              (js/set! vstate .urlbar-obs
+                (js/new MutationObserver (fn [] Any
                   (when (and (has? sidebar-main "data-gjoa-compact")
                              (not (has? doc-el "gjoa-urlbar-floating")))
                     (if (has? urlbar "breakout-extend")
@@ -366,8 +359,8 @@
                         (do
                           (dbg1 "urlbar:breakout-close")
                           (rmattr! urlbar "popover")
-                          (let [cursor-over (or (.matches sidebar-main ":hover")
-                                                 (some-> vstate .-strip (.matches ":hover")))]
+                          (let [cursor-over (or (js/call sidebar-main .matches ":hover")
+                                                 (some-> vstate (js/get .strip) (js/call .matches ":hover")))]
                             (if cursor-over
                               (dbg1 "urlbar:breakout-close:keep-open")
                               (do
@@ -376,52 +369,52 @@
                                 (cancel-hide-watchdog)
                                 (when (has? sidebar-main "gjoa-has-hover")
                                   (rmattr! sidebar-main "gjoa-has-hover"))
-                                (set! (.-collapse-until vstate)
+                                (js/set! vstate .collapse-until
                                   (+ (Date/now) (collapse-protection-duration-ms))))))))))))
-              (.observe (.-urlbar-obs vstate) urlbar
+              (js/call (js/get vstate .urlbar-obs) .observe urlbar
                 {:attributes true :attributeFilter ["breakout-extend"]}))
-            (when (or (not (.-strip vstate)) (not (.-isConnected (.-strip vstate))))
-              (set! (.-strip vstate) (xul-new "box"))
-              (set! (.-id (.-strip vstate)) "gjoa-hover-strip")
-              (.appendChild (.-parentNode sidebar-main) (.-strip vstate))
-              (on! (.-strip vstate) "mouseenter" (fn []
+            (when (or (not (js/get vstate .strip)) (not (js/get (js/get vstate .strip) .isConnected)))
+              (js/set! vstate .strip (xul-new "box"))
+              (js/set! (js/get vstate .strip) .id "gjoa-hover-strip")
+              (js/call (js/get sidebar-main .parentNode) .appendChild (js/get vstate .strip))
+              (on! (js/get vstate .strip) "mouseenter" (fn [] Any
                 (dbg "hoverStrip:mouseenter"
-                  {:_ignoreNextHover (.-ignore-next-hover shared)
-                   :flashPending (bool (.-flash-timer vstate))
+                  {:_ignoreNextHover (js/get shared .ignore-next-hover)
+                   :flashPending (bool (js/get vstate .flash-timer))
                    :hasHover (has? sidebar-main "gjoa-has-hover")})
-                (if (.-ignore-next-hover shared)
+                (if (js/get shared .ignore-next-hover)
                   (dbg "hoverStrip:abort" {:reason "ignore-next-hover-sync"})
                   (flash-sidebar OFFSCREEN-SHOW-DURATION)))))
             (on! sidebar-main "mouseover" on-sidebar-enter)
             (on! sidebar-main "mouseleave" on-sidebar-leave)
             (on! doc-el "mouseleave" on-doc-mouse-leave))
 
-          compact-disable (fn []
+          compact-disable (fn [] Any
             (dbg1 "compactDisable")
             (clear-flash)
             (cancel-hide-watchdog)
             (rmattr! sidebar-main "data-gjoa-compact")
             (rmattr! sidebar-main "gjoa-has-hover")
-            (when (.-urlbar-obs vstate) (.disconnect (.-urlbar-obs vstate)))
-            (set! (.-urlbar-obs vstate) nil)
+            (when (js/get vstate .urlbar-obs) (js/call (js/get vstate .urlbar-obs) .disconnect))
+            (js/set! vstate .urlbar-obs nil)
             (when urlbar
               (attr! urlbar "popover" "manual")
               (ensure-popover))
-            (when (.-strip vstate)
-              (.remove (.-strip vstate))
-              (set! (.-strip vstate) nil))
+            (when (js/get vstate .strip)
+              (js/call (js/get vstate .strip) .remove)
+              (js/set! vstate .strip nil))
             (off! sidebar-main "mouseover" on-sidebar-enter)
             (off! sidebar-main "mouseleave" on-sidebar-leave)
             (off! doc-el "mouseleave" on-doc-mouse-leave))
 
-          compact-enable-horizontal (fn []
+          compact-enable-horizontal (fn [] Any
             (when (not (has? doc-el "data-gjoa-compact-horizontal"))
               (dbg1 "compactEnableHorizontal")
               (attr! doc-el "data-gjoa-compact-horizontal" "")
-              (when (and urlbar (not (.-urlbar-obs hstate)))
+              (when (and urlbar (not (js/get hstate .urlbar-obs)))
                 (rmattr! urlbar "popover")
-                (set! (.-urlbar-obs hstate)
-                  (MutationObserver. (fn []
+                (js/set! hstate .urlbar-obs
+                  (js/new MutationObserver (fn [] Any
                     (when (and (has? doc-el "data-gjoa-compact-horizontal")
                                (not (has? doc-el "gjoa-urlbar-floating")))
                       (if (has? urlbar "breakout-extend")
@@ -429,39 +422,39 @@
                             (attr! urlbar "popover" "manual")
                             (ensure-popover))
                           (rmattr! urlbar "popover"))))))
-                (.observe (.-urlbar-obs hstate) urlbar
+                (js/call (js/get hstate .urlbar-obs) .observe urlbar
                   {:attributes true :attributeFilter ["breakout-extend"]}))
-              (when (or (not (.-strip hstate)) (not (.-isConnected (.-strip hstate))))
-                (set! (.-strip hstate) (xul-new "box"))
-                (set! (.-id (.-strip hstate)) "gjoa-hover-strip-top")
-                (.appendChild doc-el (.-strip hstate))
-                (on! (.-strip hstate) "mouseenter"
-                #(when (not (.-ignore-next-hover shared))
-                   (flash-toolbox OFFSCREEN-SHOW-DURATION))))
+              (when (or (not (js/get hstate .strip)) (not (js/get (js/get hstate .strip) .isConnected)))
+                (js/set! hstate .strip (xul-new "box"))
+                (js/set! (js/get hstate .strip) .id "gjoa-hover-strip-top")
+                (js/call doc-el .appendChild (js/get hstate .strip))
+                (on! (js/get hstate .strip) "mouseenter"
+                (fn [] Any (when (not (js/get shared .ignore-next-hover))
+                   (flash-toolbox OFFSCREEN-SHOW-DURATION)))))
               (on! navigator-toolbox "mouseover" on-toolbox-enter)
               (on! navigator-toolbox "mouseleave" on-toolbox-leave)
               (on! doc-el "mouseleave" on-doc-mouse-leave-top)))
 
-          compact-disable-horizontal (fn []
+          compact-disable-horizontal (fn [] Any
             (when (has? doc-el "data-gjoa-compact-horizontal")
               (dbg1 "compactDisableHorizontal")
               (clear-flash-toolbox)
               (cancel-hide-watchdog-hz)
               (rmattr! doc-el "data-gjoa-compact-horizontal")
               (rmattr! navigator-toolbox "gjoa-has-hover")
-              (when (.-urlbar-obs hstate) (.disconnect (.-urlbar-obs hstate)))
-              (set! (.-urlbar-obs hstate) nil)
+              (when (js/get hstate .urlbar-obs) (js/call (js/get hstate .urlbar-obs) .disconnect))
+              (js/set! hstate .urlbar-obs nil)
               (when urlbar
                 (attr! urlbar "popover" "manual")
                 (ensure-popover))
-              (when (.-strip hstate)
-                (.remove (.-strip hstate))
-                (set! (.-strip hstate) nil))
+              (when (js/get hstate .strip)
+                (js/call (js/get hstate .strip) .remove)
+                (js/set! hstate .strip nil))
               (off! navigator-toolbox "mouseover" on-toolbox-enter)
               (off! navigator-toolbox "mouseleave" on-toolbox-leave)
               (off! doc-el "mouseleave" on-doc-mouse-leave-top)))]
 
-      (let [apply-compact-for-current-mode (fn []
+      (let [apply-compact-for-current-mode (fn [] Any
               (let [vertical (pref-bool "sidebar.verticalTabs" true)]
                 (if vertical
                   (when (and (pref-bool COMPACT-PREF false)
@@ -471,19 +464,19 @@
                              (not (has? doc-el "data-gjoa-compact-horizontal")))
                     (compact-enable-horizontal)))))
 
-            compact-toggle (fn []
+            compact-toggle (fn [] Any
               (let [vertical (pref-bool "sidebar.verticalTabs" true)]
                 (if vertical
                   (let [active (has? sidebar-main "data-gjoa-compact")]
                     (dbg "compactToggle:vertical" {:wasActive active})
                     (if active
                       (do (compact-disable) (set-pref-bool! COMPACT-PREF false))
-                      (do (set! (.-ignore-next-hover shared) true)
+                      (do (js/set! shared .ignore-next-hover true)
                           (compact-enable)
                           (set-pref-bool! COMPACT-PREF true)
-                          (let [safety-timer (setTimeout #(reconcile-compact-state "safety-timer-400ms") 400)
-                                handler (fn [e]
-                                          (when (and (identical? (.-target e) sidebar-main) (= (.-propertyName e) "transform"))
+                          (let [safety-timer (setTimeout (fn [] Any (reconcile-compact-state "safety-timer-400ms")) 400)
+                                handler (fn [e] Any
+                                          (when (and (identical? (js/get e .target) sidebar-main) (= (js/get e .propertyName) "transform"))
                                             (off! sidebar-main "transitionend" handler)
                                             (clearTimeout safety-timer)
                                             (reconcile-compact-state "transitionend-transform")))]
@@ -492,18 +485,18 @@
                     (dbg "compactToggle:horizontal" {:wasActive active})
                     (if active
                       (do (compact-disable-horizontal) (set-pref-bool! HORIZONTAL-COMPACT-PREF false))
-                      (do (set! (.-ignore-next-hover shared) true)
+                      (do (js/set! shared .ignore-next-hover true)
                           (compact-enable-horizontal)
                           (set-pref-bool! HORIZONTAL-COMPACT-PREF true)
-                          (let [safety-timer (setTimeout #(reconcile-compact-state-horizontal "safety-timer-400ms-hz") 400)
-                                handler (fn [e]
-                                          (when (and (identical? (.-target e) navigator-toolbox) (= (.-propertyName e) "transform"))
+                          (let [safety-timer (setTimeout (fn [] Any (reconcile-compact-state-horizontal "safety-timer-400ms-hz")) 400)
+                                handler (fn [e] Any
+                                          (when (and (identical? (js/get e .target) navigator-toolbox) (= (js/get e .propertyName) "transform"))
                                             (off! navigator-toolbox "transitionend" handler)
                                             (clearTimeout safety-timer)
                                             (reconcile-compact-state-horizontal "transitionend-transform-hz")))]
                             (on! navigator-toolbox "transitionend" handler))))))))
 
-            compact-observer {:observe (fn []
+            compact-observer {:observe (fn [] Any
               (let [vertical (pref-bool "sidebar.verticalTabs" true)]
                 (when vertical
                   (let [enabled (pref-bool COMPACT-PREF false)
@@ -511,7 +504,7 @@
                     (when (and enabled (not active)) (compact-enable))
                     (when (and (not enabled) active) (compact-disable))))))}
 
-            compact-observer-hz {:observe (fn []
+            compact-observer-hz {:observe (fn [] Any
               (let [vertical (pref-bool "sidebar.verticalTabs" true)]
                 (when (not vertical)
                   (let [enabled (pref-bool HORIZONTAL-COMPACT-PREF false)
@@ -519,7 +512,7 @@
                     (when (and enabled (not active)) (compact-enable-horizontal))
                     (when (and (not enabled) active) (compact-disable-horizontal))))))}
 
-            vertical-tabs-observer {:observe (fn []
+            vertical-tabs-observer {:observe (fn [] Any
               (let [vertical (pref-bool "sidebar.verticalTabs" true)]
                 (dbg "verticalTabs:change" {:vertical vertical})
                 (if vertical
@@ -527,47 +520,47 @@
                   (compact-disable))
                 (apply-compact-for-current-mode)))}
 
-            on-pfx-dismiss (fn []
-              (set! (.-ignore-next-hover shared) true)
+            on-pfx-dismiss (fn [] Any
+              (js/set! shared .ignore-next-hover true)
               (set-hover false)
               (clear-flash)
-              (setTimeout #(set! (.-ignore-next-hover shared) false)
+              (setTimeout (fn [] Any (js/set! shared .ignore-next-hover false))
                 (+ KEEP-HOVER-DURATION 100)))
 
-            on-pfx-flash #(when (has? sidebar-main "data-gjoa-compact")
-                            (flash-sidebar FLASH-DURATION))
+            on-pfx-flash (fn [] Any (when (has? sidebar-main "data-gjoa-compact")
+                            (flash-sidebar FLASH-DURATION)))
 
-            on-sizemode-change #(reconcile-compact-state "sizemodechange")
+            on-sizemode-change (fn [] Any (reconcile-compact-state "sizemodechange"))
 
-            on-window-blur #(when (identical? (.-target %) window)
-                              (reconcile-compact-state "window-blur"))
+            on-window-blur (fn [%1] Any (when (identical? (js/get %1 .target) window)
+                              (reconcile-compact-state "window-blur")))
 
-            pin-sidebar (fn []
+            pin-sidebar (fn [] Any
               (attr! sidebar-main "gjoa-has-hover" "true")
               (clear-flash))
 
-            pin-toolbox (fn []
+            pin-toolbox (fn [] Any
               (attr! navigator-toolbox "gjoa-has-hover" "true")
               (clear-flash-toolbox))
 
-            destroy (fn []
+            destroy (fn [] Any
               (off! document "popupshown" on-popup-shown)
               (off! document "popuphidden" on-popup-hidden)
               (off! sidebar-main "gjoa-dismiss" on-pfx-dismiss)
               (off! sidebar-main "gjoa-flash" on-pfx-flash)
               (off! window "sizemodechange" on-sizemode-change)
               (off! window "blur" on-window-blur)
-              (.removeObserver (.-prefs Services) COMPACT-PREF compact-observer)
-              (.removeObserver (.-prefs Services) HORIZONTAL-COMPACT-PREF compact-observer-hz)
-              (.removeObserver (.-prefs Services) "sidebar.verticalTabs" vertical-tabs-observer)
+              (js/call (js/get Services .prefs) .removeObserver COMPACT-PREF compact-observer)
+              (js/call (js/get Services .prefs) .removeObserver HORIZONTAL-COMPACT-PREF compact-observer-hz)
+              (js/call (js/get Services .prefs) .removeObserver "sidebar.verticalTabs" vertical-tabs-observer)
               (cancel-hide-watchdog)
               (cancel-hide-watchdog-hz)
               (clear-flash)
               (clear-flash-toolbox)
-              (when (.-retry-timer vstate)
-                (clearTimeout (.-retry-timer vstate)))
-              (when (.-retry-timer hstate)
-                (clearTimeout (.-retry-timer hstate))))]
+              (when (js/get vstate .retry-timer)
+                (clearTimeout (js/get vstate .retry-timer)))
+              (when (js/get hstate .retry-timer)
+                (clearTimeout (js/get hstate .retry-timer))))]
 
         (on! document "popupshown" on-popup-shown)
         (on! document "popuphidden" on-popup-hidden)
@@ -575,9 +568,9 @@
         (on! sidebar-main "gjoa-flash" on-pfx-flash)
         (on! window "sizemodechange" on-sizemode-change)
         (on! window "blur" on-window-blur)
-        (.addObserver (.-prefs Services) COMPACT-PREF compact-observer)
-        (.addObserver (.-prefs Services) HORIZONTAL-COMPACT-PREF compact-observer-hz)
-        (.addObserver (.-prefs Services) "sidebar.verticalTabs" vertical-tabs-observer)
+        (js/call (js/get Services .prefs) .addObserver COMPACT-PREF compact-observer)
+        (js/call (js/get Services .prefs) .addObserver HORIZONTAL-COMPACT-PREF compact-observer-hz)
+        (js/call (js/get Services .prefs) .addObserver "sidebar.verticalTabs" vertical-tabs-observer)
         (apply-compact-for-current-mode)
 
         {:toggle compact-toggle
@@ -587,6 +580,6 @@
          :flashToolbox flash-toolbox
          :pinSidebar pin-sidebar
          :pinToolbox pin-toolbox
-         :isCompactVertical #(has? sidebar-main "data-gjoa-compact")
-         :isCompactHorizontal #(has? doc-el "data-gjoa-compact-horizontal")
+         :isCompactVertical (fn [] Any (has? sidebar-main "data-gjoa-compact"))
+         :isCompactHorizontal (fn [] Any (has? doc-el "data-gjoa-compact-horizontal"))
          :destroy destroy})))))

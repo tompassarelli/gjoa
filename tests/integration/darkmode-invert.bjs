@@ -15,15 +15,14 @@
 ;; Precondition: cosmetic-fixture-server.mjs on :8975 (/light = themeless white).
 (ns gjoa.tests.integration.darkmode-invert
   (:require [gjoa.tests.dsl :refer [deftest expect]]))
-(define-mode strict)
 (declare-extern [Number] Any)
 
-(def LIGHT :- String "http://127.0.0.1:8975/light") ;; themeless white -> inverts to black
-(def TOP :- String "http://127.0.0.1:8975/")        ;; no-bg -> Canvas/system color
+(def LIGHT String "http://127.0.0.1:8975/light") ;; themeless white -> inverts to black
+(def TOP String "http://127.0.0.1:8975/")        ;; no-bg -> Canvas/system color
 
 ;; Chrome-side: navigate `url`, settle, drawSnapshot the page, return center-pixel
 ;; luminance (0=black .. 255=white). No content executeScript -> survives inversion.
-(defn render-lum-js [url :- String] :- String
+(defn render-lum-js [(url String)] String
   (str "const done = arguments[arguments.length-1];"
        "(async () => { try {"
        "  const win = Services.wm.getMostRecentWindow('navigator:browser');"
@@ -38,7 +37,7 @@
        "} catch(e){ done('ERR:'+(e&&e.message||e)); } })();"))
 
 ;; Re-snapshot the ALREADY-loaded page (no navigation) — for the live-toggle test.
-(def relum-js :- String
+(def relum-js String
   (str "const done = arguments[arguments.length-1];"
        "(async () => { try {"
        "  const win = Services.wm.getMostRecentWindow('navigator:browser');"
@@ -51,39 +50,39 @@
        "  done(String(Math.round(0.2126*d[0] + 0.7152*d[1] + 0.0722*d[2])));"
        "} catch(e){ done('ERR:'+(e&&e.message||e)); } })();"))
 
-(defn set-prefs [mn :- Any js :- String] :- Any
-  (.executeScript mn js))
+(defn set-prefs [(mn Any) (js String)] Any
+  (js/call mn .executeScript js))
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "darkmode P0: engine inverts a themeless-light page (painted, chrome-side)" [mn ctx]
-     (js/await (.setContext mn "chrome"))
+     (js/await (js/call mn .setContext "chrome"))
      ;; GLOBAL-pref engine path only: hybrid actor off, invert on; set BEFORE nav.
      (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'on';"))
-     (let [lum (js/await (.executeAsyncScript mn (render-lum-js LIGHT) []))]
+     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT) []))]
        (console/log (str "[DM-P0] invert-ON /light center-lum=" lum))
        (expect (< (Number lum) 80) (str "themeless-light should render DARK under engine invert; lum=" lum))))
    (deftest "darkmode P0: flag off leaves a themeless-light page light (control)" [mn ctx]
-     (js/await (.setContext mn "chrome"))
+     (js/await (js/call mn .setContext "chrome"))
      (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false); return 'off';"))
-     (let [lum (js/await (.executeAsyncScript mn (render-lum-js LIGHT) []))]
+     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT) []))]
        (console/log (str "[DM-P0] invert-OFF /light center-lum=" lum))
        (expect (> (Number lum) 150) (str "flag off: themeless-light should stay LIGHT; lum=" lum))))
    (deftest "darkmode P1: live toggle restyles an already-loaded tab (painted)" [mn ctx]
-     (js/await (.setContext mn "chrome"))
+     (js/await (js/call mn .setContext "chrome"))
      ;; load with invert OFF -> light
      (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', false); return 'off';"))
-     (let [before (js/await (.executeAsyncScript mn (render-lum-js LIGHT) []))]
+     (let [before (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT) []))]
        (console/log (str "[DM-P1] before-toggle lum=" before))
        (expect (> (Number before) 150) (str "should start LIGHT; lum=" before)))
      ;; flip invert ON without reloading -> engine must restyle the LIVE doc
      (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'on';"))
-     (let [after (js/await (.executeAsyncScript mn relum-js []))]
+     (let [after (js/await (js/call mn .executeAsyncScript relum-js []))]
        (console/log (str "[DM-P1] after-toggle lum=" after))
        (expect (< (Number after) 80) (str "live toggle should restyle to DARK without reload; lum=" after))))
    (deftest "darkmode P2: system colors invert under full engine mode (painted)" [mn ctx]
-     (js/await (.setContext mn "chrome"))
+     (js/await (js/call mn .setContext "chrome"))
      (js/await (set-prefs mn "Services.prefs.setBoolPref('gjoa.darkmode.enabled', false); Services.prefs.setIntPref('layout.css.prefers-color-scheme.content-override', 1); Services.prefs.setBoolPref('gjoa.darkmode.invert.enabled', true); return 'engine';"))
-     (let [lum (js/await (.executeAsyncScript mn (render-lum-js TOP) []))]
+     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js TOP) []))]
        (console/log (str "[DM-P2] full-engine / center-lum=" lum))
        (expect (< (Number lum) 90) (str "system colors (page bg) should invert to DARK; lum=" lum))))]))
 (js/export-default tests)

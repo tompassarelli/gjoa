@@ -5,7 +5,6 @@
 ;; — the same channel as perf-prefs / adblock-prefs / dark-mode-prefs / genai.
 ;; (`;;` comments don't survive the beagle→js emit; rationale lives here.)
 (ns gjoa.defaults.pref.layout)
-(define-mode strict)
 (declare-extern [pref] Any)
 
 ;; Dynamic orientation: pick vertical tabs (sidebar) on a wide/full-width window

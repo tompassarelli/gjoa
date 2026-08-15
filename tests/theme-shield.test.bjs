@@ -3,21 +3,20 @@
 (ns gjoa.tests.theme-shield
   (:require [fs :refer [existsSync readFileSync]]
             [path :refer [join]]))
-(define-mode strict)
 
 (declare-extern [describe expect test process] Any)
 
-(def REPO :- String (.cwd process))
-(def SHIELD :- String (join REPO "src" "gjoa" "chrome" "css" "gjoa.uc.css"))
+(def REPO String (js/call process .cwd))
+(def SHIELD String (join REPO "src" "gjoa" "chrome" "css" "gjoa.uc.css"))
 
 (describe "urlbar theme shield"
-  (fn []
+  (fn [] Any
     (test "CSS source exists"
-      (fn []
-        (.toBe (expect (existsSync SHIELD)) true)))
+      (fn [] Any
+        (js/call (expect (existsSync SHIELD)) .toBe true)))
 
     (test "declares the current Firefox urlbar variables"
-      (fn []
+      (fn [] Any
         (let [css (readFileSync SHIELD "utf8")]
-          (.toContain (expect css) "--toolbar-field-focus-background-color:")
-          (.toContain (expect css) "--urlbar-box-background-color:"))))))
+          (js/call (expect css) .toContain "--toolbar-field-focus-background-color:")
+          (js/call (expect css) .toContain "--urlbar-box-background-color:"))))))

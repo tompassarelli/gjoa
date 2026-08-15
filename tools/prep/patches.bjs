@@ -16,30 +16,29 @@
             [gjoa.tools.prep.paths :refer [ENGINE-DIR PATCHES-DIR]]
             [gjoa.tools.prep.patch-header :refer [check-all]]
             [gjoa.tools.prep.log :refer [log]]))
-(define-mode strict)
 (declare-extern [Bun process Error] Any)
 
-(def APPLIED-LOG :- String ".gjoa-applied-patches")
+(def APPLIED-LOG String ".gjoa-applied-patches")
 
 ;; Hex SHA-256 of a patch file's bytes (Bun runtime — same hasher download.bjs
 ;; uses). This is the identity we record/compare so a changed patch (same name,
 ;; new content) is detected and re-applied instead of silently skipped.
-(defn sha256OfFile [path :- String] :- Any
-  (let [file (.file Bun path)
-        buf (js/await (.arrayBuffer file))
-        hash (Bun.CryptoHasher. "sha256")]
-    (.update hash buf)
-    (.digest hash "hex")))
+(defn sha256OfFile [(path String)] Any
+  (let [file (js/call Bun .file path)
+        buf (js/await (js/call file .arrayBuffer))
+        hash (js/new Bun.CryptoHasher "sha256")]
+    (js/call hash .update buf)
+    (js/call hash .digest "hex")))
 
 ;; Run a command in `cwd`, inheriting stdio. Returns the exit code.
-(defn run-git [args :- Any cwd :- String] :- Any
-  (let [proc (.spawn Bun {:cmd args
+(defn run-git [(args Any) (cwd String)] Any
+  (let [proc (js/call Bun .spawn {:cmd args
                           :cwd cwd
                           :stdout "inherit"
                           :stderr "inherit"})]
-    (js/await (.-exited proc))))
+    (js/await (js/get proc .exited))))
 
-(defn ensureEngineGit [] :- Any
+(defn ensureEngineGit [] Any
   (if (existsSync (join ENGINE-DIR ".git"))
     nil
     ;; mach detects .git/ and queries it for build metadata. If we don't init it,
@@ -51,40 +50,38 @@
                           "commit" "-q" "-m" "vanilla mozilla-central"] ENGINE-DIR)))))
 
 ;; Read the applied-patches log into a Map of name -> recorded-hash.
-(defn readApplied [] :- Any
+(defn readApplied [] Any
   (let [path (join ENGINE-DIR APPLIED-LOG)
-        applied (Map.)]
+        applied (js/new Map)]
     (if (not (existsSync path))
       applied
-      (let [text (js/await (.text (.file Bun path)))
-            lines (.filter (.split text "\n") (fn [s] (.-length (.trim s))))]
-        (.forEach lines
-          (fn [line :- String]
-            (let [m (.match line (RegExp. "^([^\\t]+)\\t([0-9a-f]{64})$"))]
+      (let [text (js/await (js/call (js/call Bun .file path) .text))
+            lines (js/call (js/call text .split "\n") .filter (fn [s] Any (js/get (js/call s .trim) .length)))]
+        (js/call lines .forEach (fn [(line String)] Any (let [m (js/call line .match (js/new RegExp "^([^\\t]+)\\t([0-9a-f]{64})$"))]
               (when (not m)
-                (throw (Error. (str "invalid " APPLIED-LOG " record: " line))))
-              (.set applied (.trim (aget m 1)) (aget m 2)))))
+                (throw (js/new Error (str "invalid " APPLIED-LOG " record: " line))))
+              (js/call applied .set (js/call (aget m 1) .trim) (aget m 2)))))
         applied))))
 
 ;; Persist the applied-patches log from a Map of name -> hash, sorted by name,
 ;; one `<name>\t<hash>` line each.
-(defn recordApplied [applied :- Any] :- Any
+(defn recordApplied [(applied Any)] Any
   (let [path (join ENGINE-DIR APPLIED-LOG)
-        names (.sort (Array/from (.keys applied)))
-        body (.join (.map names (fn [n :- String] (str n "\t" (.get applied n)))) "\n")]
-    (js/await (.write Bun path (str body "\n")))))
+        names (js/call (js/call Array .from (js/call applied .keys)) .sort)
+        body (js/call (js/call names .map (fn [(n String)] Any (str n "\t" (js/call applied .get n)))) .join "\n")]
+    (js/await (js/call Bun .write path (str body "\n")))))
 
 ;; Patch-header lint. Non-fatal — we always apply patches regardless, but a
 ;; missing header surfaces immediately so future maintainers (read: the user,
 ;; post-Firefox-bump) get a clear signal that the 3-way-merge metadata is
 ;; incomplete.
-(defn runLint [] :- Any
+(defn runLint [] Any
   (try
     (let [problems (js/await (check-all))]
       (when (> problems 0)
-        (.warn log (str problems " patch(es) missing the gjoa-patch header"))))
-    (catch Error e
-      (.warn log (str "patch-header lint failed (non-fatal): " (.-message e))))))
+        (js/call log .warn (str problems " patch(es) missing the gjoa-patch header"))))
+    (catch (e Error)
+      (js/call log .warn (str "patch-header lint failed (non-fatal): " (js/get e .message))))))
 
 ;; Apply a single patch by name. Throws (with the patch name) on failure so
 ;; the caller surfaces exactly which patch broke.
@@ -94,32 +91,31 @@
 ;; anchored to (class, method) identity, so it survives upstream reflow that `.rej`s
 ;; the line-anchored textual patch. `git apply` is atomic, so on failure the tree is
 ;; untouched and the replay runs on pristine source.
-(defn applyOne [name :- String] :- Any
-  (.step log (str "applying patch " name))
+(defn applyOne [(name String)] Any
+  (js/call log .step (str "applying patch " name))
   (let [path (join PATCHES-DIR name)
         code (js/await (run-git ["git" "apply" "--whitespace=nowarn" path] ENGINE-DIR))]
     (when (not= code 0)
-      (let [claims-path (join PATCHES-DIR (.replace name ".patch" ".claims.json"))]
+      (let [claims-path (join PATCHES-DIR (js/call name .replace ".patch" ".claims.json"))]
         (if (existsSync claims-path)
-          (let [repo (.cwd process)
+          (let [repo (js/call process .cwd)
                 applier (join repo ".beagle-tools" "gjoa" "tools" "projector" "apply-claims.js")
                 rc (js/await (run-git ["bun" applier claims-path ENGINE-DIR] repo))]
             (if (= rc 0)
-              (.ok log (str "  " name ": textual patch .rej'd — recovered via claim-doc replay (identity-anchored)"))
-              (throw (Error. (str "failed to apply patch " name ": git apply exited " code
+              (js/call log .ok (str "  " name ": textual patch .rej'd — recovered via claim-doc replay (identity-anchored)"))
+              (throw (js/new Error (str "failed to apply patch " name ": git apply exited " code
                                   "; claim-doc fallback exited " rc)))))
-          (throw (Error. (str "failed to apply patch " name ": git apply exited " code))))))))
+          (throw (js/new Error (str "failed to apply patch " name ": git apply exited " code))))))))
 
-(js/export (defn patches [] :- Any
+(js/export (defn patches [] Any
   (if (not (existsSync PATCHES-DIR))
     (do
-      (.info log "no patches/ directory, skipping")
+      (js/call log .info "no patches/ directory, skipping")
       nil)
-    (let [allPatches (.sort (.filter (readdirSync PATCHES-DIR)
-                                     (fn [f] (.endsWith f ".patch"))))]
-      (if (= (.-length allPatches) 0)
+    (let [allPatches (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [f] Any (js/call f .endsWith ".patch"))) .sort)]
+      (if (= (js/get allPatches .length) 0)
         (do
-          (.info log "patches/ is empty, skipping")
+          (js/call log .info "patches/ is empty, skipping")
           nil)
         (do
           (js/await (runLint))
@@ -127,22 +123,22 @@
           (let [applied (js/await (readApplied))]
             (loop [i 0
                    newCount 0]
-              (if (>= i (.-length allPatches))
+              (if (>= i (js/get allPatches .length))
                 ;; Done iterating — report + persist.
                 (if (= newCount 0)
-                  (.info log (str "all " (.-length allPatches) " patches already applied"))
+                  (js/call log .info (str "all " (js/get allPatches .length) " patches already applied"))
                   (do
                     (js/await (recordApplied applied))
-                    (.ok log (str "applied " newCount " new patch" (if (= newCount 1) "" "es")))))
+                    (js/call log .ok (str "applied " newCount " new patch" (if (= newCount 1) "" "es")))))
                 (let [name (aget allPatches i)]
                   (let [curHash (js/await (sha256OfFile (join PATCHES-DIR name)))
-                        recordedHash (.get applied name)]
+                        recordedHash (js/call applied .get name)]
                     ;; Skip only when the name and current content hash match.
-                    (if (and (.has applied name) (= recordedHash curHash))
+                    (if (and (js/call applied .has name) (= recordedHash curHash))
                       (recur (+ i 1) newCount)
                       (do
-                        (when (and (.has applied name) (not= recordedHash curHash))
-                          (.step log (str "patch " name " changed since last apply — re-applying")))
+                        (when (and (js/call applied .has name) (not= recordedHash curHash))
+                          (js/call log .step (str "patch " name " changed since last apply — re-applying")))
                         (js/await (applyOne name))
-                        (.set applied name curHash)
+                        (js/call applied .set name curHash)
                         (recur (+ i 1) (+ newCount 1)))))))))))))))

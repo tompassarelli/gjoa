@@ -15,43 +15,42 @@
 ;; transfer DR omits — DR's un-gamma'd lightness is fine for image *classification*
 ;; (the async pass), but the AA *gate* must be true WCAG.
 (ns gjoa.tools.test-driver.contrast-score)
-(define-mode strict)
 
 ;; --- color parsing ----------------------------------------------------------
 
 ;; "rgb(255, 0, 0)" / "rgba(0, 0, 0, 0.5)" -> {:r :g :b :a}. Channels 0..255,
 ;; alpha 0..1 (defaults to 1). No regex dependency — strip + split.
-(js/export (defn parse-rgb [s :- String] :- Any
-  (let [stripped (.replace (.replace (.replace s "rgba(" "") "rgb(" "") ")" "")
-        parts (.split stripped ",")
-        nth-num (fn [i :- Any] :- Any (Number/parseFloat (.trim (aget parts i))))]
+(js/export (defn parse-rgb [(s String)] Any
+  (let [stripped (js/call (js/call (js/call s .replace "rgba(" "") .replace "rgb(" "") .replace ")" "")
+        parts (js/call stripped .split ",")
+        nth-num (fn [(i Any)] Any (js/call Number .parseFloat (js/call (aget parts i) .trim)))]
     {:r (nth-num 0)
      :g (nth-num 1)
      :b (nth-num 2)
-     :a (if (> (.-length parts) 3) (nth-num 3) 1)})))
+     :a (if (> (js/get parts .length) 3) (nth-num 3) 1)})))
 
 ;; Accept a color as either a computed-style string or an already-parsed map.
-(defn as-rgb [v :- Any] :- Any
+(defn as-rgb [(v Any)] Any
   (if (= (js/typeof v) "string") (parse-rgb v) v))
 
 ;; --- luminance + contrast ---------------------------------------------------
 
 ;; sRGB channel (0..255) -> linear-light (0..1).
-(defn linearize [c :- Any] :- Any
+(defn linearize [(c Any)] Any
   (let [cs (/ c 255)]
     (if (<= cs 0.03928)
       (/ cs 12.92)
-      (Math/pow (/ (+ cs 0.055) 1.055) 2.4))))
+      (js/call Math .pow (/ (+ cs 0.055) 1.055) 2.4))))
 
 ;; WCAG relative luminance of an rgb map.
-(js/export (defn rel-lum [rgb :- Any] :- Any
+(js/export (defn rel-lum [(rgb Any)] Any
   (+ (* 0.2126 (linearize (:r rgb)))
      (* 0.7152 (linearize (:g rgb)))
      (* 0.0722 (linearize (:b rgb))))))
 
 ;; Composite a (possibly translucent) foreground over an opaque backdrop so the
 ;; contrast we score is the contrast the eye actually sees.
-(defn composite-over [fg :- Any bg :- Any] :- Any
+(defn composite-over [(fg Any) (bg Any)] Any
   (let [a (:a fg)]
     (if (or (= a nil) (>= a 1))
       fg
@@ -62,28 +61,28 @@
 
 ;; WCAG contrast ratio between a foreground and a backdrop (either may be a
 ;; string or a parsed map). Range 1..21.
-(js/export (defn contrast [fg :- Any bg :- Any] :- Any
+(js/export (defn contrast [(fg Any) (bg Any)] Any
   (let [bgc (as-rgb bg)
         fgc (composite-over (as-rgb fg) bgc)
         l1 (rel-lum fgc)
         l2 (rel-lum bgc)
-        hi (Math/max l1 l2)
-        lo (Math/min l1 l2)]
+        hi (js/call Math .max l1 l2)
+        lo (js/call Math .min l1 l2)]
     (/ (+ hi 0.05) (+ lo 0.05)))))
 
 ;; --- AA threshold -----------------------------------------------------------
 
-(js/export (defn large-text? [font-size :- Any bold :- Any] :- Any
+(js/export (defn large-text? [(font-size Any) (bold Any)] Any
   (or (>= font-size 24) (and bold (>= font-size 18.66)))))
 
-(js/export (defn aa-threshold [font-size :- Any bold :- Any] :- Any
+(js/export (defn aa-threshold [(font-size Any) (bold Any)] Any
   (if (large-text? font-size bold) 3 4.5)))
 
 ;; --- per-box + per-page scoring ---------------------------------------------
 
 ;; Evaluate one text box. Returns a result map (keyword-keyed, beagle-native)
 ;; so score-page aggregates without touching JS-object access.
-(js/export (defn evaluate-box [fg :- Any bg :- Any font-size :- Any bold :- Any text :- Any] :- Any
+(js/export (defn evaluate-box [(fg Any) (bg Any) (font-size Any) (bold Any) (text Any)] Any
   (let [ratio (contrast fg bg)
         thr (aa-threshold font-size bold)]
     {:ratio ratio
@@ -95,12 +94,12 @@
 ;; Aggregate a JS array of evaluate-box results into a page score.
 ;;   {:total :passes :passRatio :minRatio :worst5}
 ;; worst5 = the five lowest-contrast boxes, the actionable failures.
-(js/export (defn score-page [results :- Any] :- Any
-  (let [total (.-length results)
-        passes (.-length (.filter results (fn [r :- Any] :- Any (:pass r))))
-        sorted (.sort (.slice results) (fn [a :- Any b :- Any] :- Any (- (:ratio a) (:ratio b))))]
+(js/export (defn score-page [(results Any)] Any
+  (let [total (js/get results .length)
+        passes (js/get (js/call results .filter (fn [(r Any)] Any (:pass r))) .length)
+        sorted (js/call (js/call results .slice) .sort (fn [(a Any) (b Any)] Any (- (:ratio a) (:ratio b))))]
     {:total total
      :passes passes
      :passRatio (if (> total 0) (/ passes total) 1)
      :minRatio (if (> total 0) (:ratio (aget sorted 0)) 99)
-     :worst5 (.slice sorted 0 5)})))
+     :worst5 (js/call sorted .slice 0 5)})))

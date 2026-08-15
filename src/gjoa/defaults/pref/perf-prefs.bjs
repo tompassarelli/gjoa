@@ -7,7 +7,6 @@
 ;; beagle→js emit, so the packaged pref file carries only the pref() statements;
 ;; the rationale lives here in source.)
 (ns gjoa.defaults.pref.perf)
-(define-mode strict)
 (declare-extern [pref] Any)
 
 ;; --- GC tuning (large nursery, parallel marking) ---

@@ -7,9 +7,8 @@
 ;; -> Engine::use_resources -> url_cosmetic_resources.injected_script).
 (ns gjoa.tests.integration.scriptlet-engine
   (:require [gjoa.tests.dsl :refer [deftest expect]]))
-(define-mode strict)
 
-(def DRIVE :- String
+(def DRIVE String
   (str "\n"
     "  const [resolve] = arguments;\n"
     "  (async () => {\n"
@@ -40,17 +39,17 @@
     "    } catch (e) { resolve({ err: String(e) }); }\n"
     "  })();\n"))
 
-(js/export (def tests :- Any
+(js/export (def tests Any
   [(deftest "engine scriptlets: a +js() rule + the resource library yields injected_script" [mn]
-     (js/await (.setContext mn "chrome"))
-     (let [r (js/await (.executeAsyncScript mn DRIVE))]
-       (when (.-err r)
-         (throw (Error. (str "engine scriptlet path errored: " (.-err r)))))
-       (expect (.-ready r) "content-classifier service must initialize")
-       (expect (> (.-len r) 0)
+     (js/await (js/call mn .setContext "chrome"))
+     (let [r (js/await (js/call mn .executeAsyncScript DRIVE))]
+       (when (js/get r .err)
+         (throw (js/new Error (str "engine scriptlet path errored: " (js/get r .err)))))
+       (expect (js/get r .ready) "content-classifier service must initialize")
+       (expect (> (js/get r .len) 0)
                (str "engine must produce a non-empty injected_script for the youtube +js rule (len="
-                    (.-len r) ")"))
-       (expect (.-hasPrune r)
+                    (js/get r .len) ")"))
+       (expect (js/get r .hasPrune)
                "injected_script must contain the json-prune scriptlet body")))]))
 
 (js/export-default tests)

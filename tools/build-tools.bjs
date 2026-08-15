@@ -7,111 +7,100 @@
 ;; the pinned Beagle checkout's bin/beagle-build, then runs it to compile
 ;; everything else. mtime-cached — re-runs are near-instant when nothing changed.
 (ns gjoa.tools.build-tools
-  (:require [fs/promises :refer [mkdir]]
-            [fs :refer [existsSync statSync readdirSync readFileSync]]
+  (:require [fs :refer [existsSync statSync readdirSync readFileSync]]
             [path :refer [join resolve relative]]))
-(define-mode strict)
 (declare-extern [process Bun] Any)
 
-(def REPO-ROOT :- String (.cwd process))
-(def OUT-ROOT :- String (join REPO-ROOT ".beagle-tools" "gjoa"))
+(def REPO-ROOT String (js/call process .cwd))
+(def OUT-ROOT String (join REPO-ROOT ".beagle-tools"))
 ;; Local builds derive the immutable content-addressed pin directly from the full
 ;; object ID in configs/beagle.ref. CI overrides BEAGLE_PIN_ROOT with its fresh
 ;; checkout of that same object. Never compile against the moving shared checkout.
-(def BEAGLE-REF-FILE :- String (join REPO-ROOT "configs" "beagle.ref"))
-(def BEAGLE-REF :- String
-  (let [lines (.split (readFileSync BEAGLE-REF-FILE "utf8") "\n")
-        ref (.find lines (fn [l :- String] :- Bool
-                           (and (> (.-length (.trim l)) 0)
-                                (not (.startsWith (.trim l) "#")))))]
+(def BEAGLE-REF-FILE String (join REPO-ROOT "configs" "beagle.ref"))
+(def BEAGLE-REF String
+  (let [lines (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
+        ref (js/call lines .find (fn [(l String)] Bool
+                           (and (> (js/get (js/call l .trim) .length) 0)
+                                (not (js/call (js/call l .trim) .startsWith "#")))))]
     (if ref
-      (.trim ref)
-      (throw (Error. "configs/beagle.ref has no Beagle object ID")))))
-(def BEAGLE-PIN-ROOT :- String
-  (or (.-BEAGLE_PIN_ROOT (.-env process))
-      (resolve (.-HOME (.-env process)) "code" "beagle" "pins" BEAGLE-REF)))
-;; beagle-build is a `#!/usr/bin/env bash` script. Windows has no shebang support,
+      (js/call ref .trim)
+      (throw (js/new Error "configs/beagle.ref has no Beagle object ID")))))
+(def BEAGLE-PIN-ROOT String
+  (or (js/get (js/get process .env) .BEAGLE_PIN_ROOT)
+      (resolve (js/get (js/get process .env) .HOME) "code" "beagle" "pins" BEAGLE-REF)))
+;; beagle-build-all is a `#!/usr/bin/env bash` script. Windows has no shebang support,
 ;; so it can't be exec'd directly there — it's launched via `bash` (Git Bash on the
-;; runner) at every :cmd site below. Normalize the path to forward slashes so bash
+;; runner). Normalize the path to forward slashes so bash
 ;; accepts it on Windows; (String/fromCharCode 92) is a backslash. No-op on *nix.
-(def BEAGLE-BUILD :- String
-  (.replaceAll (resolve BEAGLE-PIN-ROOT "bin" "beagle-build") (String/fromCharCode 92) "/"))
-(def SRC-DIRS :- Any ["tools" "tests"])
+(def BEAGLE-BUILD-ALL String
+  (js/call (resolve BEAGLE-PIN-ROOT "bin" "beagle-build-all") .replaceAll (js/call String .fromCharCode 92) "/"))
+(def SRC-DIRS Any ["tools" "tests"])
 
 ;; Recursively collect every *.bjs path under `dir` (synchronous — small tree).
-(defn find-bjs [dir :- String] :- Any
+(defn find-bjs [(dir String)] Any
   (let [out []
         entries (readdirSync dir {:withFileTypes true})
-        n (.-length entries)]
+        n (js/get entries .length)]
     (loop [i 0]
       (when (< i n)
         (let [entry (aget entries i)
-              full (join dir (.-name entry))]
-          (if (.isDirectory entry)
+              full (join dir (js/get entry .name))]
+          (if (js/call entry .isDirectory)
             (let [sub (find-bjs full)
-                  m (.-length sub)]
+                  m (js/get sub .length)]
               (loop [j 0]
                 (when (< j m)
-                  (.push out (aget sub j))
+                  (js/call out .push (aget sub j))
                   (recur (+ j 1)))))
-            (when (.endsWith (.-name entry) ".bjs")
-              (.push out full)))
+            (when (js/call (js/get entry .name) .endsWith ".bjs")
+              (js/call out .push full)))
           (recur (+ i 1)))))
     out))
 
 ;; Recompile only when the source is newer than its output (or output missing).
-(defn stale? [src :- String out :- String] :- Bool
+(defn stale? [(src String) (out String)] Bool
   (if (existsSync out)
-    (> (.-mtimeMs (statSync src)) (.-mtimeMs (statSync out)))
+    (let [out-m (js/get (statSync out) .mtimeMs)]
+      (or (> (js/get (statSync src) .mtimeMs) out-m)
+          (> (js/get (statSync BEAGLE-REF-FILE) .mtimeMs) out-m)))
     true))
 
-(defn compile-one [src :- String] :- (Promise Any)
-  (let [rel (relative REPO-ROOT src)
-        out (join OUT-ROOT (.replace rel (RegExp. "\\.bjs$") ".js"))]
-    (if (not (stale? src out))
-      {:rel rel :code 0 :skipped true}
-      (let [_ (js/await (mkdir (join out "..") {:recursive true}))
-            proc (.spawn Bun {:cmd ["bash" BEAGLE-BUILD src out]
-                              :cwd REPO-ROOT
-                              :stdout "pipe"
-                              :stderr "pipe"})
-            results (js/await (Promise/all [(.text (Response. (.-stdout proc)))
-                                             (.text (Response. (.-stderr proc)))
-                                             (.-exited proc)]))]
-        {:rel rel :code (aget results 2)
-         :err (.trim (or (aget results 1) (aget results 0)))
-         :skipped false}))))
-
-(defn run [] :- (Promise Any)
+(defn run [] (Promise Any)
   (let [files []
-        nd (.-length SRC-DIRS)]
+        nd (js/get SRC-DIRS .length)]
     (loop [d 0]
       (when (< d nd)
         (let [root (join REPO-ROOT (aget SRC-DIRS d))]
           (when (existsSync root)
             (let [found (find-bjs root)
-                  m (.-length found)]
-              (loop [k 0] (when (< k m) (.push files (aget found k)) (recur (+ k 1)))))))
+                  m (js/get found .length)]
+              (loop [k 0] (when (< k m) (js/call files .push (aget found k)) (recur (+ k 1)))))))
         (recur (+ d 1))))
-    (let [sorted (.sort files)
-          n (.-length sorted)]
-      (loop [i 0 failed 0 built 0]
-        (if (< i n)
-          (let [r (js/await (compile-one (aget sorted i)))]
-            (cond
-              (not= (.-code r) 0)
-              (do (console/error (str "[31m✗[0m " (.-rel r) "\n" (.-err r)))
-                  (recur (+ i 1) (+ failed 1) built))
-              (.-skipped r)
-              (recur (+ i 1) failed built)
-              :else
-              (recur (+ i 1) failed (+ built 1))))
-          (do
-            (when (> failed 0)
-              (console/error (str "\n[31m✗ " failed " tool file(s) failed to compile[0m"))
-              (.exit process 1))
-            (console/error (str "[2m[tools][0m compiled " built ", "
-                                 (- n built) " cached → .beagle-tools/"))
-            0))))))
+    (let [sorted (js/call files .sort)
+          n (js/get sorted .length)
+          stale-count (loop [i 0 count 0]
+                        (if (< i n)
+                          (let [src (aget sorted i)
+                                rel (relative REPO-ROOT src)
+                                out (join OUT-ROOT "gjoa" (js/call rel .replace (js/new RegExp "\\.bjs$") ".js"))]
+                            (recur (+ i 1) (if (stale? src out) (+ count 1) count)))
+                          count))]
+      (if (= stale-count 0)
+        (console/error (str "[2m[tools][0m compiled 0, " n " cached → .beagle-tools/gjoa/"))
+        (let [proc (js/call Bun .spawn {:cmd ["bash" BEAGLE-BUILD-ALL "tools" "tests" "--out" OUT-ROOT]
+                                        :cwd REPO-ROOT
+                                        :stdout "pipe"
+                                        :stderr "pipe"})
+              results (js/await (js/call Promise .all [(js/call (js/new Response (js/get proc .stdout)) .text)
+                                                       (js/call (js/new Response (js/get proc .stderr)) .text)
+                                                       (js/get proc .exited)]))
+              code (aget results 2)
+              output (js/call (str (or (aget results 0) "") (or (aget results 1) "")) .trim)]
+          (if (not= code 0)
+            (do
+              (console/error output)
+              (js/call process .exit 1))
+            (console/error (str "[2m[tools][0m compiled " n ", 0 cached → .beagle-tools/gjoa/")))))
+      0)))
 
 (js/await (run))
