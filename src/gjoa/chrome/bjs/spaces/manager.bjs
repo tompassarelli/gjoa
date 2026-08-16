@@ -14,7 +14,9 @@
   (let [on-change (js/get deps .onChange)
         on-activated (js/get deps .onActivated)
         tab-by-id (js/get deps .tabById)
-        spaces (js/new Map)
+        ;; Keyed by space id — a new-space-id UUID, round-tripped through gjoa's
+        ;; own snapshot format.
+        (spaces (JsMap String Any)) (js/new Map)
         tab-space (js/new WeakMap)
         state {:active-id nil :applying false}
         default-space {:id (new-space-id) :name DEFAULT-NAME :createdAt (Date/now)}]

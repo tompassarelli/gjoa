@@ -44,7 +44,7 @@
 
 ;; parse `(pref "name" value)` forms from every pref source -> Map{name -> value-str}.
 (defn collect-prefs [] Any
-  (let [m (js/new Map)]
+  (let [(m (JsMap String String)) (js/new Map)]
     (when (existsSync PREF-DIR)
       (doseq [name (readdirSync PREF-DIR)]
         (when (js/call name .endsWith ".bjs")

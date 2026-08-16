@@ -4,7 +4,9 @@
             [gjoa.tabs.constants :refer [CLOSED-MEMORY]]))
 
 (js/export (defn build-envelope! [(snapshot Any)] Any
-  (let [tab-space-map (js/new Map)]
+  ;; Keys and values are the raw halves of a persisted tabSpaces pair — session
+  ;; state gjoa reads back, not a shape this module produces.
+  (let [(tab-space-map (JsMap Any Any)) (js/new Map)]
     (when (and (js/get snapshot .spaces) (js/get (js/get snapshot .spaces) .tabSpaces))
       (js/call (js/get (js/get snapshot .spaces) .tabSpaces) .forEach
         (fn [%1] Any (js/call tab-space-map .set (aget %1 0) (aget %1 1)))))

@@ -28,7 +28,9 @@
 (js/export (defn reduce-event [(cache Any) (ev Any)] Any
   (cond
     (js/get ev .WorkspacesChanged)
-    (let [next (js/new Map)
+    ;; Keys and values come off the niri IPC stream as decoded JSON — the wire
+    ;; shape is niri's to declare, not gjoa's.
+    (let [(next (JsMap Any Any)) (js/new Map)
           arr (js/get (js/get ev .WorkspacesChanged) .workspaces)]
       (js/call arr .forEach (fn [%1] Any (js/call next .set (js/get %1 .id) %1)))
       {:cache next :switch nil})
@@ -82,8 +84,10 @@
         :else {:action "none" :reason "no-name-or-idx"})))))
 
 ;; --- Lifecycle / streaming ---------------------------------------------------
-(def st Any {:proc nil :alive false :debounce-id nil
-                :cache (js/new Map) :pending nil :backoff 500})
+(def st Any
+  (let [(cache (JsMap Any Any)) (js/new Map)]
+    {:proc nil :alive false :debounce-id nil
+     :cache cache :pending nil :backoff 500}))
 
 (defn apply-switch! [(target Any)] Any
   ;; Debounce rapid niri switches: only the last focus in the window is applied.

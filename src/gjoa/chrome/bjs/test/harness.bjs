@@ -32,8 +32,8 @@
   (let [happy-window (js/new Window)
         happy-doc (js/get happy-window .document)
 
-        prefs (js/new Map)
-        pref-observers (js/new Map)]
+        (prefs (JsMap String Any)) (js/new Map)
+        (pref-observers (JsMap String Any)) (js/new Map)]
 
     ;; Default prefs gjoa actually reads. Tests override via setPref.
     (js/call prefs .set "sidebar.verticalTabs" true)
@@ -76,7 +76,7 @@
                     :dirsvc {:get (fn [] Any (let [r {:path "/tmp"}] r))}}
 
           ;; Save current globals before overriding
-          saved (js/new Map)]
+          (saved (JsMap String Any)) (js/new Map)]
 
       (js/call GLOBALS-TO-OVERRIDE .forEach
         (fn [%1] Any (js/call saved .set %1 (js/call Reflect .get globalThis %1))))

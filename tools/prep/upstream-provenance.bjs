@@ -83,7 +83,7 @@
 ;; count (omitted => 1); a==0/b==0 is a /dev/null create (no baseline context).
 ;; -> { "<path>": [ {:header "@@ -a,b +c,d @@" :a a :b b} ... ] }.
 (defn diff-hunks [(text String)] Any
-  (let [result (js/new Map)
+  (let [(result (JsMap String (Vec Any))) (js/new Map)
         cur [""]
         ensure (fn [(f String)] Any (when (not (js/call result .has f)) (js/call result .set f [])) (aset cur 0 f))]
     (doseq [line (js/call text .split "\n")]

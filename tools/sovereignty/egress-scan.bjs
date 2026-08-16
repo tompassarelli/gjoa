@@ -117,7 +117,7 @@
 
 ;; map of guarded-ref -> "local"|"network" from `<regex>.test(<ref>)` calls in a file.
 (defn collect-guards [(ast Any)] Any
-  (let [g (js/new Map)]
+  (let [(g (JsMap String String)) (js/new Map)]
     (walk ast
       (fn [(n Any)] Any
         (when (and (= (js/get n .type) "CallExpression")
@@ -189,7 +189,7 @@
         cleaned (js/call src .replace (js/new RegExp "^[ \\t]*import\\([A-Za-z_$][\\w$]*,\\s*\"[^\"]*\",\\s*[A-Za-z_$][\\w$]*\\);[ \\t]*$" "gm") "")]
     (try
       (let [ast (parse cleaned {:ecmaVersion "latest" :sourceType "module" :locations true :allowHashBang true})
-            consts (js/new Map)]
+            (consts (JsMap String Any)) (js/new Map)]
         ;; pass 1 — resolve module-level const strings (so endpoints aren't all "dynamic").
         (walk ast
           (fn [(n Any)] Any

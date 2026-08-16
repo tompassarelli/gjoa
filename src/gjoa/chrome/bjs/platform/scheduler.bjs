@@ -2,14 +2,15 @@
 (ns gjoa.platform.scheduler
   (:require [gjoa.tabs.log :refer [create-logger!]]))
 
-(declare-extern [performance String undefined] Any)
+(declare-extern [String undefined] Any)
 
 (js/export (def DOMAIN-ORDER Any ["prefs" "windows" "tabs" "snapshots" "sidebar" "command"]))
 
 (js/export (defn make-scheduler! [] Any
   (let [log (create-logger! "scheduler")
-        reconcilers (js/new Map)
-        pending (js/new Map)
+        ;; Both maps are keyed by domain name — the DOMAIN-ORDER vocabulary.
+        (reconcilers (JsMap String (Vec Any))) (js/new Map)
+        (pending (JsMap String (Vec Any))) (js/new Map)
         state {:pendingFlush nil
                :pendingResolve nil
                :lastReconcileMs nil
@@ -24,7 +25,13 @@
           (run-once [] Any
                      (when (not (js/get state .destroyed))
                        (let [started-at (js/call performance .now)
-                             snapshot (js/new Map pending)]
+                             ;; Freeze the dirty set before clearing it. Written
+                             ;; entry-by-entry because the stdlib models Map's
+                             ;; zero-argument constructor only.
+                             snapshot (let [(snap (JsMap String (Vec Any))) (js/new Map)]
+                                        (js/call pending .forEach
+                                          (fn [reasons domain] Any (js/call snap .set domain reasons)))
+                                        snap)]
                          (js/call pending .clear)
                          (js/call DOMAIN-ORDER .forEach (fn [domain] Any
                            (let [reasons (js/call snapshot .get domain)]

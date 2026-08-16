@@ -52,7 +52,7 @@
 ;; Read the applied-patches log into a Map of name -> recorded-hash.
 (defn readApplied [] Any
   (let [path (join ENGINE-DIR APPLIED-LOG)
-        applied (js/new Map)]
+        (applied (JsMap String String)) (js/new Map)]
     (if (not (existsSync path))
       applied
       (let [text (js/await (js/call (js/call Bun .file path) .text))

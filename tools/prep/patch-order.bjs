@@ -84,16 +84,17 @@
 (defn components [(patches Any)] Any
   (let [n (js/get patches .length)
         parent (js/new Array n)
-        by-file (js/new Map)]
+        (by-file (JsMap String Int)) (js/new Map)]
     (loop [i 0] (when (< i n) (aset parent i i) (recur (+ i 1))))
     (loop [i 0]
       (when (< i n)
         (doseq [f (js/get (aget patches i) .files)]
-          (if (js/call by-file .has f)
-            (aset parent (uf-find parent (js/call by-file .get f)) (uf-find parent i))
-            (js/call by-file .set f i)))
+          (let [seen (js/call by-file .get f)]
+            (if (nil? seen)
+              (js/call by-file .set f i)
+              (aset parent (uf-find parent seen) (uf-find parent i)))))
         (recur (+ i 1))))
-    (let [groups (js/new Map)]
+    (let [(groups (JsMap Int (Vec Any))) (js/new Map)]
       (loop [i 0]
         (when (< i n)
           (let [r (uf-find parent i)]
@@ -104,9 +105,11 @@
 
 ;; files touched by >=2 members of a group (what binds the component together)
 (defn shared-in-group [(group Any)] Any
-  (let [counts (js/new Map) out []]
+  (let [(counts (JsMap String Int)) (js/new Map) out []]
     (doseq [p group]
-      (doseq [f (js/get p .files)] (js/call counts .set f (+ 1 (or (js/call counts .get f) 0)))))
+      (doseq [f (js/get p .files)]
+        (let [prev (js/call counts .get f)]
+          (js/call counts .set f (if (nil? prev) 1 (+ prev 1))))))
     (doseq [e (Array/from (js/call counts .entries))]
       (when (> (aget e 1) 1) (js/call out .push (aget e 0))))
     (js/call out .sort)))
@@ -127,8 +130,11 @@
 
 ;; domains appearing in >1 run = split (a foreign patch wedged in the block)
 (defn split-domains [(runs Any)] Any
-  (let [counts (js/new Map) out []]
-    (doseq [r runs] (js/call counts .set (js/get r .domain) (+ 1 (or (js/call counts .get (js/get r .domain)) 0))))
+  (let [(counts (JsMap Any Int)) (js/new Map) out []]
+    (doseq [r runs]
+      (let [d (js/get r .domain)
+            prev (js/call counts .get d)]
+        (js/call counts .set d (if (nil? prev) 1 (+ prev 1)))))
     (doseq [e (Array/from (js/call counts .entries))]
       (when (> (aget e 1) 1) (js/call out .push (aget e 0))))
     out))

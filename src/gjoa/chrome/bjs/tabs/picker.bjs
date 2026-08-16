@@ -29,7 +29,8 @@
                              0 1))]
           (js/call (js/call all-items .filter (fn [%1] Any (js/call matched-set .has %1))) .sort
                  (fn [a b] Any (- (title-rank a) (title-rank b)))))
-        (let [by-id (js/new Map)]
+        ;; Items are caller-supplied; their ids are tab ids or command keys.
+        (let [(by-id (JsMap Any Any)) (js/new Map)]
           (js/call all-items .forEach
             (fn [%1] Any (when (and (not= (js/get %1 .id) nil) (not= (js/get %1 .id) undefined))
                (js/call by-id .set (js/get %1 .id) %1))))
