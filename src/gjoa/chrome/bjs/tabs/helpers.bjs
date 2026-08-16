@@ -68,8 +68,8 @@
                        :label (js/get tab .label)
                        :nextTabId (js/get state .nextTabId)})
                  pinned-id)
-               (let [fresh (js/get state .nextTabId)]
-                 (js/set! state .nextTabId (+ (js/get state .nextTabId) 1))
+               (let [(fresh Int) (js/get state .nextTabId)]
+                 (js/set! state .nextTabId (+ fresh 1))
                  (pin-tab-id tab fresh)
                  (log "treeData:fresh"
                       {:id fresh
@@ -111,7 +111,8 @@
                 (let [group (group-by-id pid)]
                   (if (nil? (some-> group (js/get ._group)))
                     lv
-                    (+ lv 1 (or (js/get (js/get group ._group) .level) 0))))
+                    (let [(group-level Int) (or (js/get (js/get group ._group) .level) 0)]
+                      (+ lv 1 group-level))))
               :else
                 (let [p (tab-by-id pid)]
                   (if (nil? p) lv (recur p (+ lv 1))))))))))))
@@ -177,8 +178,10 @@
                     (let [ts (JSON/parse raw)
                           entries (js/get ts .entries)]
                       (when (and (Array/isArray entries) (js/get entries .length))
-                        (let [idx (Math/max 0 (Math/min (- (js/get entries .length) 1)
-                                                        (- (or (js/get ts .index) 1) 1)))]
+                        (let [(entry-count Int) (js/get entries .length)
+                              ;; SessionStore's 1-based cursor, restored from disk.
+                              (ss-index Int) (or (js/get ts .index) 1)
+                              idx (Math/max 0 (Math/min (- entry-count 1) (- ss-index 1)))]
                           (some-> entries (aget idx) (js/get .url)))))))
                 (catch (e Any)
                   (console/error "gjoa-tabs: getTabState failed" e)

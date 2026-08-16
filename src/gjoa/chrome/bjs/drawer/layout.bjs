@@ -115,12 +115,12 @@
           (when (and urlbar (not (js/get state .updating))
                      (not (has? urlbar "breakout-extend")))
               (js/set! state .updating true)
-              (let [inset (or (parseFloat
-                                (js/call (getComputedStyle (js/get document .documentElement)) .getPropertyValue
-                                  "--gjoa-sidebar-inset"))
-                              10)
-                    w (Math/max 0 (- (js/get (js/call sidebar-main .getBoundingClientRect) .width)
-                                      (* inset 2)))]
+              (let [(inset Float) (or (parseFloat
+                                        (js/call (getComputedStyle (js/get document .documentElement)) .getPropertyValue
+                                          "--gjoa-sidebar-inset"))
+                                      10)
+                    (sidebar-w Float) (js/get (js/call sidebar-main .getBoundingClientRect) .width)
+                    w (Math/max 0.0 (- sidebar-w (* inset 2)))]
                 (js/call (js/get urlbar .style) .setProperty "--urlbar-width" (str w "px"))
                 ;; #150: stash the resting width so the FLIPPED breakout-extend
                 ;; CSS can grow the bar toward the page (leftward) instead of the
@@ -187,17 +187,28 @@
                         bottom-hits []]
                     (collect-icons! nav-bar-el top-hits)
                     (collect-icons! footer bottom-hits)
-                    (if (or (not (js/get top-hits .length)) (not (js/get bottom-hits .length)))
+                    (if (or (= (js/get top-hits .length) 0) (= (js/get bottom-hits .length) 0))
                       true
                       (do
-                        (js/call top-hits .sort (fn [%1 %2] Any (- (js/get %1 .top) (js/get %2 .top))))
-                        (js/call bottom-hits .sort (fn [%1 %2] Any (- (js/get %1 .bottom) (js/get %2 .bottom))))
+                        ;; collect-icons! pushes DOMRects, so every coordinate below
+                        ;; is a CSS pixel double.
+                        (js/call top-hits .sort
+                          (fn [%1 %2] Any
+                            (let [(a Float) (js/get %1 .top) (b Float) (js/get %2 .top)] (- a b))))
+                        (js/call bottom-hits .sort
+                          (fn [%1 %2] Any
+                            (let [(a Float) (js/get %1 .bottom) (b Float) (js/get %2 .bottom)] (- a b))))
                         (let [top-icon (aget top-hits 0)
-                              bottom-icon (aget bottom-hits (- (js/get bottom-hits .length) 1))
+                              (bottom-count Int) (js/get bottom-hits .length)
+                              bottom-icon (aget bottom-hits (- bottom-count 1))
                               sidebar-rect (js/call sidebar-main-el .getBoundingClientRect)
-                              top-gap (- (js/get top-icon .top) (js/get sidebar-rect .top))
-                              bottom-gap (- (js/get sidebar-rect .bottom) (js/get bottom-icon .bottom))
-                              BOTTOM-OFFSET 4
+                              (top-icon-top Float) (js/get top-icon .top)
+                              (bottom-icon-bottom Float) (js/get bottom-icon .bottom)
+                              (sidebar-top Float) (js/get sidebar-rect .top)
+                              (sidebar-bottom Float) (js/get sidebar-rect .bottom)
+                              top-gap (- top-icon-top sidebar-top)
+                              bottom-gap (- sidebar-bottom bottom-icon-bottom)
+                              (BOTTOM-OFFSET Int) 4
                               delta (- (+ top-gap BOTTOM-OFFSET) bottom-gap)]
                           (if (< (Math/abs delta) 0.5)
                             (do
@@ -206,10 +217,10 @@
                                         " bottomGap=" (js/call bottom-gap .toFixed 1)
                                         " target=" (js/call (+ top-gap BOTTOM-OFFSET) .toFixed 1)))
                               true)
-                            (let [current-var (or (parseFloat
-                                                    (js/call (getComputedStyle (js/get document .documentElement)) .getPropertyValue
-                                                      "--gjoa-symmetric-footer"))
-                                                  0)
+                            (let [(current-var Float) (or (parseFloat
+                                                            (js/call (getComputedStyle (js/get document .documentElement)) .getPropertyValue
+                                                              "--gjoa-symmetric-footer"))
+                                                          0)
                                   next (Math/max 0 (Math/round (- current-var (* delta 0.6))))]
                               (js/call (js/get (js/get document .documentElement) .style) .setProperty
                                             "--gjoa-symmetric-footer" (str next "px"))
@@ -221,7 +232,7 @@
         ;; --- sync-symmetric-footer ---
         sync-symmetric-footer (fn [] Any
           (js/call (Array/from {:length 30}) .forEach
-            (fn [_ i] Any
+            (fn [_ (i Int)] Any
               (setTimeout sync-symmetric-footer-once (* i 50)))))
 
         ;; --- expand ---
@@ -329,7 +340,9 @@
         nav-bar-slot-after (fn [anchor-id] Any
           (try
             (let [p (placement-of anchor-id)]
-              (if (and p (= (js/get p .area) "nav-bar")) (+ (js/get p .position) 1) nil))
+              (if (and p (= (js/get p .area) "nav-bar"))
+                (let [(position Int) (js/get p .position)] (+ position 1))
+                nil))
             (catch (_e Any) nil)))
 
         ;; Called pre-buildArea: a placement live here and gone a tick later was

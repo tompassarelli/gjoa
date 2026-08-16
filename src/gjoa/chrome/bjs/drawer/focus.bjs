@@ -62,8 +62,10 @@
             (js/call window .requestAnimationFrame (fn [] Any (js/call fwd .check)))))
 
         rescue! (fn [] Any
-          (js/set! st .rescues (+ (js/get st .rescues) 1))
-          (set-pref-int! RESCUE-PREF (+ (pref-int RESCUE-PREF 0) 1))
+          (let [(rescues Int) (js/get st .rescues)]
+            (js/set! st .rescues (+ rescues 1)))
+          (let [(prior Int) (pref-int RESCUE-PREF 0)]
+            (set-pref-int! RESCUE-PREF (+ prior 1)))
           (log "rescue" {:kind (js/get st .kind) :n (js/get st .rescues)})
           (try
             (some-> window (js/get .gURLBar) (js/call .focus))
@@ -85,7 +87,8 @@
           (when (and (> (js/get st .intent) 0) (armed?))
             (cond
               (urlbar-focused?)
-                (when (< (- (Date/now) (js/get st .intent)) INTENT-TTL-MS) (watch!))
+                (let [(intent Int) (js/get st .intent)]
+                  (when (< (- (Date/now) intent) INTENT-TTL-MS) (watch!)))
               (content-owns?)
                 (js/set! st .intent 0)
               :else

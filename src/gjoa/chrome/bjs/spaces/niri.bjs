@@ -73,9 +73,12 @@
               (js/call spaces .setActive (js/get created .id))
               {:action "create" :id (js/get created .id) :name name})))
 
-        (and idx (> idx 0))
-        (let [lst (js/call spaces .list)
-              at (aget lst (- idx 1))]
+        ;; idx arrives off the niri IPC stream: it is a 1-based position only if
+        ;; it is actually a positive integer, so the guard proves that first.
+        (and (number? idx) (js/call Number .isInteger idx) (> idx 0))
+        (let [(pos Int) (Math/trunc idx)
+              lst (js/call spaces .list)
+              at (aget lst (- pos 1))]
           (if at
             (do (js/call spaces .setActive (js/get at .id))
                 {:action "activate" :id (js/get at .id) :by "idx"})
@@ -154,7 +157,7 @@
   (pump-step! proc {:s ""}))
 
 (defn schedule-respawn! [] Any
-  (let [b (js/get st .backoff)]
+  (let [(b Int) (js/get st .backoff)]
     (js/set! st .backoff (Math/min (* b 2) 30000))
     (setTimeout (fn [] Any (when (js/get st .alive) (spawn!))) b)))
 

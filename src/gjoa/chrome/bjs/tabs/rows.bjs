@@ -1,6 +1,7 @@
 #lang beagle/js
 (ns gjoa.tabs.rows
   (:require [gjoa.macros :refer [q qa by-id attr! on! xul htm has? toggle! rmattr! bool tabs!]]
+            [gjoa.tabs.constants :refer [INDENT]]
             [gjoa.tabs.helpers :refer [has-children! is-horizontal level-of! level-of-row! tree-data! data-of! all-rows]]
             [gjoa.tabs.log :refer [create-logger!]]
             [gjoa.tabs.state :refer [hz-display moving-tabs row-of state]]))
@@ -77,7 +78,8 @@
                   (and (or (bool (js/get g .collapsed)) (bool (js/get g .layoutCollapsed)))
                        (has-children! row)))
                 (js/set! (js/get row .style) .paddingInlineStart
-                      (str (+ (* (js/get g .level) INDENT) 8) "px"))))))
+                      (let [(level Int) (or (js/get g .level) 0)]
+                        (str (+ (* level INDENT) 8) "px")))))))
 
         ;; ----- horizontal grid -----
 
@@ -102,11 +104,12 @@
                            (if (js/get %1 .hidden)
                              (rmattr! %1 "gjoa-popout-child")
                              (do
-                               (when (or (= (level-of-row! %1) 0)
-                                         (= (js/get gs .col) 0))
-                                 (js/set! gs .col (+ (js/get gs .col) 1))
-                                 (js/set! gs .ric 0))
-                               (js/set! gs .ric (+ (js/get gs .ric) 1))
+                               (let [(col Int) (js/get gs .col)]
+                                 (when (or (= (level-of-row! %1) 0) (= col 0))
+                                   (js/set! gs .col (+ col 1))
+                                   (js/set! gs .ric 0)))
+                               (let [(ric Int) (js/get gs .ric)]
+                                 (js/set! gs .ric (+ ric 1)))
                                (js/set! (js/get %1 .style) .gridColumn
                                      (String (js/get gs .col)))
                                (js/set! (js/get %1 .style) .gridRow
@@ -142,19 +145,20 @@
                      (fn [%1] Any (let [first-row (q %1
                              ".gjoa-tab-row:not([hidden]), .gjoa-group-row:not([hidden])")]
                         (when first-row
-                          (js/set! (js/get %1 .style) .maxHeight
-                                (str (+ (js/get first-row .offsetHeight) 2) "px"))))))
+                          (let [(row-height Int) (js/get first-row .offsetHeight)]
+                            (js/set! (js/get %1 .style) .maxHeight
+                                  (str (+ row-height 2) "px")))))))
 
                    ;; Urlbar popover demotion
-                   (let [total-popouts
-                         (+ (if (js/get state .panel)
-                              (js/get (qa (js/get state .panel)
-                                          "[gjoa-popout-child]") .length)
-                              0)
-                            (if (js/get state .pinnedContainer)
-                              (js/get (qa (js/get state .pinnedContainer)
-                                          "[gjoa-popout-child]") .length)
-                              0))
+                   (let [(panel-popouts Int) (if (js/get state .panel)
+                                               (js/get (qa (js/get state .panel)
+                                                           "[gjoa-popout-child]") .length)
+                                               0)
+                         (pinned-popouts Int) (if (js/get state .pinnedContainer)
+                                                (js/get (qa (js/get state .pinnedContainer)
+                                                            "[gjoa-popout-child]") .length)
+                                                0)
+                         total-popouts (+ panel-popouts pinned-popouts)
                          urlbar (by-id "urlbar")]
                      (when urlbar
                        (when (and (> total-popouts 0)
@@ -310,7 +314,8 @@
 
         create-group-row (fn [name level] Any
           (let [lv (if (= level undefined) 0 level)
-                _  (js/set! counters .group (+ (js/get counters .group) 1))
+                (group-seq Int) (js/get counters .group)
+                _  (js/set! counters .group (+ group-seq 1))
                 group {:id       (str "g" (js/get counters .group))
                        :type     "group"
                        :name     (or name "New Group")

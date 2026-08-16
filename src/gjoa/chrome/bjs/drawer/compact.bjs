@@ -22,7 +22,8 @@
             (and value (js/get shared .ignore-next-hover))
             (rmattr! elem "gjoa-has-hover")
             value
-            (let [cr (- (js/get st .collapse-until) (Date/now))]
+            (let [(collapse-until Int) (js/get st .collapse-until)
+                  cr (- collapse-until (Date/now))]
               (if (> cr 0)
                 (do
                   (dbg "setHover:revealDropped" {:collapseRemaining cr})
@@ -155,7 +156,8 @@
 
         on-popup-shown (fn [e] Any
           (when (not (is-ignored-popup e))
-            (js/set! shared .open-popups (+ (js/get shared .open-popups) 1))
+            (let [(open-popups Int) (js/get shared .open-popups)]
+              (js/set! shared .open-popups (+ open-popups 1)))
             (let [t (js/get e .target)]
               (dbg "popupshown" {:id (js/get t .id) :tag (js/get t .localName) :_openPopups (js/get shared .open-popups)}))))
 
@@ -212,7 +214,8 @@
 
         on-popup-hidden (fn [e] Any
           (when (not (is-ignored-popup e))
-            (js/set! shared .open-popups (Math/max 0 (- (js/get shared .open-popups) 1)))
+            (let [(open-popups Int) (js/get shared .open-popups)]
+              (js/set! shared .open-popups (Math/max 0 (- open-popups 1))))
             (let [t (js/get e .target)]
               (dbg "popuphidden" {:id (js/get t .id) :tag (js/get t .localName) :_openPopups (js/get shared .open-popups)}))
             ;; Release a pin whose clear on-sidebar-leave deferred, once the menu is
@@ -233,10 +236,11 @@
             (let [target (js/get event .target)
                   target-id (or (js/get target .id) (js/get target .localName))]
               (dbg "onSidebarEnter:entry" {:targetId target-id :_ignoreNextHover (js/get shared .ignore-next-hover) :flashPending (bool (js/get vstate .flash-timer))})
-              (when (> (js/get vstate .collapse-until) (Date/now))
-                (dbg "onSidebarEnter:cancel-collapse-protection-sync"
-                  {:remainingMs (- (js/get vstate .collapse-until) (Date/now)) :targetId target-id})
-                (js/set! vstate .collapse-until 0))
+              (let [(collapse-until Int) (js/get vstate .collapse-until)]
+                (when (> collapse-until (Date/now))
+                  (dbg "onSidebarEnter:cancel-collapse-protection-sync"
+                    {:remainingMs (- collapse-until (Date/now)) :targetId target-id})
+                  (js/set! vstate .collapse-until 0)))
               (setTimeout (fn [] Any
                 (cond
                   (not (js/call target .matches ":hover"))
@@ -288,15 +292,20 @@
             (when (and (has? sidebar-main "data-gjoa-compact")
                        (not (has? sidebar-main "gjoa-has-hover"))
                        (not (js/get shared .ignore-next-hover)))
-              (let [trigger-width (parseInt
-                                    (or (js/call (getComputedStyle doc-el) .getPropertyValue
-                                          "--gjoa-compact-trigger-width")
-                                        "8")
-                                    10)
+              (let [(parsed-trigger Float) (parseInt
+                                             (or (js/call (getComputedStyle doc-el) .getPropertyValue
+                                                   "--gjoa-compact-trigger-width")
+                                                 "8")
+                                             10)
+                    ;; A garbled custom property parses to NaN, and every edge
+                    ;; comparison against NaN is false — the trigger would go
+                    ;; quietly dead rather than fall back to the 8px default.
+                    (trigger-width Float) (if (js/call Number .isFinite parsed-trigger) parsed-trigger 8.0)
+                    (inner-width Float) (js/get window .innerWidth)
                     on-left (pref-bool "sidebar.position_start" true)
                     near-edge (if on-left
                                 (<= (js/get e .clientX) (* trigger-width 3))
-                                (>= (js/get e .clientX) (- (js/get window .innerWidth) (* trigger-width 3))))]
+                                (>= (js/get e .clientX) (- inner-width (* trigger-width 3))))]
                 (when near-edge
                   (dbg "onDocMouseLeave:show" {:clientX (js/get e .clientX) :onLeft on-left})
                   (flash-sidebar OFFSCREEN-SHOW-DURATION)))))

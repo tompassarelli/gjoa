@@ -112,10 +112,14 @@
                           (attr! row "gjoa-picker-selected" "true"))
                         (when (and (js/get st .preserveTree) query (not (is-direct-match item query)))
                           (attr! row "gjoa-picker-context" "true"))
-                        (when (js/get item .depth)
-                          (js/call (js/get row .style) .setProperty "padding-left"
-                            (str (+ 14 (* (js/get item .depth) 14)) "px")
-                            "important"))
+                        ;; Items are caller-supplied, so an indent level indents the
+                        ;; row only once it is proven numeric — the truthiness test
+                        ;; alone would let a stray value reach the style as NaNpx.
+                        (let [depth (js/get item .depth)]
+                          (when (and (number? depth) (js/call Number .isFinite depth) (not= depth 0))
+                            (js/call (js/get row .style) .setProperty "padding-left"
+                              (str (+ 14 (* depth 14.0)) "px")
+                              "important")))
 
                         ;; icon column
                         (when (js/get item .icon)
@@ -156,12 +160,13 @@
                   (js/call .scrollIntoView {:block "nearest"}))))))
 
         ;; --- move-selection ---
-        move-selection (fn [delta] Any
-          (when (> (js/get (js/get st .filtered) .length) 0)
-            (js/set! st .selectedIdx
-              (rem (+ (js/get st .selectedIdx) delta (js/get (js/get st .filtered) .length))
-                   (js/get (js/get st .filtered) .length)))
-            (render-list)))
+        move-selection (fn [(delta Int)] Any
+          (let [(match-count Int) (js/get (js/get st .filtered) .length)
+                (selected-idx Int) (js/get st .selectedIdx)]
+            (when (> match-count 0)
+              (js/set! st .selectedIdx
+                (rem (+ selected-idx delta match-count) match-count))
+              (render-list))))
 
         ;; --- open-action-menu ---
         open-action-menu (fn [] Any

@@ -40,8 +40,8 @@
   (let [from-row (or (js/get state .cursor) (js/call row-of .get (js/get gBrowser .selectedTab)))]
     (when from-row
       (let [rows (js/call (all-rows) .filter (fn [%1] Any (not (js/get %1 .hidden))))
-            from-idx (js/call rows .indexOf from-row)
-            to-idx (js/call rows .indexOf to-row)]
+            (from-idx Int) (js/call rows .indexOf from-row)
+            (to-idx Int) (js/call rows .indexOf to-row)]
         (when (and (>= from-idx 0) (>= to-idx 0))
           (clear-selection)
           (let [start (Math/min from-idx to-idx)
@@ -293,17 +293,19 @@
           pending (= live-url "about:blank")]
       (if (or (= live-url (js/get s .url)) pending)
         (do (apply-fn live s ni)
-            (js/set! li-ref .v (+ (js/get li-ref .v) 1))
+            (let [(live-idx Int) (js/get li-ref .v)]
+              (js/set! li-ref .v (+ live-idx 1)))
             (match-tabs-loop! tab-nodes tabs (+ ni 1) li-ref applied apply-fn))
-        (let [off (loop [j 1]
+        (let [(live-idx Int) (js/get li-ref .v)
+              off (loop [j 1]
                     (cond
-                      (or (> j 5) (>= (+ (js/get li-ref .v) j) (js/get tabs .length))) 0
-                      (= (or (some-> (aget tabs (+ (js/get li-ref .v) j)) (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec)) "")
+                      (or (> j 5) (>= (+ live-idx j) (js/get tabs .length))) 0
+                      (= (or (some-> (aget tabs (+ live-idx j)) (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec)) "")
                          (js/get s .url)) j
                       :else (recur (+ j 1))))]
           (when (> off 0)
-            (apply-fn (aget tabs (+ (js/get li-ref .v) off)) s ni)
-            (js/set! li-ref .v (+ (js/get li-ref .v) off 1)))
+            (apply-fn (aget tabs (+ live-idx off)) s ni)
+            (js/set! li-ref .v (+ live-idx off 1)))
           (match-tabs-loop! tab-nodes tabs (+ ni 1) li-ref applied apply-fn))))))
 
 (def loaded-nodes-ref Any {:v nil})
@@ -332,8 +334,9 @@
                   ;; Advance nextTabId past all saved node IDs
                   (js/call tab-nodes .forEach
                     (fn [s] Any
-                      (when (and (js/get s .id) (>= (js/get s .id) (js/get state .nextTabId)))
-                        (js/set! state .nextTabId (+ (js/get s .id) 1)))))
+                      (let [(saved-id Int) (js/get s .id)]
+                        (when (and (js/get s .id) (>= saved-id (js/get state .nextTabId)))
+                          (js/set! state .nextTabId (+ saved-id 1))))))
 
                   (pfx-log "loadFromHistory"
                     {:nextTabId (js/get state .nextTabId)
@@ -345,7 +348,7 @@
 
                   (let [applied (js/new Set)
                         apply-fn (fn [tab s i] Any
-                                   (let [id (or (js/get s .id) (let [nid (js/get state .nextTabId)]
+                                   (let [id (or (js/get s .id) (let [(nid Int) (js/get state .nextTabId)]
                                                            (js/set! state .nextTabId (+ nid 1))
                                                            nid))]
                                      (js/call tree-of .set tab
@@ -682,12 +685,16 @@
                                     b (some-> el (js/call .getBoundingClientRect))]
                                 (if (or (= a nil) (= b nil))
                                   {:i i :error "no rect"}
+                                  (let [(a-bottom Float) (js/get a .bottom)
+                                        (a-right Float) (js/get a .right)
+                                        (b-top Float) (js/get b .top)
+                                        (b-left Float) (js/get b .left)]
                                   {:i i
                                    :between (str (describe (aget els i)) " -> " (describe el))
-                                   :gapY (Math/round (- (js/get b .top) (js/get a .bottom)))
-                                   :gapX (Math/round (- (js/get b .left) (js/get a .right)))
-                                   :sameY (= (Math/round (js/get a .top)) (Math/round (js/get b .top)))
-                                   :sameX (= (Math/round (js/get a .left)) (Math/round (js/get b .left)))}))))))
+                                   :gapY (Math/round (- b-top a-bottom))
+                                   :gapX (Math/round (- b-left a-right))
+                                   :sameY (= (Math/round (js/get a .top)) (Math/round b-top))
+                                   :sameX (= (Math/round (js/get a .left)) (Math/round b-left))})))))))
 
                         (console/log "gjoa-tabs: dev helpers (window.pfx) exposed (gjoa.debug=true)")))
 

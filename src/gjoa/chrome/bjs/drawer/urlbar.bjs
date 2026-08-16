@@ -505,9 +505,13 @@
                                 (let [hit (js/call (js/call [ch] .concat (inner-nodes ch)) .find
                                             (fn [n] Any
                                               (let [nr (js/call n .getBoundingClientRect)
-                                                    c (js/call window .getComputedStyle n)]
-                                                (and (< (Math/abs (- (js/get nr .width) (js/get r .width))) 2)
-                                                     (< (Math/abs (- (js/get nr .height) (js/get r .height))) 2)
+                                                    c (js/call window .getComputedStyle n)
+                                                    (nw Float) (js/get nr .width)
+                                                    (nh Float) (js/get nr .height)
+                                                    (rw Float) (js/get r .width)
+                                                    (rh Float) (js/get r .height)]
+                                                (and (< (Math/abs (- nw rw)) 2)
+                                                     (< (Math/abs (- nh rh)) 2)
                                                      (bool (opaque? (js/get c .backgroundColor)))))))]
                                   (if hit
                                     (let [c (js/call window .getComputedStyle hit)]
@@ -523,8 +527,10 @@
                               text-el (or (some-> window (js/get .gURLBar) (js/get .inputField))
                                           (js/call urlbar .querySelector ".urlbar-input")
                                           input-box)
+                              (rect-left Float) (js/get rect .left)
                               input-left (if text-el
-                                           (- (js/get (js/call text-el .getBoundingClientRect) .left) (js/get rect .left))
+                                           (let [(text-left Float) (js/get (js/call text-el .getBoundingClientRect) .left)]
+                                             (- text-left rect-left))
                                            36)
                               kids (Array/from (js/get container .children))
                               input-idx (js/call kids .indexOf input-box)
@@ -554,20 +560,25 @@
                           ;; not centred — a compound chip's icon is not at the chip's centre).
                           (doseq [ch leading]
                             (let [r (js/call ch .getBoundingClientRect)
+                                  (r-left Float) (js/get r .left)
+                                  (r-top Float) (js/get r .top)
+                                  (rect-top Float) (js/get rect .top)
                                   parts (parts-of ch)
                                   slot (html-new "div")]
                               (when (> (js/get parts .length) 0)
                                 (css! slot (str "position:absolute;box-sizing:border-box;"
-                                                "left:" (- (js/get r .left) (js/get rect .left)) "px;"
-                                                "top:" (- (js/get r .top) (js/get rect .top)) "px;"
+                                                "left:" (- r-left rect-left) "px;"
+                                                "top:" (- r-top rect-top) "px;"
                                                 "width:" (js/get r .width) "px;height:" (js/get r .height) "px;"
                                                 (box-chrome ch r)))
                                 (doseq [p parts]
                                   (let [pr (js/call (js/get p .el) .getBoundingClientRect)
+                                        (pr-left Float) (js/get pr .left)
+                                        (pr-top Float) (js/get pr .top)
                                         ic (html-new "div")]
                                     (css! ic (str "position:absolute;box-sizing:border-box;"
-                                                  "left:" (- (js/get pr .left) (js/get r .left)) "px;"
-                                                  "top:" (- (js/get pr .top) (js/get r .top)) "px;"
+                                                  "left:" (- pr-left r-left) "px;"
+                                                  "top:" (- pr-top r-top) "px;"
                                                   "width:" (js/get pr .width) "px;height:" (js/get pr .height) "px;"
                                                   "opacity:.9;" (js/get p .css)))
                                     (when (js/get p .text) (js/set! ic .textContent (js/get p .text)))

@@ -58,7 +58,8 @@
 ;; this overlaid by the user override pref gjoa.keys.bindings (JSON {key: id|null};
 ;; null unbinds). about:vim + `:bind` (P2/P3) edit that one pref.
 (def DEFAULT-KEYMAP Any
-  (let [m (js/new Map)]
+  ;; keystroke -> command id, both drawn from the VIM-COMMANDS catalog.
+  (let [(m (JsMap String String)) (js/new Map)]
     (js/call VIM-COMMANDS .forEach (fn [c] Any (js/call m .set (js/get c .key) (js/get c .id))))
     m))
 
@@ -280,12 +281,13 @@
         indent-row (fn [row] Any
           (if (js/get row ._group)
             (let [all-r (all-rows)
-                  i (js/call all-r .indexOf row)]
+                  (i Int) (js/call all-r .indexOf row)]
               (when (> i 0)
                 (let [d (js/get row ._group)
+                      (d-level Int) (or (js/get d .level) 0)
                       prev-lv (level-of-row! (aget all-r (- i 1)))]
-                  (when (not (> (js/get d .level) prev-lv))
-                    (js/set! d .level (+ (js/get d .level) 1))
+                  (when (not (> d-level prev-lv))
+                    (js/set! d .level (+ d-level 1))
                     (js/call rows .syncAnyRow row)))))
             (when (js/get row ._tab)
               (let [prev (js/get row .previousElementSibling)]
@@ -303,9 +305,10 @@
 
         outdent-row (fn [row] Any
           (if (js/get row ._group)
-            (let [d (js/get row ._group)]
-              (when (> (or (js/get d .level) 0) 0)
-                (js/set! d .level (Math/max 0 (- (js/get d .level) 1)))
+            (let [d (js/get row ._group)
+                  (d-level Int) (or (js/get d .level) 0)]
+              (when (> d-level 0)
+                (js/set! d .level (Math/max 0 (- d-level 1)))
                 (js/call rows .syncAnyRow row)))
             (when (js/get row ._tab)
               (let [td (tree-data! (js/get row ._tab))]
@@ -788,9 +791,10 @@
 
 
         go-to-end (fn [(idx Int)] Any
-          (let [visible (js/call (all-rows) .filter (fn [%1] Any (not (js/get %1 .hidden))))]
-            (when (> (js/get visible .length) 0)
-              (let [r (aget visible (if (< idx 0) (+ (js/get visible .length) idx) idx))]
+          (let [visible (js/call (all-rows) .filter (fn [%1] Any (not (js/get %1 .hidden))))
+                (visible-count Int) (js/get visible .length)]
+            (when (> visible-count 0)
+              (let [r (aget visible (if (< idx 0) (+ visible-count idx) idx))]
                 (set-cursor r)
                 (when (js/get r ._tab)
                   (js/set! gBrowser .selectedTab (js/get r ._tab)))))))
@@ -802,9 +806,10 @@
         close-focused (fn [] Any
           (if (> (js/get selection .size) 1)
             ;; Multi-select
-            (let [sel (Array/from selection)]
+            (let [sel (Array/from selection)
+                  (sel-count Int) (js/get sel .length)]
               (clearSelection)
-              (let [last-r (aget sel (- (js/get sel .length) 1))]
+              (let [last-r (aget sel (- sel-count 1))]
                 (letfn [(find-valid [(n Any)] Any
                           (when n
                             (if (or (js/get n .hidden) (= n (js/get state .spacer))
@@ -814,7 +819,7 @@
                   (let [next (find-valid (js/get last-r .nextElementSibling))]
                     (when (and next (not= next (js/get state .spacer)))
                       (set-cursor next))
-                    (loop [i (- (js/get sel .length) 1)]
+                    (loop [i (- sel-count 1)]
                       (when (>= i 0)
                         (let [row (aget sel i)]
                           (if (js/get row ._tab)
@@ -842,7 +847,8 @@
                                   (when (> lv my-level)
                                     (when (js/get nxt ._group)
                                       (js/set! (js/get nxt ._group) .level
-                                            (Math/max 0 (- (or (js/get (js/get nxt ._group) .level) 0) 1)))
+                                            (let [(nxt-level Int) (or (js/get (js/get nxt ._group) .level) 0)]
+                                              (Math/max 0 (- nxt-level 1))))
                                       (js/call rows .syncGroupRow nxt))
                                     (dec-groups (js/get nxt .nextElementSibling))))))]
                       (dec-groups (js/get (js/get state .cursor) .nextElementSibling)))
@@ -904,7 +910,8 @@
               (let [all-tabs (js/call (js/get gjoa-api .tabs) .all)]
                 (if (not (js/get all-tabs .length))
                   (modeline-msg "No tabs" 3000)
-                  (let [window-labels (js/new Map)]
+                  ;; Window ids come back over the cross-window tabs API.
+                  (let [(window-labels (JsMap Any String)) (js/new Map)]
                     (js/call all-tabs .forEach (fn [t] Any
                       (when (not (js/call window-labels .has (js/get t .windowId)))
                         (js/call window-labels .set (js/get t .windowId)
@@ -960,14 +967,15 @@
 
         label-of (fn [tag] Any
           (when tag
-            (let [i (js/call tag .indexOf ":")]
+            (let [(i Int) (js/call tag .indexOf ":")]
               (if (>= i 0) (js/call tag .slice (+ i 1)) tag))))
 
         tag-kind (fn [tag] Any
           (when tag
             (if (js/call tag .startsWith "checkpoint:") "checkpoint" "session")))
 
-        relative-time (fn [ts] String
+        ;; ts is an events-table timestamp: milliseconds since the epoch.
+        relative-time (fn [(ts Int)] String
           (let [now (Date/now)
                 delta (- now ts)
                 mins (Math/floor (/ delta 60000))]
@@ -1047,25 +1055,29 @@
         restore-event (fn [event] Any
           (let [env (js/get event .snapshot)
                 tab-nodes (js/call (js/get env .nodes) .filter (fn [%1] Any (not= (js/get %1 .type) "group")))
-                tab-space-map (js/new Map)]
+                ;; Raw halves of a persisted tabSpaces pair, as read back from
+                ;; the history snapshot.
+                (tab-space-map (JsMap Any Any)) (js/new Map)]
             (when (and (js/get env .spaces) (js/get (js/get env .spaces) .tabSpaces))
               (js/call (js/get (js/get env .spaces) .tabSpaces) .forEach
                 (fn [%1] Any (js/call tab-space-map .set (aget %1 0) (aget %1 1)))))
             (if (not (js/get tab-nodes .length))
               (do (modeline-msg "Restore: no tabs in event" 3000) nil)
-              (let [max-saved-id (js/call (js/get Math .max) .apply nil
-                                   (js/call [0] .concat (js/call tab-nodes .map (fn [%1] Any (or (js/get %1 .id) 0)))))
-                    offset (js/get state .nextTabId)]
-                (js/set! state .nextTabId (+ (js/get state .nextTabId) max-saved-id 1))
+              (let [(max-saved-id Int) (js/call (js/get Math .max) .apply nil
+                                         (js/call [0] .concat (js/call tab-nodes .map (fn [%1] Any (or (js/get %1 .id) 0)))))
+                    (offset Int) (js/get state .nextTabId)]
+                (js/set! state .nextTabId (+ offset max-saved-id 1))
                 (let [group-name (or (label-of (js/get event .tag))
                                      (str "Restored " (js/call (js/new Date (js/get event .timestamp)) .toLocaleString)))
                       group-row (js/call rows .createGroupRow group-name 0)]
                   (js/call (js/get state .panel) .insertBefore group-row (js/get state .spacer))
                   (js/call rows .syncAnyRow group-row)
                   (js/call tab-nodes .forEach (fn [n] Any
-                    (let [new-id (+ (or (js/get n .id) 0) offset)
-                          new-parent-id (if (= (js/typeof (js/get n .parentId)) "number")
-                                          (+ (js/get n .parentId) offset)
+                    (let [(saved-id Int) (or (js/get n .id) 0)
+                          new-id (+ saved-id offset)
+                          saved-parent-id (js/get n .parentId)
+                          new-parent-id (if (number? saved-parent-id)
+                                          (+ saved-parent-id offset)
                                           (js/get (js/get group-row ._group) .id))
                           orig-space (js/call tab-space-map .get (or (js/get n .id) 0))]
                       (js/call saved-tab-queue .push
@@ -1101,10 +1113,12 @@
                             delta (- (+ tgt-level 1) src-level)]
                         (js/call src-rows .forEach (fn [r] Any
                           (when (js/get r ._group)
-                            (js/set! (js/get r ._group) .level
-                                  (Math/max 0 (+ (or (js/get (js/get r ._group) .level) 0) delta))))))))
-                    (let [tgt-sub (subtree-rows! target)]
-                      (insert-after-each! (aget tgt-sub (- (js/get tgt-sub .length) 1)) src-rows))
+                            (let [(group-level Int) (or (js/get (js/get r ._group) .level) 0)]
+                              (js/set! (js/get r ._group) .level
+                                    (Math/max 0 (+ group-level delta)))))))))
+                    (let [tgt-sub (subtree-rows! target)
+                          (tgt-sub-count Int) (js/get tgt-sub .length)]
+                      (insert-after-each! (aget tgt-sub (- tgt-sub-count 1)) src-rows))
                     (js/call src-rows .forEach (fn [%1] Any (js/call rows .syncAnyRow %1)))
                     (js/call rows .updateVisibility)
                     (scheduleSave)
@@ -1301,15 +1315,16 @@
                         (on1! label "blur" (fn [] Any (finish true)))))))))))
 
 
-        cycle-space (fn [dir] Any
-          (let [list (js/call spaces .list)]
-            (if (< (js/get list .length) 2)
+        cycle-space (fn [(dir Int)] Any
+          (let [list (js/call spaces .list)
+                (space-count Int) (js/get list .length)]
+            (if (< space-count 2)
               (modeline-msg "Only one space -- :space new <name> to add" 2500)
               (let [cur (js/call spaces .activeId)
-                    idx (js/call list .findIndex (fn [%1] Any (= (js/get %1 .id) cur)))
+                    (idx Int) (js/call list .findIndex (fn [%1] Any (= (js/get %1 .id) cur)))
                     ;; `%` is beagle's anon-fn arg, NOT modulo — use `rem`.
-                    next-idx (rem (+ (rem (+ idx dir) (js/get list .length)) (js/get list .length))
-                                  (js/get list .length))
+                    next-idx (rem (+ (rem (+ idx dir) space-count) space-count)
+                                  space-count)
                     next (aget list next-idx)]
                 (js/call spaces .setActive (js/get next .id))
                 (modeline-msg (str ":space -> \"" (js/get next .name) "\"") 1500)))))

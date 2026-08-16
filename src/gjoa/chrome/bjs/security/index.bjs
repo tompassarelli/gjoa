@@ -93,7 +93,11 @@
                                      " matches or exceeds latest stable " latest))
                 (let [my (parse-version my-version)
                       up (parse-version latest)
-                      major-behind (- (aget up 0) (aget my 0))]
+                      ;; parse-version yields a [major minor patch] triple whose
+                      ;; every element is an integer or the 0 fallback.
+                      (up-major Int) (aget up 0)
+                      (my-major Int) (aget my 0)
+                      major-behind (- up-major my-major)]
                   (if (>= major-behind 1)
                     (do
                       (console/error

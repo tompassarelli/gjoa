@@ -133,7 +133,8 @@
   (let [dt (or d (js/new Date))
         day-short (js/call dt .toLocaleDateString "en-US" {:weekday "short"})
         yyyy (js/call dt .getFullYear)
-        mm (js/call (String (+ (js/call dt .getMonth) 1)) .padStart 2 "0")
+        (month Int) (js/call dt .getMonth)
+        mm (js/call (String (+ month 1)) .padStart 2 "0")
         dd (js/call (String (js/call dt .getDate)) .padStart 2 "0")
         hh (js/call (String (js/call dt .getHours)) .padStart 2 "0")
         min (js/call (String (js/call dt .getMinutes)) .padStart 2 "0")]
@@ -303,9 +304,9 @@
 
    :runRetention
    (fn [opts] Any
-     (with-conn! (fn [%1] Any (let [days (or (and opts (js/get opts .retainDays))
+     (with-conn! (fn [%1] Any (let [(days Int) (or (and opts (js/get opts .retainDays))
                                 (js/call (js/get Services .prefs) .getIntPref "gjoa.history.retainDays" 30))
-                       max-rows (or (and opts (js/get opts .maxRows))
+                       (max-rows Int) (or (and opts (js/get opts .maxRows))
                                     (js/call (js/get Services .prefs) .getIntPref "gjoa.history.maxRows" 10000))
                        cutoff (- (Date/now) (* days 24 60 60 1000))
                        result {:deleted 0}]
@@ -315,13 +316,15 @@
                          "DELETE FROM events WHERE tag IS NULL AND timestamp < ?"
                          [cutoff])
                        (js/call .then (fn [] Any (js/call %1 .execute "SELECT changes() AS c")))
-                       (js/call .then (fn [r] Any (js/set! result .deleted (+ (js/get result .deleted) (read-changes r)))))
+                       (js/call .then (fn [r] Any (let [(deleted Int) (js/get result .deleted)]
+                                                    (js/set! result .deleted (+ deleted (read-changes r))))))
                        (js/call .then (fn [] Any
                          (js/call %1 .execute
                            "DELETE FROM events WHERE tag IS NULL AND id IN (SELECT id FROM events WHERE tag IS NULL ORDER BY timestamp ASC LIMIT MAX(0, (SELECT COUNT(*) FROM events WHERE tag IS NULL) - ?))"
                            [max-rows])))
                        (js/call .then (fn [] Any (js/call %1 .execute "SELECT changes() AS c")))
-                       (js/call .then (fn [r] Any (js/set! result .deleted (+ (js/get result .deleted) (read-changes r))))))))
+                       (js/call .then (fn [r] Any (let [(deleted Int) (js/get result .deleted)]
+                                                    (js/set! result .deleted (+ deleted (read-changes r)))))))))
                (js/call .then (fn [] Any
                  (when (js/get result .deleted)
                    (log "runRetention"
