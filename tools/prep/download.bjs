@@ -137,8 +137,9 @@
                   ;; --status-fd lines are prefixed "[GNUPG:] ", so match on `includes`
                   ;; not `startsWith`; the primary-key-fpr is still the LAST field.
                   valid (js/call (js/call out .split "\n") .some (fn [(line String)] Any (and (js/call line .includes "VALIDSIG ")
-                                 (let [f (js/call (js/call line .trim) .split (js/new RegExp "\\s+"))]
-                                   (= (aget f (- (js/get f .length) 1)) MOZILLA-SIGNING-FPR)))))]
+                                 (let [f (js/call (js/call line .trim) .split (js/new RegExp "\\s+"))
+                                       (field-count Int) (js/get f .length)]
+                                   (= (aget f (- field-count 1)) MOZILLA-SIGNING-FPR)))))]
               (when-not valid
                 (throw (js/new Error (str "SHA256SUMS.asc not signed by pinned Mozilla key "
                                     MOZILLA-SIGNING-FPR " (no VALIDSIG line whose primary-key fpr matches)"
@@ -183,7 +184,7 @@
   (let [res (js/await (fetch url))]
     (when-not (js/get res .ok)
       (throw (js/new Error (str "download failed (" (js/get res .status) "): " url))))
-    (let [total (Number (or (js/call (js/get res .headers) .get "content-length") 0))]
+    (let [(total Float) (Number (or (js/call (js/get res .headers) .get "content-length") 0))]
       (when total
         (js/call log .info (str "expecting " (js/call (/ total 1024 1024) .toFixed 1) " MB")))
       (js/await (js/call Bun .write dest res)))))
@@ -208,7 +209,8 @@
         (when (not= actualHash expectedHash)
           (throw (js/new Error (str "tarball SHA256 mismatch.\n  expected: " expectedHash
                               "\n  got:      " actualHash)))))
-      (js/call log .ok (str "tarball verified (" (js/call (/ (js/get (statSync tarball) .size) 1024 1024) .toFixed 1) " MB)"))
+      (let [(size Float) (js/get (statSync tarball) .size)]
+        (js/call log .ok (str "tarball verified (" (js/call (/ size 1024 1024) .toFixed 1) " MB)")))
       ;; Extract into engine/. mozilla-central tarballs unpack as firefox-VERSION/
       ;; — strip that level so engine/ holds the source tree directly.
       (if (existsSync ENGINE-DIR)

@@ -53,7 +53,8 @@
                          (some? (js/get m .value)) (some? (js/get (js/get m .value) .body)))
                 (js/call out .push {:name (js/get (js/get m .key) .name) :node m :body (js/get (js/get m .value) .body)
                             :params (param-names m) :ordinal (aget n 0)})
-                (aset n 0 (+ (aget n 0) 1))))))))
+                (let [(ordinal Int) (aget n 0)]
+                  (aset n 0 (+ ordinal 1)))))))))
     out))
 
 ;; capture an anchor fingerprint for class.method from a pristine source.
@@ -75,7 +76,9 @@
   (let [sa (js/new Set a) sb (js/new Set b)
         inter (js/call (js/call Array .from sa) .filter (fn [(x Any)] Bool (js/call sb .has x)))
         uni (js/new Set (js/call (js/call Array .from sa) .concat (js/call Array .from sb)))]
-    (if (= (js/get uni .size) 0) 0 (/ (js/get inter .length) (js/get uni .size)))))
+    (let [(inter-count Int) (js/get inter .length)
+          (uni-count Int) (js/get uni .size)]
+      (if (= uni-count 0) 0 (/ inter-count uni-count)))))
 
 ;; fuzzy-find the renamed target in `src`'s class `cname` given the anchor.
 ;; Returns {:name :body :confidence :why} for the best candidate, or nil. Confidence
@@ -94,10 +97,15 @@
                            score (+ (* 0.7 j) (* 0.25 pm) (* 0.05 pos))]
                        {:name (js/get m .name) :node m :score score :j j :pm pm})))]
         (if (= (js/get scored .length) 0) nil
-          (let [sorted (js/call (js/call scored .slice) .sort (fn [(a Any) (b Any)] Float (- (js/get b .score) (js/get a .score))))
+          (let [sorted (js/call (js/call scored .slice) .sort
+                                (fn [(a Any) (b Any)] Float
+                                  (let [(a-score Float) (js/get a .score)
+                                        (b-score Float) (js/get b .score)]
+                                    (- b-score a-score))))
                 best (aget sorted 0)
-                second (if (> (js/get sorted .length) 1) (js/get (aget sorted 1) .score) 0)
-                margin (- (js/get best .score) second)]
+                (best-score Float) (js/get best .score)
+                (second Float) (if (> (js/get sorted .length) 1) (js/get (aget sorted 1) .score) 0)
+                margin (- best-score second)]
             {:name (js/get best .name)
              :body [(js/get (js/get (js/get best .node) .body) .start) (js/get (js/get (js/get best .node) .body) .end)]
              :confidence (js/get best .score)

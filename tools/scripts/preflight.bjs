@@ -314,7 +314,7 @@
 ;; dep marker. DECLARED count; check-contract returns the EVALUATED count. Any gap =
 ;; the parser silently dropped a declared dep (the cpp-symbol/cpp-member skew) — fail-closed.
 (def DEP-BULLET-RE Any (js/new RegExp "(?:#|;;)\\s*-\\s*((?:rust|cpp|webidl|js)-[a-z-]+)\\s+\\S" "gm"))
-(defn count-declared-deps [(text String)] Number
+(defn count-declared-deps [(text String)] Int
   (let [m (js/call text .match DEP-BULLET-RE)]
     (if m (js/get m .length) 0)))
 (defn gateL [] Any
@@ -331,7 +331,8 @@
             declared (count-declared-deps text)]
         ;; reconciliation: every declared `# depends-on` bullet MUST produce an evaluated
         ;; result; a shortfall = the parser silently dropped a dep (unknown/typo'd kind).
-        (let [delta (- declared (js/get results .length))]
+        (let [(result-count Int) (js/get results .length)
+              delta (- declared result-count)]
           (if (> delta 0)
             (js/call dropped .push (str (basename f) ": " delta " declared depends-on bullet(s) parsed to nothing (unknown/typo'd kind — vocabulary drift)"))))
         (doseq [r results]

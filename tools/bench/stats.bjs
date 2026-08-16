@@ -34,51 +34,59 @@
    28 2.048
    29 2.045})
 
-(defn tCritical [(df Number)] Number
+(defn tCritical [(df Int)] Float
   (let [v (get T-CRITICAL-95 df)]
     (cond
       (some? v) v
       (< df 2) 12.706 ;; df=1, very wide
       :else 1.96))) ;; approximate for df > 29
 
-(js/export (defn geometric-mean [(values Any)] Number
+(js/export (defn geometric-mean [(values Any)] Float
   (if (= (js/get values .length) 0)
-    0
-    (let [logSum (js/call values .reduce (fn [acc v] Any (+ acc (js/call Math .log v))) 0)]
-      (js/call Math .exp (/ logSum (js/get values .length)))))))
+    0.0
+    (let [(logSum Float) (js/call values .reduce (fn [(acc Float) v] Float (+ acc (Math/log v))) 0)]
+      (let [(n Int) (js/get values .length)]
+        (Math/exp (/ logSum n)))))))
 
-(js/export (defn arithmetic-mean [(values Any)] Number
+(js/export (defn arithmetic-mean [(values Any)] Float
   (if (= (js/get values .length) 0)
-    0
-    (/ (js/call values .reduce (fn [a b] Any (+ a b)) 0) (js/get values .length)))))
+    0.0
+    (let [(total Float) (js/call values .reduce (fn [(a Float) (b Float)] Float (+ a b)) 0)
+          (n Int) (js/get values .length)]
+      (/ total n)))))
 
-(js/export (defn standard-deviation [(values Any)] Number
+(js/export (defn standard-deviation [(values Any)] Float
   (if (< (js/get values .length) 2)
-    0
-    (let [mean (arithmetic-mean values)
-          squaredDiffs (js/call values .map (fn [v] Any (js/call Math .pow (- v mean) 2)))
-          variance (/ (js/call squaredDiffs .reduce (fn [a b] Any (+ a b)) 0) (- (js/get values .length) 1))]
-      (js/call Math .sqrt variance)))))
+    0.0
+    (let [(mean Float) (arithmetic-mean values)
+          squaredDiffs (js/call values .map (fn [(v Float)] Float (Math/pow (- v mean) 2)))
+          (sum-sq Float) (js/call squaredDiffs .reduce (fn [(a Float) (b Float)] Float (+ a b)) 0)
+          (n Int) (js/get values .length)
+          variance (/ sum-sq (- n 1))]
+      (Math/sqrt variance)))))
 
 (js/export (defn confidence-interval95 [(values Any)] Any
-  (let [n (js/get values .length)
-        mean (arithmetic-mean values)]
+  (let [(n Int) (js/get values .length)
+        (mean Float) (arithmetic-mean values)]
     (if (< n 2)
       {:mean mean :ci 0 :low mean :high mean}
-      (let [sd (standard-deviation values)
+      (let [(sd Float) (standard-deviation values)
             df (- n 1)
-            t (tCritical df)
-            se (/ sd (js/call Math .sqrt n))
+            (t Float) (tCritical df)
+            se (/ sd (Math/sqrt n))
             ci (* t se)]
         {:mean mean :ci ci :low (- mean ci) :high (+ mean ci)})))))
 
-(js/export (defn median [(values Any)] Number
+(js/export (defn median [(values Any)] Float
   (if (= (js/get values .length) 0)
-    0
-    (let [sorted (js/call [...values] .sort (fn [a b] Any (- a b)))
-          mid (js/call Math .floor (/ (js/get sorted .length) 2))]
-      (if (= (mod (js/get sorted .length) 2) 0)
-        (/ (+ (get sorted (- mid 1)) (get sorted mid)) 2)
+    0.0
+    (let [sorted (js/call [...values] .sort (fn [(a Float) (b Float)] Float (- a b)))
+          (sample-count Int) (js/get sorted .length)
+          (mid Int) (Math/floor (/ sample-count 2))]
+      (if (= (mod sample-count 2) 0)
+        (let [(lo Float) (get sorted (- mid 1))
+              (hi Float) (get sorted mid)]
+          (/ (+ lo hi) 2))
         (get sorted mid))))))
 
 (js/export (defn format-result [(label String) (gjoa Any) (firefox Any) (unit String)] String
@@ -98,9 +106,11 @@
       (do
         (js/call lines .push "    Ratio:   n/a (insufficient samples)")
         (js/call lines .join "\n"))
-      (let [speedup (/ (js/get firefoxCI .mean) (js/get gjoaCI .mean))
+      (let [(firefox-mean Float) (js/get firefoxCI .mean)
+            (gjoa-mean Float) (js/get gjoaCI .mean)
+            speedup (/ firefox-mean gjoa-mean)
             pct (js/call (* (- speedup 1) 100) .toFixed 1)
             dir (if (>= speedup 1) "faster" "slower")
-            absPct (js/call (js/call Math .abs (parseFloat pct)) .toFixed 1)]
+            absPct (js/call (Math/abs (parseFloat pct)) .toFixed 1)]
         (js/call lines .push (str "    Ratio:   " (js/call speedup .toFixed 3) "x — Gjoa is " absPct "% " dir))
         (js/call lines .join "\n"))))))

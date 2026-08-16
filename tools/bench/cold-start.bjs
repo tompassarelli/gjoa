@@ -7,7 +7,7 @@
   (:require [util :refer [parseArgs]]
             [path :refer [join]]
             [gjoa.tools.bench.stats :refer [confidence-interval95 median format-result]]))
-(declare-extern [Bun process performance] Any)
+(declare-extern [Bun process] Any)
 
 (def parsed Any
   (parseArgs {:args (js/call (js/get Bun .argv) .slice 2)

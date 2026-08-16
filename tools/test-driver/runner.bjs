@@ -231,7 +231,11 @@
         (let [needle (js/call (js/get opts .grep) .toLowerCase)]
           (doseq [s suites]
             (js/set! s .tests (js/call (js/get s .tests) .filter (fn [t] Any (js/call (js/call (js/get t .name) .toLowerCase) .includes needle)))))))
-      (let [totalCount (js/call suites .reduce (fn [n s] Any (+ n (js/get (js/get s .tests) .length))) 0)]
+      (let [(totalCount Int) (js/call suites .reduce
+                                      (fn [(n Int) s] Int
+                                        (let [(suite-size Int) (js/get (js/get s .tests) .length)]
+                                          (+ n suite-size)))
+                                      0)]
         (if (= totalCount 0)
           (do
             (emit {:type "summary" :pass 0 :fail 0 :skip 0 :durationMs 0
@@ -398,7 +402,8 @@
       (let [a (aget args i)]
         (cond
           (and (= a flag) (aget args (+ i 1))) (aget args (+ i 1))
-          (js/call a .startsWith (str flag "=")) (js/call a .slice (+ (js/get flag .length) 1))
+          (js/call a .startsWith (str flag "="))
+            (let [(flag-len Int) (js/get flag .length)] (js/call a .slice (+ flag-len 1)))
           :else (recur (+ i 1)))))))
 
 (def cliSubsystem Any (cli-val cliArgs "--subsystem"))

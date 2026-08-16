@@ -26,7 +26,9 @@
           (when (node? v) (js/call kids .push v))
           (when (js/call Array .isArray v)
             (doseq [e v] (when (node? e) (js/call kids .push e)))))))
-    (js/call kids .sort (fn [(a Any) (b Any)] Int (- (js/get a .start) (js/get b .start))))
+    (js/call kids .sort
+             (fn [(a Any) (b Any)] Int
+               (let [(a-start Int) (js/get a .start) (b-start Int) (js/get b .start)] (- a-start b-start))))
     kids)))
 
 ;; acorn node + source -> lossless CST map {:kind :start :end :segs :kids}.

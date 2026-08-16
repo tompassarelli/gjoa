@@ -67,7 +67,9 @@
 ;; share a node id here. Surfaced honestly via `stats`, never hidden.
 (defn register! [(acc Any) (nm String)] Any
   (js/call (js/get acc .names) .add nm)
-  (js/call (js/get acc .counts) .set nm (+ 1 (or (js/call (js/get acc .counts) .get nm) 0))))
+  (let [counts (js/get acc .counts)
+        prev (js/call counts .get nm)]
+    (js/call counts .set nm (if (number? prev) (+ prev 1) 1))))
 
 ;; Recursively walk an acorn node. `acc` accumulates {:names Set :edges [[from to]]}.
 ;; `enclosing` is the nearest MODULE-SCOPE function we're inside (or TOPLEVEL).
@@ -226,7 +228,9 @@
 (defn leverage! [(graph Any) (n Number)] Any
   (let [scored (js/call (js/call (js/get graph .ids) .filter (fn [(id String)] Bool (not (js/call id .startsWith TOPLEVEL)))) .map (fn [(id String)] Any
                    {:id id :n (js/get (closure (js/get graph .rev) id) .size)}))
-        ranked (js/call scored .sort (fn [(a Any) (b Any)] Number (- (js/get b .n) (js/get a .n))))]
+        ranked (js/call scored .sort
+                        (fn [(a Any) (b Any)] Int
+                          (let [(a-n Int) (js/get a .n) (b-n Int) (js/get b .n)] (- b-n a-n))))]
     (js/call console .log (str "\nTop " n " functions by blast-radius (transitive dependents):\n"))
     (doseq [row (js/call ranked .slice 0 n)]
       (js/call console .log (str "  " (js/call (str (js/get row .n)) .padStart 4) "  "
@@ -258,7 +262,11 @@
 
 (defn stats! [(graph Any)] Any
   (let [fns (js/call (js/get graph .ids) .filter (fn [(id String)] Bool (not (js/call id .startsWith TOPLEVEL))))
-        edges (js/call fns .reduce (fn [(a Number) (id String)] Number (+ a (js/get (js/call (js/get graph .fwd) .get id) .size))) 0)
+        edges (js/call fns .reduce
+                       (fn [(a Int) (id String)] Int
+                         (let [(fanout Int) (js/get (js/call (js/get graph .fwd) .get id) .size)]
+                           (+ a fanout)))
+                       0)
         mods (js/call (list-modules) .map parse-module!)
         merges (js/call mods .flatMap (fn [(m Any)] Any
                                 (js/call (js/get m .merges) .map (fn [(kv Any)] String

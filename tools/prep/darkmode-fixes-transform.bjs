@@ -138,26 +138,30 @@
   (let [raw (js/call (js/call body .trim) .split (js/new RegExp "[\\s,/]+"))]
     (js/call raw .filter (fn [s] Any (> (js/get s .length) 0)))))
 
-(defn parse-component [(s String) (whole Any)] Any
+(defn parse-component [(s String) (whole Int)] Any
   (if (js/call s .endsWith "%")
-    (* (/ (parseFloat (js/call s .slice 0 -1)) 100) whole)
+    (let [(pct Float) (parseFloat (js/call s .slice 0 -1))]
+      (* (/ pct 100) whole))
     (parseFloat s)))
 
-(defn hsl->rgb [(h Any) (s Any) (l Any)] Any
-  (let [hh (/ (mod (mod h 360) 360) 360)
+(defn hsl->rgb [(h Float) (s Float) (l Float)] Any
+  ;; Floor-modulo by hand: beagle's `mod` is integer-only, and a CSS hue is a
+  ;; fractional degree that may be negative.
+  (let [hh (/ (- h (* 360 (Math/floor (/ h 360)))) 360)
         q (if (< l 0.5) (* l (+ 1 s)) (- (+ l s) (* l s)))
         p (- (* 2 l) q)
-        hue->rgb (fn [(t0 Any)] Any (let [t (cond (< t0 0) (+ t0 1) (> t0 1) (- t0 1) :else t0)]
+        ;; Turn fractions, in a colour space that is entirely fractional.
+        hue->rgb (fn [(t0 Float)] Float (let [(t Float) (cond (< t0 0) (+ t0 1) (> t0 1) (- t0 1) :else t0)]
                      (cond
-                       (< t (/ 1 6)) (+ p (* (- q p) 6 t))
-                       (< t (/ 1 2)) q
-                       (< t (/ 2 3)) (+ p (* (- q p) (- (/ 2 3) t) 6))
+                       (< t (/ 1.0 6.0)) (+ p (* (- q p) 6 t))
+                       (< t (/ 1.0 2.0)) q
+                       (< t (/ 2.0 3.0)) (+ p (* (- q p) (- (/ 2.0 3.0) t) 6))
                        :else p)))]
     (if (= s 0)
       [(Math/round (* l 255)) (Math/round (* l 255)) (Math/round (* l 255))]
-      [(Math/round (* (hue->rgb (+ hh (/ 1 3))) 255))
+      [(Math/round (* (hue->rgb (+ hh (/ 1.0 3.0))) 255))
        (Math/round (* (hue->rgb hh) 255))
-       (Math/round (* (hue->rgb (- hh (/ 1 3))) 255))])))
+       (Math/round (* (hue->rgb (- hh (/ 1.0 3.0))) 255))])))
 
 (defn parse-color [(raw String)] Any
   (let [s (js/call raw .trim)
@@ -180,8 +184,10 @@
             parts (split-args body)]
         (when (>= (js/get parts .length) 3)
           (let [h (parseFloat (aget parts 0))
-                sat (/ (parse-component (aget parts 1) 100) 100)
-                lit (/ (parse-component (aget parts 2) 100) 100)
+                (sat-raw Float) (parse-component (aget parts 1) 100)
+                (lit-raw Float) (parse-component (aget parts 2) 100)
+                sat (/ sat-raw 100)
+                lit (/ lit-raw 100)
                 rgb (hsl->rgb h (clamp sat 0 1) (clamp lit 0 1))]
             [(aget rgb 0) (aget rgb 1) (aget rgb 2)
              (if (>= (js/get parts .length) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)])))
@@ -195,14 +201,14 @@
 
       :else nil)))
 
-(defn compute [(u Any)] Any
+(defn compute [(u Float)] Float
   (let [f (/ u 255)]
     (if (<= f 0.03928) (/ f 12.92) (Math/pow (/ (+ f 0.055) 1.055) 2.4))))
 
-(defn decompute [(x Any)] Any
+(defn decompute [(x Float)] Any
   (let [s (if (<= x (/ 0.03928 12.92))
             (* x 12.92)
-            (- (* 1.055 (Math/pow x (/ 1 2.4))) 0.055))]
+            (- (* 1.055 (Math/pow x (/ 1.0 2.4))) 0.055))]
     (clamp (Math/round (* s 255)) 0 255)))
 
 (defn flip-rgba [(rgba Any)] Any
@@ -211,10 +217,10 @@
         lum (+ (* 0.2126 lr) (* 0.7152 lg) (* 0.0722 lb))
         target (- 1 lum)
         factor (/ (+ target 0.05) (+ lum 0.05))
-        adj (fn [(l Any)] Any (decompute (Math/max 0 (- (* (+ l 0.05) factor) 0.05))))]
+        adj (fn [(l Float)] Any (decompute (Math/max 0.0 (- (* (+ l 0.05) factor) 0.05))))]
     [(adj lr) (adj lg) (adj lb) a]))
 
-(defn luminance [(rgba Any)] Any
+(defn luminance [(rgba Any)] Float
   (+ (* 0.2126 (compute (aget rgba 0)))
      (* 0.7152 (compute (aget rgba 1)))
      (* 0.0722 (compute (aget rgba 2)))))
@@ -274,12 +280,12 @@
         (doseq [line lines]
           (let [trimmed (js/call line .trim)]
             (cond
-              (and (= trimmed "") (not @cur-name)) nil
+              (and (= trimmed "") (nil? @cur-name)) nil
 
               (and (js/call SECTION-HEADER .test trimmed) (js/call KNOWN-SECTIONS .includes trimmed))
               (do (flush!) (reset! cur-name trimmed))
 
-              (and (not @cur-name) (not= trimmed ""))
+              (and (nil? @cur-name) (not= trimmed ""))
               (js/call patterns .push trimmed)
 
               :else
@@ -364,7 +370,7 @@
 ;; nests deeper than 2). Returns {:css ... :unresolved [...]} where :unresolved is
 ;; ONLY the FINAL pass's leftovers (a transient inner-layer literal isn't reported).
 ;; Pure: builds a fresh unresolved list per pass and returns the last one.
-(defn resolve-tokens-fixpoint [(css String) (passes Any)] Any
+(defn resolve-tokens-fixpoint [(css String) (passes Int)] Any
   (if (or (<= passes 0) (not (js/call css .includes "${")))
     {:css css :unresolved []}
     (let [u []
@@ -594,14 +600,17 @@ counterpart. Output is minified (the actor lazy-loads + caches it once).
       (let [built (build-entry! block false)] ;; false = prune invertSelectors
         (cond
           (js/get built .rejected)
-          (oset! stats "rejected" (+ (js/get stats .rejected) 1))
+          (let [(rejected Int) (js/get stats .rejected)]
+            (oset! stats "rejected" (+ rejected 1)))
           (not (js/get built .substantive))
-          (oset! stats "skippedEmpty" (+ (js/get stats .skippedEmpty) 1))
+          (let [(skipped Int) (js/get stats .skippedEmpty)]
+            (oset! stats "skippedEmpty" (+ skipped 1)))
           :else
           (doseq [key (block-host-keys! block)]
             (when (not (get out key))
               (oset! out key (js/get built .entry))
-              (oset! stats "written" (+ (js/get stats .written) 1)))))))
+              (let [(written Int) (js/get stats .written)]
+                (oset! stats "written" (+ written 1))))))))
     {:fixes out :stats stats}))
 
 (defn write-all! [] Any
@@ -648,7 +657,7 @@ counterpart. Output is minified (the actor lazy-loads + caches it once).
         (info (str "  curated∩bulk (curated won): " @overlap))
         (ok (str "wrote " (js/get merged-keys .length) " total entries → "
                  "src/gjoa/toolkit/components/content-classifier/darkmode-fixes.json "
-                 "(" (Math/round (/ (js/get json .length) 1024)) " KB, minified)"))
+                 "(" (let [(json-bytes Int) (js/get json .length)] (Math/round (/ json-bytes 1024))) " KB, minified)"))
         0))))
 
 (defn main! [] Any

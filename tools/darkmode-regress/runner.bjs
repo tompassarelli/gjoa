@@ -229,9 +229,10 @@
               norm-timings (if (and verify? (= (js/get t1 .length) 0)) (parse-normalizer-timings dumplog) t1)]
           (when (> (js/get norm-timings .length) 0)
             (let [mss (js/call norm-timings .map (fn [(t Any)] Any (js/get t .ms)))
-                  tot (js/call mss .reduce (fn [(a Any) (b Any)] Any (+ a b)) 0)]
+                  (tot Float) (js/call mss .reduce (fn [(a Float) (b Float)] Float (+ a b)) 0)]
               (js/call console .log (str "normalizer: " (js/get norm-timings .length) " passes measured, "
-                                 "mean " (js/call Math .round (/ tot (js/get norm-timings .length))) "ms"))))
+                                 "mean " (let [(pass-count Int) (js/get norm-timings .length)]
+                                           (Math/round (/ tot pass-count))) "ms"))))
           (js/call fs .writeFileSync (js/call path .join outdir "report.json") (js/call JSON .stringify {:threshold threshold :normalize normalize? :results results
                              :normalizeTimings norm-timings} nil 2))
           (js/call console .log (str "report: " outdir "/report.json  + per-site PNGs in " outdir "/"))

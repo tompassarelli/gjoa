@@ -47,7 +47,8 @@
         (let [src (readFileSync (aget files i) "utf8")]
           (recur (+ i 1) (if (round-trips? src) bad (+ bad 1))))
         (do
-          (console/error (str "GATE A  reflector round-trip: " (- (js/get files .length) bad) "/" (js/get files .length) " byte-identical"))
+          (let [(file-count Int) (js/get files .length)]
+            (console/error (str "GATE A  reflector round-trip: " (- file-count bad) "/" file-count " byte-identical")))
           (when (> bad 0) (fail! (str bad " file(s) failed round-trip")))))))
   ;; GATE B — committed claim-doc reproduces the textual patch's output
   (let [artifact (join REPO "patches" "0003-newtab-redirector-gjoa.claims.json")

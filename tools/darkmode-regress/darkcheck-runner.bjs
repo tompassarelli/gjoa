@@ -108,7 +108,12 @@
           collect-js (js/call fs .readFileSync "tools/darkmode-regress/darkcheck-collect.js" "utf8")
           audit-js (str colormath-js "\n" (js/call fs .readFileSync "tools/darkmode-regress/darkcheck-audit.js" "utf8"))
           cfg (or (js/get corpus .config) {})
-          port (parseInt (or (get (js/get process .env) "GJOA_DC_PORT") "3838") 10)
+          ;; GJOA_DC_PORT is environment-supplied; arm B binds port+1, so a
+          ;; non-numeric value would spawn both arms on NaN.
+          (port Int) (let [n (parseInt (or (get (js/get process .env) "GJOA_DC_PORT") "3838") 10)]
+                       (if (and (number? n) (js/call Number .isInteger n) (> n 0) (< n 65535))
+                         (Math/trunc n)
+                         3838))
           outdir (or (get (js/get process .env) "GJOA_DC_OUT") "dist/darkcheck")
           _mk (js/call fs .mkdirSync outdir {:recursive true})
 
@@ -181,7 +186,9 @@
           (when (> (js/get pr .count) 0)
             (js/call console .log (str "  " (js/get pr .rule) " fails on " (js/get pr .count) " pages: " (js/call (js/get pr .failPages) .join " ")))))
         ;; Publish the quarantine fraction for every run.
-        (let [qfrac (/ (js/get quarantined .length) (max 1 (js/get results .length)))]
+        (let [(quarantined-count Int) (js/get quarantined .length)
+              (result-count Int) (js/get results .length)
+              qfrac (/ quarantined-count (max 1 result-count))]
           (js/call fs .writeFileSync (js/call path .join outdir "rollup.json") (js/call JSON .stringify {:total (js/get results .length) :failedPages (js/get failedPages .length)
                              :quarantined (js/get quarantined .length) :quarantineFraction qfrac
                              :errored (js/get errored .length)

@@ -81,14 +81,18 @@
     (console/log "customization-target:" (js/get r .customizationTarget))
     (console/log "\nnav-bar children (left→right, visible only):")
     (let [visible (js/call (js/get r .navBarChildren) .filter (fn [c] Any (and (not (js/get c .hidden)) (> (js/get c .width) 0))))]
-      (js/call visible .sort (fn [a b] Any (- (js/get a .left) (js/get b .left))))
+      (js/call visible .sort
+               (fn [a b] Any
+                 (let [(a-left Float) (js/get a .left) (b-left Float) (js/get b .left)] (- a-left b-left))))
       (doseq [c visible]
         (console/log (str "  [" (js/call (String (js/get c .left)) .padStart 4) ".." (js/call (String (js/get c .right)) .padStart 4) "] w="
                            (js/call (String (js/get c .width)) .padStart 4) " order=" (js/call (js/get c .order) .padStart 3) "  "
                            (or (js/get c .id) (js/get c .tag)) "." (js/call (js/get c .cls) .slice 0 30)))))
     (console/log "\ncustomization-target children (visible only):")
     (let [ctVisible (js/call (js/get r .ctChildren) .filter (fn [c] Any (and (not (js/get c .hidden)) (> (js/get c .width) 0))))]
-      (js/call ctVisible .sort (fn [a b] Any (- (js/get a .left) (js/get b .left))))
+      (js/call ctVisible .sort
+               (fn [a b] Any
+                 (let [(a-left Float) (js/get a .left) (b-left Float) (js/get b .left)] (- a-left b-left))))
       (doseq [c ctVisible]
         (console/log (str "  [" (js/call (String (js/get c .left)) .padStart 4) ".." (js/call (String (js/get c .right)) .padStart 4) "] w="
                            (js/call (String (js/get c .width)) .padStart 4) " order=" (js/call (js/get c .order) .padStart 3) " mIS="

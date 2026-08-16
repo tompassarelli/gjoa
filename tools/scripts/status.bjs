@@ -57,17 +57,20 @@
     (dim "—")
     (let [aT (parseVer a)
           bT (parseVer b)
-          cmp (cmpVer aT bT)]
+          cmp (cmpVer aT bT)
+          ;; parseVer yields a [major minor patch] triple of integers.
+          (a-major Int) (aget aT 0)
+          (b-major Int) (aget bT 0)]
       (if (= cmp 0)
         (green "match")
         ;; a > b -> we're AHEAD of the comparison target.
         (if (> cmp 0)
-          (if (> (aget aT 0) (aget bT 0))
-            (cyan (str "+" (- (aget aT 0) (aget bT 0)) " major ahead"))
+          (if (> a-major b-major)
+            (cyan (str "+" (- a-major b-major) " major ahead"))
             (cyan "patch ahead"))
           ;; a < b -> we're BEHIND.
-          (if (< (aget aT 0) (aget bT 0))
-            (red (str "-" (- (aget bT 0) (aget aT 0)) " major"))
+          (if (< a-major b-major)
+            (red (str "-" (- b-major a-major) " major"))
             (yellow "point behind")))))))
 
 ;; -- Oracles -----------------------------------------------------------------
@@ -135,8 +138,9 @@
                         (or (aget (js/call (aget (js/call (js/call librewolfPkgbuild .trim) .split "\n") 0) .split "-") 0) nil)
                         nil)
             ;; Count advisories newer than our pin from the known-vulns page.
-            advisoryCount (atom nil)
-            inTheWildCount (atom nil)]
+            ;; nil until the advisory page is fetched; a count once it is.
+            (advisoryCount (Atom Any)) (atom nil)
+            (inTheWildCount (Atom Any)) (atom nil)]
 
         (if advHtml
           (do
@@ -159,9 +163,11 @@
                               (loop []
                                 (let [am (js/call advRe .exec body)]
                                   (when (not (nil? am))
-                                    (reset! advisoryCount (+ (deref advisoryCount) 1))
+                                    (let [(seen Int) (deref advisoryCount)]
+                                      (reset! advisoryCount (+ seen 1)))
                                     (if (= (aget am 2) "critical")
-                                      (reset! inTheWildCount (+ (deref inTheWildCount) 1)))
+                                      (let [(wild Int) (deref inTheWildCount)]
+                                        (reset! inTheWildCount (+ wild 1))))
                                     (recur)))))))))
                     (recur)))))))
 
@@ -186,8 +192,9 @@
   ;; as a "how old is the build" signal. Detect and short-circuit.
   (if (<= (js/call d .getFullYear) 1970)
     "nix-built"
-    (let [ms (- (js/call Date .now) (js/call d .getTime))
-          min (/ ms 60000)]
+    (let [(built-at Int) (js/call d .getTime)
+          ms (- (js/call Date .now) built-at)
+          (min Float) (/ ms 60000)]
       (if (< min 1)
         "just now"
         (if (< min 60)
@@ -242,7 +249,9 @@
               ;; Overall threat color.
               critical (or (> (or (:inTheWildCount oracles) 0) 0)
                            (and (:mozillaLatest oracles)
-                                (< (aget (parseVer pinned) 0) (- (aget (parseVer (:mozillaLatest oracles)) 0) 1))))
+                                (let [(pinned-major Int) (aget (parseVer pinned) 0)
+                                      (latest-major Int) (aget (parseVer (:mozillaLatest oracles)) 0)]
+                                  (< pinned-major (- latest-major 1)))))
               stale (and (not critical)
                          (:mozillaLatest oracles)
                          (< (cmpVer (parseVer pinned) (parseVer (:mozillaLatest oracles))) 0))

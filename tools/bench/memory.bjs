@@ -22,8 +22,14 @@
 
 (def values Any (js/get parsed .values))
 
-(def NUM-TABS Any (parseInt (get values "tabs") 10))
-(def SETTLE-MS Any (parseInt (get values "settle-time") 10))
+;; Both come off the command line, where a non-numeric value would otherwise
+;; travel as NaN into the tab loop and Bun.sleep and measure nothing.
+(defn cli-count [(raw Any) (fallback Int)] Int
+  (let [n (parseInt raw 10)]
+    (if (and (number? n) (js/call Number .isInteger n) (>= n 0)) (Math/trunc n) fallback)))
+
+(def NUM-TABS Int (cli-count (get values "tabs") 50))
+(def SETTLE-MS Int (cli-count (get values "settle-time") 10000))
 
 (defn findBinary [(name String)] String
   (let [local-result
@@ -63,7 +69,7 @@
 ;; tree. PSS divides each shared page among the processes that map it, so the
 ;; tree-wide sum reflects unique physical memory without double-counting
 ;; shared pages (unlike VmRSS).
-(defn getTreePssKB! [(rootPid Any)] Any
+(defn getTreePssKB! [(rootPid Any)] Int
   (let [pids (getProcessTree! rootPid)
         totalKB (atom 0)
         re (js/new RegExp "^Pss:\\s+(\\d+)\\s+kB" "m")]
@@ -122,8 +128,8 @@
 
           ;; Measure PSS (proportional set size) across the process tree.
           (let [pssKB (getTreePssKB! pid)
-                totalMB (/ pssKB 1024)
-                perTabMB (/ totalMB NUM-TABS)]
+                (totalMB Float) (/ pssKB 1024)
+                (perTabMB Float) (/ totalMB NUM-TABS)]
             (console/log (str "  Total RSS: " (js/call totalMB .toFixed 1) " MB"))
             (console/log (str "  Per-tab:   " (js/call perTabMB .toFixed 2) " MB"))
 

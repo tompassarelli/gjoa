@@ -58,7 +58,7 @@
   (let [clean (js/call sym .replace (js/new RegExp "^crate::") "")
         segs (js/call clean .split "::")
         upper-idx (js/call segs .findIndex (fn [(s String)] Bool (js/call (js/new RegExp "^[A-Z]") .test s)))
-        n (js/get segs .length)
+        (n Int) (js/get segs .length)
         mods (if (= upper-idx -1) (js/call segs .slice 0 (- n 1)) (js/call segs .slice 0 upper-idx))
         item (if (= upper-idx -1) (aget segs (- n 1)) (aget segs upper-idx))
         file (resolve-module-file crate-root mods)]
@@ -96,7 +96,9 @@
   (let [m (js/call (js/new RegExp (str "export\\s+(?:const|let|var)\\s+" mod "\\s*=\\s*\\{")) .exec text)]
     (if (not m)
       nil
-      (let [start (+ (js/get m .index) (js/get (aget m 0) .length) -1)
+      (let [(match-at Int) (js/get m .index)
+            (match-len Int) (js/get (aget m 0) .length)
+            start (+ match-at match-len -1)
             len (js/get text .length)]
         (loop [i (+ start 1) depth 1]
           (if (>= i len)
@@ -150,8 +152,9 @@
           ;; outermost namespace: mozilla::dom::Document::GetColorSchemeBits ->
           ;; class Document, not `namespace mozilla`. (aget parts 0) false-negated
           ;; every 3+-part qualified symbol.
-          klass (if (>= (js/get parts .length) 2) (aget parts (- (js/get parts .length) 2)) "")
-          member (aget parts (- (js/get parts .length) 1))
+          (part-count Int) (js/get parts .length)
+          klass (if (>= part-count 2) (aget parts (- part-count 2)) "")
+          member (aget parts (- part-count 1))
           roots (cpp-search-roots)
           ;; (1) qualified `Class::Member` anywhere — strongest signal.
           qualified (js/call (sh (str "rg -l --no-messages -F '" klass "::" member "' " roots " 2>/dev/null | head -1") {:quiet true}) .trim)]

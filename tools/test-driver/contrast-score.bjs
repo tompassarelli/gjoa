@@ -36,11 +36,11 @@
 ;; --- luminance + contrast ---------------------------------------------------
 
 ;; sRGB channel (0..255) -> linear-light (0..1).
-(defn linearize [(c Any)] Any
+(defn linearize [(c Float)] Float
   (let [cs (/ c 255)]
     (if (<= cs 0.03928)
       (/ cs 12.92)
-      (js/call Math .pow (/ (+ cs 0.055) 1.055) 2.4))))
+      (Math/pow (/ (+ cs 0.055) 1.055) 2.4))))
 
 ;; WCAG relative luminance of an rgb map.
 (js/export (defn rel-lum [(rgb Any)] Any
@@ -54,20 +54,23 @@
   (let [a (:a fg)]
     (if (or (= a nil) (>= a 1))
       fg
-      {:r (+ (* (:r fg) a) (* (:r bg) (- 1 a)))
-       :g (+ (* (:g fg) a) (* (:g bg) (- 1 a)))
-       :b (+ (* (:b fg) a) (* (:b bg) (- 1 a)))
-       :a 1})))
+      (let [(alpha Float) a
+            (fr Float) (:r fg) (fgg Float) (:g fg) (fb Float) (:b fg)
+            (br Float) (:r bg) (bgg Float) (:g bg) (bb Float) (:b bg)]
+        {:r (+ (* fr alpha) (* br (- 1 alpha)))
+         :g (+ (* fgg alpha) (* bgg (- 1 alpha)))
+         :b (+ (* fb alpha) (* bb (- 1 alpha)))
+         :a 1}))))
 
 ;; WCAG contrast ratio between a foreground and a backdrop (either may be a
 ;; string or a parsed map). Range 1..21.
 (js/export (defn contrast [(fg Any) (bg Any)] Any
   (let [bgc (as-rgb bg)
         fgc (composite-over (as-rgb fg) bgc)
-        l1 (rel-lum fgc)
-        l2 (rel-lum bgc)
-        hi (js/call Math .max l1 l2)
-        lo (js/call Math .min l1 l2)]
+        (l1 Float) (rel-lum fgc)
+        (l2 Float) (rel-lum bgc)
+        (hi Float) (Math/max l1 l2)
+        (lo Float) (Math/min l1 l2)]
     (/ (+ hi 0.05) (+ lo 0.05)))))
 
 ;; --- AA threshold -----------------------------------------------------------
@@ -95,9 +98,11 @@
 ;;   {:total :passes :passRatio :minRatio :worst5}
 ;; worst5 = the five lowest-contrast boxes, the actionable failures.
 (js/export (defn score-page [(results Any)] Any
-  (let [total (js/get results .length)
-        passes (js/get (js/call results .filter (fn [(r Any)] Any (:pass r))) .length)
-        sorted (js/call (js/call results .slice) .sort (fn [(a Any) (b Any)] Any (- (:ratio a) (:ratio b))))]
+  (let [(total Int) (js/get results .length)
+        (passes Int) (js/get (js/call results .filter (fn [(r Any)] Any (:pass r))) .length)
+        sorted (js/call (js/call results .slice) .sort
+                        (fn [(a Any) (b Any)] Float
+                          (let [(ar Float) (:ratio a) (br Float) (:ratio b)] (- ar br))))]
     {:total total
      :passes passes
      :passRatio (if (> total 0) (/ passes total) 1)

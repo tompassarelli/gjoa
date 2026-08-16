@@ -35,7 +35,8 @@
   (let [o (or opts {})
         host (or (js/get o .host) "127.0.0.1")
         port (or (js/get o .port) 2828)
-        deadline (+ (js/call Date .now) (or (js/get o .connectTimeoutMs) 30000))
+        (connect-timeout-ms Int) (or (js/get o .connectTimeoutMs) 30000)
+        deadline (+ (js/call Date .now) connect-timeout-ms)
         ;; Mutable scan state — `socket`/`lastErr` accumulate across poll attempts.
         scan {:socket nil :lastErr nil}]
     ;; Both the loop and the inner try contain js/await, so beagle wraps each in
@@ -80,11 +81,11 @@
         (let [_grow (js/set! recv .buf (js/call Buffer .concat [(js/get recv .buf) chunk]))]
           (loop []
             (let [buf (js/get recv .buf)
-                  colonIdx (js/call buf .indexOf 0x3a)] ;; ':'
+                  (colonIdx Int) (js/call buf .indexOf 0x3a)] ;; ':'
               (if (< colonIdx 0)
                 nil ;; need more data for header
                 (let [lenStr (js/call (js/call buf .subarray 0 colonIdx) .toString "utf8")
-                      len (js/call Number .parseInt lenStr 10)]
+                      (len Int) (js/call Number .parseInt lenStr 10)]
                   (if (or (not (js/call Number .isFinite len)) (< len 0))
                     (do
                       (js/call socket .destroy (js/new MarionetteError (str "invalid framing header: " (js/call JSON .stringify lenStr)) nil))
@@ -118,7 +119,7 @@
                                                       err (aget parsed 2)
                                                       result (aget parsed 3)
                                                       w (js/call inflight .get msgId)]
-                                                  (if (not w)
+                                                  (if (nil? w)
                                                     nil ;; late or unknown
                                                     (let [_d (js/call inflight .delete msgId)]
                                                       (if err

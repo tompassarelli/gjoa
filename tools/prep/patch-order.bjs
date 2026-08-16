@@ -117,7 +117,9 @@
 ;; ── domain runs + split detection ───────────────────────────────────────────
 
 (defn by-num [(patches Any)] Any
-  (js/call (js/call patches .slice) .sort (fn [(a Any) (b Any)] Int (- (js/get a .num) (js/get b .num)))))
+  (js/call (js/call patches .slice) .sort
+           (fn [(a Any) (b Any)] Int
+             (let [(a-num Int) (js/get a .num) (b-num Int) (js/get b .num)] (- a-num b-num)))))
 
 (defn domain-runs [(patches Any)] Any
   (let [runs []]
@@ -143,12 +145,14 @@
 
 (defn canonical [(patches Any)] Any
   (js/call (js/call patches .slice) .sort (fn [(a Any) (b Any)] Int
-      (let [dr (- (depth-rank (js/get a .domain)) (depth-rank (js/get b .domain)))]
-        (if (not= dr 0) dr (- (js/get a .num) (js/get b .num)))))))
+      (let [dr (- (depth-rank (js/get a .domain)) (depth-rank (js/get b .domain)))
+            (a-num Int) (js/get a .num)
+            (b-num Int) (js/get b .num)]
+        (if (not= dr 0) dr (- a-num b-num))))))
 
 ;; values of the longest strictly-increasing subsequence of distinct `nums`.
 (defn lis-keep [(nums Any)] Any
-  (let [n (js/get nums .length)
+  (let [(n Int) (js/get nums .length)
         len (js/new Array n)
         prev (js/new Array n)]
     (loop [i 0]
@@ -156,9 +160,10 @@
         (aset len i 1) (aset prev i -1)
         (loop [j 0]
           (when (< j i)
-            (when (and (< (aget nums j) (aget nums i)) (> (+ 1 (aget len j)) (aget len i)))
-              (aset len i (+ 1 (aget len j)))
-              (aset prev i j))
+            (let [(len-j Int) (aget len j)]
+              (when (and (< (aget nums j) (aget nums i)) (> (+ 1 len-j) (aget len i)))
+                (aset len i (+ 1 len-j))
+                (aset prev i j)))
             (recur (+ j 1))))
         (recur (+ i 1))))
     (let [best (loop [i 0 bi -1 bl -1]
@@ -180,10 +185,10 @@
       (when (< i (js/get canon .length))
         (let [p (aget canon i)]
           (when (not (js/call keep .has (js/get p .num)))
-            (let [lo (loop [j (- i 1)]
-                       (cond (< j 0) 0
-                             (js/call keep .has (js/get (aget canon j) .num)) (js/get (aget canon j) .num)
-                             :else (recur (- j 1))))
+            (let [(lo Int) (loop [j (- i 1)]
+                             (cond (< j 0) 0
+                                   (js/call keep .has (js/get (aget canon j) .num)) (js/get (aget canon j) .num)
+                                   :else (recur (- j 1))))
                   slot (loop [s (+ lo 1)] (if (js/call used .has s) (recur (+ s 1)) s))]
               (js/call used .add slot)
               (js/call moves .push {:from-name (js/get p .name) :to-name (str (pad4 slot) "-" (js/get p .slug) ".patch")
@@ -198,7 +203,7 @@
         out []]
     (loop [i 1]
       (when (< i (js/get nums .length))
-        (let [prev (aget nums (- i 1)) cur (aget nums i)]
+        (let [(prev Int) (aget nums (- i 1)) (cur Int) (aget nums i)]
           (when (> cur (+ prev 1)) (js/call out .push (str (pad4 (+ prev 1)) "–" (pad4 (- cur 1))))))
         (recur (+ i 1))))
     out))

@@ -70,9 +70,9 @@
       (writeFileSync VENDORED-CORE-DST out)
       (js/call log .step (str "vendored beagle/core.js @ " ref)))))
 
-(defn count-files [(dir String)] Any
+(defn count-files [(dir String)] Int
   (reduce
-    (fn [count name] Any (let [path (join dir name)]
+    (fn [(count Int) name] Int (let [path (join dir name)]
         (if (js/call (statSync path) .isDirectory)
           (+ count (count-files path))
           (+ count 1))))

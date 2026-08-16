@@ -126,7 +126,8 @@
   (let [lines (blob-lines ref pth)
         out []]
     (doseq [h hunks]
-      (let [a (js/get h .a) b (js/get h .b)]
+      ;; @@ -a,b @@ — a 1-based old-side start line and a line count.
+      (let [(a Int) (js/get h .a) (b Int) (js/get h .b)]
         (when (and (> a 0) (> b 0))
           (let [span (js/call lines .slice (- a 1) (+ (- a 1) b))]
             (js/call out .push {:header (js/get h .header) :range [a b] :hash (sha256 (js/call span .join "\n"))})))))
@@ -179,8 +180,9 @@
 (defn changed-hunks [(ref String) (pth String) (hunks Any)] Any
   (let [lines (blob-lines ref pth)]
     (js/call hunks .filter (fn [(h Any)] Bool
-                     (let [a (aget (js/get h .range) 0)
-                           b (aget (js/get h .range) 1)
+                     ;; :range is the locked [start count] pair, both integers.
+                     (let [(a Int) (aget (js/get h .range) 0)
+                           (b Int) (aget (js/get h .range) 1)
                            span (js/call lines .slice (- a 1) (+ (- a 1) b))]
                        (not= (sha256 (js/call span .join "\n")) (js/get h .hash)))))))
 
@@ -215,9 +217,18 @@
                :tag tag
                :digest digest
                :patches patches}
-          nf (js/call names .reduce (fn [(a Int) (n String)] Int (+ a (js/get (js/call Object .keys (js/get patches n)) .length))) 0)
+          nf (js/call names .reduce (fn [(a Int) (n String)] Int
+                                      (let [(touched Int) (js/get (js/call Object .keys (js/get patches n)) .length)]
+                                        (+ a touched)))
+                                    0)
           nh (js/call names .reduce (fn [(a Int) (n String)] Int
-                              (+ a (js/call (js/call Object .keys (js/get patches n)) .reduce (fn [(s Int) (f String)] Int (+ s (js/get (js/get (js/get (js/get patches n) f) .hunks) .length))) 0))) 0)
+                                      (let [(per-patch Int) (js/call (js/call Object .keys (js/get patches n)) .reduce
+                                                                     (fn [(s Int) (f String)] Int
+                                                                       (let [(anchors Int) (js/get (js/get (js/get (js/get patches n) f) .hunks) .length)]
+                                                                         (+ s anchors)))
+                                                                     0)]
+                                        (+ a per-patch)))
+                                    0)
           identity {:$schema "gjoa provenance identity (generated — do not edit by hand)"
                     :note (str "L4 baked-provenance identity. `digest` is one sha256 over EVERY locked blob OID + "
                                "hunk hash in configs/upstream-provenance.json — the supply-chain coordinate proving "
@@ -295,12 +306,19 @@
         ;; ── render ──
         (console/log (str "upstream provenance — lock @ " (js/get lock .tag) " vs " ref
                           (if integrity "  (integrity check)" "")))
-        (console/log (str "  " (js/get pnames .length) " patches · "
-                          (- (js/call pnames .reduce (fn [(a Int) (n String)] Int (+ a (js/get (js/call Object .keys (js/get lockPatches n)) .length))) 0)
-                             (js/get changed .length) (js/get vanished .length) (js/get collision .length))
-                          " file(s) apply-safe (OID-identical"
-                          (if (> (js/get hunkSafe .length) 0) (str " + " (js/get hunkSafe .length) " hunk-anchored") "")
-                          ")"))
+        (let [(locked-files Int) (js/call pnames .reduce
+                                          (fn [(a Int) (n String)] Int
+                                            (let [(touched Int) (js/get (js/call Object .keys (js/get lockPatches n)) .length)]
+                                              (+ a touched)))
+                                          0)
+              (changed-count Int) (js/get changed .length)
+              (vanished-count Int) (js/get vanished .length)
+              (collision-count Int) (js/get collision .length)]
+          (console/log (str "  " (js/get pnames .length) " patches · "
+                            (- locked-files changed-count vanished-count collision-count)
+                            " file(s) apply-safe (OID-identical"
+                            (if (> (js/get hunkSafe .length) 0) (str " + " (js/get hunkSafe .length) " hunk-anchored") "")
+                            ")")))
         (let [native-first (fn [(arr Any)] Any
                              (js/call (js/call arr .slice) .sort (fn [(a Any) (b Any)] Int
                                                     (- (if (= (js/get a .tier) "native") 0 1) (if (= (js/get b .tier) "native") 0 1)))))]

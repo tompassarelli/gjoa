@@ -24,10 +24,13 @@
   [{:class "AboutNewTabRedirectorParent" :method "newChannel"}
    {:class "AboutNewTabRedirectorChild" :method "newChannel"}])
 
+;; Occurrences counted one position at a time, so an overlapping match still
+;; counts. The stdlib models String.indexOf without its fromIndex, so the search
+;; window is taken by slicing and the hit is mapped back to an absolute index.
 (defn count-occurrences [(s String) (needle String)] Int
   (loop [from 0 n 0]
-    (let [i (js/call s .indexOf needle from)]
-      (if (< i 0) n (recur (+ i 1) (+ n 1))))))
+    (let [(i Int) (js/call (js/call s .slice from) .indexOf needle)]
+      (if (< i 0) n (recur (+ from i 1) (+ n 1))))))
 
 (defn main! [] Any
   (let [pristine (readFileSync (aget (js/get process .argv) 2) "utf8")

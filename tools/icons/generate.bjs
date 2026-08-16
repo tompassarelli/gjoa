@@ -71,7 +71,9 @@
   ;; logo.png + logo-mac.png are aliases for the largest sizes.
   (js/await (copyFile (join BRANDING-SRC "logo512.png") (join BRANDING-SRC "logo.png")))
   (js/await (copyFile (join BRANDING-SRC "logo1024.png") (join BRANDING-SRC "logo-mac.png")))
-  (js/call log .ok (str "wrote " (+ (js/get DESKTOP-SIZES .length) (js/get EXTRA-LOGO-SIZES .length) 2) " desktop icons"))
+  (let [(desktop-count Int) (js/get DESKTOP-SIZES .length)
+        (extra-count Int) (js/get EXTRA-LOGO-SIZES .length)]
+    (js/call log .ok (str "wrote " (+ desktop-count extra-count 2) " desktop icons")))
 
   (js/call log .step "rendering about-page logos (in-omni.ja)")
   (js/await (renderPng ABOUT-LOGO-SIZE (join CONTENT-DIR "about-logo.png")))

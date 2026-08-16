@@ -59,7 +59,8 @@
             members (js/get entry .members)]
         (console/log (str "  " g " (" (js/get members .length) " members)"))
         (doseq [member members]
-          (aset total 0 (+ (aget total 0) 1))
+          (let [(seen Int) (aget total 0)]
+            (aset total 0 (+ seen 1)))
           (when (not (resolves? member))
             (js/call missing .push (str g "." member))))))
     (console/log "")

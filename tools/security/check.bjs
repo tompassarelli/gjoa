@@ -128,7 +128,10 @@
      :summary (str (js/get inTheWild .length) " in-the-wild CVE(s) unaddressed")}
 
     :else
-    (let [majorDelta (- (aget latestTuple 0) (aget pinnedTuple 0))]
+    ;; parseVersion yields a [major minor patch] triple of integers.
+    (let [(latest-major Int) (aget latestTuple 0)
+          (pinned-major Int) (aget pinnedTuple 0)
+          majorDelta (- latest-major pinned-major)]
       (cond
         (>= majorDelta 2)
         {:status "CRITICAL" :summary (str majorDelta " major versions behind")}
@@ -200,8 +203,8 @@
             (js/call detailLines .push (str "Unfixed advisories on your pin (" (js/get matchedAdvisories .length) "):"))
             ;; Sort by severity (critical first), then advisory id newest first.
             (let [sevRank {:critical 0 :high 1 :moderate 2 :low 3}
-                  sorted (js/call (js/call Array .from matchedAdvisories) .sort (fn [a b] Any (let [sa (let [r (aget sevRank (or (js/get a .severity) "low"))] (if (= r undefined) 4 r))
-                                        sb (let [r (aget sevRank (or (js/get b .severity) "low"))] (if (= r undefined) 4 r))]
+                  sorted (js/call (js/call Array .from matchedAdvisories) .sort (fn [a b] Any (let [(sa Int) (let [r (aget sevRank (or (js/get a .severity) "low"))] (if (= r undefined) 4 r))
+                                        (sb Int) (let [r (aget sevRank (or (js/get b .severity) "low"))] (if (= r undefined) 4 r))]
                                     (if (not= sa sb)
                                       (- sa sb)
                                       (if (< (js/get a .id) (js/get b .id)) 1 -1)))))]
@@ -210,14 +213,17 @@
                       wild (if (isInTheWild a) "  [in-the-wild]" "")]
                   (js/call detailLines .push (str "  [" sev "] " (js/get a .id) "  fixes Firefox " (js/get a .affectsVersion) wild))))
               (when (> (js/get sorted .length) 8)
-                (js/call detailLines .push (str "  ... and " (- (js/get sorted .length) 8) " more")))
+                (let [(advisory-count Int) (js/get sorted .length)]
+                  (js/call detailLines .push (str "  ... and " (- advisory-count 8) " more"))))
               (js/call detailLines .push "")
               (js/call detailLines .push "Details: https://www.mozilla.org/en-US/security/known-vulnerabilities/firefox/")))
           (when (and netError versions)
             (js/call detailLines .push "")
             (js/call detailLines .push (str "Note: " netError)))
 
-          (let [majorDelta (- (aget latestTuple 0) (aget pinnedTuple 0))
+          (let [(latest-major Int) (aget latestTuple 0)
+                (pinned-major Int) (aget pinnedTuple 0)
+                majorDelta (- latest-major pinned-major)
                 patchDelta (if (= majorDelta 0) (cmpVersion pinnedTuple latestTuple) nil)
                 base {:pinned pinned
                       :latest latest
