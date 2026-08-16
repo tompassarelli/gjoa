@@ -223,7 +223,7 @@ Dark and system-resolved-dark use adaptive pre-paint inversion:
    if (prefName.EqualsLiteral("layout.css.dpi") ||
        prefName.EqualsLiteral("layout.css.devPixelsPerPx")) {
      int32_t oldAppUnitsPerDevPixel = mDeviceContext->AppUnitsPerDevPixel();
-@@ -772,6 +786,103 @@
+@@ -772,6 +786,102 @@
    }
  }
  
@@ -326,7 +326,7 @@ Dark and system-resolved-dark use adaptive pre-paint inversion:
  bool nsPresContext::ForcingColors() const {
    return mForcedColors == StyleForcedColors::Active;
  }
-@@ -936,6 +1047,7 @@
+@@ -936,6 +1046,7 @@
    }());
  
    UpdateForcedColors();
@@ -334,7 +334,7 @@ Dark and system-resolved-dark use adaptive pre-paint inversion:
  
    SetInRDMPane(top->GetInRDMPane());
  
-@@ -1647,9 +1759,24 @@
+@@ -1647,9 +1758,24 @@
    if (!GetBackgroundColorDraw()) {
      return NS_RGB(255, 255, 255);
    }
@@ -444,7 +444,7 @@ Dark and system-resolved-dark use adaptive pre-paint inversion:
          &self,
 --- a/servo/components/style/values/specified/color.rs
 +++ b/servo/components/style/values/specified/color.rs
-@@ -868,6 +868,60 @@
+@@ -868,6 +868,58 @@
      }
  }
  
@@ -503,7 +503,7 @@ Dark and system-resolved-dark use adaptive pre-paint inversion:
  impl Color {
      /// Converts this Color into a ComputedColor.
      ///
-@@ -893,7 +947,7 @@
+@@ -893,7 +945,7 @@
              }};
          }
  
@@ -512,7 +512,7 @@ Dark and system-resolved-dark use adaptive pre-paint inversion:
              Color::CurrentColor => ComputedColor::CurrentColor,
              Color::Absolute(ref absolute) => {
                  let mut color = absolute.color;
-@@ -936,7 +990,46 @@
+@@ -936,7 +988,46 @@
              Color::InheritFromBodyQuirk => {
                  ComputedColor::Absolute(context.ok_or(())?.device().body_text_color())
              },
