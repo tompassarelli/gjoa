@@ -15,7 +15,8 @@
         (let [v (js/parseFloat raw)]
           (if (and (js/Number.isFinite v) (> v 0)) v FALLBACK-TRANSITION-MS))
       (js/call raw .endsWith "s")
-        (let [v (* (js/parseFloat raw) 1000)]
+        (let [(f Float) (js/parseFloat raw)
+              v (* f 1000)]
           (if (and (js/Number.isFinite v) (> v 0)) v FALLBACK-TRANSITION-MS))
       :else FALLBACK-TRANSITION-MS))))
 

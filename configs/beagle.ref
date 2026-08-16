@@ -8,4 +8,4 @@
 # full-HEAD equality. To advance, create the new detached content-addressed pin,
 # update this file, then re-import and re-vendor; never re-point an existing pin.
 # Canonical upstream: https://github.com/tompassarelli/beagle.
-987a2d15477670ddb51fd44b50487b52ae9c6343
+a39e2b7fff8543c91d6fd6ecd50e6ba8c641b8ec
