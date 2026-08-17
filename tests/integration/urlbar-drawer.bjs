@@ -326,8 +326,10 @@
 ")
 (defn assert-promoted! [(p Any) (phase String)] Any
   (let [tag (str "top-layer watchdog (" phase "): ")
-        centre-off (Math/abs (- (js/get p .left)
-                                (/ (- (js/get p .windowWidth) (js/get p .width)) 2)))]
+        (p-left Float) (js/get p .left)
+        (p-width Float) (js/get p .width)
+        (window-width Float) (js/get p .windowWidth)
+        centre-off (Math/abs (- p-left (/ (- window-width p-width) 2)))]
     (expect (js/get p .popoverOpen)
       (str tag "#urlbar evicted from the top layer (:popover-open false) — the "
            "floating palette is laid out inside the drawer. " (JSON/stringify p)))
@@ -385,8 +387,10 @@
 ")
 (defn assert-promotion-independent! [(d Any)] Any
   (let [tag (str "staged palette (demoted via " (js/get d .path) "): ")
-        centre-off (Math/abs (- (/ (+ (js/get d .left) (js/get d .right)) 2)
-                                (/ (js/get d .windowWidth) 2)))]
+        (d-left Float) (js/get d .left)
+        (d-right Float) (js/get d .right)
+        (window-width Float) (js/get d .windowWidth)
+        centre-off (Math/abs (- (/ (+ d-left d-right) 2) (/ window-width 2)))]
     (expect (not (js/get d .error)) (str tag (js/get d .error)))
     ;; NON-VACUOUS: if the eviction didn't take, the case proves nothing.
     (expect (not (js/get d .popoverOpen))
@@ -402,9 +406,11 @@
     (expect (and (>= (js/get d .width) 660) (<= (js/get d .width) 760))
       (str tag "width " (js/call (js/get d .width) .toFixed 1) "px left the zen-sized band — the "
            "drawer-scoped width rules took it back. " (JSON/stringify d)))
-    (expect (and (= (js/get d .clientRects) 1)
-                 (< (Math/abs (- (js/get d .clientRectWidth) (js/get d .width))) 1))
-      (str tag "client rect disagrees with its bounding rect. " (JSON/stringify d)))
+    (let [(client-rect-width Float) (js/get d .clientRectWidth)
+          (d-width Float) (js/get d .width)]
+      (expect (and (= (js/get d .clientRects) 1)
+                   (< (Math/abs (- client-rect-width d-width)) 1))
+        (str tag "client rect disagrees with its bounding rect. " (JSON/stringify d))))
     (expect (and (js/get (js/get d .hitLeft) .inUrlbar) (js/get (js/get d .hitRight) .inUrlbar))
       (str tag "CUT OFF — an edge point hit-tests outside #urlbar (left→"
            (js/get (js/get d .hitLeft) .id) ", right→" (js/get (js/get d .hitRight) .id) "); the content deck "
@@ -628,10 +634,13 @@
       (let [a (aget (js/get before .row) id) b (aget (js/get during .row) id)]
         (if (not b)
           (js/call drift .push (str "#" id " VANISHED from the row"))
+          ;; Each row entry is a [left top width height] rect in CSS pixels.
           (doseq [i [0 1 2 3]]
-            (when (> (Math/abs (- (aget b i) (aget a i))) 1)
-              (js/call drift .push (str "#" id " " (aget RECT-EDGE i)
-                                " " (aget a i) "→" (aget b i))))))))
+            (let [(before-edge Float) (aget a i)
+                  (during-edge Float) (aget b i)]
+              (when (> (Math/abs (- during-edge before-edge)) 1)
+                (js/call drift .push (str "#" id " " (aget RECT-EDGE i)
+                                  " " before-edge "→" during-edge))))))))
     (expect (= (js/get drift .length) 0)
       (str tag "the row REFLOWED: " (js/call drift .join ", ")
            ". The row's height is `.urlbar-container[breakout] { min-height: "
@@ -645,8 +654,11 @@
 ;; which measures against #sidebar-container — display:none in horizontal).
 (defn assert-horizontal-palette! [(f Any) (vector String)] Any
   (let [tag (str "horizontal floating palette (" vector "): ")
-        off (Math/abs (- (+ (aget (js/get f .urlbar) 0) (/ (aget (js/get f .urlbar) 2) 2))
-                         (/ (js/get f .windowWidth) 2)))]
+        ;; f.urlbar is the same [left top width height] CSS-pixel rect.
+        (urlbar-left Float) (aget (js/get f .urlbar) 0)
+        (urlbar-width Float) (aget (js/get f .urlbar) 2)
+        (window-width Float) (js/get f .windowWidth)
+        off (Math/abs (- (+ urlbar-left (/ urlbar-width 2)) (/ window-width 2)))]
     (expect (js/get f .horizontal) (str tag "window left horizontal tab mode mid-test"))
     (expect (js/get f .floating)
       (str tag "gjoa-urlbar-floating not set — this vector never reached the float path. "
@@ -740,7 +752,14 @@
 ;; sub-state: it escapes the drawer, sits centred over the content, is zen-sized,
 ;; carries the hint footer, and its painted box matches its layout rect.
 (defn assert-floating-overlay! [(f Any) (phase String)] Any
-  (let [tag (str "floating palette (" phase "): ")]
+  (let [tag (str "floating palette (" phase "): ")
+        (urlbar-left Float) (js/get f .urlbarLeft)
+        (urlbar-right Float) (js/get f .urlbarRight)
+        (sidebar-left Float) (js/get f .sidebarLeft)
+        (sidebar-right Float) (js/get f .sidebarRight)
+        (window-width Float) (js/get f .windowWidth)
+        (urlbar-width Float) (js/get f .urlbarWidth)
+        (client-rect-width Float) (js/get f .clientRectWidth)]
     (expect (not (js/get f .error)) (str tag "MEASURE-FLOATING error: " (JSON/stringify f)))
     (expect (js/get f .floating)
       (str tag "gjoa-urlbar-floating not set — the Ctrl+L activate path never ran"))
@@ -749,13 +768,12 @@
     ;; sidebar-positionend translateX — anchors the box to the drawer slot, and
     ;; some still spill a little past the drawer edge, so centring is the assertion
     ;; that actually pins the contract.
-    (expect (or (< (js/get f .urlbarLeft) (- (js/get f .sidebarLeft) 1))
-                (> (js/get f .urlbarRight) (+ (js/get f .sidebarRight) 1)))
+    (expect (or (< urlbar-left (- sidebar-left 1))
+                (> urlbar-right (+ sidebar-right 1)))
       (str tag "CONTAINED in #sidebar-container ["
            (js/call (js/get f .sidebarLeft) .toFixed 1) ".." (js/call (js/get f .sidebarRight) .toFixed 1)
            "] — it must overlay the page content. " (JSON/stringify f)))
-    (let [off (Math/abs (- (/ (+ (js/get f .urlbarLeft) (js/get f .urlbarRight)) 2)
-                           (/ (js/get f .windowWidth) 2)))]
+    (let [off (Math/abs (- (/ (+ urlbar-left urlbar-right) 2) (/ window-width 2)))]
       (expect (<= off 8)
         (str tag "OFF-CENTRE by " (js/call off .toFixed 1) "px — anchored to the drawer "
              "slot, not centred over the content. " (JSON/stringify f))))
@@ -779,7 +797,7 @@
       (str tag "NOT top-layer promoted (:popover-open false) — it is laid out "
            "inside the drawer's clip chain. " (JSON/stringify f)))
     (expect (and (= (js/get f .clientRects) 1)
-                 (< (Math/abs (- (js/get f .clientRectWidth) (js/get f .urlbarWidth))) 1))
+                 (< (Math/abs (- client-rect-width urlbar-width)) 1))
       (str tag "client rect disagrees with its bounding rect. " (JSON/stringify f)))
     (expect (and (js/get (js/get f .hitLeft) .inUrlbar) (js/get (js/get f .hitRight) .inUrlbar))
       (str tag "CLIPPED — an edge point hit-tests outside #urlbar (left→"
@@ -792,8 +810,12 @@
 (defn assert-resting-anchor! [(a Any) (wrote Any) (rest0 Any) (mode String)] Any
   (let [tag (str "resting anchor after a " mode " dismiss: ")
         TOL 2
-        drift (fn [(k String)] Any
-                (Math/abs (- (Number (get a k)) (Number (get rest0 k)))))]
+        ;; `Number` coerces a missing key (headerTop is null without the header)
+        ;; to 0 rather than propagating NaN through every drift assertion.
+        drift (fn [(k String)] Float
+                (let [(now Float) (Number (get a k))
+                      (was Float) (Number (get rest0 k))]
+                  (Math/abs (- now was))))]
     (expect (not (js/get a .error)) (str tag "MEASURE-ANCHOR error: " (JSON/stringify a)))
     ;; The write itself — deterministic where the surviving geometry is not.
     (expect wrote
@@ -810,10 +832,12 @@
     (expect (<= (drift "headerTop") TOL)
       (str tag "#gjoa-space-header top drifted " (js/call (drift "headerTop") .toFixed 1)
            "px. after=" (JSON/stringify a)))
-    (expect (<= (drift "gapAboveTabs") TOL)
-      (str tag "the gap between the urlbar bottom and the tab list grew by "
-           (js/call (- (js/get a .gapAboveTabs) (js/get rest0 .gapAboveTabs)) .toFixed 1)
-           "px. after=" (JSON/stringify a)))
+    (let [(gap-now Float) (js/get a .gapAboveTabs)
+          (gap-was Float) (js/get rest0 .gapAboveTabs)]
+      (expect (<= (drift "gapAboveTabs") TOL)
+        (str tag "the gap between the urlbar bottom and the tab list grew by "
+             (js/call (- gap-now gap-was) .toFixed 1)
+             "px. after=" (JSON/stringify a))))
     (expect (<= (drift "urlbarHeight") TOL)
       (str tag "the resting #urlbar is " (js/call (js/get a .urlbarHeight) .toFixed 1) "px tall, was "
            (js/call (js/get rest0 .urlbarHeight) .toFixed 1) "px. after=" (JSON/stringify a)))
@@ -837,7 +861,10 @@
 ;; real box, some ghost box at the same offset within the same-width container.
 (defn assert-ghost-chip! [(c Any) (gh Any) (phase String)] Any
   (let [tag (str "ghost engine chip (" phase "): ")
-        near? (fn [(a Any) (b Any)] Any (<= (Math/abs (- (Number a) (Number b))) 2))
+        near? (fn [(a Any) (b Any)] Any
+                (let [(av Float) (Number a)
+                      (bv Float) (Number b)]
+                  (<= (Math/abs (- av bv)) 2)))
         at-rect (fn [(want Any) (painted? Any)] Any
                 (js/call (js/get gh .boxes) .find (fn [b] Any (and (near? (js/get b .l) (js/get want .l)) (near? (js/get b .t) (js/get want .t))
                                (near? (js/get b .w) (js/get want .w)) (near? (js/get b .h) (js/get want .h))
@@ -890,7 +917,15 @@
                       "const ur = u.getBoundingClientRect();"
                       "return ur.width > 0 && ur.width < window.innerWidth * 0.6;")
                  5000))
-     (let [r (chrome-eval MEASURE-RESTING)]
+     (let [r (chrome-eval MEASURE-RESTING)
+           (urlbar-width Float) (js/get r .urlbarWidth)
+           (urlbar-left Float) (js/get r .urlbarLeft)
+           (urlbar-right Float) (js/get r .urlbarRight)
+           (toolbox-left Float) (js/get r .toolboxLeft)
+           (toolbox-right Float) (js/get r .toolboxRight)
+           (sidebar-width Float) (js/get r .sidebarWidth)
+           (inset Float) (js/get r .inset)
+           (window-width Float) (js/get r .windowWidth)]
        (expect (not (js/get r .error)) (str "MEASURE-RESTING error: " (JSON/stringify r)))
        (expect (not (js/get r .breakoutExtend))
          "resting urlbar unexpectedly has [breakout-extend] — measure ran in the wrong state")
@@ -900,22 +935,22 @@
          (str "#gjoa-urlbar-hints present in the RESTING drawer urlbar — the hint "
               "footer leaked out of the floating palette. " (JSON/stringify r)))
        ;; The resting urlbar must stay a drawer-sized box.
-       (expect (< (js/get r .urlbarWidth) (* (js/get r .windowWidth) 0.6))
+       (expect (< urlbar-width (* window-width 0.6))
          (str "resting urlbar not contained — width " (js/call (js/get r .urlbarWidth) .toFixed 1)
               "px is ~the window width " (js/call (js/get r .windowWidth) .toFixed 1) "px "
               "instead of the drawer width. " (JSON/stringify r)))
        ;; And it must be ~ the drawer inner width (sidebar width − 2·inset), the
        ;; value sync-urlbar-width pins. Allow generous slack for sub-pixel / icon
        ;; reserve so this stays robust, not pixel-brittle.
-       (let [expected-inner (- (js/get r .sidebarWidth) (* (js/get r .inset) 2))
-             delta (Math/abs (- (js/get r .urlbarWidth) expected-inner))]
+       (let [expected-inner (- sidebar-width (* inset 2))
+             delta (Math/abs (- urlbar-width expected-inner))]
          (expect (< delta 40)
            (str "resting urlbar width " (js/call (js/get r .urlbarWidth) .toFixed 1) "px not ~ drawer inner width "
                 (js/call expected-inner .toFixed 1) "px (sidebar " (js/call (js/get r .sidebarWidth) .toFixed 1)
                 " − 2·" (js/get r .inset) "); delta=" (js/call delta .toFixed 1) "px. " (JSON/stringify r))))
        ;; Belt-and-suspenders: the urlbar must sit inside the toolbox horizontally.
-       (expect (and (>= (js/get r .urlbarLeft) (- (js/get r .toolboxLeft) 2))
-                    (<= (js/get r .urlbarRight) (+ (js/get r .toolboxRight) 2)))
+       (expect (and (>= urlbar-left (- toolbox-left 2))
+                    (<= urlbar-right (+ toolbox-right 2)))
          (str "resting urlbar overflows the toolbox horizontally. " (JSON/stringify r))))
 
      ;; --- FLOATING: the Ctrl+L palette over the content -----------------------
@@ -972,7 +1007,8 @@
      ;; need). The runner's per-test RESET also blurs the urlbar, this is belt+
      ;; suspenders within the file.
      (let [r (chrome-eval MEASURE-EXTENDED)
-           _ (js/await (js/call mn .executeScript RESET-URLBAR))]
+           _ (js/await (js/call mn .executeScript RESET-URLBAR))
+           (urlbar-height Float) (js/get r .urlbarHeight)]
        (expect (not (js/get r .error)) (str "MEASURE-EXTENDED error: " (JSON/stringify r)))
        (expect (js/get r .breakoutExtend) "could not drive urlbar into [breakout-extend]")
        (expect (js/get r .hasBackground) ".urlbar-background not found under [breakout-extend]")
@@ -981,7 +1017,7 @@
        (expect (> (js/get r .bgHeight) 0)
          (str ".urlbar-background collapsed to zero height — height="
               (js/call (js/get r .bgHeight) .toFixed 1) "px. " (JSON/stringify r)))
-       (expect (>= (js/get r .bgHeight) (- (js/get r .urlbarHeight) 2))
+       (expect (>= (js/get r .bgHeight) (- urlbar-height 2))
          (str ".urlbar-background too short to cover the input row — height "
               (js/call (js/get r .bgHeight) .toFixed 1) "px vs urlbar box " (js/call (js/get r .urlbarHeight) .toFixed 1)
               "px. " (JSON/stringify r)))
@@ -1007,7 +1043,9 @@
          (expect (not= (js/get ext .inputContainerTop) nil) "no .urlbar-input-container under [breakout-extend]")
          ;; The security icon and URL text row must stay pixel-aligned between
          ;; the resting and expanded states.
-         (let [jump (Math/abs (- (Number (js/get ext .inputContainerTop)) (Number (js/get rest .inputContainerTop))))]
+         (let [(ext-top Float) (Number (js/get ext .inputContainerTop))
+               (rest-top Float) (Number (js/get rest .inputContainerTop))
+               jump (Math/abs (- ext-top rest-top))]
            (expect (<= jump 1.5)
              (str "input row JUMPED on focus by " (js/call jump .toFixed 2) "px "
                   "(rest top=" (js/call (Number (js/get rest .inputContainerTop)) .toFixed 2)
@@ -1148,11 +1186,13 @@
                  ;; The ghost is the row's stand-in, so it must occupy the urlbar's
                  ;; pre-summon slot — not merely exist.
                  (doseq [i [0 1 2 3]]
-                   (expect (<= (Math/abs (- (aget (js/get f .ghostRect) i) (aget (js/get rest0 .urlbar) i))) 2)
-                     (str "horizontal ghost (" vector "): slot " (aget RECT-EDGE i) " is "
-                          (aget (js/get f .ghostRect) i) ", the resting urlbar's was "
-                          (aget (js/get rest0 .urlbar) i) " — the stand-in does not fill the slot. "
-                          (JSON/stringify f)))))
+                   (let [(ghost-edge Float) (aget (js/get f .ghostRect) i)
+                         (resting-edge Float) (aget (js/get rest0 .urlbar) i)]
+                     (expect (<= (Math/abs (- ghost-edge resting-edge)) 2)
+                       (str "horizontal ghost (" vector "): slot " (aget RECT-EDGE i) " is "
+                            ghost-edge ", the resting urlbar's was "
+                            resting-edge " — the stand-in does not fill the slot. "
+                            (JSON/stringify f))))))
                (js/await (js/call mn .executeScript DISMISS-FLOATING))
                (js/await (await-true FLOATING-TORN-DOWN 3000))
                (js/await (await-true SNAP-RELEASED 2000))))
@@ -1163,10 +1203,12 @@
                (str "horizontal (" vector "): #urlbar did not come home — it is under #"
                     (js/get a .urlbarParent) ". " (JSON/stringify a)))
              (doseq [i [0 1 2 3]]
-               (expect (<= (Math/abs (- (aget (js/get a .urlbar) i) (aget (js/get rest0 .urlbar) i))) 2)
-                 (str "horizontal (" vector "): the resting urlbar's " (aget RECT-EDGE i)
-                      " is " (aget (js/get a .urlbar) i) ", was " (aget (js/get rest0 .urlbar) i)
-                      ". " (JSON/stringify a))))
+               (let [(now-edge Float) (aget (js/get a .urlbar) i)
+                     (resting-edge Float) (aget (js/get rest0 .urlbar) i)]
+                 (expect (<= (Math/abs (- now-edge resting-edge)) 2)
+                   (str "horizontal (" vector "): the resting urlbar's " (aget RECT-EDGE i)
+                        " is " now-edge ", was " resting-edge
+                        ". " (JSON/stringify a)))))
              ;; Drawer and compact modes promote the horizontal resting bar; restore
              ;; that state so an in-flow [breakout-extend] cannot shift the row.
              (expect-eq (js/get a .popoverAttr) (js/get rest0 .popoverAttr)
@@ -1238,7 +1280,9 @@
              (str mode ": --urlbar-height latched across the orientation flip. after="
                   (JSON/stringify a)))
            (doseq [k ["containerHeight" "urlbarHeight" "toolboxHeight" "panelTop"]]
-             (let [d (Math/abs (- (Number (get a k)) (Number (get rest0 k))))]
+             (let [(now Float) (Number (get a k))
+                   (was Float) (Number (get rest0 k))
+                   d (Math/abs (- now was))]
                (expect (<= d 2)
                  (str mode ": " k " drifted " d "px across the orientation flip ("
                       (get rest0 k) " → " (get a k) ") — the drawer column is "
@@ -1279,7 +1323,10 @@
            (str "the fullscreen palette is not hit-testable (left→" (js/get (js/get f .hitLeft) .id)
                 ", mid→" (js/get (js/get f .hitMid) .id) ", right→" (js/get (js/get f .hitRight) .id)
                 "). " (JSON/stringify f)))
-         (let [off (Math/abs (- (/ (+ (js/get f .left) (js/get f .right)) 2) (/ (js/get f .windowWidth) 2)))]
+         (let [(left Float) (js/get f .left)
+               (right Float) (js/get f .right)
+               (window-width Float) (js/get f .windowWidth)
+               off (Math/abs (- (/ (+ left right) 2) (/ window-width 2)))]
            (expect (<= off 8)
              (str "the fullscreen palette is off-centre by " (js/call off .toFixed 1) "px. "
                   (JSON/stringify f))))
