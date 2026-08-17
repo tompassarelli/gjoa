@@ -136,11 +136,12 @@
       (js/await (js/call mn .executeScript PREFS-JS))
       (js/await (js/call mn .executeAsyncScript NAV-JS [url]))
       (js/await (sleep 800))
-      (let [page-w (js/get meta .pageWidth)
+      (let [(page-w Float) (js/get meta .pageWidth)
             shot (js/await (js/call mn .executeAsyncScript (snapshot-png-js page-w (js/get meta .pageHeight)) []))
             _ (when (js/call shot .startsWith "ERR:") (expect false (str name " drawSnapshot capture failed: " shot)))
             png (decode-png shot)
-            scale (if (> page-w 0) (/ (:width png) page-w) 1)
+            (png-w Float) (:width png)
+            (scale Float) (if (> page-w 0) (/ png-w page-w) 1)
             boxes (js/get meta .boxes)
             results (js/call boxes .map (fn [(b Any)] Any
                         (let [rect {:x (js/get b .x) :y (js/get b .y) :w (js/get b .w) :h (js/get b .h)}

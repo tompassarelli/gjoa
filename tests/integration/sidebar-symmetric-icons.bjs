@@ -96,8 +96,12 @@
                  (let [_ (js/await (js/new Promise (fn [res] Any (setTimeout res 200))))
                        nr (chrome-eval probe)]
                    (if (and (js/get nr .topIcon) (js/get nr .bottomIcon) (js/get nr .sidebar)
-                            (let [tg (- (js/get (js/get nr .topIcon) .top) (js/get (js/get nr .sidebar) .top))
-                                  bg (- (js/get (js/get nr .sidebar) .bottom) (js/get (js/get nr .bottomIcon) .bottom))]
+                            (let [(top-icon-top Float) (js/get (js/get nr .topIcon) .top)
+                                  (sidebar-top Float) (js/get (js/get nr .sidebar) .top)
+                                  (sidebar-bottom Float) (js/get (js/get nr .sidebar) .bottom)
+                                  (bottom-icon-bottom Float) (js/get (js/get nr .bottomIcon) .bottom)
+                                  tg (- top-icon-top sidebar-top)
+                                  bg (- sidebar-bottom bottom-icon-bottom)]
                               (<= (Math/abs (- tg bg)) TOLERANCE-PX)))
                      nr
                      (recur nr))))))]
@@ -114,11 +118,15 @@
              (str "No bottom icon found in #sidebar-container > sidebar-main (searched "
                   (js/get r .bottomCount) " candidates). "
                   "Result: " (JSON/stringify r nil 2)))
-           (let [topGap (- (js/get (js/get r .topIcon) .top) (js/get (js/get r .sidebar) .top))
-                 bottomGap (- (js/get (js/get r .sidebar) .bottom) (js/get (js/get r .bottomIcon) .bottom))
+           (let [(top-icon-top Float) (js/get (js/get r .topIcon) .top)
+                 (sidebar-top Float) (js/get (js/get r .sidebar) .top)
+                 (sidebar-bottom Float) (js/get (js/get r .sidebar) .bottom)
+                 (bottom-icon-bottom Float) (js/get (js/get r .bottomIcon) .bottom)
+                 topGap (- top-icon-top sidebar-top)
+                 bottomGap (- sidebar-bottom bottom-icon-bottom)
                  ;; src/drawer/layout.ts targets `bottomGap = topGap + BOTTOM_OFFSET`
                  ;; (default 4px). Bottom icons sit slightly farther from the edge.
-                 BOTTOM-OFFSET 4
+                 (BOTTOM-OFFSET Int) 4
                  delta (Math/abs (- bottomGap (+ topGap BOTTOM-OFFSET)))]
              (expect (<= delta TOLERANCE-PX)
                (str "Asymmetric icon Y-deltas off target: topGap=" (js/call topGap .toFixed 2) "px "

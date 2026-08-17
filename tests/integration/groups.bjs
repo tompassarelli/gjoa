@@ -232,7 +232,7 @@
              (when (< group-idx 0)
                (throw (js/new Error (str "expected a group row in the tree after Create Group. "
                              "before=" (JSON/stringify before) ", after=" (JSON/stringify after)))))
-             (let [group-level (aget (aget after group-idx) 0)
+             (let [(group-level Int) (aget (aget after group-idx) 0)
                    parent-idx (js/call after .findIndex (fn [row] Any (and (= (aget row 1) "tab") (js/call (aget row 2) .includes "about:blank?p"))))
                    a-idx (js/call after .findIndex (fn [row] Any (and (= (aget row 1) "tab") (js/call (aget row 2) .includes "about:blank?a"))))
                    b-idx (js/call after .findIndex (fn [row] Any (and (= (aget row 1) "tab") (js/call (aget row 2) .includes "about:blank?b"))))]

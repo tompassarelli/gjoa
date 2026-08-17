@@ -109,8 +109,12 @@
 ;; Slack covers the urlbar's own margin-inline; a regrown spring is ~112px.
 (defn assert-even-rhythm! [(r Any) (phase String)] Any
   (let [rects (js/get r .rects)
-        gap (fn [i] Any (- (js/get (aget rects i) .left) (js/get (aget rects (- i 1)) .right)))
-        max-tight (js/call [(gap 1) (gap 2) (gap 5) (gap 6)] .reduce (fn [a b] Any (Math/max a b)) 0)
+        gap (fn [(i Int)] Float
+              (let [(left Float) (js/get (aget rects i) .left)
+                    (prev-right Float) (js/get (aget rects (- i 1)) .right)]
+                (- left prev-right)))
+        (max-tight Float) (js/call [(gap 1) (gap 2) (gap 5) (gap 6)] .reduce
+                                   (fn [(a Float) (b Float)] Float (Math/max a b)) 0)
         ceiling (+ max-tight 15)]
     (doseq [i [3 4]]
       (expect (<= (gap i) ceiling)
@@ -159,7 +163,9 @@
          ;; when extensions is absent.
          (let [anchor (if (js/get r .ext) (js/get r .ext) (js/get r .panelUI))
                anchor-name (if (js/get r .ext) "unified-extensions-button" "PanelUI-button")
-               gap (- (js/get (js/get r .gjoaBtn) .left) (js/get anchor .right))]
+               (btn-left Float) (js/get (js/get r .gjoaBtn) .left)
+               (anchor-right Float) (js/get anchor .right)
+               gap (- btn-left anchor-right)]
            (expect (not (or (< gap -2) (> gap 50)))
              (str "#gjoa-sidebar-button not adjacent to #" anchor-name ": "
                   anchor-name ".right=" (js/get anchor .right) " gjoaBtn.left=" (js/get (js/get r .gjoaBtn) .left) " gap=" gap "px "
@@ -174,7 +180,9 @@
          ;; Use center-Y, not top-Y. Icons can have different intrinsic sizes
          ;; (hamburger 16px vs back-button 32px) but visually align by CENTER.
          ;; Reference: PanelUI-button (or PanelUI-menu-button) — the hamburger.
-         (let [center (fn [h] Any (/ (+ (js/get h .top) (js/get h .bottom)) 2))
+         (let [center (fn [h] Float
+                        (let [(top Float) (js/get h .top) (bottom Float) (js/get h .bottom)]
+                          (/ (+ top bottom) 2)))
                ref (or (js/call (js/get r .hits) .find (fn [h] Any (or (= (js/get h .id) "PanelUI-button") (= (js/get h .id) "PanelUI-menu-button"))))
                        (aget (js/get r .hits) 0))
                refC (center ref)

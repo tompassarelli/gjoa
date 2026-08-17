@@ -21,7 +21,7 @@
 (js/export (def tests Any
   [(deftest "New tab — gBrowser.addTab() row appears in sidebar" [mn]
      (await-true "return !!document.querySelector(\"#gjoa-tab-panel\");")
-     (let [before (chrome-eval visibleTabRows)]
+     (let [(before Int) (chrome-eval visibleTabRows)]
        (chrome-eval "
         gBrowser.addTab(\"https://example.com/addtab\", {
           triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
@@ -33,7 +33,7 @@
 
    (deftest "New tab — BrowserCommands.openTab() (the + button / Ctrl+T path) row appears" [mn]
      (await-true "return !!document.querySelector(\"#gjoa-tab-panel\");")
-     (let [before (chrome-eval visibleTabRows)
+     (let [(before Int) (chrome-eval visibleTabRows)
            ;; BrowserCommands.openTab() is what the native UI + button binds.
            reachable (chrome-eval "
         return typeof BrowserCommands !== \"undefined\" && typeof BrowserCommands.openTab === \"function\";

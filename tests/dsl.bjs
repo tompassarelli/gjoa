@@ -56,7 +56,7 @@
   ([(mn Any) (script String)] Any
     (wait-for mn script nil))
   ([(mn Any) (script String) (timeout-ms Any)] Any
-    (let [timeout (or timeout-ms 1500)
+    (let [(timeout Int) (or timeout-ms 1500)
           deadline (+ (Date/now) timeout)]
       (loop [last-err nil]
         (if (< (Date/now) deadline)

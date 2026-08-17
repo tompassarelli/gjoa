@@ -31,7 +31,7 @@
         }
       ")
 
-     (let [before (chrome-eval "
+     (let [(before Int) (chrome-eval "
         return document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row\").length;
       ")]
 

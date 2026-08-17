@@ -16,7 +16,7 @@
    (deftest "narrow window crosses threshold → horizontal; wide → vertical" [mn]
      (await-true "return !!gBrowser;" 5000)
      ;; Force a known wide state first, then narrow below the threshold.
-     (let [threshold (chrome-eval "return Services.prefs.getIntPref('gjoa.layout.narrowThreshold', 1000);")]
+     (let [(threshold Int) (chrome-eval "return Services.prefs.getIntPref('gjoa.layout.narrowThreshold', 1000);")]
        ;; Go narrow (threshold - 200): should flip to horizontal (verticalTabs=false).
        (chrome-eval (str "window.resizeTo(" (- threshold 200) ", 800); return true;"))
        (js/await (sleep 600))

@@ -114,14 +114,18 @@
       ")]
        ;; The header content (its visible box, after margin) should not be
        ;; flush against the sidebar edge — it should sit inside the inset.
-       (let [header-inset (- (js/get r .headerLeft) (js/get r .sidebarLeft))]
+       (let [(header-left Float) (js/get r .headerLeft)
+             (sidebar-left Float) (js/get r .sidebarLeft)
+             header-inset (- header-left sidebar-left)]
          (expect (not (< header-inset 6))
                  (str "Header flush-left against sidebar edge: headerLeft=" (js/get r .headerLeft) " "
                       "sidebarLeft=" (js/get r .sidebarLeft) " inset=" header-inset "px (expected ≥6px).")))
        ;; And the label's left edge should be within ~12px of the leftmost
        ;; nav-bar icon — i.e. on the same visual content rail.
        (when (not= (js/get r .firstNavIconLeft) nil)
-         (let [drift (Math/abs (- (js/get r .labelLeft) (js/get r .firstNavIconLeft)))]
+         (let [(label-left Float) (js/get r .labelLeft)
+               (first-nav-icon-left Float) (js/get r .firstNavIconLeft)
+               drift (Math/abs (- label-left first-nav-icon-left))]
            (expect (not (> drift 24))
                    (str "Header label not aligned with nav-bar icons: labelLeft=" (js/get r .labelLeft) " "
                         "firstNavIconLeft=" (js/get r .firstNavIconLeft) " drift=" drift "px (expected ≤24px)."))))))
