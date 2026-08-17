@@ -1,6 +1,6 @@
 #lang beagle/js
 ;; Compile all chrome .bjs source files as one checked module overlay.
-;; Skips macros.bjs (compile-time only) and test files.
+;; Skips test files.
 (ns gjoa.tools.chrome-bundle.compile
   (:require [fs :refer [existsSync statSync readdirSync readFileSync]]
             [path :refer [join resolve relative]]))
@@ -54,9 +54,11 @@
           (recur (+ i 1)))))
     results))
 
+;; macros.bjs stays in the batch: it is the only provider of `gjoa.macros`, and
+;; a namespace absent from the invocation is unresolvable. Its emitted module is
+;; empty (macros expand at compile time) and no bundle entry names it.
 (defn should-skip [(rel String)] Bool
   (cond
-    (= rel "macros.bjs") true
     (js/call rel .startsWith "test/") true
     (js/call rel .endsWith ".test.bjs") true
     :else false))

@@ -1,4 +1,4 @@
 #lang beagle/js
-(ns gjoa.hello)
+(ns gjoa.hello.index)
 
 (println "[GJOA] chrome loader active")
