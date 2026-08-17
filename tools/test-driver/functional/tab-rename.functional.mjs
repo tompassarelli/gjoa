@@ -27,26 +27,28 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log("FAIL:", m); } };
 
 // start-rename raises the flag when it adds the gjoa-renaming class + contenteditable
-const startIdx = bjs.indexOf('(.add (.-classList label) "gjoa-renaming")');
+const startIdx = bjs.indexOf('(js/call (js/get label .classList) .add "gjoa-renaming")');
 ok(startIdx !== -1, "start-rename adds the gjoa-renaming class");
 const startScope = bjs.slice(startIdx, startIdx + 1200);
-ok(/\(set!\s+\(\.-renaming vs\)\s+true\)/.test(startScope),
-   "start-rename sets (.-renaming vs) true when rename begins");
+ok(/\(js\/set!\s+vs\s+\.renaming\s+true\)/.test(startScope),
+   "start-rename sets (js/set! vs .renaming true) when rename begins");
 
-// finish clears it when it removes the class
-const finishIdx = bjs.indexOf('(.remove (.-classList label) "gjoa-renaming")');
+// finish clears it when it removes the class. The window is two lines at this
+// nesting depth — the clear must sit beside the class removal, not merely
+// somewhere in finish.
+const finishIdx = bjs.indexOf('(js/call (js/get label .classList) .remove "gjoa-renaming")');
 ok(finishIdx !== -1, "finish removes the gjoa-renaming class");
-const finishScope = bjs.slice(finishIdx, finishIdx + 120);
-ok(/\(set!\s+\(\.-renaming vs\)\s+false\)/.test(finishScope),
-   "finish clears (.-renaming vs) false when rename ends");
+const finishScope = bjs.slice(finishIdx, finishIdx + 160);
+ok(/\(js\/set!\s+vs\s+\.renaming\s+false\)/.test(finishScope),
+   "finish clears (js/set! vs .renaming false) when rename ends");
 
 // BOTH capture-phase document keydown handlers must bail while renaming.
-const guards = bjs.match(/\(not \(\.-renaming vs\)\)/g) || [];
+const guards = bjs.match(/\(not \(js\/get vs \.renaming\)\)/g) || [];
 ok(guards.length >= 2,
-   `both vim capture keydown handlers guard on (not (.-renaming vs)) — found ${guards.length}, need >=2`);
+   `both vim capture keydown handlers guard on (not (js/get vs .renaming)) — found ${guards.length}, need >=2`);
 
 // specifically: the setup-vim-keys handler's panel-active guard includes the renaming bail
-ok(/\(\.-panel-active vs\)\s*\(not \(\.-renaming vs\)\)/.test(bjs),
+ok(/\(js\/get vs \.panel-active\)\s*\(not \(js\/get vs \.renaming\)\)/.test(bjs),
    "setup-vim-keys handler bails on renaming (panel-active AND not renaming)");
 
 console.log(`\ntab-rename invariants: ${pass} pass, ${fail} fail`);

@@ -42,13 +42,13 @@ if (mRule) {
 
 // --- (2) Escape branch blocks FF's synchronous view.close ---
 // Slice from the Escape key test to the next cond clause (the Enter test).
-const eStart = bjs.indexOf('(= (.-key e) "Escape")');
-const eEnd = bjs.indexOf('(= (.-key e) "Enter")', eStart);
+const eStart = bjs.indexOf('(= (js/get e .key) "Escape")');
+const eEnd = bjs.indexOf('(= (js/get e .key) "Enter")', eStart);
 ok(eStart >= 0 && eEnd > eStart, "found the Escape cond branch");
 if (eStart >= 0 && eEnd > eStart) {
   const branch = bjs.slice(eStart, eEnd);
-  ok(/\.preventDefault e/.test(branch), "Escape calls preventDefault (blocks FF view.close) [the bug]");
-  ok(/\.stopImmediatePropagation e/.test(branch), "Escape stops propagation to FF's window listener");
+  ok(/js\/call e \.preventDefault/.test(branch), "Escape calls preventDefault (blocks FF view.close) [the bug]");
+  ok(/js\/call e \.stopImmediatePropagation/.test(branch), "Escape stops propagation to FF's window listener");
 }
 
 // --- (3) finish-teardown COLLAPSES the focused/expanded residue ---
@@ -68,11 +68,12 @@ ok(fStart >= 0 && fEnd > fStart, "found finish-teardown");
 if (fStart >= 0 && fEnd > fStart) {
   const body = bjs.slice(fStart, fEnd);
   const code = body.replace(/;;[^\n]*/g, ""); // strip beagle comments before matching
-  ok(/\.hidePopover urlbar/.test(code), "finish-teardown hides the popover");
+  ok(/js\/call urlbar \.hidePopover/.test(code), "finish-teardown hides the popover");
   ok(!/compact-on/.test(code), "popover-hide is NOT gated on compact mode");
   ok(/selectedBrowser[\s\S]*?\.focus/.test(code),
      "finish-teardown returns focus to CONTENT — kills the focused breakout-extend residue [the bug]");
-  ok(/-view[\s\S]{0,6}\.close/.test(code), "finish-teardown closes the urlbar view (collapses results)");
+  ok(/\(js\/get \.view\)\s*\(js\/call \.close\)/.test(code),
+     "finish-teardown closes the urlbar view (collapses results)");
   ok(/rmattr! urlbar "breakout-extend"/.test(code), "finish-teardown clears breakout-extend");
   ok(!/\(when \(not \(bool \(has\? urlbar "breakout-extend"\)\)\)/.test(code),
      "hidePopover is NOT gated behind a breakout-extend skip [the janky-teardown bug]");

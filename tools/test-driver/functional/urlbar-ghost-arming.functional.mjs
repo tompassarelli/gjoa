@@ -32,7 +32,7 @@ ok(/\.urlbar-input-container/.test(bjs),
 ok(/-inputField/.test(bjs) || /\.urlbar-input\b/.test(bjs),
    "ghost measures the real .urlbar-input (inputField) for the text start-x");
 // Text is the real resting value, with the placeholder only when empty.
-ok(/\.-value/.test(bjs) && /has-value\?/.test(bjs),
+ok(/\(js\/get \.value\)/.test(bjs) && /has-value\?/.test(bjs),
    "ghost text = the real resting gURLBar.value (placeholder only when the bar is empty)");
 // EVERY visible leading icon reproduced (not one hand-drawn shield): iterate leading + glyph-of
 ok(/glyph-of/.test(bjs) && /\bleading\b/.test(bjs) && /doseq/.test(bjs),
@@ -49,16 +49,19 @@ ok(/listStyleImage/.test(bjs) && /backgroundImage/.test(bjs),
 ok(/-moz-context-properties\s*:\s*fill/.test(bjs),
    "ghost tints copied chrome SVG glyphs via -moz-context-properties: fill");
 // --- arming gate, set before showPopover, revealed on a later frame ---
-const armIdx = bjs.indexOf('"gjoa-urlbar-arming"');
-const popIdx = bjs.indexOf(".showPopover");
+// The promotion that shows the popover is `ensure-floating-promoted`; the file
+// also carries a showPopover shim far above activate, so the ordering is read
+// against the promotion CALL, not against the first mention of showPopover.
+const armIdx = bjs.indexOf('(attr! root "gjoa-urlbar-arming" "")');
+const popIdx = bjs.indexOf("(ensure-floating-promoted)", armIdx);
 ok(armIdx !== -1, "activate arms gjoa-urlbar-arming");
 ok(armIdx !== -1 && popIdx !== -1 && armIdx < popIdx,
-   "arming is set BEFORE showPopover() (so the pre-promotion frame is opacity:0)");
+   "arming is set BEFORE the promotion (so the pre-promotion frame is opacity:0)");
 // reveal on a subsequent animation frame (double-rAF) with a setTimeout fallback
-const revealScope = bjs.slice(popIdx);
+const revealScope = popIdx !== -1 ? bjs.slice(popIdx) : "";
 ok(/requestAnimationFrame/.test(revealScope) && /rmattr!\s+root\s+"gjoa-urlbar-arming"/.test(bjs),
    "arming is cleared on a later frame (requestAnimationFrame reveal)");
-ok(/setTimeout\s+window\s+reveal/.test(bjs) || /\.setTimeout window reveal/.test(bjs),
+ok(/js\/call window \.setTimeout reveal/.test(bjs),
    "a setTimeout fallback clears arming even if rAF is starved (never stuck invisible)");
 // teardown also clears arming defensively
 ok((bjs.match(/rmattr!\s+root\s+"gjoa-urlbar-arming"/g) || []).length >= 2,
@@ -94,7 +97,7 @@ if (sidebarRule) {
 // for the palette's lifetime. The stage owns geometry and z-order.
 ok(/ensure-stage!/.test(bjs) && /"gjoa-urlbar-stage"/.test(bjs),
    "there is a stage owner (ensure-stage!) creating #gjoa-urlbar-stage");
-ok(/\(\.appendChild root el\)/.test(bjs),
+ok(/\(js\/call root \.appendChild el\)/.test(bjs),
    "the stage is appended to `root` (documentElement) — the backdrop's proven anchor");
 // It must be a <toolbar>: UrlbarInput's connectedCallback (which the reparent fires)
 // sets #allowBreakout = !!this.closest("toolbar"); under a plain div that goes false
@@ -105,12 +108,12 @@ ok(/xul-id "toolbar" "gjoa-urlbar-stage"/.test(bjs),
 // viewport-sized stage) and would otherwise stretch the input row to the whole window.
 ok(/--urlbar-container-height:\s*var\(--urlbar-min-height\)\s*!important/.test(css),
    "the floating palette pins --urlbar-container-height (parentNode is the stage)");
-ok(/ensure-staged!/.test(bjs) && /\.appendChild st urlbar/.test(bjs),
+ok(/ensure-staged!/.test(bjs) && /js\/call st \.appendChild urlbar/.test(bjs),
    "#urlbar is reparented INTO the stage while floating");
 // the home slot must be recorded, and restored before teardown drops the floating attrs
-ok(/:parent \(\.-parentNode urlbar\)/.test(bjs) && /:next \(\.-nextSibling urlbar\)/.test(bjs),
+ok(/:parent \(js\/get urlbar \.parentNode\)/.test(bjs) && /:next \(js\/get urlbar \.nextSibling\)/.test(bjs),
    "the resting home slot (parent + nextSibling) is recorded before the move");
-ok(/restore-home!/.test(bjs) && /insertBefore p urlbar n/.test(bjs),
+ok(/restore-home!/.test(bjs) && /js\/call p \.insertBefore urlbar n/.test(bjs),
    "teardown restores #urlbar to its exact home slot (insertBefore, not just append)");
 const restoreIdx = bjs.indexOf("(restore-home!)");
 const dropFloatIdx = bjs.indexOf('rmattr! root "gjoa-urlbar-floating"');
@@ -151,11 +154,11 @@ ok(/popover.*manual/.test(promoteScope) && /showPopover/.test(promoteScope),
    "ensure-floating-promoted asserts popover=manual + showPopover (top-layer promotion)");
 // A showPopover throw must not skip the following focus/select, so promotion and
 // focus handling require separate catches.
-const catches = (promoteScope.match(/\(catch Any/g) || []).length;
+const catches = (promoteScope.match(/\(catch \(\w+ Any\)/g) || []).length;
 ok(catches >= 2,
    "promotion and focus/select have SEPARATE catches (a showPopover throw cannot skip focus)");
-const focusIdx = promoteScope.indexOf("gURLBar .focus");
-const lastCatchBeforeFocus = promoteScope.lastIndexOf("(catch Any", focusIdx);
+const focusIdx = promoteScope.indexOf("(js/call .focus)");
+const lastCatchBeforeFocus = promoteScope.lastIndexOf("(catch (", focusIdx);
 ok(focusIdx !== -1 && lastCatchBeforeFocus !== -1 &&
    promoteScope.slice(lastCatchBeforeFocus, focusIdx).includes("(try"),
    "gURLBar.focus/select sit in their own try, after the promotion's catch");
