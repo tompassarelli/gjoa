@@ -1,4 +1,4 @@
-// AUTO-VENDORED by tools/prep/overlay.bjs from $BEAGLE_PIN_ROOT/beagle-lib/lib/beagle/core.js (configs/beagle.ref = 4aaf833c1edd).
+// AUTO-VENDORED by tools/prep/overlay.bjs from $BEAGLE_PIN_ROOT/beagle-lib/lib/beagle/core.js (configs/beagle.ref = f30421aee7fe).
 // DO NOT EDIT BY HAND — re-vendored on every `bun run import` so the
 // $$bc value-semantics runtime always matches the beagle the chrome was
 // compiled against. Bump configs/beagle.ref + re-import to change it.
@@ -308,7 +308,7 @@ function hamtHash(x) {
 }
 
 // A beagle map/record rep, as opposed to a DOM node / class instance / other host
-// object. Cross-realm plain objects (iframe, vm context) read as host here.
+// object. Cross-realm plain objects (embedded document, vm context) read as host here.
 function isPlainObject(x) {
   const p = Object.getPrototypeOf(x);
   return p === Object.prototype || p === null;
