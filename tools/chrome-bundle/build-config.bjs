@@ -1,9 +1,10 @@
 #lang beagle/js
 (ns gjoa.tools.chrome-bundle.build-config)
 
-(defrecord Entry [(out String)
-                  (files (Vec String))
-                  (banner String)])
+(defrecord Entry
+  [out String
+   files (Vec String)
+   banner String])
 
 (def B String ".beagle-out/gjoa")
 
