@@ -20,11 +20,11 @@
             [gjoa.tools.test-driver.marionette :refer [connect-marionette!]]))
 (declare-extern [process console JSON Promise Error setTimeout Object] Any)
 
-(defn sleep [(ms Any)] Any
-  (js/new Promise (fn [r] Any (setTimeout (fn [] Any (r nil)) ms))))
+(defn sleep [ms Any] Any
+  (js/new Promise (fn [r (Fn [Any] Any)] Any (setTimeout (fn [] Any (r nil)) ms))))
 
 (defn make-profile! [] String
-  (let [dir (js/call fs .mkdtempSync (js/call path .join (js/call os .tmpdir) "gjoa-verify-"))]
+  (let [dir Any (js/call fs .mkdtempSync (js/call path .join (js/call os .tmpdir) "gjoa-verify-"))]
     (js/call fs .writeFileSync (js/call path .join dir "prefs.js") (str "user_pref(\"marionette.port\", 2828);\n"
            "user_pref(\"marionette.enabled\", true);\n"))
     dir))
@@ -66,9 +66,9 @@
   (when (not (or (aget (js/get process .argv) 2) (get (js/get process .env) "GJOA_BIN")))
     (js/call console .error "usage: about-pages <gjoa-bin>  (or set $GJOA_BIN)")
     (js/call process .exit 2))
-  (let [bin (or (aget (js/get process .argv) 2) (get (js/get process .env) "GJOA_BIN"))
-        profile (make-profile!)
-        child (spawn bin
+  (let [bin Any (or (aget (js/get process .argv) 2) (get (js/get process .env) "GJOA_BIN"))
+        profile String (make-profile!)
+        child Any (spawn bin
                      ;; --no-remote: never hand off to a stray running instance.
                      ;; --remote-allow-system-access: required for Marionette's
                      ;; privileged ("chrome") context on modern Firefox.
@@ -76,21 +76,21 @@
                       "--remote-allow-system-access" "--headless"]
                      {:stdio "ignore"
                       :env (js/call Object .assign {} (js/get process .env) {"GJOA_ALLOW_INSECURE" "1" "MOZ_HEADLESS" "1"})})
-        client (js/await (connect-marionette! {:connectTimeoutMs 45000}))
-        _sess (js/await (js/call client .newSession))
-        _ctx (js/await (js/call client .setContext "chrome"))
-        about (js/await (js/call client .executeScript ABOUT-PROBE []))
-        pointer (js/await (js/call client .executeAsyncScript POINTER-PROBE []))
-        _log (js/call console .log (js/call JSON .stringify {:about about :pointer pointer} nil 2))
-        _quit (js/await (js/call client .quit ["eForceQuit"]))
-        _disc (js/call client .disconnect)
-        _kill (js/call child .kill)
-        ok-about (js/call about .every (fn [(r Any)] Any (js/get r .registered)))
-        ok-ptr (js/get pointer .pointer)]
+        client Any (js/await (connect-marionette! {:connectTimeoutMs 45000}))
+        _sess Any (js/await (js/call client .newSession))
+        _ctx Any (js/await (js/call client .setContext "chrome"))
+        about Any (js/await (js/call client .executeScript ABOUT-PROBE []))
+        pointer Any (js/await (js/call client .executeAsyncScript POINTER-PROBE []))
+        _log Any (js/call console .log (js/call JSON .stringify {:about about :pointer pointer} nil 2))
+        _quit Any (js/await (js/call client .quit ["eForceQuit"]))
+        _disc Any (js/call client .disconnect)
+        _kill Any (js/call child .kill)
+        ok-about Bool (js/call about .every (fn [r Any] Any (js/get r .registered)))
+        ok-ptr Any (js/get pointer .pointer)]
     (js/call console .log (str "\nVERDICT: about-pages=" (if ok-about "PASS" "FAIL")
                        "  settings-pointer=" (if ok-ptr "PASS" "FAIL")))
     (js/call process .exit (if (and ok-about ok-ptr) 0 1))))
 
-(js/call (run!) .catch (fn [(e Any)] Any
+(js/call (run!) .catch (fn [e Any] Any
                  (js/call console .error (str "verify failed: " (or (js/get e .stack) e)))
                  (js/call process .exit 1)))
