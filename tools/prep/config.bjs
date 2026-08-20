@@ -27,17 +27,17 @@
 (js/export (defn load-config! [] Any
   (if (deref cached)
     (deref cached)
-    (let [path (join REPO-ROOT "gjoa.json")
-          raw (readFileSync path "utf8")
-          parsed (js/call JSON .parse raw)]
+    (let [path Any (join REPO-ROOT "gjoa.json")
+          raw Any (readFileSync path "utf8")
+          parsed Any (js/call JSON .parse raw)]
       (validate parsed)
       (reset! cached parsed)
       parsed))))
 
-(defn validate [(c Any)] Any
-  (let [required ["name" "binaryName" "appId" "vendor" "displayVersion"
+(defn validate [c Any] Any
+  (let [required (Vec String) ["name" "binaryName" "appId" "vendor" "displayVersion"
                   "license" "github" "firefox" "branding" "urls"]]
-    (doseq [k required]
+    (doseq [k Int required]
       (if (= (get c k) undefined)
         (throw (js/new Error (str "gjoa.json missing required field: " k)))))
     (if (not (js/get (js/get c .firefox) .version))
