@@ -7,7 +7,7 @@
 (ns gjoa.tests.integration.spaces-scope-groups
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect expect-eq wait-for]]))
 
-(defn clean-spaces [(mn Any)] Any
+(defn clean-spaces [mn Any] Any
   (js/await (js/call mn .executeScript "
     const main = window.Spaces.list().find(s => s.name === \"Main\") || window.Spaces.list()[0];
     window.Spaces.setActive(main.id);
@@ -44,7 +44,7 @@
       ")
 
      ;; Assert spaceId captured.
-     (let [created (chrome-eval "
+     (let [created Any (chrome-eval "
         const grp = document.querySelector('[gjoa-test-marker=\"ws-group\"]');
         const ws = window.Spaces.list().find(s => s.name === \"Workspace\");
         return { spaceId: grp._group.spaceId, wsId: ws.id };
@@ -62,7 +62,7 @@
      (await-true "return window.Spaces.active().name === \"Main\";" 1500)
      (chrome-eval "window.gjoaTest.rows.updateVisibility();")
 
-     (let [in-main (chrome-eval "
+     (let [in-main Any (chrome-eval "
         const grp = document.querySelector('[gjoa-test-marker=\"ws-group\"]');
         return { hidden: !!grp.hidden };
       ")]
@@ -78,7 +78,7 @@
      (await-true "return window.Spaces.active().name === \"Workspace\";" 1500)
      (chrome-eval "window.gjoaTest.rows.updateVisibility();")
 
-     (let [back-in-ws (chrome-eval "
+     (let [back-in-ws Any (chrome-eval "
         const grp = document.querySelector('[gjoa-test-marker=\"ws-group\"]');
         return { hidden: !!grp.hidden };
       ")]
@@ -101,7 +101,7 @@
 
      ;; Build the snapshot envelope (same path scheduleSave takes) and
      ;; inspect the serialized group entry.
-     (let [env (chrome-eval "
+     (let [env Any (chrome-eval "
         // We can't call buildEnvelope directly, but scheduleSave + history
         // are wired. Instead, walk DOM rows the way buildEnvelope does and
         // assert _group.spaceId is non-empty and matches Project.
@@ -114,7 +114,7 @@
         }
         return { entries, projId: proj.id };
       ")
-           proj-entry (js/call (:entries env) .find (fn [e] Any (= (js/get e .name) "Project-A")))]
+          proj-entry Any (js/call (:entries env) .find (fn [e Any] Any (= (js/get e .name) "Project-A")))]
        (expect proj-entry "Project-A group not found in DOM")
        (expect-eq (js/get proj-entry .spaceId) (:projId env)
                   (str "Project-A.spaceId=" (js/get proj-entry .spaceId) " doesn't match Project.id=" (:projId env) " — would not persist correctly across restart"))))]))
