@@ -14,28 +14,32 @@
 ;; build a claim-doc from the edited source + the PRISTINE source + (class,method)
 ;; anchors: the set-body payload is the method body from `edited`; the `:anchor`
 ;; fingerprint (params/ordinal/idents) is captured from `pristine` for rename-recovery.
-(js/export (defn build-doc [(edited String) (pristine String) (anchors Any)] Any
-  (let [out []]
-    (doseq [a anchors]
-      (let [body (get-body edited (js/get a .class) (js/get a .method))
-            fp (capture-anchor pristine (js/get a .class) (js/get a .method))]
+(js/export (defn build-doc [edited String
+                           pristine String
+                           anchors Any] Any
+  (let [out (Vec Any) []]
+    (doseq [a Any anchors]
+      (let [body Any (get-body edited (js/get a .class) (js/get a .method))
+           fp Any (capture-anchor pristine (js/get a .class) (js/get a .method))]
         (when (some? body)
           (js/call out .push {:verb "set-body" :class (js/get a .class) :method (js/get a .method) :body body :anchor fp}))))
     out)))
 
 ;; replay a claim-doc onto a source -> {:ok :src :recoveries} or {:ok false :reason}.
 ;; Each verb passes its :anchor so set-method-body can recover an upstream rename.
-(js/export (defn replay [(doc Any) (src String)] Any
-  (let [recoveries []]
-    (loop [i 0 cur src]
+(js/export (defn replay [doc Any
+                        src String] Any
+  (let [recoveries (Vec Any) []]
+    (loop [i Int 0
+          cur String src]
       (if (< i (js/get doc .length))
-        (let [c (aget doc i)
-              r (set-method-body cur (js/get c .class) (js/get c .method) (js/get c .body) (js/get c .anchor))]
+        (let [c Any (aget doc i)
+             r Any (set-method-body cur (js/get c .class) (js/get c .method) (js/get c .body) (js/get c .anchor))]
           (if (js/get r .ok)
             (do (when (some? (js/get r .recovered)) (js/call recoveries .push (js/get r .recovered)))
                 (recur (+ i 1) (js/get r .src)))
             r))
         {:ok true :src cur :recoveries recoveries})))))
 
-(js/export (defn doc->json [(doc Any)] String (js/call JSON .stringify doc nil 2)))
-(js/export (defn json->doc [(s String)] Any (js/call JSON .parse s)))
+(js/export (defn doc->json [doc Any] String (js/call JSON .stringify doc nil 2)))
+(js/export (defn json->doc [s String] Any (js/call JSON .parse s)))
