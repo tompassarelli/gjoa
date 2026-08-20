@@ -18,7 +18,7 @@
 ;; `from`/`to` flow from the network (latest-stable) and gjoa.json into a git
 ;; shell-out, so reject anything that isn't a plain Firefox version before it can
 ;; reach the shell (command-injection guard).
-(defn version->tag [(v String)] String
+(defn version->tag [v String] String
   (if (not (js/call v .match (js/new RegExp "^[0-9]+(\\.[0-9]+){1,3}(esr)?$")))
     (throw (js/new Error (str "refusing unsafe version string: " v)))
     (str "FIREFOX_" (js/call v .replaceAll "." "_") "_RELEASE")))
@@ -27,51 +27,51 @@
   (js/get (js/get (js/call JSON .parse (readFileSync (join REPO "gjoa.json") "utf8")) .firefox) .version))
 
 (defn latest-stable [] String
-  (let [out (sh "curl -s 'https://product-details.mozilla.org/1.0/firefox_versions.json' 2>/dev/null" {:quiet true})]
+  (let [out String (sh "curl -s 'https://product-details.mozilla.org/1.0/firefox_versions.json' 2>/dev/null" {:quiet true})]
     (if (= out "") "" (js/get (js/call JSON .parse out) .LATEST_FIREFOX_VERSION))))
 
 ;; mozilla files a patch touches (exclude the depends-on contract lines)
-(defn touches [(text String)] Any
-  (let [out []]
-    (doseq [m (js/call text .matchAll (js/new RegExp "^#     - (\\S+/\\S+)\\s*$" "gm"))]
-      (let [p (aget m 1)]
+(defn touches [text String] Any
+  (let [out (Vec Any) []]
+    (doseq [m Any (js/call text .matchAll (js/new RegExp "^#     - (\\S+/\\S+)\\s*$" "gm"))]
+      (let [p Any (aget m 1)]
         (when (not (js/call (js/new RegExp "^(rust-|cpp-|js-|webidl-)") .test p))
           (js/call out .push p))))
     out))
 
-(defn rung-name [(files Any)] String
+(defn rung-name [files Any] String
   (cond
-    (js/call files .some (fn [(f String)] Bool (js/call (js/new RegExp "\\.(rs|cpp|cc|h|webidl)$") .test f))) "native-src"
-    (js/call files .some (fn [(f String)] Bool (js/call (js/new RegExp "\\.(mjs|js)$") .test f))) "sys.mjs"
+    (js/call files .some (fn [f String] Bool (js/call (js/new RegExp "\\.(rs|cpp|cc|h|webidl)$") .test f))) "native-src"
+    (js/call files .some (fn [f String] Bool (js/call (js/new RegExp "\\.(mjs|js)$") .test f))) "sys.mjs"
     :else "build"))
 
 (defn main! [] Any
-  (let [argv (js/call (js/get process .argv) .slice 2)
-        from (or (aget argv 0) (gjoa-version))
-        to (or (aget argv 1) (latest-stable))]
+  (let [argv Any (js/call (js/get process .argv) .slice 2)
+        from Any (or (aget argv 0) (gjoa-version))
+        to Any (or (aget argv 1) (latest-stable))]
     (cond
       (or (= from "") (= to "")) (console/log "forecast: could not determine from/to versions")
       (= from to) (console/log (str "forecast: already at " to " — nothing to forecast"))
       :else
-      (let [delta (js/call (js/call (sh (str "git -C " FF " diff --name-only " (version->tag from) " " (version->tag to) " 2>/dev/null") {:quiet true}) .split "\n") .filter (fn [(s String)] Bool (> (js/get s .length) 0)))]
+      (let [delta Any (js/call (js/call (sh (str "git -C " FF " diff --name-only " (version->tag from) " " (version->tag to) " 2>/dev/null") {:quiet true}) .split "\n") .filter (fn [s String] Bool (> (js/get s .length) 0)))]
         (if (= (js/get delta .length) 0)
           (console/log (str "forecast " from " -> " to ": empty delta — are the release tags present in " FF "?"))
           (do
             (console/log (str "conflict forecast: Firefox " from " -> " to "  (" (js/get delta .length) " files changed upstream)\n"))
-            (let [names (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .sort)
-                  affected []]
-              (doseq [n names]
-                (let [files (touches (readFileSync (join PATCHES-DIR n) "utf8"))
-                      hits (js/call files .filter (fn [(f String)] Bool (js/call delta .includes f)))]
+            (let [names Any (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [p String] Bool (js/call p .endsWith ".patch"))) .sort)
+                  affected (Vec Any) []]
+              (doseq [n Int names]
+                (let [files Any (touches (readFileSync (join PATCHES-DIR n) "utf8"))
+                      hits Any (js/call files .filter (fn [f String] Bool (js/call delta .includes f)))]
                   (when (> (js/get hits .length) 0)
                     (js/call affected .push {:name n :rung (rung-name files) :hits hits}))))
               (if (= (js/get affected .length) 0)
                 (console/log "  CLEAN — no gjoa patch touches a changed file. All patches apply unchanged.")
                 (do
                   (console/log (str "  " (js/get affected .length) " patch(es) in the blast radius (review highest-tier first):"))
-                  (doseq [a affected]
+                  (doseq [a Any affected]
                     (console/log (str "    [" (js/get a .rung) "] " (js/get a .name)))
-                    (doseq [h (js/get a .hits)] (console/log (str "        ~ " h)))))))))))))
+                    (doseq [h Any (js/get a .hits)] (console/log (str "        ~ " h)))))))))))))
 
 (when (js/get (js/import-meta) .main)
   (main!))
