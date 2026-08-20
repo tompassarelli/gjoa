@@ -15,23 +15,27 @@
 ;; toolbox's live parent, which lags the collapse (a separate module reparents it)
 ;; and caused the half-width labelled-rail regression (#collapse-width). The
 ;; invariant it locks: launcher collapsed (and not a compact reveal) ⇒ iconsOnly.
-(js/export (defn collapse-flags [(launcher-expanded Bool) (compact Bool) (hover Bool)] Any
-  (let [compact-revealed (and compact hover)]
+(js/export (defn collapse-flags
+             [launcher-expanded Bool
+              compact Bool
+              hover Bool]
+             Any
+             (let [compact-revealed Any (and compact hover)]
     {:iconsOnly (and (not launcher-expanded) (not compact-revealed))
      :sidebarCollapsed (or (not launcher-expanded) compact)})))
 
-(js/export (defn make-layout! [(deps Any)] Any
-  (let [sidebar-main (js/get deps .sidebarMain)
-        rows (js/get deps .rows)
-        log (create-logger! "tabs/layout")
+(js/export (defn make-layout! [deps Any] Any
+  (let [sidebar-main Any (js/get deps .sidebarMain)
+        rows Any (js/get deps .rows)
+        log Any (create-logger! "tabs/layout")
 
         ;; Module-private mutable state
-        priv {:toolboxResizeObs nil
+        priv (Map Keyword Any) {:toolboxResizeObs nil
               :alignSpacer nil
               :lastVertical nil
               :posPanelRaf 0}
 
-        is-vertical (fn [] Bool
+        is-vertical (Fn [] Bool) (fn [] Bool
           (pref-bool "sidebar.verticalTabs" true))
 
         ;; Keep only the active tree expanded in horizontal mode. This is a
@@ -42,14 +46,16 @@
         ;;   - it is scoped to the ACTIVE SPACE, so other spaces are untouched;
         ;;   - if the active tree can't be resolved, nothing is collapsed — we
         ;;     never mass-collapse on a missed selected-tab lookup.
-        apply-layout-tree-collapse (fn [] Any
-          (let [vertical (is-vertical)
-                space-filter (js/get deps .isTabInActiveSpace)
-                all (all-rows)
-                mutated {:v false}
-                set-lc! (fn [row val] Any
-                  (let [d (data-of! row)
-                        cur (if (and d (js/get d .layoutCollapsed)) true false)]
+        apply-layout-tree-collapse (Fn [] Any) (fn [] Any
+          (let [vertical Any (is-vertical)
+                space-filter Any (js/get deps .isTabInActiveSpace)
+                all (Vec Any) (all-rows)
+                mutated (Map Keyword Bool) {:v false}
+                set-lc! (Fn [Any Bool] Any) (fn
+                                              [row Any
+                                               val Bool] Any
+                                              (let [d Any (data-of! row)
+                        cur Bool (if (and d (js/get d .layoutCollapsed)) true false)]
                     (when (and d (not= cur val))
                       (js/set! d .layoutCollapsed val)
                       (js/call rows .syncAnyRow row)
@@ -57,35 +63,35 @@
             (if vertical
               ;; Vertical never layout-collapses: clear the transient flag so the
               ;; user's real (persisted) collapse state is what renders.
-              (js/call all .forEach (fn [row] Any
+              (js/call all .forEach (fn [row Any] Any
                 (when (= (level-of-row! row) 0)
                   (set-lc! row false))))
               ;; Horizontal: collapse every active-space tree except the active one.
-              (let [active-tab (and gBrowser (js/get gBrowser .selectedTab))
-                    active-row (and active-tab
+              (let [active-tab Any (and gBrowser (js/get gBrowser .selectedTab))
+                    active-row Any (and active-tab
                                     (or (js/call row-of .get active-tab)
-                                        (js/call all .find (fn [%1] Any (= (js/get %1 ._tab) active-tab)))))
-                    found {:root nil}]
+                                        (js/call all .find (fn [%1 Any] Any (= (js/get %1 ._tab) active-tab)))))
+                    found (Map Keyword Any) {:root nil}]
                 (when active-row
-                  (loop [i (js/call all .indexOf active-row)]
+                  (loop [i Int (js/call all .indexOf active-row)]
                     (when (>= i 0)
                       (if (= (level-of-row! (aget all i)) 0)
                         (js/set! found .root (aget all i))
                         (recur (- i 1))))))
                 (when (js/get found .root)
-                  (js/call all .forEach (fn [row] Any
+                  (js/call all .forEach (fn [row Any] Any
                     (when (and (= (level-of-row! row) 0)
-                               (let [t (js/get row ._tab)]
+                               (let [t Any (js/get row ._tab)]
                                  (or (not t) (not space-filter) (space-filter t))))
                       (set-lc! row (not= row (js/get found .root)))))))))
             (when (js/get mutated .v)
               (js/call rows .updateVisibility))))
 
-        setup-horizontal-align-spacer (fn [] Any
-          (let [target (by-id "TabsToolbar-customization-target")]
+        setup-horizontal-align-spacer (Fn [] Any) (fn [] Any
+          (let [target Any (by-id "TabsToolbar-customization-target")]
             (when target
               (when (not (js/get priv .alignSpacer))
-                (let [el (xul-new "box")]
+                (let [el Any (xul-new "box")]
                   (js/set! el .id "gjoa-content-alignment-spacer")
                   (js/set! (js/get el .style) .flex "0 0 auto")
                   (js/set! (js/get el .style) .width "10px")
@@ -93,12 +99,12 @@
               (when (not (same-node? (js/get target .firstChild) (js/get priv .alignSpacer)))
                 (js/call target .prepend (js/get priv .alignSpacer))))))
 
-        teardown-horizontal-align-spacer (fn [] Any
+        teardown-horizontal-align-spacer (Fn [] Any) (fn [] Any
           (when (js/get priv .alignSpacer)
             (js/call (js/get priv .alignSpacer) .remove)))
 
-        set-urlbar-top-layer (fn [(in-top-layer Bool)] Any
-          (let [urlbar (by-id "urlbar")]
+        set-urlbar-top-layer (Fn [Bool] Any) (fn [in-top-layer Bool] Any
+          (let [urlbar Any (by-id "urlbar")]
             (when urlbar
               (when (not (has? sidebar-main "data-gjoa-compact"))
                 (if (and in-top-layer (not (has? urlbar "popover")))
@@ -108,9 +114,9 @@
                   (when (and (not in-top-layer) (has? urlbar "popover"))
                     (rmattr! urlbar "popover")))))))
 
-        position-panel (fn [] Any
+        position-panel (Fn [] Any) (fn [] Any
           (when (js/get state .panel)
-            (let [vertical (is-vertical)]
+            (let [vertical Any (is-vertical)]
               (toggle! (js/get state .panel) "gjoa-horizontal" (not vertical))
               (when (js/get state .pinnedContainer)
                 (toggle! (js/get state .pinnedContainer) "gjoa-horizontal" (not vertical)))
@@ -120,11 +126,11 @@
                 (js/call (js/get priv .toolboxResizeObs) .disconnect)
                 (js/set! priv .toolboxResizeObs nil))
 
-              (let [toolbox (by-id "navigator-toolbox")
+              (let [toolbox Any (by-id "navigator-toolbox")
                     ;; `same-node?`, never `=`: beagle's `=` is STRUCTURAL over own
                     ;; enumerable keys, so any two DOM nodes compare EQUAL — every
                     ;; node guard in this function is dead code without it.
-                    toolbox-in-sidebar (and toolbox (same-node? (js/get toolbox .parentNode) sidebar-main))
+                    toolbox-in-sidebar Any (and toolbox (same-node? (js/get toolbox .parentNode) sidebar-main))
                     ;; The AUTHORITATIVE collapsed signal is FF's own
                     ;; `sidebar-launcher-expanded` attribute — NOT the toolbox's
                     ;; parent. The toolbox is reparented in/out of the sidebar by
@@ -136,14 +142,14 @@
                     ;; instead of the favicon strip (#collapse-width regression).
                     ;; Decide icons-only/collapsed off the settled attribute; keep
                     ;; toolbox-in-sidebar only for the physical panel arrangement.
-                    launcher-expanded (has? sidebar-main "sidebar-launcher-expanded")]
+                    launcher-expanded Any (has? sidebar-main "sidebar-launcher-expanded")]
 
                 (if vertical
-                  (let [flags (collapse-flags launcher-expanded
+                  (let [flags Any (collapse-flags launcher-expanded
                                               (has? sidebar-main "data-gjoa-compact")
                                               (has? sidebar-main "gjoa-has-hover"))
-                        sidebar-collapsed (js/get flags .sidebarCollapsed)
-                        icons-only (js/get flags .iconsOnly)]
+                        sidebar-collapsed Any (js/get flags .sidebarCollapsed)
+                        icons-only Any (js/get flags .iconsOnly)]
                     (toggle! (js/get state .panel) "gjoa-icons-only" icons-only)
                     (when (js/get state .pinnedContainer)
                       (toggle! (js/get state .pinnedContainer) "gjoa-icons-only" icons-only))
@@ -156,7 +162,7 @@
                                    (not (same-node? (js/get toolbox .nextElementSibling)
                                                     (js/get state .spaceHeader))))
                           (js/call toolbox .after (js/get state .spaceHeader)))
-                        (let [header-anchor (or (js/get state .spaceHeader) toolbox)]
+                        (let [header-anchor Any (or (js/get state .spaceHeader) toolbox)]
                           (when (not (same-node? (js/get header-anchor .nextElementSibling)
                                                  (js/get state .pinnedContainer)))
                             (js/call header-anchor .after (js/get state .pinnedContainer))))
@@ -182,21 +188,21 @@
                     (rmattr! (js/get document .documentElement) "gjoa-sidebar-collapsed")
                     (when (and (js/get state .spaceHeader) (js/get (js/get state .spaceHeader) .parentNode))
                       (js/call (js/get state .spaceHeader) .remove))
-                    (let [tabbrowser-tabs (by-id "tabbrowser-tabs")]
+                    (let [tabbrowser-tabs Any (by-id "tabbrowser-tabs")]
                       (when tabbrowser-tabs
                         (when (and (js/get state .pinnedContainer)
                                    (not (same-node? (js/get tabbrowser-tabs .nextElementSibling)
                                                     (js/get state .pinnedContainer))))
                           (js/call tabbrowser-tabs .after (js/get state .pinnedContainer)))
-                        (let [anchor (or (js/get state .pinnedContainer) tabbrowser-tabs)]
+                        (let [anchor Any (or (js/get state .pinnedContainer) tabbrowser-tabs)]
                           (when (not (same-node? (js/get anchor .nextElementSibling) (js/get state .panel)))
                             (js/call anchor .after (js/get state .panel))))))
                     (setup-horizontal-align-spacer)))
 
                 ;; Track toolbox height for compact mode offset
                 (if (and (not toolbox-in-sidebar) toolbox)
-                  (let [update-height (fn [] Any
-                          (let [h (js/get (js/call toolbox .getBoundingClientRect) .height)]
+                  (let [update-height (Fn [] Any) (fn [] Any
+                          (let [h Float (js/get (js/call toolbox .getBoundingClientRect) .height)]
                             (js/call (js/get (js/get document .documentElement) .style) .setProperty
                                           "--gjoa-toolbox-height" (str h "px"))))]
                     (update-height)
@@ -206,13 +212,13 @@
 
                 ;; Re-sync all rows when switching modes
                 (when vertical (js/call rows .clearHorizontalGrid))
-                (js/call (all-rows) .forEach (fn [%1] Any (js/call rows .syncAnyRow %1)))
+                (js/call (all-rows) .forEach (fn [%1 Any] Any (js/call rows .syncAnyRow %1)))
                 (js/call rows .updateVisibility)
 
                 ;; Apply "keep only active tree expanded" on mode changes
-                (let [mode-changed (and (not= (js/get priv .lastVertical) nil)
+                (let [mode-changed Any (and (not= (js/get priv .lastVertical) nil)
                                         (not= (js/get priv .lastVertical) vertical))
-                      initial-horizontal (and (= (js/get priv .lastVertical) nil) (not vertical))]
+                      initial-horizontal Any (and (= (js/get priv .lastVertical) nil) (not vertical))]
                   (log "positionPanel:transitionCheck"
                        {:lastVertical (js/get priv .lastVertical)
                         :vertical vertical
@@ -234,7 +240,7 @@
         ;; sidebar-launcher-expanded), each firing the MutationObserver. Collapse
         ;; them into ONE positionPanel per frame so we never thrash the layout or
         ;; read a half-applied attribute set mid-burst.
-        request-position-panel (fn [] Any
+        request-position-panel (Fn [] Any) (fn [] Any
           (when (= (js/get priv .posPanelRaf) 0)
             (js/set! priv .posPanelRaf
               (requestAnimationFrame
