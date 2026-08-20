@@ -28,35 +28,37 @@
 
 ;; Mirrors Mozilla's release URL convention. Used for both .source.tar.xz and
 ;; the SHA256SUMS file that publishes its hash.
-(defn tarballUrl [(version String)] String
+(defn tarballUrl [version String] String
   (str "https://archive.mozilla.org/pub/firefox/releases/" version
        "/source/firefox-" version ".source.tar.xz"))
 
-(defn checksumUrl [(version String)] String
+(defn checksumUrl [version String] String
   (str "https://archive.mozilla.org/pub/firefox/releases/" version "/SHA256SUMS"))
 
-(defn signatureUrl [(version String)] String
+(defn signatureUrl [version String] String
   (str "https://archive.mozilla.org/pub/firefox/releases/" version "/SHA256SUMS.asc"))
 
 ;; In-repo pinned-hash file for a given version (the F9 trust anchor).
-(defn pinnedHashPath [(version String)] String
+(defn pinnedHashPath [version String] String
   (join CONFIGS-DIR (str "firefox-" version ".sha256")))
 
-(defn tarballName [(version String)] String
+(defn tarballName [version String] String
   (str "firefox-" version ".source.tar.xz"))
 
 ;; Parse a SHA256SUMS body for the tarball's hash. Mozilla lists files with
 ;; subdirectory prefixes, e.g. `source/firefox-150.0.source.tar.xz` — match by
 ;; basename. Returns nil if the tarball isn't listed.
-(js/export (defn hashFromSums [(text String) (version String)] Any
-  (let [want (tarballName version)
-        lines (js/call text .split "\n")]
-    (loop [i 0]
+(js/export (defn hashFromSums
+             [text String
+              version String] Any
+  (let [want String (tarballName version)
+        lines Any (js/call text .split "\n")]
+    (loop [i Int 0]
       (if (>= i (js/get lines .length))
         nil
-        (let [parts (js/call (js/call (aget lines i) .trim) .split (js/new RegExp "\\s+"))
-              hash (aget parts 0)
-              file (aget parts 1)]
+        (let [parts Any (js/call (js/call (aget lines i) .trim) .split (js/new RegExp "\\s+"))
+              hash Any (aget parts 0)
+              file Any (aget parts 1)]
           (if (and file (or (= file want) (js/call file .endsWith (str "/" want))))
             hash
             (recur (+ i 1)))))))))
@@ -66,14 +68,14 @@
 ;; that reads SHA256SUMS reads it. Throws if the version isn't pinned — bumping
 ;; FF_VERSION MUST add a configs/firefox-<version>.sha256 (see that file's
 ;; header for how to derive it safely).
-(defn pinnedSha256 [(version String)] String
-  (let [p (pinnedHashPath version)]
+(defn pinnedSha256 [version String] String
+  (let [p String (pinnedHashPath version)]
     (if (not (existsSync p))
       (throw (js/new Error (str "no pinned checksum for firefox " version
                           ".\n  expected: " p
                           "\n  add it from the GPG-verified SHA256SUMS (see that file's header)."))))
-    (let [text (readFileSync p "utf8")
-          hash (hashFromSums text version)]
+    (let [text Any (readFileSync p "utf8")
+          hash Any (hashFromSums text version)]
       (if (not hash)
         (throw (js/new Error (str "pinned checksum file does not list " (tarballName version) ": " p)))
         hash))))
@@ -83,12 +85,15 @@
 ;; gpg isn't installed we log and skip (the pinned-hash assertion below is the
 ;; load-bearing check, so absence of gpg never weakens the happy path). Returns
 ;; true if verified, false if skipped/unavailable; throws on an actual bad sig.
-(js/export (defn verifySignature [(version String) (sumsText String) (strict Bool)] Any
+(js/export (defn verifySignature
+             [version String
+              sumsText String
+              strict Bool] Any
   ;; Bun.spawnSync THROWS ("Executable not found") when gpg is absent entirely,
   ;; rather than returning {success:false} — so probe under try/catch. A missing
   ;; gpg must degrade to a clean skip (non-strict daily build) or a clear refusal
   ;; (strict pin creation), never an opaque crash mid-build.
-  (let [available (try (js/get (js/call Bun .spawnSync ["gpg" "--version"] {:stdout "ignore" :stderr "ignore"}) .success)
+  (let [available Any (try (js/get (js/call Bun .spawnSync ["gpg" "--version"] {:stdout "ignore" :stderr "ignore"}) .success)
                     (catch (_e Any) false))]
     (if (not available)
       (if strict
@@ -98,15 +103,15 @@
         (do
           (js/call log .warn "gpg not available; skipping SHA256SUMS.asc signature check (pinned in-repo hash still enforced)")
           false))
-      (let [ascRes (js/await (fetch (signatureUrl version)))]
+      (let [ascRes Any (js/await (fetch (signatureUrl version)))]
         (when-not (js/get ascRes .ok)
           (throw (js/new Error (str "failed to fetch SHA256SUMS.asc: " (js/get ascRes .status)))))
-        (let [asc (js/await (js/call ascRes .text))
-              tmpDir (join SOURCES-CACHE ".gpg-verify")
-              keyPath (join tmpDir "mozilla.key")
-              sumsPath (join tmpDir "SHA256SUMS")
-              ascPath (join tmpDir "SHA256SUMS.asc")
-              keyRes (js/await (fetch (str "https://archive.mozilla.org/pub/firefox/releases/" version "/KEY")))]
+        (let [asc Any (js/await (js/call ascRes .text))
+              tmpDir Any (join SOURCES-CACHE ".gpg-verify")
+              keyPath Any (join tmpDir "mozilla.key")
+              sumsPath Any (join tmpDir "SHA256SUMS")
+              ascPath Any (join tmpDir "SHA256SUMS.asc")
+              keyRes Any (js/await (fetch (str "https://archive.mozilla.org/pub/firefox/releases/" version "/KEY")))]
           (when-not (js/get keyRes .ok)
             (throw (js/new Error (str "failed to fetch Mozilla KEY: " (js/get keyRes .status)))))
           (mkdirSync tmpDir {:recursive true})
@@ -115,30 +120,17 @@
           (js/await (js/call Bun .write ascPath asc))
           ;; Import the published KEY into an ephemeral keyring, then assert the
           ;; signature was made by the PINNED fingerprint before trusting it.
-          (let [kr (join tmpDir "keyring.gpg")
-                imp (js/call Bun .spawnSync ["gpg" "--no-default-keyring" "--keyring" kr "--import" keyPath] {:stdout "ignore" :stderr "ignore"})]
+          (let [kr Any (join tmpDir "keyring.gpg")
+                imp Any (js/call Bun .spawnSync ["gpg" "--no-default-keyring" "--keyring" kr "--import" keyPath] {:stdout "ignore" :stderr "ignore"})]
             (when-not (js/get imp .success)
               (throw (js/new Error "gpg: failed to import Mozilla KEY")))
             ;; --status-fd 1 prints machine-readable VALIDSIG <fpr> ... lines.
-            (let [ver (js/call Bun .spawnSync ["gpg" "--no-default-keyring" "--keyring" kr
+            (let [ver Any (js/call Bun .spawnSync ["gpg" "--no-default-keyring" "--keyring" kr
                                        "--status-fd" "1" "--verify" ascPath sumsPath] {:stdout "pipe" :stderr "ignore"})
-                  out (js/call (js/get ver .stdout) .toString)
-                  ;; gpg VALIDSIG line fields:
-                  ;;   VALIDSIG <signing-key-fpr> <date> <sig-ts> <expire-ts> <ver>
-                  ;;            <reserved> <pk-algo> <hash-algo> <sig-class> <PRIMARY-KEY-FPR>
-                  ;; Mozilla signs SHA256SUMS.asc with a ROTATING SUBKEY, so the FIRST
-                  ;; field is the subkey fpr while the LAST field is the primary-key fpr
-                  ;; gpg resolved. We pin to the PRIMARY key (the durable trust anchor
-                  ;; that survives subkey rotation), so assert a VALIDSIG line whose
-                  ;; primary-key-fpr field == our pinned fingerprint. (A direct
-                  ;; primary-key signature repeats the primary as both fields, so this
-                  ;; also covers that case — strictly more correct than matching the
-                  ;; first field, which only held while Mozilla signed with the primary.)
-                  ;; --status-fd lines are prefixed "[GNUPG:] ", so match on `includes`
-                  ;; not `startsWith`; the primary-key-fpr is still the LAST field.
-                  valid (js/call (js/call out .split "\n") .some (fn [(line String)] Any (and (js/call line .includes "VALIDSIG ")
-                                 (let [f (js/call (js/call line .trim) .split (js/new RegExp "\\s+"))
-                                       (field-count Int) (js/get f .length)]
+                  out Any (js/call (js/get ver .stdout) .toString)
+                  valid Any (js/call (js/call out .split "\n") .some (fn [line String] Any (and (js/call line .includes "VALIDSIG ")
+                                 (let [f Any (js/call (js/call line .trim) .split (js/new RegExp "\\s+"))
+                                       field-count Int (js/get f .length)]
                                    (= (aget f (- field-count 1)) MOZILLA-SIGNING-FPR)))))]
               (when-not valid
                 (throw (js/new Error (str "SHA256SUMS.asc not signed by pinned Mozilla key "
@@ -147,20 +139,20 @@
               (js/call log .ok (str "SHA256SUMS.asc GPG-verified against pinned Mozilla key " MOZILLA-SIGNING-FPR))
               true))))))))
 
-(defn fetchSha256 [(version String)] Any
+(defn fetchSha256 [version String] Any
   (js/call log .step (str "fetching upstream SHA256SUMS for firefox " version))
-  (let [res (js/await (fetch (checksumUrl version)))]
+  (let [res Any (js/await (fetch (checksumUrl version)))]
     (when-not (js/get res .ok)
       (throw (js/new Error (str "failed to fetch SHA256SUMS: " (js/get res .status)))))
-    (let [text (js/await (js/call res .text))
-          liveHash (hashFromSums text version)]
+    (let [text Any (js/await (js/call res .text))
+          liveHash Any (hashFromSums text version)]
       (when-not liveHash
         (throw (js/new Error (str "SHA256SUMS does not list " (tarballName version)))))
       ;; F9 trust anchor: the live SHA256SUMS comes from the SAME origin as the
       ;; tarball, so it can't be the sole authority. Assert it against the
       ;; in-repo pinned hash — a backdoored tarball + matching same-origin
       ;; SHA256SUMS can't move this committed value.
-      (let [pinned (pinnedSha256 version)]
+      (let [pinned String (pinnedSha256 version)]
         (when (not= liveHash pinned)
           (throw (js/new Error (str "live SHA256SUMS disagrees with pinned checksum for firefox " version
                               ".\n  pinned: " pinned
@@ -172,32 +164,34 @@
       (js/await (verifySignature version text false))
       liveHash)))
 
-(defn sha256OfFile [(path String)] Any
-  (let [file (js/call Bun .file path)
-        buf (js/await (js/call file .arrayBuffer))
-        hash (js/new Bun.CryptoHasher "sha256")]
+(defn sha256OfFile [path String] Any
+  (let [file Any (js/call Bun .file path)
+        buf Any (js/await (js/call file .arrayBuffer))
+        hash Any (js/new Bun.CryptoHasher "sha256")]
     (js/call hash .update buf)
     (js/call hash .digest "hex")))
 
-(defn downloadTo [(url String) (dest String)] Any
+(defn downloadTo
+  [url String
+   dest String] Any
   (js/call log .step (str "downloading " url))
-  (let [res (js/await (fetch url))]
+  (let [res Any (js/await (fetch url))]
     (when-not (js/get res .ok)
       (throw (js/new Error (str "download failed (" (js/get res .status) "): " url))))
-    (let [(total Float) (Number (or (js/call (js/get res .headers) .get "content-length") 0))]
+    (let [total Float (Number (or (js/call (js/get res .headers) .get "content-length") 0))]
       (when total
         (js/call log .info (str "expecting " (js/call (/ total 1024 1024) .toFixed 1) " MB")))
       (js/await (js/call Bun .write dest res)))))
 
 (js/export (defn download! [] Any
-  (let [cfg (load-config!)]
+  (let [cfg Any (load-config!)]
     (mkdirSync SOURCES-CACHE {:recursive true})
-    (let [version (js/get (js/get cfg .firefox) .version)
-          tarball (join SOURCES-CACHE (tarballName version))
-          expectedHash (js/await (fetchSha256 version))]
+    (let [version Any (js/get (js/get cfg .firefox) .version)
+          tarball Any (join SOURCES-CACHE (tarballName version))
+          expectedHash Any (js/await (fetchSha256 version))]
       ;; Cache hit: existing tarball matches upstream hash. Skip download.
       (if (existsSync tarball)
-        (let [have (js/await (sha256OfFile tarball))]
+        (let [have Any (js/await (sha256OfFile tarball))]
           (if (= have expectedHash)
             (js/call log .ok "cached tarball matches upstream hash, skipping download")
             (do
@@ -205,11 +199,11 @@
               (js/await (downloadTo (tarballUrl version) tarball)))))
         (js/await (downloadTo (tarballUrl version) tarball)))
       ;; Verify post-download (also catches partial writes / network corruption).
-      (let [actualHash (js/await (sha256OfFile tarball))]
+      (let [actualHash Any (js/await (sha256OfFile tarball))]
         (when (not= actualHash expectedHash)
           (throw (js/new Error (str "tarball SHA256 mismatch.\n  expected: " expectedHash
                               "\n  got:      " actualHash)))))
-      (let [(size Float) (js/get (statSync tarball) .size)]
+      (let [size Float (js/get (statSync tarball) .size)]
         (js/call log .ok (str "tarball verified (" (js/call (/ size 1024 1024) .toFixed 1) " MB)")))
       ;; Extract into engine/. mozilla-central tarballs unpack as firefox-VERSION/
       ;; — strip that level so engine/ holds the source tree directly.
@@ -220,11 +214,11 @@
         (do
           (js/call log .step "extracting tarball to engine/ (this takes a couple minutes)")
           (mkdirSync ENGINE-DIR)
-          (let [proc (js/call Bun .spawn {:cmd ["tar" "-xJf" tarball "-C" ENGINE-DIR "--strip-components=1"]
+          (let [proc Any (js/call Bun .spawn {:cmd ["tar" "-xJf" tarball "-C" ENGINE-DIR "--strip-components=1"]
                                   :cwd REPO-ROOT
                                   :stdout "inherit"
                                   :stderr "inherit"})
-                code (js/await (js/get proc .exited))]
+                code Any (js/await (js/get proc .exited))]
             (when (not= code 0)
               (throw (js/new Error (str "tar extraction failed (exit " code ")")))))
           (js/call log .ok "engine/ ready")))))))
