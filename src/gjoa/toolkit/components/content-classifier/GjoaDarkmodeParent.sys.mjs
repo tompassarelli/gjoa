@@ -275,7 +275,7 @@ function _decideCorrectiveDarkens(corrective, fg) {
   return _oklchL(corrective) < _oklchL(fg);
 }
 // ── OKLCH ⇄ sRGB (Ottosson) + the hue-preserving accent solve ──────────────────────
-// Keep this math identical to tools/darkmode-regress/colormath.js and the paint
+// Keep this math identical to tools/darkmode-regress/colormath.cjs and the paint
 // operator so a chromatic accent can be re-solved toward legibility without
 // changing hue.
 function _oklab(rgb) {

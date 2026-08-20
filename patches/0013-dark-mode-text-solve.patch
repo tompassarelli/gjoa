@@ -11,7 +11,7 @@
 #     - cpp-method nsTextPaintStyle::InitCommonColors
 #
 # gjoa dark-mode v2 (M3): paint-time text re-solve. Ports
-# tools/darkmode-regress/colormath.js correct() (OKLab + APCA SA98G) to C++ and
+# tools/darkmode-regress/colormath.cjs correct() (OKLab + APCA SA98G) to C++ and
 # applies it at nsTextPaintStyle::GetTextColor against the frozen effective
 # backdrop, so every glyph clears an APCA floor + stays under the halation ceiling
 # holding hue -- which 0009's blind Y->1-lum cannot guarantee.
@@ -24,7 +24,7 @@ index 0000000000000000000000000000000000000000..8f30b481fbe9bf06bad1c2b8dbcbfc34
 +/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
 +/* gjoa dark-mode v2 (M3): OKLab/APCA paint-time text re-solve.
 + *
-+ * Mirrors tools/darkmode-regress/colormath.js correct() exactly — Ottosson OKLab
++ * Mirrors tools/darkmode-regress/colormath.cjs correct() exactly — Ottosson OKLab
 + * + APCA SA98G, pure float math, C++-only (no crate, no Rust). The deterministic
 + * bun test (tools/darkmode-regress/colormath.test.js) is the spec; keep in sync.
 + *
@@ -78,7 +78,7 @@ index 0000000000000000000000000000000000000000..cafba416f9ee32eda17ca2aa8d3d31c3
 +++ b/layout/generic/GjoaDarkText.cpp
 @@ -0,0 +1,184 @@
 +/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
-+/* gjoa dark-mode v2 (M3). Port of tools/darkmode-regress/colormath.js correct().
++/* gjoa dark-mode v2 (M3). Port of tools/darkmode-regress/colormath.cjs correct().
 + * Pure float math; no engine deps beyond nsColor. */
 +
 +#include "GjoaDarkText.h"
