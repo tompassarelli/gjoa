@@ -10,55 +10,63 @@
             [gjoa.tools.projector.reflector :refer [child-nodes to-cst render]]
             [gjoa.tools.projector.anchor :refer [fuzzy-find confident?]]))
 
-(defn parse-js [(src String)] Any
+(defn parse-js [src String] Any
   (parse src {:ecmaVersion "latest" :sourceType "module" :allowHashBang true}))
 
 ;; DFS for the named class (ClassDeclaration/ClassExpression with id.name = cname).
-(defn find-class [(n Any) (cname String)] Any
+(defn find-class [n Any
+                 cname String] Any
   (if (and (some? n)
            (or (= (js/get n .type) "ClassDeclaration") (= (js/get n .type) "ClassExpression"))
            (some? (js/get n .id)) (= (js/get (js/get n .id) .name) cname))
     n
-    (let [kids (child-nodes n)]
-      (loop [i 0]
+    (let [kids Any (child-nodes n)]
+      (loop [i Int 0]
         (if (< i (js/get kids .length))
-          (let [r (find-class (aget kids i) cname)]
+          (let [r Any (find-class (aget kids i) cname)]
             (if (some? r) r (recur (+ i 1))))
           nil)))))
 
 ;; DFS within a node for a MethodDefinition/Property whose key name = `name`;
 ;; return the body block's [start end] span, or nil.
-(defn find-method [(n Any) (name String)] Any
+(defn find-method [n Any
+                  name String] Any
   (if (and (some? n)
            (or (= (js/get n .type) "MethodDefinition") (= (js/get n .type) "Property"))
            (some? (js/get n .key)) (= (js/get (js/get n .key) .name) name)
            (some? (js/get n .value)) (some? (js/get (js/get n .value) .body)))
     [(js/get (js/get (js/get n .value) .body) .start) (js/get (js/get (js/get n .value) .body) .end)]
-    (let [kids (child-nodes n)]
-      (loop [i 0]
+    (let [kids Any (child-nodes n)]
+      (loop [i Int 0]
         (if (< i (js/get kids .length))
-          (let [r (find-method (aget kids i) name)]
+          (let [r Any (find-method (aget kids i) name)]
             (if (some? r) r (recur (+ i 1))))
           nil)))))
 
 ;; CLASS-QUALIFIED anchor: locate `class-name`, then `method-name`'s body span
 ;; within it. Disambiguates same-named methods across classes (name + structural
 ;; position). Returns [start end] or nil.
-(js/export (defn find-body-span [(ast Any) (class-name String) (method-name String)] Any
-  (let [c (find-class ast class-name)]
+(js/export (defn find-body-span [ast Any
+                                class-name String
+                                method-name String] Any
+  (let [c Any (find-class ast class-name)]
     (if (nil? c) nil (find-method c method-name)))))
 
 ;; replace the CST node covering exactly [s e] with a raw leaf carrying `text`.
-(js/export (defn replace-span [(cst Any) (span Any) (text String)] Any
+(js/export (defn replace-span [cst Any
+                              span Any
+                              text String] Any
   (if (and (= (js/get cst .start) (aget span 0)) (= (js/get cst .end) (aget span 1)))
     {:kind "Raw" :start (aget span 0) :end (aget span 1) :segs [text] :kids []}
     {:kind (js/get cst .kind) :start (js/get cst .start) :end (js/get cst .end)
      :segs (js/get cst .segs)
-     :kids (js/call (js/get cst .kids) .map (fn [(k Any)] Any (replace-span k span text)))})))
+     :kids (js/call (js/get cst .kids) .map (fn [k Any] Any (replace-span k span text)))})))
 
 ;; replace the body block at `span` in `src` with `new-body`, byte-exactly.
-(defn apply-body [(src String) (span Any) (new-body String)] String
-  (let [root {:type "File" :start 0 :end (js/get src .length) :body [(parse-js src)]}]
+(defn apply-body [src String
+                 span Any
+                 new-body String] String
+  (let [root (Map Keyword Any) {:type "File" :start 0 :end (js/get src .length) :body [(parse-js src)]}]
     (render (replace-span (to-cst root src) span new-body))))
 
 ;; the set-body verb: src + class + method + new body text (including the braces),
@@ -67,15 +75,19 @@
 ;; match (recovers an upstream rename) — but only AUTO-APPLY when confident +
 ;; unambiguous, else fail loudly (never mis-apply). -> {:ok :src :span [:recovered]}
 ;; or {:ok false :reason}.
-(js/export (defn set-method-body [(src String) (class-name String) (method-name String) (new-body String) (anchor Any)] Any
-  (let [ast (parse-js src)
-        exact (find-body-span ast class-name method-name)]
+(js/export (defn set-method-body [src String
+                                 class-name String
+                                 method-name String
+                                 new-body String
+                                 anchor Any] Any
+  (let [ast Any (parse-js src)
+       exact Any (find-body-span ast class-name method-name)]
     (cond
       (some? exact)
       {:ok true :src (apply-body src exact new-body) :span exact}
 
       (some? anchor)
-      (let [m (fuzzy-find src class-name anchor)]
+      (let [m Any (fuzzy-find src class-name anchor)]
         (if (confident? m)
           {:ok true :src (apply-body src (js/get m .body) new-body) :span (js/get m .body)
            :recovered (str method-name " -> " (js/get m .name) " (" (js/get m .why) ")")}
@@ -86,12 +98,14 @@
 
 ;; extract the literal body text of class.method from src (for building a claim
 ;; from a known-good edited source).
-(js/export (defn get-body [(src String) (class-name String) (method-name String)] Any
-  (let [ast (parse-js src)
-        span (find-body-span ast class-name method-name)]
+(js/export (defn get-body [src String
+                          class-name String
+                          method-name String] Any
+  (let [ast Any (parse-js src)
+       span Any (find-body-span ast class-name method-name)]
     (if (nil? span) nil (js/call src .slice (aget span 0) (aget span 1))))))
 
 ;; valid JS? (parse-or-false)
-(js/export (defn parses? [(src String)] Bool
+(js/export (defn parses? [src String] Bool
   (try (do (parse-js src) true)
     (catch (_e Error) false))))
