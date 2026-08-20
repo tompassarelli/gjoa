@@ -74,7 +74,7 @@
   [(deftest "compact — sidebar stays expanded while a context menu is open (#88)" [mn]
      (js/await (chrome-eval ENABLE-COMPACT))
      (js/await (await-true "return !!document.querySelector('#sidebar-container[data-gjoa-compact]');" 4000))
-     (let [r (js/await (chrome-eval OPEN-MENU-AND-LEAVE))]
+     (let [r Any (js/await (chrome-eval OPEN-MENU-AND-LEAVE))]
        (expect (js/get r .menuLive) "precondition: a live menupopup[state=showing] should exist"))
      ;; KEEP: negative assertion — no observable flag to await. The leave-collapse
      ;; opportunity is on-sidebar-leave's setTimeout(linger=150ms); we must let it FIRE
@@ -82,7 +82,7 @@
      ;; gjoa-has-hover would return at the first 20ms poll, before the timer ran. Blind
      ;; settle past the 150ms linger (+ rAF/flash margin) is required.
      (js/await (sleep 400))
-     (let [held (js/await (chrome-eval HAS-HOVER))]
+     (let [held Bool (js/await (chrome-eval HAS-HOVER))]
        (expect held "sidebar collapsed while a context menu was open"))
      ;; Once the menu closes, a later mouseleave may collapse the sidebar.
      (js/await (chrome-eval CLOSE-MENU-AND-LEAVE))
@@ -97,7 +97,7 @@
    (deftest "compact — an `e`-pinned drawer survives a context menu opening" [mn]
      (js/await (chrome-eval ENABLE-COMPACT))
      (js/await (await-true "return !!document.querySelector('#sidebar-container[data-gjoa-compact]');" 4000))
-     (let [r (js/await (chrome-eval PIN-THEN-MENU-AND-LEAVE))]
+     (let [r Any (js/await (chrome-eval PIN-THEN-MENU-AND-LEAVE))]
        (expect (js/get r .menuLive) "precondition: a live menupopup[state=showing] should exist")
        (expect (js/get r .pinnedBefore) "precondition: [gjoa-pinned] should be set before the leave")
        ;; Assert synchronously before asynchronous menu cleanup can change state.
