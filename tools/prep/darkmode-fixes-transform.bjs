@@ -46,7 +46,10 @@
 ;; Reflect.set, which emits as a plain `Reflect.set(o,k,v)` call. This is the
 ;; idiomatic interop escape until the pinned compiler's set!-of-get lowering is
 ;; repaired upstream (it still bracket-assigns in the older committed registry.js).
-(defn oset! [(o Any) (k Any) (v Any)] Any
+(defn oset!
+  [o Any
+   k Any
+   v Any] Any
   (js/call Reflect .set o k v)
   v)
 
@@ -69,8 +72,8 @@
   "0e6d82b4df349edeb789e4dbb346f427caff4861f071020525fd81e6f50e638f")
 
 ;; Hex SHA-256 of a string (Bun runtime hasher). Pure — no `!`.
-(defn sha256 [(text String)] String
-  (let [hash (js/new Bun.CryptoHasher "sha256")]
+(defn sha256 [text String] String
+  (let [hash Any (js/new Bun.CryptoHasher "sha256")]
     (js/call hash .update text)
     (js/call hash .digest "hex")))
 
@@ -108,12 +111,15 @@
    "darkred"   [139 0 0]
    "aliceblue" [240 248 255]})
 
-(defn clamp [(x Any) (lo Any) (hi Any)] Any
+(defn clamp
+  [x Any
+   lo Any
+   hi Any] Any
   (Math/max lo (Math/min hi x)))
 
-(defn parse-hex [(h String)] Any
-  (let [n (js/get h .length)
-        valid (js/call (js/new RegExp "^[0-9a-fA-F]+$") .test h)]
+(defn parse-hex [h String] Any
+  (let [n Any (js/get h .length)
+        valid Any (js/call (js/new RegExp "^[0-9a-fA-F]+$") .test h)]
     (cond
       (not valid) nil
       (= n 3) [(parseInt (str (aget h 0) (aget h 0)) 16)
@@ -134,24 +140,28 @@
                (/ (parseInt (js/call h .slice 6 8) 16) 255)]
       :else nil)))
 
-(defn split-args [(body String)] Any
-  (let [raw (js/call (js/call body .trim) .split (js/new RegExp "[\\s,/]+"))]
-    (js/call raw .filter (fn [s] Any (> (js/get s .length) 0)))))
+(defn split-args [body String] Any
+  (let [raw Any (js/call (js/call body .trim) .split (js/new RegExp "[\\s,/]+"))]
+    (js/call raw .filter (fn [s String] Any (> (js/get s .length) 0)))))
 
-(defn parse-component [(s String) (whole Int)] Any
+(defn parse-component
+  [s String
+   whole Int] Any
   (if (js/call s .endsWith "%")
-    (let [(pct Float) (parseFloat (js/call s .slice 0 -1))]
+    (let [pct Float (parseFloat (js/call s .slice 0 -1))]
       (* (/ pct 100) whole))
     (parseFloat s)))
 
-(defn hsl->rgb [(h Float) (s Float) (l Float)] Any
+(defn hsl->rgb
+  [h Float
+   s Float
+   l Float] Any
   ;; Floor-modulo by hand: beagle's `mod` is integer-only, and a CSS hue is a
   ;; fractional degree that may be negative.
-  (let [hh (/ (- h (* 360 (Math/floor (/ h 360)))) 360)
-        q (if (< l 0.5) (* l (+ 1 s)) (- (+ l s) (* l s)))
-        p (- (* 2 l) q)
-        ;; Turn fractions, in a colour space that is entirely fractional.
-        hue->rgb (fn [(t0 Float)] Float (let [(t Float) (cond (< t0 0) (+ t0 1) (> t0 1) (- t0 1) :else t0)]
+  (let [hh Float (/ (- h (* 360 (Math/floor (/ h 360)))) 360)
+        q Float (if (< l 0.5) (* l (+ 1 s)) (- (+ l s) (* l s)))
+        p Float (- (* 2 l) q)
+        hue->rgb (Fn [Float] Float) (fn [t0 Float] Float (let [t Float (cond (< t0 0) (+ t0 1) (> t0 1) (- t0 1) :else t0)]
                      (cond
                        (< t (/ 1.0 6.0)) (+ p (* (- q p) 6 t))
                        (< t (/ 1.0 2.0)) q
@@ -163,16 +173,16 @@
        (Math/round (* (hue->rgb hh) 255))
        (Math/round (* (hue->rgb (- hh (/ 1.0 3.0))) 255))])))
 
-(defn parse-color [(raw String)] Any
-  (let [s (js/call raw .trim)
-        lower (js/call s .toLowerCase)]
+(defn parse-color [raw String] Any
+  (let [s String (js/call raw .trim)
+        lower Any (js/call s .toLowerCase)]
     (cond
       (js/call s .startsWith "#")
       (parse-hex (js/call s .slice 1))
 
       (or (js/call lower .startsWith "rgb(") (js/call lower .startsWith "rgba("))
-      (let [body (js/call s .slice (+ (js/call s .indexOf "(") 1) (js/call s .lastIndexOf ")"))
-            parts (split-args body)]
+      (let [body String (js/call s .slice (+ (js/call s .indexOf "(") 1) (js/call s .lastIndexOf ")"))
+            parts Any (split-args body)]
         (when (>= (js/get parts .length) 3)
           [(clamp (Math/round (parse-component (aget parts 0) 255)) 0 255)
            (clamp (Math/round (parse-component (aget parts 1) 255)) 0 255)
@@ -180,15 +190,15 @@
            (if (>= (js/get parts .length) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)]))
 
       (or (js/call lower .startsWith "hsl(") (js/call lower .startsWith "hsla("))
-      (let [body (js/call s .slice (+ (js/call s .indexOf "(") 1) (js/call s .lastIndexOf ")"))
-            parts (split-args body)]
+      (let [body String (js/call s .slice (+ (js/call s .indexOf "(") 1) (js/call s .lastIndexOf ")"))
+            parts Any (split-args body)]
         (when (>= (js/get parts .length) 3)
-          (let [h (parseFloat (aget parts 0))
-                (sat-raw Float) (parse-component (aget parts 1) 100)
-                (lit-raw Float) (parse-component (aget parts 2) 100)
-                sat (/ sat-raw 100)
-                lit (/ lit-raw 100)
-                rgb (hsl->rgb h (clamp sat 0 1) (clamp lit 0 1))]
+          (let [h Float (parseFloat (aget parts 0))
+                sat-raw Float (parse-component (aget parts 1) 100)
+                lit-raw Float (parse-component (aget parts 2) 100)
+                sat Float (/ sat-raw 100)
+                lit Float (/ lit-raw 100)
+                rgb Any (hsl->rgb h (clamp sat 0 1) (clamp lit 0 1))]
             [(aget rgb 0) (aget rgb 1) (aget rgb 2)
              (if (>= (js/get parts .length) 4) (clamp (parse-component (aget parts 3) 1) 0 1) 1)])))
 
@@ -196,47 +206,55 @@
       (parse-hex s)
 
       (get NAMED-COLORS lower)
-      (let [rgb (get NAMED-COLORS lower)]
+      (let [rgb Any (get NAMED-COLORS lower)]
         [(aget rgb 0) (aget rgb 1) (aget rgb 2) 1])
 
       :else nil)))
 
-(defn compute [(u Float)] Float
-  (let [f (/ u 255)]
+(defn compute [u Float] Float
+  (let [f Float (/ u 255)]
     (if (<= f 0.03928) (/ f 12.92) (Math/pow (/ (+ f 0.055) 1.055) 2.4))))
 
-(defn decompute [(x Float)] Any
-  (let [s (if (<= x (/ 0.03928 12.92))
+(defn decompute [x Float] Any
+  (let [s Float (if (<= x (/ 0.03928 12.92))
             (* x 12.92)
             (- (* 1.055 (Math/pow x (/ 1.0 2.4))) 0.055))]
     (clamp (Math/round (* s 255)) 0 255)))
 
-(defn flip-rgba [(rgba Any)] Any
-  (let [r (aget rgba 0) g (aget rgba 1) b (aget rgba 2) a (aget rgba 3)
-        lr (compute r) lg (compute g) lb (compute b)
-        lum (+ (* 0.2126 lr) (* 0.7152 lg) (* 0.0722 lb))
-        target (- 1 lum)
-        factor (/ (+ target 0.05) (+ lum 0.05))
-        adj (fn [(l Float)] Any (decompute (Math/max 0.0 (- (* (+ l 0.05) factor) 0.05))))]
+(defn flip-rgba [rgba Any] Any
+  (let [r Any (aget rgba 0)
+        g Any (aget rgba 1)
+        b Any (aget rgba 2)
+        a Any (aget rgba 3)
+        lr Float (compute r)
+        lg Float (compute g)
+        lb Float (compute b)
+        lum Float (+ (* 0.2126 lr) (* 0.7152 lg) (* 0.0722 lb))
+        target Float (- 1 lum)
+        factor Float (/ (+ target 0.05) (+ lum 0.05))
+        adj (Fn [Float] Any) (fn [l Float] Any (decompute (Math/max 0.0 (- (* (+ l 0.05) factor) 0.05))))]
     [(adj lr) (adj lg) (adj lb) a]))
 
-(defn luminance [(rgba Any)] Float
+(defn luminance [rgba Any] Float
   (+ (* 0.2126 (compute (aget rgba 0)))
      (* 0.7152 (compute (aget rgba 1)))
      (* 0.0722 (compute (aget rgba 2)))))
 
-(defn byte->hex [(n Any)] String
+(defn byte->hex [n Any] String
   (js/call (js/call (clamp (Math/round n) 0 255) .toString 16) .padStart 2 "0"))
 
-(defn rgba->css [(rgba Any)] String
-  (let [r (aget rgba 0) g (aget rgba 1) b (aget rgba 2) a (aget rgba 3)]
+(defn rgba->css [rgba Any] String
+  (let [r Any (aget rgba 0)
+        g Any (aget rgba 1)
+        b Any (aget rgba 2)
+        a Any (aget rgba 3)]
     (if (>= a 1)
       (str "#" (byte->hex r) (byte->hex g) (byte->hex b))
       (str "rgba(" (clamp (Math/round r) 0 255) ", " (clamp (Math/round g) 0 255) ", "
            (clamp (Math/round b) 0 255) ", " (Number (js/call a .toFixed 3)) ")"))))
 
-(defn resolve-token [(inner String)] Any
-  (let [parsed (parse-color inner)]
+(defn resolve-token [inner String] Any
+  (let [parsed Any (parse-color inner)]
     (when parsed (rgba->css (flip-rgba parsed)))))
 
 ;; ---------------------------------------------------------------------------
@@ -265,20 +283,20 @@
   ["INVERT" "CSS" "IGNORE INLINE STYLE" "IGNORE IMAGE ANALYSIS"
    "INVERT SIZE" "PLUS"])
 
-(defn parse-snapshot! [(text String)] Any
-  (let [blocks (js/call text .split SEPARATOR)
-        out []]
-    (doseq [block blocks]
-      (let [lines (js/call (js/call block .trimEnd) .split "\n")
-            patterns []
-            sections {}
-            cur-name (atom nil)
-            cur-lines (atom [])
-            flush! (fn [] Any (when @cur-name
+(defn parse-snapshot! [text String] Any
+  (let [blocks Any (js/call text .split SEPARATOR)
+        out (Vec Any) []]
+    (doseq [block Any blocks]
+      (let [lines Any (js/call (js/call block .trimEnd) .split "\n")
+            patterns (Vec Any) []
+            sections (Map Any Any) {}
+            cur-name (Atom Nil) (atom nil)
+            cur-lines (Atom (Vec Any)) (atom [])
+            flush! (Fn [] Any) (fn [] Any (when @cur-name
                        (oset! sections @cur-name (js/call (js/call @cur-lines .join "\n") .trim)))
                      (reset! cur-lines []))]
-        (doseq [line lines]
-          (let [trimmed (js/call line .trim)]
+        (doseq [line String lines]
+          (let [trimmed Any (js/call line .trim)]
             (cond
               (and (= trimmed "") (nil? @cur-name)) nil
 
@@ -299,40 +317,50 @@
 ;; Host matching (identical semantics to darkmode-registry.bjs).
 ;; ---------------------------------------------------------------------------
 
-(defn pattern-host [(pat String)] String
-  (let [no-scheme (js/call pat .replace (js/new RegExp "^[a-z]+://") "")
-        host (aget (js/call no-scheme .split "/") 0)]
+(defn pattern-host [pat String] String
+  (let [no-scheme Any (js/call pat .replace (js/new RegExp "^[a-z]+://") "")
+        host Any (aget (js/call no-scheme .split "/") 0)]
     (js/call (js/call host .trim) .toLowerCase)))
 
-(defn host-matches? [(pat String) (host String)] Any
-  (let [p (pattern-host pat)
-        h (js/call host .toLowerCase)]
+(defn host-matches?
+  [pat String
+   host String] Any
+  (let [p String (pattern-host pat)
+        h Any (js/call host .toLowerCase)]
     (cond
       (= p "*") false
       (= p h) true
       (js/call p .startsWith "*.")
-      (let [base (js/call p .slice 2)]
+      (let [base String (js/call p .slice 2)]
         (or (= h base) (js/call h .endsWith (str "." base))))
       (js/call h .endsWith (str "." p)) true
       :else false)))
 
-(defn find-block [(blocks Any) (host String)] Any
-  (js/call blocks .find (fn [b] Any (js/call (js/get b .patterns) .some (fn [pat] Any (host-matches? pat host))))))
+(defn find-block
+  [blocks Any
+   host String] Any
+  (js/call blocks .find (fn [b Any] Any (js/call (js/get b .patterns) .some (fn [pat String] Any (host-matches? pat host))))))
 
 ;; ---------------------------------------------------------------------------
 ;; CSS resolution: ${...} tokens + var(--darkreader-*) refs.
 ;; ---------------------------------------------------------------------------
 
-(defn resolve-tokens [(css String) (unresolved Any)] String
-  (js/call css .replace (js/new RegExp "\\$\\{([^}]*)\\}" "g") (fn [_match inner] Any (let [trimmed (js/call inner .trim)]
+(defn resolve-tokens
+  [css String
+   unresolved Any] String
+  (js/call css .replace (js/new RegExp "\\$\\{([^}]*)\\}" "g") (fn [_match String
+                                                                    inner String] Any (let [trimmed Any (js/call inner .trim)]
                 (cond
                   (= (js/call trimmed .toLowerCase) "transparent") "transparent"
                   :else
-                  (let [resolved (resolve-token trimmed)]
+                  (let [resolved Any (resolve-token trimmed)]
                     (if resolved resolved (do (js/call unresolved .push trimmed) trimmed))))))))
 
-(defn resolve-dr-vars [(css String) (unmapped Any)] String
-  (js/call css .replace (js/new RegExp "var\\(\\s*(--darkreader-[A-Za-z0-9_-]+)\\s*(?:,[^)]*)?\\)" "g") (fn [_match name] Any (let [v (get DARKREADER-VARS name)]
+(defn resolve-dr-vars
+  [css String
+   unmapped Any] String
+  (js/call css .replace (js/new RegExp "var\\(\\s*(--darkreader-[A-Za-z0-9_-]+)\\s*(?:,[^)]*)?\\)" "g") (fn [_match String
+                                                                                                             name String] Any (let [v Any (get DARKREADER-VARS name)]
                 (if v v (do (js/call unmapped .push name) "#181a1b"))))))
 
 ;; Constructs that must NEVER reach the generated USER_SHEET (fail closed).
@@ -348,15 +376,15 @@
 ;; selector per line.
 ;; `body` is a parsed-map lookup that may be `undefined` (section absent), so it
 ;; is genuinely Any here — guard truthiness before touching String methods.
-(defn selector-lines [(body Any)] Any
+(defn selector-lines [body Any] Any
   (if (or (not body) (= (js/call body .trim) ""))
     []
-    (js/call (js/call (js/call body .split "\n") .map (fn [s] Any (js/call s .trim))) .filter (fn [s] Any (> (js/get s .length) 0)))))
+    (js/call (js/call (js/call body .split "\n") .map (fn [s String] Any (js/call s .trim))) .filter (fn [s String] Any (> (js/get s .length) 0)))))
 
 ;; IGNORE * with a body of exactly `*` means "all elements" → emit boolean true.
 ;; A non-`*` body → emit the explicit selector list. Empty → nil (directive absent).
-(defn ignore-field [(body Any)] Any
-  (let [sels (selector-lines body)]
+(defn ignore-field [body Any] Any
+  (let [sels Any (selector-lines body)]
     (cond
       (= (js/get sels .length) 0) nil
       (and (= (js/get sels .length) 1) (= (aget sels 0) "*")) true
@@ -370,22 +398,24 @@
 ;; nests deeper than 2). Returns {:css ... :unresolved [...]} where :unresolved is
 ;; ONLY the FINAL pass's leftovers (a transient inner-layer literal isn't reported).
 ;; Pure: builds a fresh unresolved list per pass and returns the last one.
-(defn resolve-tokens-fixpoint [(css String) (passes Int)] Any
+(defn resolve-tokens-fixpoint
+  [css String
+   passes Int] Any
   (if (or (<= passes 0) (not (js/call css .includes "${")))
     {:css css :unresolved []}
-    (let [u []
-          next (resolve-tokens css u)]
+    (let [u (Vec Any) []
+          next String (resolve-tokens css u)]
       (if (or (= next css) (not (js/call next .includes "${")))
         {:css next :unresolved u}
         (resolve-tokens-fixpoint next (- passes 1))))))
 
-(defn build-css [(css Any)] Any
+(defn build-css [css Any] Any
   (if (or (not css) (= (js/call css .trim) ""))
     {:css "" :unresolved [] :unmapped []}
-    (let [unmapped []
-          fixed (resolve-tokens-fixpoint css 5)
-          resolved (resolve-dr-vars (js/get fixed .css) unmapped)
-          compact (js/call (js/call (js/call resolved .replace (js/new RegExp "\\s*\\n\\s*" "g") " ") .replace (js/new RegExp "  +" "g") " ") .trim)]
+    (let [unmapped (Vec Any) []
+          fixed Any (resolve-tokens-fixpoint css 5)
+          resolved String (resolve-dr-vars (js/get fixed .css) unmapped)
+          compact Any (js/call (js/call (js/call resolved .replace (js/new RegExp "\\s*\\n\\s*" "g") " ") .replace (js/new RegExp "  +" "g") " ") .trim)]
       (if (js/call FORBIDDEN-CSS .test compact)
         {:rejected "resolved CSS contains a forbidden construct (url()/@import/expression())"}
         {:css compact :unresolved (js/get fixed .unresolved) :unmapped unmapped}))))
@@ -411,16 +441,18 @@
 ;; entries that carry hand-reviewed invertSelectors are merged on top and win, so
 ;; nothing hand-tuned is lost.) `keep-invert?` lets the QA print path still inspect
 ;; the raw INVERT list without it ever reaching the written entry.
-(defn build-entry! [(block Any) (keep-invert? Any)] Any
-  (let [secs (js/get block .sections)
-        css-built (build-css (get secs "CSS"))]
+(defn build-entry!
+  [block Any
+   keep-invert? Any] Any
+  (let [secs Any (js/get block .sections)
+        css-built Any (build-css (get secs "CSS"))]
     (if (js/get css-built .rejected)
       {:rejected (js/get css-built .rejected)}
-      (let [invert-sels (selector-lines (get secs "INVERT"))
-            ign-inline (ignore-field (get secs "IGNORE INLINE STYLE"))
-            ign-image (ignore-field (get secs "IGNORE IMAGE ANALYSIS"))
-            has-css (> (js/get (js/get css-built .css) .length) 0)
-            entry {:mode "css" :override "auto"}]
+      (let [invert-sels Any (selector-lines (get secs "INVERT"))
+            ign-inline Any (ignore-field (get secs "IGNORE INLINE STYLE"))
+            ign-image Any (ignore-field (get secs "IGNORE IMAGE ANALYSIS"))
+            has-css Bool (> (js/get (js/get css-built .css) .length) 0)
+            entry (Map Keyword String) {:mode "css" :override "auto"}]
         ;; Provenance uses a STRING key so the emitted JSON key is exactly
         ;; "_provenance" (a keyword :_provenance munges the leading underscore).
         (oset! entry "_provenance" PROVENANCE)
@@ -453,22 +485,23 @@
 ;; ---------------------------------------------------------------------------
 
 (defn selftest! [] Any
-  (let [info (js/get log .info) ok (js/get log .ok) err (js/get log .error)
-        failures (atom 0)
-        check! (fn [(label String) (pass Any) (detail String)] Any (if pass
+  (let [info Any (js/get log .info)
+        ok Any (js/get log .ok)
+        err Any (js/get log .error)
+        failures (Atom Int) (atom 0)
+        check! (Fn [String Any String] Any) (fn [label String pass Any detail String] Any (if pass
                    (ok (str label " — " detail))
                    (do (err (str label " FAILED — " detail)) (reset! failures (+ @failures 1)))))
-        white (flip-rgba [255 255 255 1])
-        black (flip-rgba [0 0 0 1])
-        ;; a tiny synthetic block exercising every directive
-        sample (str "*.example.com\n\nINVERT\n.logo\n.brand-mark\n\n"
+        white Any (flip-rgba [255 255 255 1])
+        black Any (flip-rgba [0 0 0 1])
+        sample String (str "*.example.com\n\nINVERT\n.logo\n.brand-mark\n\n"
                     "CSS\n.box {\n  background: ${#ffffff} !important;\n}\n\n"
                     "IGNORE INLINE STYLE\n.entry *\n\n"
                     "IGNORE IMAGE ANALYSIS\n*\n")
-        blocks (parse-snapshot! sample)
-        blk (find-block blocks "example.com")
-        built (and blk (build-entry! blk true))
-        e (and built (js/get built .entry))]
+        blocks Any (parse-snapshot! sample)
+        blk Any (find-block blocks "example.com")
+        built Any (and blk (build-entry! blk true))
+        e Any (and built (js/get built .entry))]
     (info "darkmode-fixes-transform self-test")
     (check! "white→dark" (< (luminance white) 0.22) (str "luminance " (js/call (luminance white) .toFixed 4)))
     (check! "black→light" (> (luminance black) 0.5) (str "luminance " (js/call (luminance black) .toFixed 4)))
@@ -519,20 +552,22 @@ counterpart. Output is minified (the actor lazy-loads + caches it once).
 
 (defn read-snapshot! [] Any
   (when (not (existsSync SNAPSHOT-PATH))
-    (let [err (js/get log .error)]
+    (let [err Any (js/get log .error)]
       (err (str "snapshot not found at " SNAPSHOT-PATH))
       (err (str "refresh (pinned): curl -sL https://raw.githubusercontent.com/darkreader/darkreader/"
                 DARKREADER-PIN "/src/config/dynamic-theme-fixes.config -o tools/prep/darkreader-fixes.snapshot"))
       (js/call process .exit 1)))
   (readFileSync SNAPSHOT-PATH "utf8"))
 
-(defn generate-for-host! [(blocks Any) (host String)] Any
-  (let [block (find-block blocks host)]
+(defn generate-for-host!
+  [blocks Any
+   host String] Any
+  (let [block Any (find-block blocks host)]
     (if (not block)
       {:host host :missing true :reason "no matching DR block"}
       ;; print/QA path keeps invertSelectors visible so a human can eyeball what
       ;; the bulk import drops; the --write-all path prunes them.
-      (let [built (build-entry! block true)]
+      (let [built Any (build-entry! block true)]
         (cond
           (js/get built .rejected)
           {:host host :missing true :reason (js/get built .rejected)}
@@ -542,15 +577,16 @@ counterpart. Output is minified (the actor lazy-loads + caches it once).
            :directives (js/get built .directives)
            :matched-by (js/call (js/get block .patterns) .join ", ")})))))
 
-(defn print-result! [(r Any)] Any
-  (let [warn (js/get log .warn) step (js/get log .step)]
+(defn print-result! [r Any] Any
+  (let [warn Any (js/get log .warn)
+        step Any (js/get log .step)]
     (if (js/get r .missing)
       (warn (str (js/get r .host) ": skipped — " (js/get r .reason)))
       (do
         (step (str (js/get r .host) "  (matched DR patterns: " (js/get r .matched-by) ")"))
-        (let [d (js/get r .directives)]
+        (let [d Any (js/get r .directives)]
           (js/call log .info (str "  directives: "
-                          (js/call (js/call ["INVERT" "CSS" "IGNORE INLINE STYLE" "IGNORE IMAGE ANALYSIS"] .filter (fn [name] Any (cond
+                          (js/call (js/call ["INVERT" "CSS" "IGNORE INLINE STYLE" "IGNORE IMAGE ANALYSIS"] .filter (fn [name String] Any (cond
                                               (= name "INVERT") (js/get d .invert)
                                               (= name "CSS") (js/get d .css)
                                               (= name "IGNORE INLINE STYLE") (js/get d .ignoreInline)
@@ -573,12 +609,12 @@ counterpart. Output is minified (the actor lazy-loads + caches it once).
 ;; domains, so the apex key also covers every subdomain). A plain host keys as
 ;; itself. The global `*` block and any pattern that reduces to `*` / empty is
 ;; skipped. De-duped within a block.
-(defn block-host-keys! [(block Any)] Any
-  (let [seen {}
-        keys []]
-    (doseq [pat (js/get block .patterns)]
-      (let [ph (pattern-host pat)
-            key (if (js/call ph .startsWith "*.") (js/call ph .slice 2) ph)]
+(defn block-host-keys! [block Any] Any
+  (let [seen (Map Any Any) {}
+        keys (Vec Any) []]
+    (doseq [pat String (js/get block .patterns)]
+      (let [ph String (pattern-host pat)
+            key String (if (js/call ph .startsWith "*.") (js/call ph .slice 2) ph)]
         (when (and (not= key "") (not= key "*") (not (js/call key .includes "*"))
                    (not (get seen key)))
           (oset! seen key true)
@@ -589,64 +625,60 @@ counterpart. Output is minified (the actor lazy-loads + caches it once).
 ;; that several blocks fight over keep the FIRST substantive entry (DR orders the
 ;; corpus most-specific-first within a domain family). INVERT-only blocks (which
 ;; collapse to the engine default after the prune) contribute nothing.
-(defn build-all! [(blocks Any)] Any
-  (let [out {}
-        ;; Hyphen-free keys: the beagle/js keyword `:skipped-empty` would munge to
-        ;; `skipped_empty` on read while `oset!`/`get` use the literal string —
-        ;; mismatched keys silently zero the counter. Plain camelCase keeps the
-        ;; keyword-accessor (`.-skippedEmpty`) and the string key identical.
-        stats {:blocks (js/get blocks .length) :written 0 :skippedEmpty 0 :rejected 0}]
-    (doseq [block blocks]
-      (let [built (build-entry! block false)] ;; false = prune invertSelectors
+(defn build-all! [blocks Any] Any
+  (let [out (Map Any Any) {}
+        stats (Map Keyword Any) {:blocks (js/get blocks .length) :written 0 :skippedEmpty 0 :rejected 0}]
+    (doseq [block Any blocks]
+      (let [built Any (build-entry! block false)] ;; false = prune invertSelectors
         (cond
           (js/get built .rejected)
-          (let [(rejected Int) (js/get stats .rejected)]
+          (let [rejected Int (js/get stats .rejected)]
             (oset! stats "rejected" (+ rejected 1)))
           (not (js/get built .substantive))
-          (let [(skipped Int) (js/get stats .skippedEmpty)]
+          (let [skipped Int (js/get stats .skippedEmpty)]
             (oset! stats "skippedEmpty" (+ skipped 1)))
           :else
-          (doseq [key (block-host-keys! block)]
+          (doseq [key String (block-host-keys! block)]
             (when (not (get out key))
               (oset! out key (js/get built .entry))
-              (let [(written Int) (js/get stats .written)]
+              (let [written Int (js/get stats .written)]
                 (oset! stats "written" (+ written 1))))))))
     {:fixes out :stats stats}))
 
 (defn write-all! [] Any
-  (let [info (js/get log .info) ok (js/get log .ok) warn (js/get log .warn) err (js/get log .error)
-        snapshot (read-snapshot!)]
+  (let [info Any (js/get log .info)
+        ok Any (js/get log .ok)
+        warn Any (js/get log .warn)
+        err Any (js/get log .error)
+        snapshot Any (read-snapshot!)]
     ;; Pin gate — refuse to write generated CSS unless the on-disk snapshot matches
     ;; the SHA-256 recorded at DARKREADER-PIN (tampered / silently-refreshed corpus
     ;; is rejected before any USER_SHEET CSS is produced).
-    (let [actual (sha256 snapshot)]
+    (let [actual String (sha256 snapshot)]
       (when (not= actual EXPECTED-SNAPSHOT-SHA256)
         (err (str "snapshot SHA-256 does not match the pinned hash for Dark Reader " DARKREADER-PIN ".\n"
                   "  expected: " EXPECTED-SNAPSHOT-SHA256 "\n"
                   "  got:      " actual "\n"
                   "  --write-all refused. Re-pin deliberately, then update EXPECTED-SNAPSHOT-SHA256."))
         (js/call process .exit 1)))
-    (let [blocks (parse-snapshot! snapshot)
-          built (build-all! blocks)
-          bulk (js/get built .fixes)
-          st (js/get built .stats)
-          ;; Curated registry is AUTHORITATIVE — load it last and let its keys win.
-          curated (if (existsSync REGISTRY-PATH)
+    (let [blocks Any (parse-snapshot! snapshot)
+          built Any (build-all! blocks)
+          bulk Any (js/get built .fixes)
+          st Any (js/get built .stats)
+          curated Any (if (existsSync REGISTRY-PATH)
                     (js/call JSON .parse (readFileSync REGISTRY-PATH "utf8"))
                     {})
-          merged {}
-          curated-keys (Object/keys curated)
-          bulk-keys (Object/keys bulk)
-          overlap (atom 0)]
+          merged (Map Any Any) {}
+          curated-keys Any (Object/keys curated)
+          bulk-keys Any (Object/keys bulk)
+          overlap (Atom Int) (atom 0)]
       ;; 1. lay down every bulk entry, then 2. overwrite with curated (curated wins).
-      (doseq [k bulk-keys] (oset! merged k (get bulk k)))
-      (doseq [k curated-keys]
+      (doseq [k Int bulk-keys] (oset! merged k (get bulk k)))
+      (doseq [k Int curated-keys]
         (when (get bulk k) (reset! overlap (+ @overlap 1)))
         (oset! merged k (get curated k)))
-      (let [merged-keys (Object/keys merged)
-            ;; minified single-line JSON — the file is lazy-loaded + cached by the
-            ;; actor, so on-disk compactness is pure win (smaller fetch + parse).
-            json (js/call JSON .stringify merged)]
+      (let [merged-keys Any (Object/keys merged)
+            json Any (js/call JSON .stringify merged)]
         (writeFileSync REGISTRY-PATH (str json "\n"))
         (info "darkmode bulk import (Dark Reader → gjoa, pruned)")
         (info (str "  blocks parsed:        " (js/get st .blocks)))
@@ -657,24 +689,24 @@ counterpart. Output is minified (the actor lazy-loads + caches it once).
         (info (str "  curated∩bulk (curated won): " @overlap))
         (ok (str "wrote " (js/get merged-keys .length) " total entries → "
                  "src/gjoa/toolkit/components/content-classifier/darkmode-fixes.json "
-                 "(" (let [(json-bytes Int) (js/get json .length)] (Math/round (/ json-bytes 1024))) " KB, minified)"))
+                 "(" (let [json-bytes Int (js/get json .length)] (Math/round (/ json-bytes 1024))) " KB, minified)"))
         0))))
 
 (defn main! [] Any
-  (let [argv (js/call (js/get process .argv) .slice 2)
-        selftest? (js/call argv .includes "--selftest")
-        write-all? (js/call argv .includes "--write-all")
-        hosts (js/call argv .filter (fn [a] Any (not (js/call a .startsWith "--"))))]
+  (let [argv Any (js/call (js/get process .argv) .slice 2)
+        selftest? Any (js/call argv .includes "--selftest")
+        write-all? Any (js/call argv .includes "--write-all")
+        hosts Any (js/call argv .filter (fn [a String] Any (not (js/call a .startsWith "--"))))]
     (cond
       selftest? (js/call process .exit (selftest!))
       write-all? (js/call process .exit (write-all!))
       (= (js/get hosts .length) 0) (do (console/log USAGE) (js/call process .exit 0))
       :else
-      (let [snapshot (read-snapshot!)
-            blocks (parse-snapshot! snapshot)
-            results (js/call hosts .map (fn [h] Any (generate-for-host! blocks h)))]
-        (doseq [r results] (print-result! r))
-        (let [warn (js/get log .warn)]
+      (let [snapshot Any (read-snapshot!)
+            blocks Any (parse-snapshot! snapshot)
+            results Any (js/call hosts .map (fn [h String] Any (generate-for-host! blocks h)))]
+        (doseq [r Any results] (print-result! r))
+        (let [warn Any (js/get log .warn)]
           (warn "candidates only — DR tokens PRE-RESOLVED (lossy). Eyeball + visual QA before merging into darkmode-fixes.json."))
         0))))
 
