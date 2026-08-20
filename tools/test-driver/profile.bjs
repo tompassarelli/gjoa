@@ -51,18 +51,18 @@
     "// tests can drive the chrome layer past public surfaces.\n"
     "user_pref(\"gjoa.test.exposeAPI\", true);\n"))
 
-(js/export (defn create-profile [(opts Any)] Any
+(js/export (defn create-profile [opts Any] Any
   ;; opts defaults to {} (TS `opts = {}`); callers invoke create-profile() with
   ;; no args, so guard against an undefined opts before reading .extraPrefs.
-  (let [o (or opts {})
+  (let [o (U Any (Map Any Any)) (or opts {})
         ;; Marionette reads its port from the marionette.port PREF, not the
         ;; -marionette-port CLI arg (which Firefox silently ignores). Seed it
         ;; per-run so agents sharing one tree can run concurrently on distinct
         ;; ports. Default 2828 keeps single-agent + no-arg callers unchanged.
-        port (or (js/get o .marionettePort) 2828)
-        path (js/await (mkdtemp (join (tmpdir) "gjoa-test-")))
-        portPref (str "user_pref(\"marionette.port\", " port ");\n")
-        userJs (str portPref DEFAULT-USER-JS (or (js/get o .extraPrefs) ""))]
+        port (U Any Int) (or (js/get o .marionettePort) 2828)
+        path Any (js/await (mkdtemp (join (tmpdir) "gjoa-test-")))
+        portPref String (str "user_pref(\"marionette.port\", " port ");\n")
+        userJs String (str portPref DEFAULT-USER-JS (or (js/get o .extraPrefs) ""))]
     (js/await (writeFile (join path "user.js") userJs "utf8"))
     {:path path
      :cleanup (fn [] Any (js/await (rm path {:recursive true :force true})))})))
