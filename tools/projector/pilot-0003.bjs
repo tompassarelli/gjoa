@@ -27,35 +27,37 @@
 ;; Occurrences counted one position at a time, so an overlapping match still
 ;; counts. The stdlib models String.indexOf without its fromIndex, so the search
 ;; window is taken by slicing and the hit is mapped back to an absolute index.
-(defn count-occurrences [(s String) (needle String)] Int
-  (loop [from 0 n 0]
-    (let [(i Int) (js/call (js/call s .slice from) .indexOf needle)]
+(defn count-occurrences [s String
+                        needle String] Int
+  (loop [from Int 0
+        n Int 0]
+    (let [i Int (js/call (js/call s .slice from) .indexOf needle)]
       (if (< i 0) n (recur (+ from i 1) (+ n 1))))))
 
 (defn main! [] Any
-  (let [pristine (readFileSync (aget (js/get process .argv) 2) "utf8")
-        patched (readFileSync (aget (js/get process .argv) 3) "utf8")
-        claim-path (or (aget (js/get process .argv) 4) "/tmp/0003.claims.json")
-        ;; build the claim-doc from the known-good patched output, persist to JSON,
-        ;; then reload it — proving the edit round-trips through a portable artifact.
-        doc0 (build-doc patched pristine ANCHORS)
-        json (doc->json doc0)
-        _ (writeFileSync claim-path json)
-        doc (json->doc (readFileSync claim-path "utf8"))
-        ;; GATE 1 — replay the reloaded claim-doc onto pristine == patched?
-        r1 (replay doc pristine)
-        equiv (and (js/get r1 .ok) (= (js/get r1 .src) patched))
-        ;; GATE 2 — churn: (a) insert a sibling method above (offset) AND (b) edit a
-        ;; body line the patch anchors on (forces a textual .rej); replay same doc.
-        churned (js/call (js/call pristine .replace "  newChannel(uri, loadInfo) {" "  // FF153: upstream inserted a telemetry hook\n  _recordOpen(k) {\n    Glean.newtab.opened.add(1);\n  }\n\n  newChannel(uri, loadInfo) {") .replace "let chromeURI = this.getChromeURI(uri);" "let chromeURI = this.getChromeURI(uri); // FF153 upstream reflow")
-        r2 (replay doc churned)
-        churn-ok (and (js/get r2 .ok) (parses? (js/get r2 .src)) (= (count-occurrences (js/get r2 .src) "gjoa-newtab") 2))
-        ;; GATE 3 — RENAME RECOVERY: upstream renames the target method (newChannel
-        ;; -> createChannel). The textual patch .rej's; the claim recovers via the
-        ;; structural anchor (params + body fingerprint) when confident + unambiguous.
-        renamed (js/call pristine .replaceAll "newChannel(uri, loadInfo)" "createChannel(uri, loadInfo)")
-        r3 (replay doc renamed)
-        rename-ok (and (js/get r3 .ok) (parses? (js/get r3 .src))
+  (let [pristine Any (readFileSync (aget (js/get process .argv) 2) "utf8")
+       patched Any (readFileSync (aget (js/get process .argv) 3) "utf8")
+       claim-path Any (or (aget (js/get process .argv) 4) "/tmp/0003.claims.json")
+       ;; build the claim-doc from the known-good patched output, persist to JSON,
+       ;; then reload it — proving the edit round-trips through a portable artifact.
+       doc0 Any (build-doc patched pristine ANCHORS)
+       json String (doc->json doc0)
+       _ Any (writeFileSync claim-path json)
+       doc Any (json->doc (readFileSync claim-path "utf8"))
+       ;; GATE 1 — replay the reloaded claim-doc onto pristine == patched?
+       r1 Any (replay doc pristine)
+       equiv Any (and (js/get r1 .ok) (= (js/get r1 .src) patched))
+       ;; GATE 2 — churn: (a) insert a sibling method above (offset) AND (b) edit a
+       ;; body line the patch anchors on (forces a textual .rej); replay same doc.
+       churned Any (js/call (js/call pristine .replace "  newChannel(uri, loadInfo) {" "  // FF153: upstream inserted a telemetry hook\n  _recordOpen(k) {\n    Glean.newtab.opened.add(1);\n  }\n\n  newChannel(uri, loadInfo) {") .replace "let chromeURI = this.getChromeURI(uri);" "let chromeURI = this.getChromeURI(uri); // FF153 upstream reflow")
+       r2 Any (replay doc churned)
+       churn-ok Any (and (js/get r2 .ok) (parses? (js/get r2 .src)) (= (count-occurrences (js/get r2 .src) "gjoa-newtab") 2))
+       ;; GATE 3 — RENAME RECOVERY: upstream renames the target method (newChannel
+       ;; -> createChannel). The textual patch .rej's; the claim recovers via the
+       ;; structural anchor (params + body fingerprint) when confident + unambiguous.
+       renamed Any (js/call pristine .replaceAll "newChannel(uri, loadInfo)" "createChannel(uri, loadInfo)")
+       r3 Any (replay doc renamed)
+       rename-ok Any (and (js/get r3 .ok) (parses? (js/get r3 .src))
                        (= (count-occurrences (js/get r3 .src) "gjoa-newtab") 2)
                        (> (js/get (js/get r3 .recoveries) .length) 0))]
     (console/error (str "claim-doc: " (js/get doc .length) " set-body verbs, " (js/get json .length) " bytes JSON -> " claim-path))
@@ -63,7 +65,7 @@
     (console/error (str "GATE 2  churn-resilience (name-anchored claim survives reflow that .rej's the patch): " churn-ok))
     (console/error (str "GATE 3  rename-recovery (claim survives a method rename that .rej's the patch): " rename-ok))
     (when rename-ok
-      (doseq [rec (js/get r3 .recoveries)] (console/error (str "          recovered: " rec))))
+      (doseq [rec Any (js/get r3 .recoveries)] (console/error (str "          recovered: " rec))))
     (when (not (and equiv churn-ok rename-ok))
       (console/error "PILOT FAILED")
       (when (not (js/get r1 .ok)) (console/error (str "  gate1: " (js/get r1 .reason))))
