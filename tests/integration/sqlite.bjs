@@ -52,7 +52,7 @@
 ;; or a switch to the named export. See issues.
 (js/export (def tests Any
   [(deftest "sqlite: report version + FTS3/FTS5 availability" [mn]
-     (let [probe (js/await (js/call mn .executeAsyncScript PROBE-SCRIPT))]
+     (let [probe Any (js/await (js/call mn .executeAsyncScript PROBE-SCRIPT))]
        (console/error "[sqlite probe]" (JSON/stringify probe nil 2))))]))
 
 (js/export-default tests)
