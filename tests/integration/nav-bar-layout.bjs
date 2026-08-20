@@ -107,16 +107,19 @@
 ;; The horizontal row must keep ONE rhythm: the two gaps flanking #urlbar-container
 ;; (indices 3,4 of the horizontal id walk) stay near the tightest icon-cluster gap.
 ;; Slack covers the urlbar's own margin-inline; a regrown spring is ~112px.
-(defn assert-even-rhythm! [(r Any) (phase String)] Any
-  (let [rects (js/get r .rects)
-        gap (fn [(i Int)] Float
-              (let [(left Float) (js/get (aget rects i) .left)
-                    (prev-right Float) (js/get (aget rects (- i 1)) .right)]
+(defn assert-even-rhythm!
+  [r Any
+     phase String] Any
+  (let [rects Any (js/get r .rects)
+       gap (Fn [Int] Float) (fn [i Int] Float
+              (let [left Float (js/get (aget rects i) .left)
+                   prev-right Float (js/get (aget rects (- i 1)) .right)]
                 (- left prev-right)))
-        (max-tight Float) (js/call [(gap 1) (gap 2) (gap 5) (gap 6)] .reduce
-                                   (fn [(a Float) (b Float)] Float (Math/max a b)) 0)
-        ceiling (+ max-tight 15)]
-    (doseq [i [3 4]]
+       max-tight Float (js/call [(gap 1) (gap 2) (gap 5) (gap 6)] .reduce
+                                   (fn [a Float
+                                       b Float] Float (Math/max a b)) 0)
+       ceiling Float (+ max-tight 15)]
+    (doseq [i Int [3 4]]
       (expect (<= (gap i) ceiling)
         (str "nav-bar (" phase "): gap before " (js/get (aget rects i) .id) " is " (gap i)
              "px vs a " ceiling "px ceiling (tightest-cluster max " max-tight
@@ -125,7 +128,7 @@
 
 (def tests Any
   [(deftest "nav-bar — gjoa-sidebar-button (if present) lives in nav-bar, immediately right of extensions" [mn]
-     (let [r (chrome-eval "
+     (let [r Any (chrome-eval "
         const navBar = document.getElementById(\"nav-bar\");
         const pui = document.getElementById(\"PanelUI-button\");
         if (!pui) throw new Error(\"no PanelUI-button\");
@@ -161,18 +164,18 @@
          ;; v3: sidebar-toggle joins the LEFT cluster right after extensions
          ;; (order -2, extensions -3), falling back to hugging the hamburger
          ;; when extensions is absent.
-         (let [anchor (if (js/get r .ext) (js/get r .ext) (js/get r .panelUI))
-               anchor-name (if (js/get r .ext) "unified-extensions-button" "PanelUI-button")
-               (btn-left Float) (js/get (js/get r .gjoaBtn) .left)
-               (anchor-right Float) (js/get anchor .right)
-               gap (- btn-left anchor-right)]
+         (let [anchor Any (if (js/get r .ext) (js/get r .ext) (js/get r .panelUI))
+              anchor-name String (if (js/get r .ext) "unified-extensions-button" "PanelUI-button")
+              btn-left Float (js/get (js/get r .gjoaBtn) .left)
+              anchor-right Float (js/get anchor .right)
+              gap Float (- btn-left anchor-right)]
            (expect (not (or (< gap -2) (> gap 50)))
              (str "#gjoa-sidebar-button not adjacent to #" anchor-name ": "
                   anchor-name ".right=" (js/get anchor .right) " gjoaBtn.left=" (js/get (js/get r .gjoaBtn) .left) " gap=" gap "px "
                   "(expected -2 to 50px)."))))))
 
    (deftest "nav-bar — all visible top-row icons share the same vertical CENTER (±2px)" [mn]
-     (let [r (chrome-eval allIconYCheck)]
+     (let [r Any (chrome-eval allIconYCheck)]
        (expect (not (js/get r .error)) (js/get r .error))
        ;; need ≥2 icons to compare; otherwise the body is skipped and the
        ;; test passes (the original early-returned here).
@@ -180,15 +183,16 @@
          ;; Use center-Y, not top-Y. Icons can have different intrinsic sizes
          ;; (hamburger 16px vs back-button 32px) but visually align by CENTER.
          ;; Reference: PanelUI-button (or PanelUI-menu-button) — the hamburger.
-         (let [center (fn [h] Float
-                        (let [(top Float) (js/get h .top) (bottom Float) (js/get h .bottom)]
+         (let [center (Fn [Any] Float) (fn [h Any] Float
+                        (let [top Float (js/get h .top)
+                             bottom Float (js/get h .bottom)]
                           (/ (+ top bottom) 2)))
-               ref (or (js/call (js/get r .hits) .find (fn [h] Any (or (= (js/get h .id) "PanelUI-button") (= (js/get h .id) "PanelUI-menu-button"))))
+              ref Any (or (js/call (js/get r .hits) .find (fn [h Any] Any (or (= (js/get h .id) "PanelUI-button") (= (js/get h .id) "PanelUI-menu-button"))))
                        (aget (js/get r .hits) 0))
-               refC (center ref)
-               TOL 2]
-           (doseq [h (js/get r .hits)]
-             (let [c (center h)]
+              refC Float (center ref)
+              TOL Int 2]
+           (doseq [h Any (js/get r .hits)]
+             (let [c Float (center h)]
                (expect (not (> (Math/abs (- c refC)) TOL))
                  (str "Top-row icon center misaligned: id=\"" (js/get h .id) "\" center=" (js/call c .toFixed 1) " "
                       "vs ref=\"" (js/get ref .id) "\" center=" (js/call refC .toFixed 1) " "
@@ -199,18 +203,18 @@
      ;; RESET-JS sets sidebar.verticalTabs=true + clears dynamicOrientation before every test — this IS the fresh-vertical state; pin it explicitly for readability.
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
      (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
-     (let [r (chrome-eval verticalOrderIds)]
+     (let [r Any (chrome-eval verticalOrderIds)]
        (expect (js/get r .ok) (js/get r .msg))))
 
    (deftest "nav-bar — full icon order, fresh horizontal init: back,forward,refresh,urlbar,sidebar,ext,hamburger" [mn]
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
      (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
-     (let [r (chrome-eval horizontalOrderIds)]
+     (let [r Any (chrome-eval horizontalOrderIds)]
        (expect (js/get r .ok) (js/get r .msg))
        (assert-even-rhythm! r "default profile"))
      ;; Same row with the native springs present in a customized profile:
      ;; uncapped they take ~112px each and split the row into two loud gaps.
-     (let [sp (chrome-eval springPressureCheck)]
+     (let [sp Any (chrome-eval springPressureCheck)]
        (when (not (js/get sp .skip))
          (expect (js/get sp .ok) (str "with toolbarsprings injected: " (js/get sp .msg)))
          (assert-even-rhythm! sp "toolbarsprings injected"))))
@@ -218,15 +222,15 @@
    (deftest "nav-bar — full icon order survives live vertical<->horizontal flips" [mn]
      (chrome-eval "Services.prefs.setBoolPref('gjoa.layout.dynamicOrientation', false); Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
      (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
-     (let [r1 (chrome-eval verticalOrderIds)]
+     (let [r1 Any (chrome-eval verticalOrderIds)]
        (expect (js/get r1 .ok) (str "before flip: " (js/get r1 .msg))))
      (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', false); return true;")
      (await-true "return document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
-     (let [r2 (chrome-eval horizontalOrderIds)]
+     (let [r2 Any (chrome-eval horizontalOrderIds)]
        (expect (js/get r2 .ok) (str "after vertical->horizontal flip: " (js/get r2 .msg))))
      (chrome-eval "Services.prefs.setBoolPref('sidebar.verticalTabs', true); return true;")
      (await-true "return !document.documentElement.hasAttribute('gjoa-horizontal-tabs');" 4000)
-     (let [r3 (chrome-eval verticalOrderIds)]
+     (let [r3 Any (chrome-eval verticalOrderIds)]
        (expect (js/get r3 .ok) (str "after horizontal->vertical flip: " (js/get r3 .msg))))
      ;; restore defaults so we don't pollute later tests (#102)
      (chrome-eval "Services.prefs.clearUserPref('gjoa.layout.dynamicOrientation'); return true;"))])
