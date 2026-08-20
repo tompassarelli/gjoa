@@ -4,6 +4,6 @@
 
 (declare-extern [crypto] Any)
 
-(js/export (defn make-gjoa-window! [scheduler] Any
-  (let [window-id (js/call crypto .randomUUID)]
+(js/export (defn make-gjoa-window! [scheduler Any] Any
+  (let [window-id String (js/call crypto .randomUUID)]
     {:windowId window-id :tabs (make-window-tabs! scheduler)})))
