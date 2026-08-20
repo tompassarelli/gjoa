@@ -38,12 +38,12 @@
 ;; Walk a directory recursively, collecting every regular file path.
 ;; (The original used a generator; beagle has no generators, so we
 ;; accumulate into an array via .push and return it.)
-(defn walk! [(root String)] Any
-  (let [out []]
-    (letfn [(recurse [(dir String)] Any
-              (doseq [name (readdirSync dir)]
-                (let [p (join dir name)
-                      st (statSync p)]
+(defn walk! [root String] Any
+  (let [out (Vec String) []]
+    (letfn [(recurse [dir String] Any
+              (doseq [name String (readdirSync dir)]
+                (let [p String (join dir name)
+                      st Any (statSync p)]
                   (if (js/call st .isDirectory)
                     (recurse p)
                     (when (js/call st .isFile) (js/call out .push p))))))]
@@ -55,25 +55,26 @@
 ;; Apply every literal find/replace to `text`, returning the rewritten string.
 ;; Folds over SUBSTITUTIONS with native Array.reduce (each entry is a literal
 ;; find/replace via split+join, so order is irrelevant and the pass is idempotent).
-(defn apply-subs [(text Any)] Any
-  (js/call SUBSTITUTIONS .reduce (fn [acc pair] Any (let [from (nth pair 0)
-                   to   (nth pair 1)]
+(defn apply-subs [text Any] Any
+  (js/call SUBSTITUTIONS .reduce (fn [acc String
+                                      pair Any] Any (let [from String (nth pair 0)
+                                                          to String (nth pair 1)]
                (if (js/call acc .includes from)
                  (js/call (js/call acc .split from) .join to)
                  acc))) text))
 
 ;; True when this path is one we should attempt to rewrite (text formats only).
-(defn text-file? [(path String)] Any
+(defn text-file? [path String] Any
   (js/call TEXT-EXTS .test path))
 
 ;; Rewrite a single file in place; returns 1 if it changed, else 0.
-(defn rewrite-one [(path String)] Any
+(defn rewrite-one [path String] Any
   (if (not (text-file? path))
     0
-    (let [text (js/await (try (js/await (readFile path "utf8")) (catch (e Any) nil)))]
+    (let [text Any (js/await (try (js/await (readFile path "utf8")) (catch (e Any) nil)))]
       (if (nil? text)
         0
-        (let [next (apply-subs text)]
+        (let [next String (apply-subs text)]
           (if (not= next text)
             (do (js/await (writeFile path next "utf8")) 1)
             0))))))
@@ -86,6 +87,6 @@
     (do
       (js/call log .step "rewriting Firefox-isms in browser locales")
       ;; Rewrite every text file, then sum the per-file change flags (0/1).
-      (let [results (js/await (js/call Promise .all (js/call (walk! LOCALE-DIR) .map rewrite-one)))
-            changed (js/call results .reduce (fn [a b] Any (+ a b)) 0)]
+      (let [results Any (js/await (js/call Promise .all (js/call (walk! LOCALE-DIR) .map rewrite-one)))
+            changed Int (js/call results .reduce (fn [a Int b Int] Any (+ a b)) 0)]
         (js/call log .ok (str "locales: rewrote " changed " file" (if (= changed 1) "" "s"))))))))
