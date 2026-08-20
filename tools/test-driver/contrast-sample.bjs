@@ -17,52 +17,64 @@
 
 ;; base64 PNG (Marionette TakeScreenshot) -> {:width :height :data}. data is an
 ;; RGBA byte buffer, row-major, 4 bytes/pixel.
-(js/export (defn decode-png [(b64 String)] Any
-  (let [buf (js/call Buffer .from b64 "base64")
-        png (js/call (js/get PNG .sync) .read buf)]
+(js/export (defn decode-png [b64 String] Any
+  (let [buf Any (js/call Buffer .from b64 "base64")
+        png Any (js/call (js/get PNG .sync) .read buf)]
     {:width (js/get png .width) :height (js/get png .height) :data (js/get png .data)})))
 
 ;; Read one RGBA pixel.
-(defn pixel-at [(data Any) (width Int) (px Int) (py Int)] Any
-  (let [i (* (+ (* py width) px) 4)]
+(defn pixel-at
+  [data Any
+   width Int
+   px Int
+   py Int] Any
+  (let [i Int (* (+ (* py width) px) 4)]
     {:r (aget data i) :g (aget data (+ i 1)) :b (aget data (+ i 2)) :a (aget data (+ i 3))}))
 
 ;; Fast (non-gamma) luminance — only used to ORDER samples for the median, so the
 ;; sRGB transfer is irrelevant here (relative order is preserved).
-(defn lum-quick [(p Any)] Float
-  (let [(r Float) (:r p) (g Float) (:g p) (b Float) (:b p)]
+(defn lum-quick [p Any] Float
+  (let [r Float (:r p)
+        g Float (:g p)
+        b Float (:b p)]
     (+ (* 0.2126 r) (* 0.7152 g) (* 0.0722 b))))
 
 ;; Median backdrop color behind a text box. rect = {:x :y :w :h} in page CSS px.
 ;; Returns {:r :g :b :a} in 0..255 (a always 255 — screenshots are opaque).
-(js/export (defn sample-backdrop [(png Any) (rect Any) (scale Float)] Any
-  (let [(w Int) (:width png)
-        (h Int) (:height png)
-        data (:data png)
+(js/export (defn sample-backdrop
+             [png Any
+              rect Any
+              scale Float] Any
+  (let [w Int (:width png)
+        h Int (:height png)
+        data Any (:data png)
         ;; rect is page CSS px; scale maps it onto the screenshot's pixels.
-        (rx Float) (:x rect) (ry Float) (:y rect)
-        (rw Float) (:w rect) (rh Float) (:h rect)
-        (x0 Int) (Math/max 0 (Math/floor (* rx scale)))
-        (y0 Int) (Math/max 0 (Math/floor (* ry scale)))
-        (x1 Int) (Math/min (- w 1) (Math/floor (* (+ rx rw) scale)))
-        (y1 Int) (Math/min (- h 1) (Math/floor (* (+ ry rh) scale)))
-        cols 7
-        rows 3
-        total (* cols rows)
-        pts (js/new Array)]
-    (loop [k 0]
+        rx Float (:x rect)
+        ry Float (:y rect)
+        rw Float (:w rect)
+        rh Float (:h rect)
+        x0 Int (Math/max 0 (Math/floor (* rx scale)))
+        y0 Int (Math/max 0 (Math/floor (* ry scale)))
+        x1 Int (Math/min (- w 1) (Math/floor (* (+ rx rw) scale)))
+        y1 Int (Math/min (- h 1) (Math/floor (* (+ ry rh) scale)))
+        cols Int 7
+        rows Int 3
+        total Int (* cols rows)
+        pts Any (js/new Array)]
+    (loop [k Int 0]
       (when (< k total)
-        (let [r (js/call Math .floor (/ k cols))
-              c (- k (* r cols))
-              px (js/call Math .round (+ x0 (* (/ (+ c 0.5) cols) (- x1 x0))))
-              py (js/call Math .round (+ y0 (* (/ (+ r 0.5) rows) (- y1 y0))))]
+        (let [r Int (js/call Math .floor (/ k cols))
+              c Int (- k (* r cols))
+              px Int (js/call Math .round (+ x0 (* (/ (+ c 0.5) cols) (- x1 x0))))
+              py Int (js/call Math .round (+ y0 (* (/ (+ r 0.5) rows) (- y1 y0))))]
           (when (and (>= px 0) (< px w) (>= py 0) (< py h))
             (js/call pts .push (pixel-at data w px py))))
         (recur (+ k 1))))
-    (let [(n Int) (js/get pts .length)]
+    (let [n Int (js/get pts .length)]
       (if (= n 0)
         {:r 255 :g 255 :b 255 :a 255}
-        (let [sorted (js/call pts .sort (fn [(a Any) (b Any)] Float (- (lum-quick a) (lum-quick b))))]
+        (let [sorted (Vec Any) (js/call pts .sort (fn [a Any
+                                                       b Any] Float (- (lum-quick a) (lum-quick b))))]
           (aget sorted (Math/floor (/ n 2)))))))))
 
 ;; The PAINTED glyph color = the luminance extreme furthest from the median
@@ -70,34 +82,40 @@
 ;; CSS color is the 0009-inverted value, which M3 does NOT change, so a gate that
 ;; reads computed color is M3-blind. Glyph strokes are sparse, so sample DENSER
 ;; than the backdrop grid; noisy on very small text (a known limitation).
-(js/export (defn sample-foreground [(png Any) (rect Any) (scale Float)] Any
-  (let [(w Int) (:width png)
-        (h Int) (:height png)
-        data (:data png)
-        (rx Float) (:x rect) (ry Float) (:y rect)
-        (rw Float) (:w rect) (rh Float) (:h rect)
-        (x0 Int) (Math/max 0 (Math/floor (* rx scale)))
-        (y0 Int) (Math/max 0 (Math/floor (* ry scale)))
-        (x1 Int) (Math/min (- w 1) (Math/floor (* (+ rx rw) scale)))
-        (y1 Int) (Math/min (- h 1) (Math/floor (* (+ ry rh) scale)))
-        cols 16
-        rows 6
-        total (* cols rows)
-        pts (js/new Array)]
-    (loop [k 0]
+(js/export (defn sample-foreground
+             [png Any
+              rect Any
+              scale Float] Any
+  (let [w Int (:width png)
+        h Int (:height png)
+        data Any (:data png)
+        rx Float (:x rect)
+        ry Float (:y rect)
+        rw Float (:w rect)
+        rh Float (:h rect)
+        x0 Int (Math/max 0 (Math/floor (* rx scale)))
+        y0 Int (Math/max 0 (Math/floor (* ry scale)))
+        x1 Int (Math/min (- w 1) (Math/floor (* (+ rx rw) scale)))
+        y1 Int (Math/min (- h 1) (Math/floor (* (+ ry rh) scale)))
+        cols Int 16
+        rows Int 6
+        total Int (* cols rows)
+        pts Any (js/new Array)]
+    (loop [k Int 0]
       (when (< k total)
-        (let [r (js/call Math .floor (/ k cols))
-              c (- k (* r cols))
-              px (js/call Math .round (+ x0 (* (/ (+ c 0.5) cols) (- x1 x0))))
-              py (js/call Math .round (+ y0 (* (/ (+ r 0.5) rows) (- y1 y0))))]
+        (let [r Int (js/call Math .floor (/ k cols))
+              c Int (- k (* r cols))
+              px Int (js/call Math .round (+ x0 (* (/ (+ c 0.5) cols) (- x1 x0))))
+              py Int (js/call Math .round (+ y0 (* (/ (+ r 0.5) rows) (- y1 y0))))]
           (when (and (>= px 0) (< px w) (>= py 0) (< py h))
             (js/call pts .push (pixel-at data w px py))))
         (recur (+ k 1))))
-    (let [(n Int) (js/get pts .length)]
+    (let [n Int (js/get pts .length)]
       (if (= n 0)
         {:r 0 :g 0 :b 0 :a 255}
-        (let [sorted (js/call pts .sort (fn [(a Any) (b Any)] Float (- (lum-quick a) (lum-quick b))))
-              med (lum-quick (aget sorted (Math/floor (/ n 2))))
-              lo (aget sorted (Math/floor (* n 0.05)))
-              hi (aget sorted (Math/min (- n 1) (Math/floor (* n 0.95))))]
+        (let [sorted (Vec Any) (js/call pts .sort (fn [a Any
+                                                       b Any] Float (- (lum-quick a) (lum-quick b))))
+              med Float (lum-quick (aget sorted (Math/floor (/ n 2))))
+              lo Any (aget sorted (Math/floor (* n 0.05)))
+              hi Any (aget sorted (Math/min (- n 1) (Math/floor (* n 0.95))))]
           (if (>= (- (lum-quick hi) med) (- med (lum-quick lo))) hi lo)))))))
