@@ -12,7 +12,7 @@
   (:require [gjoa.tests.dsl :refer [deftest expect]]))
 (declare-extern [Number] Any)
 
-(defn render-lum-js [(url String)] String
+(defn render-lum-js [url String] String
   (str "const done = arguments[arguments.length-1];"
        "(async () => { try {"
        "  const win = Services.wm.getMostRecentWindow('navigator:browser');"
@@ -26,7 +26,9 @@
        "  done(String(Math.round(0.2126*d[0] + 0.7152*d[1] + 0.0722*d[2])));"
        "} catch(e){ done('ERR:'+(e&&e.message||e)); } })();"))
 
-(defn set-dm [(mn Any) (on Bool)] Any
+(defn set-dm
+  [mn Any
+     on Bool] Any
   (js/call mn .executeScript (str "Services.prefs.setBoolPref('gjoa.darkmode.enabled', " (if on "true" "false") ");"
                           " Services.prefs.setCharPref('gjoa.darkmode.mode','dark'); return 'ok';")))
 
@@ -34,13 +36,13 @@
   [(deftest "darkmode render: dark mode inverts a themeless-light page (chrome-side)" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
      (js/await (set-dm mn true))
-     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js "http://127.0.0.1:8975/light") []))]
+     (let [lum Any (js/await (js/call mn .executeAsyncScript (render-lum-js "http://127.0.0.1:8975/light") []))]
        (console/log (str "[darkmode-render] dark-ON themeless-light center-lum=" lum))
        (expect (< (Number lum) 80) (str "themeless-light should render DARK; got lum=" lum))))
    (deftest "darkmode render: OFF leaves a themeless-light page light (control)" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
      (js/await (set-dm mn false))
-     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js "http://127.0.0.1:8975/light") []))]
+     (let [lum Any (js/await (js/call mn .executeAsyncScript (render-lum-js "http://127.0.0.1:8975/light") []))]
        (console/log (str "[darkmode-render] OFF themeless-light center-lum=" lum))
        (expect (> (Number lum) 150) (str "themeless-light should render LIGHT when darkmode off; got lum=" lum))))]))
 (js/export-default tests)
