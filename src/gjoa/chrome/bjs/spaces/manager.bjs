@@ -10,34 +10,33 @@
 (defn new-space-id [] String
   (js/call crypto .randomUUID))
 
-(js/export (defn make-spaces! [deps] Any
-  (let [on-change (js/get deps .onChange)
-        on-activated (js/get deps .onActivated)
-        tab-by-id (js/get deps .tabById)
+(js/export (defn make-spaces! [deps Any] Any
+  (let [on-change Any (js/get deps .onChange)
+        on-activated Any (js/get deps .onActivated)
+        tab-by-id Any (js/get deps .tabById)
         ;; Keyed by space id — a new-space-id UUID, round-tripped through gjoa's
         ;; own snapshot format.
-        (spaces (JsMap String Any)) (js/new Map)
-        tab-space (js/new WeakMap)
-        state {:active-id nil :applying false}
-        default-space {:id (new-space-id) :name DEFAULT-NAME :createdAt (Date/now)}]
+        spaces (JsMap String Any) (js/new Map)
+        tab-space Any (js/new WeakMap)
+        state (Map Keyword Any) {:active-id nil :applying false}
+        default-space (Map Keyword Any) {:id (new-space-id) :name DEFAULT-NAME :createdAt (Date/now)}]
 
     (js/call spaces .set (js/get default-space .id) default-space)
     (js/set! state .active-id (js/get default-space .id))
 
-    (let [list-in-order (fn [] Any (Array/from (js/call spaces .values)))
-
-          default-id (fn [] Any (js/get (aget (list-in-order) 0) .id))]
+    (let [list-in-order (Fn [] (Vec Any)) (fn [] Any (Array/from (js/call spaces .values)))
+          default-id (Fn [] String) (fn [] Any (js/get (aget (list-in-order) 0) .id))]
 
       {:list list-in-order
 
        :activeId (fn [] Any (js/get state .active-id))
 
-       :get (fn [%1] Any (js/call spaces .get %1))
+       :get (fn [%1 Any] Any (js/call spaces .get %1))
 
        :active (fn [] Any (js/call spaces .get (js/get state .active-id)))
 
-       :spaceOf (fn [tab] Any
-           (let [cached (js/call tab-space .get tab)]
+       :spaceOf (fn [tab Any] Any
+           (let [cached Any (js/call tab-space .get tab)]
              (if (and cached (js/call spaces .has cached))
                cached
                ;; WeakMap miss — e.g. a session-restored tab the hydrate-time
@@ -45,29 +44,32 @@
                ;; persisted on the tab itself (survives Firefox session restore),
                ;; warming the WeakMap so the tab re-anchors to its real space
                ;; instead of silently stranding in Main.
-               (let [persisted (try (js/call tab .getAttribute SPACE-ATTR)
+               (let [persisted Any (try (js/call tab .getAttribute SPACE-ATTR)
                                  (catch (_e Any) nil))]
                  (if (and persisted (js/call spaces .has persisted))
                    (do (js/call tab-space .set tab persisted) persisted)
                    (default-id))))))
 
-       :create (fn [name icon] Any
-         (let [s {:id (new-space-id) :name (or name "Untitled") :createdAt (Date/now)}]
+       :create (fn [name Any
+                    icon Any] Any
+         (let [s (Map Keyword Any) {:id (new-space-id) :name (or name "Untitled") :createdAt (Date/now)}]
            (when icon (js/set! s .icon icon))
            (js/call spaces .set (js/get s .id) s)
            (on-change)
            s))
 
-       :rename (fn [id name] Any
-         (let [s (js/call spaces .get id)]
+       :rename (fn [id Any
+                    name Any] Any
+         (let [s (Map Keyword Any) (js/call spaces .get id)]
            (when s
              (when (not= (js/get s .name) name)
                (js/set! s .name name)
                (js/call spaces .set id s)
                (on-change)))))
 
-       :setIcon (fn [id icon] Any
-         (let [s (js/call spaces .get id)]
+       :setIcon (fn [id Any
+                     icon Any] Any
+         (let [s (Map Keyword Any) (js/call spaces .get id)]
            (when s
              (if icon
                (js/set! s .icon icon)
@@ -75,27 +77,28 @@
              (js/call spaces .set id s)
              (on-change))))
 
-       :delete (fn [id] Any
-         (let [def (default-id)]
+       :delete (fn [id Any] Any
+         (let [def String (default-id)]
            (when (and (not= id def) (js/call spaces .has id))
              (js/call spaces .delete id)
-             (let [reactivated (= (js/get state .active-id) id)]
+             (let [reactivated Bool (= (js/get state .active-id) id)]
                (when reactivated
                  (js/set! state .active-id def))
                (on-change)
                (when (and reactivated on-activated)
                  (on-activated id def))))))
 
-       :setActive (fn [id] Any
+       :setActive (fn [id Any] Any
          (when (and (js/call spaces .has id) (not= (js/get state .active-id) id))
-           (let [prev (js/get state .active-id)]
+           (let [prev String (js/get state .active-id)]
              (js/set! state .active-id id)
              (on-change)
              (when on-activated (on-activated prev id)))))
 
-       :assignTab (fn [tab id] Any
+       :assignTab (fn [tab Any
+                      id Any] Any
          (when (js/call spaces .has id)
-           (let [prev (js/call tab-space .get tab)]
+           (let [prev Any (js/call tab-space .get tab)]
              (when (not= prev id)
                (js/call tab-space .set tab id)
                ;; Persist on the tab node so SessionStore carries the assignment
@@ -104,16 +107,17 @@
                  (catch (_e Any) nil))
                (on-change)))))
 
-       :isVisible (fn [%1] Any (is-in-active-space %1 tab-space spaces (default-id) (js/get state .active-id)))
+       :isVisible (fn [%1 Any] Any (is-in-active-space %1 tab-space spaces (default-id) (js/get state .active-id)))
 
-       :isSpaceActive (fn [%1] Any (let [effective (if (and %1 (js/call spaces .has %1))
+       :isSpaceActive (fn [%1 Any] Any (let [effective String (if (and %1 (js/call spaces .has %1))
                            %1
                            (default-id))]
            (= effective (js/get state .active-id))))
 
-       :hydrate (fn [snapshot tabById] Any
+       :hydrate (fn [snapshot Any
+                    tabById Any] Any
          (js/call spaces .clear)
-         (js/call (js/get snapshot .spaces) .forEach (fn [%1] Any (js/call spaces .set (js/get %1 .id) %1)))
+         (js/call (js/get snapshot .spaces) .forEach (fn [%1 Any] Any (js/call spaces .set (js/get %1 .id) %1)))
          (if (= (js/get spaces .size) 0)
            (do
              (js/call spaces .set (js/get default-space .id) default-space)
@@ -122,11 +126,11 @@
                  (if (js/call spaces .has (js/get snapshot .activeId))
                    (js/get snapshot .activeId)
                    (default-id))))
-         (js/call (js/get snapshot .tabSpaces) .forEach (fn [entry] Any
-           (let [tab-id (aget entry 0)
-                 space-id (aget entry 1)]
+         (js/call (js/get snapshot .tabSpaces) .forEach (fn [entry Any] Any
+           (let [tab-id Any (aget entry 0)
+                 space-id Any (aget entry 1)]
              (when (js/call spaces .has space-id)
-               (let [tab (tabById tab-id)]
+               (let [tab Any (tabById tab-id)]
                  (when tab
                    (js/call tab-space .set tab space-id)))))))
          (on-change))
@@ -140,22 +144,22 @@
        :isApplying (fn [] Any (js/get state .applying))
 
        :applyRemoteSpaces
-       (fn [snapshot] Any
+       (fn [snapshot Any] Any
          (js/set! state .applying true)
          (try
            (js/call spaces .clear)
-           (js/call (js/get snapshot .spaces) .forEach (fn [%1] Any (js/call spaces .set (js/get %1 .id) %1)))
+           (js/call (js/get snapshot .spaces) .forEach (fn [%1 Any] Any (js/call spaces .set (js/get %1 .id) %1)))
            (when (= (js/get spaces .size) 0)
              (js/call spaces .set (js/get default-space .id) default-space))
            ;; active-id stays local: keep current if it still exists, else default.
            (when (not (js/call spaces .has (js/get state .active-id)))
              (js/set! state .active-id (default-id)))
            (when tab-by-id
-             (js/call (js/get snapshot .tabSpaces) .forEach (fn [entry] Any
-               (let [tab-id (aget entry 0)
-                     space-id (aget entry 1)]
+             (js/call (js/get snapshot .tabSpaces) .forEach (fn [entry Any] Any
+               (let [tab-id Any (aget entry 0)
+                     space-id Any (aget entry 1)]
                  (when (js/call spaces .has space-id)
-                   (let [tab (tab-by-id tab-id)]
+                   (let [tab Any (tab-by-id tab-id)]
                      (when tab
                        (js/call tab-space .set tab space-id))))))))
            (on-change)
