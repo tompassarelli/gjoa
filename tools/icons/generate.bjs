@@ -28,13 +28,13 @@
 (def ABOUT-LOGO-2X-SIZE Any 384)
 
 ;; Run an argv with Bun.spawn, draining pipes, and throw on non-zero exit.
-(defn run-quiet [(argv Any)] Any
-  (let [proc (js/call Bun .spawn {:cmd argv :stdout "pipe" :stderr "pipe"})
-        results (js/await (js/call Promise .all [(js/call (js/new Response (js/get proc .stdout)) .text)
+(defn run-quiet [argv Any] Any
+  (let [proc Any (js/call Bun .spawn {:cmd argv :stdout "pipe" :stderr "pipe"})
+        results Any (js/await (js/call Promise .all [(js/call (js/new Response (js/get proc .stdout)) .text)
                                         (js/call (js/new Response (js/get proc .stderr)) .text)
                                         (js/get proc .exited)]))
-        stderr (aget results 1)
-        code (aget results 2)]
+        stderr Any (aget results 1)
+        code Any (aget results 2)]
     (if (not= code 0)
       (throw (js/new Error (str "command failed: " (js/call argv .join " ") "\n" stderr)))
       nil)))
@@ -42,7 +42,9 @@
 (defn ensureRsvg [] Any
   (run-quiet ["rsvg-convert" "--version"]))
 
-(defn renderPng [(size Any) (dest String)] Any
+(defn renderPng
+  [size Any
+   dest String] Any
   (run-quiet ["rsvg-convert" "-w" (String size) "-h" (String size) SOURCE-SVG "-o" dest]))
 
 (defn main! [] Any
@@ -58,21 +60,21 @@
 
   (js/call log .step "rendering desktop integration icons (logo<N>.png)")
   ;; Await each render in sequence (a doseq body would fire them concurrently).
-  (let [sizes (js/call DESKTOP-SIZES .concat EXTRA-LOGO-SIZES)
-        n (js/get sizes .length)]
+  (let [sizes (Vec Any) (js/call DESKTOP-SIZES .concat EXTRA-LOGO-SIZES)
+        n Int (js/get sizes .length)]
     (js/await
-      (loop [i 0]
+      (loop [i Int 0]
         (if (< i n)
-          (let [size (aget sizes i)
-                dest (join BRANDING-SRC (str "logo" size ".png"))
-                _ (js/await (renderPng size dest))]
+          (let [size Any (aget sizes i)
+                dest String (join BRANDING-SRC (str "logo" size ".png"))
+                _ Any (js/await (renderPng size dest))]
             (recur (+ i 1)))
           nil))))
   ;; logo.png + logo-mac.png are aliases for the largest sizes.
   (js/await (copyFile (join BRANDING-SRC "logo512.png") (join BRANDING-SRC "logo.png")))
   (js/await (copyFile (join BRANDING-SRC "logo1024.png") (join BRANDING-SRC "logo-mac.png")))
-  (let [(desktop-count Int) (js/get DESKTOP-SIZES .length)
-        (extra-count Int) (js/get EXTRA-LOGO-SIZES .length)]
+  (let [desktop-count Int (js/get DESKTOP-SIZES .length)
+        extra-count Int (js/get EXTRA-LOGO-SIZES .length)]
     (js/call log .ok (str "wrote " (+ desktop-count extra-count 2) " desktop icons")))
 
   (js/call log .step "rendering about-page logos (in-omni.ja)")
@@ -97,7 +99,7 @@
   (js/call log .ok "done — run `bun run import` to push these into engine/"))
 
 ;; Entry point: run main, surfacing errors and exiting non-zero on failure.
-(js/call (main!) .catch (fn [err] Any (js/call log .error (or (js/get err .message) (String err)))
+(js/call (main!) .catch (fn [err Error] Any (js/call log .error (or (js/get err .message) (String err)))
     (if (js/get (js/get process .env) .DEBUG)
       (console/error (js/get err .stack))
       nil)
