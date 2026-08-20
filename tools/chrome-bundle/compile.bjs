@@ -18,8 +18,8 @@
 ;; object ID in configs/beagle.ref. CI overrides BEAGLE_PIN_ROOT with its checkout.
 (def BEAGLE-REF-FILE String (join REPO-ROOT "configs" "beagle.ref"))
 (def BEAGLE-REF String
-  (let [lines (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
-        ref (js/call lines .find (fn [(l String)] Bool
+  (let [lines (Vec String) (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
+        ref Any (js/call lines .find (fn [l String] Bool
                            (and (> (js/get (js/call l .trim) .length) 0)
                                 (not (js/call (js/call l .trim) .startsWith "#")))))]
     (if ref
@@ -34,18 +34,18 @@
 (def BEAGLE-BUILD-ALL String
   (js/call (resolve BEAGLE-PIN-ROOT "bin" "beagle-build-all") .replaceAll (js/call String .fromCharCode 92) "/"))
 
-(defn find-bjs-files [(dir String)] Any
-  (let [results []
-        entries (readdirSync dir {:withFileTypes true})
-        n (js/get entries .length)]
-    (loop [i 0]
+(defn find-bjs-files [dir String] Any
+  (let [results (Vec Any) []
+        entries (Vec Any) (readdirSync dir {:withFileTypes true})
+        n Int (js/get entries .length)]
+    (loop [i Int 0]
       (when (< i n)
-        (let [entry (aget entries i)
-              full (join dir (js/get entry .name))]
+        (let [entry Any (aget entries i)
+              full String (join dir (js/get entry .name))]
           (if (js/call entry .isDirectory)
-            (let [sub (find-bjs-files full)
-                  m (js/get sub .length)]
-              (loop [j 0]
+            (let [sub (Vec String) (find-bjs-files full)
+                  m Int (js/get sub .length)]
+              (loop [j Int 0]
                 (when (< j m)
                   (js/call results .push (aget sub j))
                   (recur (+ j 1)))))
@@ -57,7 +57,7 @@
 ;; macros.bjs stays in the batch: it is the only provider of `gjoa.macros`, and
 ;; a namespace absent from the invocation is unresolvable. Its emitted module is
 ;; empty (macros expand at compile time) and no bundle entry names it.
-(defn should-skip [(rel String)] Bool
+(defn should-skip [rel String] Bool
   (cond
     (js/call rel .startsWith "test/") true
     (js/call rel .endsWith ".test.bjs") true
@@ -65,55 +65,57 @@
 
 ;; Batch compilation is all-or-nothing because local providers and consumers must
 ;; inhabit one compiler overlay. The batch is skipped when every output is fresh.
-(defn up-to-date? [(src String) (out String)] Bool
+(defn up-to-date?
+  [src String
+   out String] Bool
   (if (not (existsSync out))
     false
-    (let [out-m (js/get (statSync out) .mtimeMs)]
+    (let [out-m Any (js/get (statSync out) .mtimeMs)]
       (and (>= out-m (js/get (statSync src) .mtimeMs))
            (>= out-m (js/get (statSync BEAGLE-REF-FILE) .mtimeMs))
            (or (not (existsSync MACROS-PATH))
                (>= out-m (js/get (statSync MACROS-PATH) .mtimeMs)))))))
 
 (defn run-compile [] (Promise Any)
-  (let [all-files (find-bjs-files BJS-ROOT)
-        sorted (js/call all-files .sort)
-        total (js/get sorted .length)
-        sources []]
-    (loop [i 0]
+  (let [all-files (Vec String) (find-bjs-files BJS-ROOT)
+        sorted (Vec Any) (js/call all-files .sort)
+        total Int (js/get sorted .length)
+        sources (Vec Any) []]
+    (loop [i Int 0]
       (when (< i total)
-        (let [src (aget sorted i)
-              rel (relative BJS-ROOT src)]
+        (let [src Any (aget sorted i)
+              rel String (relative BJS-ROOT src)]
           (when (not (should-skip rel))
             (js/call sources .push src))
           (recur (+ i 1)))))
-    (let [n (js/get sources .length)
-          stale-count
-          (loop [i 0 count 0]
+    (let [n Int (js/get sources .length)
+          stale-count Int (loop [i Int 0
+                 count Int 0]
             (if (< i n)
-              (let [src (aget sources i)
-                    rel (relative BJS-ROOT src)
-                    out-rel (js/call rel .replace (js/new RegExp "\\.bjs$") ".js")
-                    out-path (join OUT-ROOT "gjoa" out-rel)]
+              (let [src Any (aget sources i)
+                    rel String (relative BJS-ROOT src)
+                    out-rel String (js/call rel .replace (js/new RegExp "\\.bjs$") ".js")
+                    out-path String (join OUT-ROOT "gjoa" out-rel)]
                 (recur (+ i 1) (if (up-to-date? src out-path) count (+ count 1))))
               count))]
       (if (= stale-count 0)
         (console/log (str "✓ 0 compiled, " n " cached → .beagle-out/gjoa/"))
-        (let [cmd ["bash" BEAGLE-BUILD-ALL]
-              _ (loop [i 0]
+        (let [cmd (Vec String) ["bash" BEAGLE-BUILD-ALL]
+              _ Nil (loop [i Int 0]
                   (when (< i n)
                     (js/call cmd .push (aget sources i))
                     (recur (+ i 1))))
-              _ (js/call cmd .push "--out")
-              _ (js/call cmd .push OUT-ROOT)
-              proc (js/call Bun .spawn {:cmd cmd
+              _ Int (js/call cmd .push "--out")
+              _ Int (js/call cmd .push OUT-ROOT)
+              proc Any (js/call Bun .spawn {:cmd cmd
                                         :cwd REPO-ROOT
                                         :stdout "pipe"
                                         :stderr "pipe"})
-              results (js/await (js/call Promise .all [(js/call (js/new Response (js/get proc .stdout)) .text)
+              results Any (js/await (js/call Promise .all [(js/call (js/new Response (js/get proc .stdout)) .text)
                                                        (js/call (js/new Response (js/get proc .stderr)) .text)
                                                        (js/get proc .exited)]))
-              code (aget results 2)
-              output (js/call (str (or (aget results 0) "") (or (aget results 1) "")) .trim)]
+              code Any (aget results 2)
+              output String (js/call (str (or (aget results 0) "") (or (aget results 1) "")) .trim)]
           (if (not= code 0)
             (do
               (console/error output)
