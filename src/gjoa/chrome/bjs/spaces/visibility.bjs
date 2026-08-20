@@ -3,9 +3,14 @@
 
 (declare-extern [undefined] Any)
 
-(js/export (defn is-in-active-space [tab tab-space spaces default-id active-id] Any
-  (let [id (js/call tab-space .get tab)]
-    (let [effective (if (and (not= id undefined) (js/call spaces .has id))
+(js/export (defn is-in-active-space
+  [tab Any
+   tab-space Any
+   spaces (JsMap String Any)
+   default-id String
+   active-id String] Bool
+  (let [id Any (js/call tab-space .get tab)]
+    (let [effective String (if (and (not= id undefined) (js/call spaces .has id))
                      id
                      default-id)]
       (= effective active-id)))))
