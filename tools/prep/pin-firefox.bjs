@@ -22,35 +22,35 @@
             [gjoa.tools.prep.log :refer [log]]))
 (declare-extern [process console] Any)
 
-(defn checksumUrl [(version String)] String
+(defn checksumUrl [version String] String
   (str "https://archive.mozilla.org/pub/firefox/releases/" version "/SHA256SUMS"))
 
-(defn tarballName [(version String)] String
+(defn tarballName [version String] String
   (str "firefox-" version ".source.tar.xz"))
 
-(js/export (defn pin-firefox! [(version String)] Any
+(js/export (defn pin-firefox! [version String] Any
   ;; version reaches a fetch URL and a written file path — constrain it to a plain
   ;; Firefox version first (same guard as config.bjs / conflict-forecast).
   (when (not (js/call version .match (js/new RegExp "^[0-9]+(\\.[0-9]+){1,3}(esr)?$")))
     (throw (js/new Error (str "refusing unsafe version string: " version))))
-  (let [p (join CONFIGS-DIR (str "firefox-" version ".sha256"))]
+  (let [p Any (join CONFIGS-DIR (str "firefox-" version ".sha256"))]
     (when (existsSync p)
       (js/call log .warn (str "pin already exists (" p "); re-deriving after GPG-verify")))
     (js/call log .step (str "fetching SHA256SUMS for firefox " version))
-    (let [res (js/await (fetch (checksumUrl version)))]
+    (let [res Any (js/await (fetch (checksumUrl version)))]
       (when-not (js/get res .ok)
         (throw (js/new Error (str "failed to fetch SHA256SUMS: " (js/get res .status)))))
-      (let [text (js/await (js/call res .text))]
+      (let [text Any (js/await (js/call res .text))]
         ;; MANDATORY proof: refuse to create a pin without a Mozilla-signed sums.
         (js/await (verifySignature version text true))
-        (let [hash (hashFromSums text version)]
+        (let [hash Any (hashFromSums text version)]
           (when-not hash
             (throw (js/new Error (str "SHA256SUMS does not list " (tarballName version)))))
           (writeFileSync p (str hash "  source/" (tarballName version) "\n"))
           (js/call log .ok (str "wrote GPG-verified pin " p "\n  " hash))))))))
 
 (when (js/get (js/import-meta) .main)
-  (let [v (aget (js/get process .argv) 2)]
+  (let [v Any (aget (js/get process .argv) 2)]
     (if (not v)
       (do (console/error "usage: pin-firefox <version>") (js/call process .exit 1))
       (js/await (pin-firefox! v)))))
