@@ -28,51 +28,52 @@
 
 (def DISCLOSURE-PATH String (join REPO-ROOT "configs" "security-patches.json"))
 
-(defn sha256-file [(p String)] String
+(defn sha256-file [p String] String
   (js/call (js/call (createHash "sha256") .update (readFileSync p)) .digest "hex"))
 
-(defn sh-ok [(cmd String)] Bool
+(defn sh-ok [cmd String] Bool
   (try (do (execSync cmd {:encoding "utf8" :stdio ["ignore" "pipe" "pipe"] :timeout 180000}) true)
     (catch (_e Error) false)))
 
 (defn list-patches [] Any
-  (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .sort))
+  (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [p String] Bool (js/call p .endsWith ".patch"))) .sort))
 
 ;; Cumulative-apply probe (mirrors Gate A): apply ALL patches in order against a
 ;; fresh extract, returning a map filename->applied?. "unknown" if no cached tarball.
-(defn apply-status-map [(patches Any)] Any
-  (let [cache (str (js/get (js/get process .env) .HOME) "/.cache/gjoa/sources")
-        gjoa (js/call JSON .parse (readFileSync (join REPO-ROOT "gjoa.json") "utf8"))
-        tarball (str cache "/firefox-" (js/get (js/get gjoa .firefox) .version) ".source.tar.xz")
-        out {}]
+(defn apply-status-map [patches Any] Any
+  (let [cache String (str (js/get (js/get process .env) .HOME) "/.cache/gjoa/sources")
+        gjoa Any (js/call JSON .parse (readFileSync (join REPO-ROOT "gjoa.json") "utf8"))
+        tarball String (str cache "/firefox-" (js/get (js/get gjoa .firefox) .version) ".source.tar.xz")
+        out (Map Any Any) {}]
     (if (not (existsSync tarball))
-      (do (doseq [p patches] (aset out p "unknown (no cached source)")) out)
-      (let [tmp "/tmp/gjoa-disclosure-engine"]
+      (do (doseq [p Any patches] (aset out p "unknown (no cached source)")) out)
+      (let [tmp String "/tmp/gjoa-disclosure-engine"]
         (if (not (sh-ok (str "rm -rf " tmp " && mkdir -p " tmp
                              " && tar -xJf " tarball " -C " tmp " --strip-components=1")))
-          (do (doseq [p patches] (aset out p "unknown (extract failed)")) out)
+          (do (doseq [p Any patches] (aset out p "unknown (extract failed)")) out)
           (do
             (sh-ok (str "cd " tmp " && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m baseline"))
             ;; thread `stopped` through the loop (no mutable cell) — once a patch
             ;; fails, every later one is "blocked" since it'd build on a failed tree.
-            (let [n (js/get patches .length)]
-              (loop [i 0 stopped false]
+            (let [n Int (js/get patches .length)]
+              (loop [i Int 0
+                     stopped Bool false]
                 (when (< i n)
-                  (let [p (aget patches i)]
+                  (let [p Any (aget patches i)]
                     (if stopped
                       (do (aset out p "blocked (earlier patch failed)") (recur (+ i 1) stopped))
-                      (let [ok (sh-ok (str "cd " tmp " && git apply " (join PATCHES-DIR p)))]
+                      (let [ok Bool (sh-ok (str "cd " tmp " && git apply " (join PATCHES-DIR p)))]
                         (aset out p (if ok "applies" "FAILED"))
                         (recur (+ i 1) (or stopped (not ok))))))))
               out)))))))
 
 (js/export (defn build-disclosure [] Any
-  (let [patches (list-patches)
-        statuses (apply-status-map patches)
-        entries []]
-    (doseq [p patches]
-      (let [text (readFileSync (join PATCHES-DIR p) "utf8")
-            sec (parseSecurity text)]
+  (let [patches Any (list-patches)
+        statuses Any (apply-status-map patches)
+        entries (Vec Any) []]
+    (doseq [p Any patches]
+      (let [text String (readFileSync (join PATCHES-DIR p) "utf8")
+            sec Any (parseSecurity text)]
         (when sec
           (js/call entries .push {:id (or (js/get sec .id) nil)
                           :refs (or (js/get sec .refs) [])
@@ -89,7 +90,7 @@
      :patches entries})))
 
 (defn main! [] Any
-  (let [disclosure (build-disclosure)]
+  (let [disclosure Any (build-disclosure)]
     (writeFileSync DISCLOSURE-PATH (str (js/call JSON .stringify disclosure nil 2) "\n"))
     (console/error (str "[patch-disclosure] wrote " DISCLOSURE-PATH " ("
                         (js/get (js/get disclosure .patches) .length) " security-tagged patch(es))"))))
