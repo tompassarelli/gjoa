@@ -18,7 +18,7 @@
 (def REPO String (js/call process .cwd))
 (def ENGINE String (join REPO "engine"))
 
-(defn fail! [(msg String)] Any
+(defn fail! [msg String] Any
   (console/error (str "FAIL: " msg))
   (js/call process .exit 1))
 
@@ -29,11 +29,11 @@
 ;; bundles older than the chrome source they come from — same "refuse if stale"
 ;; discipline as Gate K (engine-currency). A local green now == a CI green.
 (defn assert-bundles-fresh! [] Any
-  (let [js-dir (join REPO "dist" "chrome" "JS")]
+  (let [js-dir Any (join REPO "dist" "chrome" "JS")]
     (when (not (existsSync js-dir))
       (fail! "dist/chrome/JS missing — run `bun run chrome:dist` before projector:test"))
-    (let [newest-src (js/call (sh (str "find " REPO "/src/gjoa/chrome -type f \\( -name '*.bjs' -o -name '*.css' \\) -printf '%T@\\n' 2>/dev/null | sort -rn | head -1") nil) .trim)
-          oldest-js (js/call (sh (str "find " js-dir " -name '*.uc.js' -printf '%T@\\n' 2>/dev/null | sort -n | head -1") nil) .trim)]
+    (let [newest-src String (js/call (sh (str "find " REPO "/src/gjoa/chrome -type f \\( -name '*.bjs' -o -name '*.css' \\) -printf '%T@\\n' 2>/dev/null | sort -rn | head -1") nil) .trim)
+         oldest-js String (js/call (sh (str "find " js-dir " -name '*.uc.js' -printf '%T@\\n' 2>/dev/null | sort -n | head -1") nil) .trim)]
       (when (and (> (js/get newest-src .length) 0) (> (js/get oldest-js .length) 0)
                  (> (parseInt newest-src 10) (parseInt oldest-js 10)))
         (fail! "dist/chrome/JS is STALE vs src/gjoa/chrome — run `bun run chrome:dist` first. (This stale-bundle false-green is what broke v0.4.1 CI; the gate now refuses it.)")))))
@@ -41,28 +41,29 @@
 (defn main! [] Any
   (assert-bundles-fresh!)
   ;; GATE A — reflector round-trip over a corpus
-  (let [files (js/call (js/call (sh (str "find " ENGINE "/browser/components " ENGINE "/toolkit/modules -name '*.sys.mjs' 2>/dev/null | head -40") nil) .split "\n") .filter (fn [(s String)] Bool (> (js/get s .length) 0)))]
-    (loop [i 0 bad 0]
+  (let [files Any (js/call (js/call (sh (str "find " ENGINE "/browser/components " ENGINE "/toolkit/modules -name '*.sys.mjs' 2>/dev/null | head -40") nil) .split "\n") .filter (fn [s String] Bool (> (js/get s .length) 0)))]
+    (loop [i Int 0
+          bad Int 0]
       (if (< i (js/get files .length))
-        (let [src (readFileSync (aget files i) "utf8")]
+        (let [src Any (readFileSync (aget files i) "utf8")]
           (recur (+ i 1) (if (round-trips? src) bad (+ bad 1))))
         (do
-          (let [(file-count Int) (js/get files .length)]
+          (let [file-count Int (js/get files .length)]
             (console/error (str "GATE A  reflector round-trip: " (- file-count bad) "/" file-count " byte-identical")))
           (when (> bad 0) (fail! (str bad " file(s) failed round-trip")))))))
   ;; GATE B — committed claim-doc reproduces the textual patch's output
-  (let [artifact (join REPO "patches" "0003-newtab-redirector-gjoa.claims.json")
-        patch (join REPO "patches" "0003-newtab-redirector-gjoa.patch")
-        doc (json->doc (readFileSync artifact "utf8"))
-        rel (js/get doc .file)
-        engine-target (join ENGINE rel)
-        tmp "/tmp/gjoa-projtest"]
+  (let [artifact Any (join REPO "patches" "0003-newtab-redirector-gjoa.claims.json")
+       patch Any (join REPO "patches" "0003-newtab-redirector-gjoa.patch")
+       doc Any (json->doc (readFileSync artifact "utf8"))
+       rel Any (js/get doc .file)
+       engine-target Any (join ENGINE rel)
+       tmp String "/tmp/gjoa-projtest"]
     (sh (str "rm -rf " tmp " && mkdir -p " (join tmp (dirname rel))) nil)
     (sh (str "cp " engine-target " " (join tmp rel)) nil)
     (sh (str "cd " tmp " && patch -R -p1 < " patch) nil)   ; engine - 0011 = pristine
-    (let [pristine (readFileSync (join tmp rel) "utf8")
-          patched (readFileSync engine-target "utf8")
-          r (replay (js/get doc .edits) pristine)]
+    (let [pristine Any (readFileSync (join tmp rel) "utf8")
+         patched Any (readFileSync engine-target "utf8")
+         r Any (replay (js/get doc .edits) pristine)]
       (if (and (js/get r .ok) (= (js/get r .src) patched))
         (console/error "GATE B  claim-doc equivalence: replay(pristine) == engine (patch 0003) [byte-for-byte]")
         (fail! (if (js/get r .ok) "claim-doc replay does not reproduce the engine file" (js/get r .reason))))))
@@ -71,13 +72,13 @@
   ;; analysis. For each function symbol, every caller `beagle callers` reports must
   ;; appear among the projected callers. (Projector additionally recovers callers
   ;; beagle drops — js/export bodies, top-level forms — so it is strictly ⊇.)
-  (let [graph (build-graph!)
-        ;; functions (NOT macros — macros inline away and are correctly not nodes)
-        symbols ["enabled?" "apply!" "parse-hosts" "allow-hosts" "make-sidebar-button!" "all-tabs"]]
-    (doseq [sym symbols]
-      (let [truth (beagle-callers sym)
-            proj (js/new Set (projected-callers graph sym))
-            missing (js/call truth .filter (fn [(c String)] Bool (not (js/call proj .has c))))]
+  (let [graph Any (build-graph!)
+       ;; functions (NOT macros — macros inline away and are correctly not nodes)
+       symbols (Vec String) ["enabled?" "apply!" "parse-hosts" "allow-hosts" "make-sidebar-button!" "all-tabs"]]
+    (doseq [sym (Vec String) symbols]
+      (let [truth Any (beagle-callers sym)
+           proj Any (js/new Set (projected-callers graph sym))
+           missing Any (js/call truth .filter (fn [c String] Bool (not (js/call proj .has c))))]
         (when (> (js/get missing .length) 0)
           (fail! (str "GATE C  who-calls(" sym "): beagle reports caller(s) the projector misses: "
                       (js/call missing .join ", "))))))
