@@ -89,19 +89,19 @@
      ;; convergence. Beagle's JS target has no `while`/`break`; the
      ;; equivalent is a loop/recur that returns the latest probe result
      ;; on either convergence or deadline.
-     (let [deadline (+ (Date/now) 3000)
-           r (js/await (loop [acc {}]
+     (let [deadline Int (+ (Date/now) 3000)
+          r Any (js/await (loop [acc Int {}]
                (if (>= (Date/now) deadline)
                  acc
-                 (let [_ (js/await (js/new Promise (fn [res] Any (setTimeout res 200))))
-                       nr (chrome-eval probe)]
+                 (let [_ Any (js/await (js/new Promise (fn [res Any] Any (setTimeout res 200))))
+                      nr Any (chrome-eval probe)]
                    (if (and (js/get nr .topIcon) (js/get nr .bottomIcon) (js/get nr .sidebar)
-                            (let [(top-icon-top Float) (js/get (js/get nr .topIcon) .top)
-                                  (sidebar-top Float) (js/get (js/get nr .sidebar) .top)
-                                  (sidebar-bottom Float) (js/get (js/get nr .sidebar) .bottom)
-                                  (bottom-icon-bottom Float) (js/get (js/get nr .bottomIcon) .bottom)
-                                  tg (- top-icon-top sidebar-top)
-                                  bg (- sidebar-bottom bottom-icon-bottom)]
+                            (let [top-icon-top Float (js/get (js/get nr .topIcon) .top)
+                                 sidebar-top Float (js/get (js/get nr .sidebar) .top)
+                                 sidebar-bottom Float (js/get (js/get nr .sidebar) .bottom)
+                                 bottom-icon-bottom Float (js/get (js/get nr .bottomIcon) .bottom)
+                                 tg Any (- top-icon-top sidebar-top)
+                                 bg String (- sidebar-bottom bottom-icon-bottom)]
                               (<= (Math/abs (- tg bg)) TOLERANCE-PX)))
                      nr
                      (recur nr))))))]
@@ -118,16 +118,16 @@
              (str "No bottom icon found in #sidebar-container > sidebar-main (searched "
                   (js/get r .bottomCount) " candidates). "
                   "Result: " (JSON/stringify r nil 2)))
-           (let [(top-icon-top Float) (js/get (js/get r .topIcon) .top)
-                 (sidebar-top Float) (js/get (js/get r .sidebar) .top)
-                 (sidebar-bottom Float) (js/get (js/get r .sidebar) .bottom)
-                 (bottom-icon-bottom Float) (js/get (js/get r .bottomIcon) .bottom)
-                 topGap (- top-icon-top sidebar-top)
-                 bottomGap (- sidebar-bottom bottom-icon-bottom)
+           (let [top-icon-top Float (js/get (js/get r .topIcon) .top)
+                sidebar-top Float (js/get (js/get r .sidebar) .top)
+                sidebar-bottom Float (js/get (js/get r .sidebar) .bottom)
+                bottom-icon-bottom Float (js/get (js/get r .bottomIcon) .bottom)
+                topGap Float (- top-icon-top sidebar-top)
+                bottomGap Float (- sidebar-bottom bottom-icon-bottom)
                  ;; src/drawer/layout.ts targets `bottomGap = topGap + BOTTOM_OFFSET`
                  ;; (default 4px). Bottom icons sit slightly farther from the edge.
-                 (BOTTOM-OFFSET Int) 4
-                 delta (Math/abs (- bottomGap (+ topGap BOTTOM-OFFSET)))]
+                BOTTOM-OFFSET Int 4
+                delta Float (Math/abs (- bottomGap (+ topGap BOTTOM-OFFSET)))]
              (expect (<= delta TOLERANCE-PX)
                (str "Asymmetric icon Y-deltas off target: topGap=" (js/call topGap .toFixed 2) "px "
                     "bottomGap=" (js/call bottomGap .toFixed 2) "px (expected bottom = top+" BOTTOM-OFFSET
