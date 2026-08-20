@@ -8,7 +8,7 @@
 (js/export (def tests Any
   [(deftest "adblock M1: blocking module + global toggle flips the engine gate" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
-     (let [r (js/await (js/call mn .executeScript (str "\n"
+     (let [r Any (js/await (js/call mn .executeScript (str "\n"
                     "  const w = Services.wm.getMostRecentWindow('navigator:browser');\n"
                     "  const gb = w.gjoaBlocking;\n"
                     "  const item = w.document.getElementById('gjoa-toggle-blocking');\n"
@@ -19,7 +19,7 @@
                     "  if (gb) gb.toggle();\n"
                     "  const restored = Services.prefs.getBoolPref(P, false);\n"
                     "  return JSON.stringify({ hasApi: !!gb, hasItem: !!item, before, after, restored });\n")))
-           d (JSON/parse r)]
+          d Any (JSON/parse r)]
        (console/log (str "\n[M1-UI] " r " (menu item is install!-gated on a native sidebar-button, absent headless — verified in the bundle instead)"))
        (expect (js/get d .hasApi) "window.gjoaBlocking missing — the gjoa-blocking chrome module did not load")
        (expect-eq (js/get d .before) true "protection.enabled not ON before toggle")
