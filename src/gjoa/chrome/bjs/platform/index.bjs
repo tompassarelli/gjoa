@@ -6,12 +6,12 @@
             [gjoa.platform.history :refer [make-persisted]]
             [gjoa.platform.cross-window-tabs :refer [make-cross-window-tabs]]))
 
-(js/export (defn make-gjoa! [(deps Any)] Any
-  (let [scheduler (make-scheduler!)
-        tabs-reconciler (make-tabs-reconciler! {:scheduler scheduler})
-        win (make-gjoa-window! scheduler)
-        persisted (make-persisted (js/get deps .history))
-        cross-window-tabs (make-cross-window-tabs)]
+(js/export (defn make-gjoa! [deps Any] Any
+  (let [scheduler Any (make-scheduler!)
+        tabs-reconciler Any (make-tabs-reconciler! {:scheduler scheduler})
+        win Any (make-gjoa-window! scheduler)
+        persisted Any (make-persisted (js/get deps .history))
+        cross-window-tabs Any (make-cross-window-tabs)]
 
     {:windows {:current (fn [] Any win)}
      :tabs cross-window-tabs
@@ -19,9 +19,9 @@
      :sessions (js/get persisted .sessions)
      :checkpoints (js/get persisted .checkpoints)
      :flush (fn [] Any (js/call scheduler .flush))
-     :diag (fn [] Any (let [s (js/call scheduler .diag)
-                  wid (js/get win .windowId)
-                  iid (js/call (js/get deps .history) .instanceId)]
+     :diag (fn [] Any (let [s Any (js/call scheduler .diag)
+                  wid Any (js/get win .windowId)
+                  iid Any (js/call (js/get deps .history) .instanceId)]
               {:scheduler s :windowId wid :instanceId iid}))
      :destroy (fn [] Any
                 (js/call tabs-reconciler .destroy)
