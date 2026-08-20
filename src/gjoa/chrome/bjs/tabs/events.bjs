@@ -17,13 +17,13 @@
 ;; urlbar focused. setTimeout(0) beats the default <browser> focus; guards keep it
 ;; from stealing focus on real pages or a non-empty urlbar.
 (defn maybe-focus-urlbar! [] Any
-  (let [win (js/get gBrowser .ownerGlobal)]
+  (let [win Any (js/get gBrowser .ownerGlobal)]
     (when win
       (js/call win .setTimeout
         (fn [] Any
           (try
-            (let [spec (or (some-> gBrowser (js/get .selectedBrowser) (js/get .currentURI) (js/get .spec)) "")
-                  u (js/get win .gURLBar)]
+            (let [spec String (or (some-> gBrowser (js/get .selectedBrowser) (js/get .currentURI) (js/get .spec)) "")
+                  u Any (js/get win .gURLBar)]
               (when (and u
                          (or (js/call spec .startsWith "chrome://gjoa-newtab")
                              (= spec "about:newtab") (= spec "about:home")
@@ -35,19 +35,27 @@
         0))))
 
 ;; Find previous tab in array matching predicate, searching backwards (multi-site)
-(defn find-prev-matching [(tabs-arr Any) (idx Int) (pred Any)] Any
-  (loop [i idx]
+(defn find-prev-matching
+  [tabs-arr Any
+   idx Int
+   pred Any]
+  Any
+  (loop [i Int idx]
     (cond
       (< i 0) nil
       (pred (aget tabs-arr i)) (aget tabs-arr i)
       :else (recur (- i 1)))))
 
 ;; Re-nest descendants after restore (walks nextElementSibling chain)
-(defn renest-descendants! [(n Any) (expected Any)
-                          (old-parent-id Any) (new-id Any)] Any
+(defn renest-descendants!
+  [n Any
+   expected Any
+   old-parent-id Any
+   new-id Any]
+  Any
   (when (and n (not= n (js/get state .spacer)))
     (when (js/get n ._tab)
-      (let [ntd (tree-data! (js/get n ._tab))]
+      (let [ntd Any (tree-data! (js/get n ._tab))]
         (when (and (js/call expected .has (js/get ntd .id))
                    (= (js/get ntd .parentId) old-parent-id))
           (js/set! ntd .parentId new-id))))
@@ -55,14 +63,18 @@
                         expected old-parent-id new-id)))
 
 ;; Reparent children after a tab closes (walks nextElementSibling)
-(defn reparent-children! [(next Any) (closing-id Any)
-                         (new-parent-id Any) (my-level Int)
-                         (rows Any)] Any
+(defn reparent-children!
+  [next Any
+   closing-id Any
+   new-parent-id Any
+   my-level Int
+   rows Any]
+  Any
   (when (and next (not= next (js/get state .spacer)))
     (cond
       (js/get next ._tab)
       (when (> (level-of! (js/get next ._tab)) my-level)
-        (let [ntd (tree-data! (js/get next ._tab))]
+        (let [ntd Any (tree-data! (js/get next ._tab))]
           (when (= (js/get ntd .parentId) closing-id)
             (js/set! ntd .parentId new-parent-id)
             (js/call rows .syncTabRow (js/get next ._tab))))
@@ -70,7 +82,7 @@
                            closing-id new-parent-id my-level rows))
 
       (js/get next ._group)
-      (let [(g-lv Int) (or (js/get (js/get next ._group) .level) 0)]
+      (let [g-lv Int (or (js/get (js/get next ._group) .level) 0)]
         (when (> g-lv my-level)
           (js/set! (js/get next ._group) .level
                 (Math/max 0 (- g-lv 1)))
@@ -83,21 +95,25 @@
                          closing-id new-parent-id my-level rows))))
 
 ;; True iff Firefox considers this tab pinned right now
-(defn is-fx-pinned [(tab Any)] Bool
+(defn is-fx-pinned [tab Any] Bool
   (or (js/get tab .pinned)
-      (let [ptc (or (some-> gBrowser (js/get .tabContainer) (js/get .pinnedTabsContainer))
+      (let [ptc Any (or (some-> gBrowser (js/get .tabContainer) (js/get .pinnedTabsContainer))
                     (js/get gBrowser .pinnedTabsContainer))]
         (and (bool ptc) (= (js/get tab .parentNode) ptc)))))
 
 ;; Place row for pinned or unpinned tab (called by place-row-in-firefox-order!)
-(defn place-row-pinned-or-unpinned! [(tab Any) (row Any)
-                                    (tabs-arr Any) (my-idx Int)] Bool
+(defn place-row-pinned-or-unpinned!
+  [tab Any
+   row Any
+   tabs-arr Any
+   my-idx Int]
+  Bool
   (if (is-fx-pinned tab)
     ;; Pinned placement
-    (let [prev-tab (find-prev-matching tabs-arr (- my-idx 1)
-                     (fn [%1] Any (is-fx-pinned %1)))]
+    (let [prev-tab Any (find-prev-matching tabs-arr (- my-idx 1)
+                     (fn [%1 Any] Any (is-fx-pinned %1)))]
       (if prev-tab
-        (let [prev-row (js/call row-of .get prev-tab)]
+        (let [prev-row Any (js/call row-of .get prev-tab)]
           (if (and prev-row (not= prev-row row)
                    (not= (js/get prev-row .nextElementSibling) row))
             (do (js/call prev-row .after row) true)
@@ -108,14 +124,14 @@
               true)
           false)))
     ;; Unpinned placement
-    (let [prev-tab (find-prev-matching tabs-arr (- my-idx 1)
-                     (fn [%1] Any (not (is-fx-pinned %1))))]
+    (let [prev-tab Any (find-prev-matching tabs-arr (- my-idx 1)
+                     (fn [%1 Any] Any (not (is-fx-pinned %1))))]
       (if prev-tab
-        (let [prev-row (js/call row-of .get prev-tab)]
+        (let [prev-row Any (js/call row-of .get prev-tab)]
           (if (and prev-row (not= prev-row row))
-            (let [prev-subtree (subtree-rows! prev-row)
-                  (subtree-count Int) (js/get prev-subtree .length)
-                  anchor (aget prev-subtree (- subtree-count 1))]
+            (let [prev-subtree (Vec Any) (subtree-rows! prev-row)
+                  subtree-count Int (js/get prev-subtree .length)
+                  anchor Any (aget prev-subtree (- subtree-count 1))]
               (if (not= (js/get anchor .nextElementSibling) row)
                 (do (js/call anchor .after row) true)
                 false))
@@ -127,27 +143,30 @@
           false)))))
 
 ;; Move row to DOM position matching tab index in gBrowser.tabs
-(defn place-row-in-firefox-order! [(tab Any) (row Any)] Bool
+(defn place-row-in-firefox-order!
+  [tab Any
+   row Any]
+  Bool
   (if (or (not row) (not (js/get state .panel)))
     false
-    (let [tabs-arr (tabs!)
-          (my-idx Int) (js/call tabs-arr .indexOf tab)]
+    (let [tabs-arr Any (tabs!)
+          my-idx Int (js/call tabs-arr .indexOf tab)]
       (if (< my-idx 0)
         false
-        (let [my-parent-id (some-> (js/call tree-of .get tab) (js/get .parentId))
-              grp-row (when (= (js/typeof my-parent-id) "string")
+        (let [my-parent-id Any (some-> (js/call tree-of .get tab) (js/get .parentId))
+              grp-row Any (when (= (js/typeof my-parent-id) "string")
                         (group-by-id my-parent-id))]
           (if grp-row
             ;; Group-parented path
-            (let [prev-sib-tab
+            (let [prev-sib-tab Any
                   (find-prev-matching tabs-arr (- my-idx 1)
-                    (fn [%1] Any (let [to (js/call tree-of .get %1)]
+                    (fn [%1 Any] Any (let [to Any (js/call tree-of .get %1)]
                        (and to (= (js/get to .parentId) my-parent-id)))))]
               (if prev-sib-tab
-                (let [prev-row (js/call row-of .get prev-sib-tab)]
+                (let [prev-row Any (js/call row-of .get prev-sib-tab)]
                   (if (and prev-row (not= prev-row row))
-                    (let [st (subtree-rows! prev-row)
-                          anchor (last-of st)]
+                    (let [st (Vec Any) (subtree-rows! prev-row)
+                          anchor Any (last-of st)]
                       (if (not= (js/get anchor .nextElementSibling) row)
                         (do (js/call anchor .after row) true)
                         false))
@@ -159,23 +178,26 @@
             (place-row-pinned-or-unpinned! tab row tabs-arr my-idx)))))))
 
 ;; Position a restored row after its original prev sibling or parent
-(defn place-restored-row! [(row Any) (parent Any)
-                          (prev-sibling-id Any)] Any
-  (let [parent-row (and parent (js/call row-of .get parent))
-        sib (and prev-sibling-id (tab-by-id prev-sibling-id))
-        sib-row (and sib (js/call row-of .get sib))
-        sib-parent (and sib (parent-of-tab! sib))
-        same-parent (or (and (not parent) (not sib-parent))
+(defn place-restored-row!
+  [row Any
+   parent Any
+   prev-sibling-id Any]
+  Any
+  (let [parent-row Any (and parent (js/call row-of .get parent))
+        sib Any (and prev-sibling-id (tab-by-id prev-sibling-id))
+        sib-row Any (and sib (js/call row-of .get sib))
+        sib-parent Any (and sib (parent-of-tab! sib))
+        same-parent Bool (or (and (not parent) (not sib-parent))
                         (and parent sib-parent
                              (= (js/get (tree-data! parent) .id)
                                 (js/get (tree-data! sib-parent) .id))))]
     (cond
       (and sib-row same-parent)
-      (let [st (subtree-rows! sib-row)]
+      (let [st (Vec Any) (subtree-rows! sib-row)]
         (js/call (last-of st) .after row))
 
       (and prev-sibling-id parent-row)
-      (let [st (subtree-rows! parent-row)]
+      (let [st (Vec Any) (subtree-rows! parent-row)]
         (js/call (last-of st) .after row))
 
       (and prev-sibling-id (not parent-row))
@@ -187,23 +209,25 @@
       :else
       (js/call (js/get state .panel) .insertBefore row
         (js/get (js/get state .panel) .firstChild)))))
-(js/export (defn make-events! [(deps Any)] Any
-  (let [{:keys [rows vim scheduleSave spaces]} deps
-        log (create-logger! "tabs")
+(js/export (defn make-events! [deps Any] Any
+  (let [{:keys [rows vim scheduleSave spaces]} Any deps
+        log Any (create-logger! "tabs")
 
-        pop-closed-entry
-        (fn [url] Any
+        pop-closed-entry (Fn [String] Any)
+        (fn [url String] Any
           (when url
-            (loop [i (let [(closed-count Int) (js/get closed-tabs .length)] (- closed-count 1))]
+            (loop [i Int (let [closed-count Int (js/get closed-tabs .length)] (- closed-count 1))]
               (cond
                 (< i 0) nil
                 (= (js/get (aget closed-tabs i) .url) url) (aget (js/call closed-tabs .splice i 1) 0)
                 :else (recur (- i 1))))))
 
         ;; applySavedToTab
-        apply-saved-to-tab
-        (fn [tab prior] Any
-          (let [td (tree-data! tab)]
+        apply-saved-to-tab (Fn [Any Any] Any)
+        (fn
+          [tab Any
+           prior Any] Any
+          (let [td Any (tree-data! tab)]
             (when (not (js/get td .appliedSavedState))
               (js/set! td .appliedSavedState true)
               (js/set! td .id (or (js/get prior .id) (js/get td .id)))
@@ -220,15 +244,17 @@
               (js/call rows .scheduleTreeResync))))
 
         ;; rememberClosedTab
-        remember-closed-tab
-        (fn [tab td] Any
-          (let [url (tab-url tab)]
+        remember-closed-tab (Fn [Any Any] Any)
+        (fn
+          [tab Any
+           td Any] Any
+          (let [url String (tab-url tab)]
             (when (and url (not= url "about:blank"))
-              (let [row (js/call row-of .get tab)]
+              (let [row Any (js/call row-of .get tab)]
                 (when row
-                  (let [parent (parent-of-tab! tab)
-                        my-level (level-of! tab)
-                        prev-sib-id (loop [r (js/get row .previousElementSibling)]
+                  (let [parent Any (parent-of-tab! tab)
+                        my-level Int (level-of! tab)
+                        prev-sib-id Any (loop [r Any (js/get row .previousElementSibling)]
                                       (cond
                                         (nil? r) nil
                                         (not (boolean (js/get r ._tab))) (recur (js/get r .previousElementSibling))
@@ -236,8 +262,8 @@
                                         (= (level-of! (js/get r ._tab)) my-level)
                                           (js/get (tree-data! (js/get r ._tab)) .id)
                                         :else (recur (js/get r .previousElementSibling))))
-                        descendant-ids (let [out []]
-                                         (loop [n (js/get row .nextElementSibling)]
+                        descendant-ids (Vec Int) (let [out (Vec Any) []]
+                                         (loop [n Any (js/get row .nextElementSibling)]
                                            (cond
                                              (or (nil? n) (= n (js/get state .spacer))) out
                                              (not (boolean (js/get n ._tab))) (recur (js/get n .nextElementSibling))
@@ -258,15 +284,15 @@
                       (js/call closed-tabs .shift))))))))
 
         ;; Event handlers
-        on-tab-open
-        (fn [e] Any
-          (let [tab (js/get e .target)
-                td (tree-data! tab)]
+        on-tab-open (Fn [Any] Any)
+        (fn [e Any] Any
+          (let [tab Any (js/get e .target)
+                td Any (tree-data! tab)]
             ;; Stamp the gjoa sailboat on gjoa pages immediately so they never
             ;; flash the generic globe placeholder while loading (#100). The
             ;; <link rel=icon> in each page sets it too; this just beats the
             ;; load for fresh / background tabs.
-            (let [spec (or (some-> tab (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec)) "")]
+            (let [spec String (or (some-> tab (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec)) "")]
               (when (or (js/call spec .startsWith "chrome://gjoa-newtab")
                         (js/call spec .startsWith "chrome://gjoa/")
                         (js/call spec .startsWith "about:newtab")
@@ -283,7 +309,7 @@
             ;; UNASSIGNED so spaceOf's attr fallback resolves it later — never
             ;; clobber a restored tab onto the active space.
             (when spaces
-              (let [persisted (js/call tab .getAttribute SPACE-ATTR)]
+              (let [persisted Any (js/call tab .getAttribute SPACE-ATTR)]
                 (cond
                   (and persisted (js/call spaces .get persisted))
                     (js/call spaces .assignTab tab persisted)
@@ -293,14 +319,14 @@
                     (js/call spaces .assignTab tab (js/call spaces .activeId)))))
 
             ;; Session-restore path
-            (let [prior (pop-saved-for-tab saved-tab-queue
+            (let [prior Any (pop-saved-for-tab saved-tab-queue
                                {:currentIdx (js/call (tabs!) .indexOf tab)
                                 :pinnedId (read-pinned-id tab)
                                 :url (tab-url tab)
                                 :inSessionRestore (js/get state .inSessionRestore)
                                 :log log})]
               (if prior
-                (let [idx (js/call (tabs!) .indexOf tab)]
+                (let [idx Int (js/call (tabs!) .indexOf tab)]
                   (console/log
                     (str "gjoa-tabs: onTabOpen matched — tab["
                          idx "] url=\"" (tab-url tab)
@@ -310,7 +336,7 @@
                   (apply-saved-to-tab tab prior)
                   (when (and spaces (js/get prior .spaceId) (js/call spaces .get (js/get prior .spaceId)))
                     (js/call spaces .assignTab tab (js/get prior .spaceId)))
-                  (let [row (js/call rows .createTabRow tab)]
+                  (let [row Any (js/call rows .createTabRow tab)]
                     (if (js/get tab .pinned)
                       (do (js/call (js/get state .pinnedContainer) .appendChild row)
                           (js/set! (js/get state .pinnedContainer) .hidden
@@ -323,9 +349,9 @@
                     (scheduleSave)))
 
                 ;; New-tab placement
-                (let [position (js/call (js/get Services .prefs) .getCharPref
+                (let [position String (js/call (js/get Services .prefs) .getCharPref
                                  "gjoa.tabs.newTabPosition" "sibling")
-                      anchor (or (js/get tab .owner)
+                      anchor Any (or (js/get tab .owner)
                                  (when (not= (js/get gBrowser .selectedTab) tab)
                                    (js/get gBrowser .selectedTab)))]
                   (when (and (= position "child") anchor)
@@ -335,7 +361,7 @@
                     (js/set! td .parentId
                           (js/get (tree-data! anchor) .parentId)))
 
-                  (let [row (js/call rows .createTabRow tab)]
+                  (let [row Any (js/call rows .createTabRow tab)]
                     (if (js/get tab .pinned)
                       (do (js/call (js/get state .pinnedContainer) .appendChild row)
                           (js/set! (js/get state .pinnedContainer) .hidden
@@ -345,9 +371,9 @@
                           (place-row-in-firefox-order! tab row)))
 
                     (when (= position "root")
-                      (let [tabs-arr (tabs!)
-                            (tab-count Int) (js/get tabs-arr .length)
-                            last-idx (- tab-count 1)]
+                      (let [tabs-arr (Vec Any) (tabs!)
+                            tab-count Int (js/get tabs-arr .length)
+                            last-idx Int (- tab-count 1)]
                         (when (not= (js/call tabs-arr .indexOf tab) last-idx)
                           (try
                             (js/call gBrowser .moveTabTo tab {:tabIndex last-idx})
@@ -358,16 +384,16 @@
                     (js/call rows .scheduleTreeResync)
                     (scheduleSave)))))))
 
-        on-tab-close
-        (fn [e] Any
-          (let [tab (js/get e .target)
-                row (js/call row-of .get tab)]
+        on-tab-close (Fn [Any] Any)
+        (fn [e Any] Any
+          (let [tab Any (js/get e .target)
+                row Any (js/call row-of .get tab)]
             (when row
-              (let [td (tree-data! tab)]
+              (let [td Any (tree-data! tab)]
                 (remember-closed-tab tab td)
-                (let [closing-id (js/get td .id)
-                      new-parent-id (undef-or (js/get td .parentId) nil)
-                      my-level (level-of! tab)]
+                (let [closing-id Int (js/get td .id)
+                      new-parent-id Any (undef-or (js/get td .parentId) nil)
+                      my-level Int (level-of! tab)]
                   (reparent-children! (js/get row .nextElementSibling)
                                      closing-id new-parent-id
                                      my-level rows))
@@ -382,20 +408,27 @@
             (scheduleSave)))
 
         ;; Shared helper for pin/unpin cascade
-        cascade-pin-change
-        (fn [e drop-parent? kid-pred kid-action prep-row move-row post-move] Any
-          (let [tab (js/get e .target)
-                row (js/call row-of .get tab)]
+        cascade-pin-change (Fn [Any (Fn [Any] Any) (Fn [Any] Any) (Fn [Any] Any) (Fn [Any] Any) (Fn [Any Any] Any) (Fn [] Any)] Any)
+        (fn
+          [e Any
+           drop-parent? (Fn [Any] Any)
+           kid-pred (Fn [Any] Any)
+           kid-action (Fn [Any] Any)
+           prep-row (Fn [Any] Any)
+           move-row (Fn [Any Any] Any)
+           post-move (Fn [] Any)] Any
+          (let [tab Any (js/get e .target)
+                row Any (js/call row-of .get tab)]
             (when row
-              (let [td (tree-data! tab)]
+              (let [td Any (tree-data! tab)]
                 ;; Conditionally drop parentId
                 (when (drop-parent? td)
                   (js/set! td .parentId nil))
 
                 ;; Cascade to direct children
-                (let [kids []]
+                (let [kids (Vec Any) []]
                   (js/call (tabs!) .forEach
-                    (fn [%1] Any (when (and (kid-pred %1)
+                    (fn [%1 Any] Any (when (and (kid-pred %1)
                                 (= (js/get (tree-data! %1) .parentId)
                                    (js/get td .id)))
                        (js/call kids .push %1))))
@@ -408,22 +441,24 @@
                 (js/call rows .updateVisibility)
                 (scheduleSave)))))
 
-        on-tab-pinned
-        (fn [e] Any
+        on-tab-pinned (Fn [Any] Any)
+        (fn [e Any] Any
           (cascade-pin-change e
             ;; drop-parent?
-            (fn [%1] Any (and (not= (js/get %1 .parentId) nil)
+            (fn [%1 Any] Any (and (not= (js/get %1 .parentId) nil)
                   (or (= (js/typeof (js/get %1 .parentId)) "string")
-                      (let [parent (tab-by-id (js/get %1 .parentId))]
+                      (let [parent Any (tab-by-id (js/get %1 .parentId))]
                         (or (not parent) (not (js/get parent .pinned)))))))
             ;; kid-pred
-            (fn [%1] Any (not (js/get %1 .pinned)))
+            (fn [%1 Any] Any (not (js/get %1 .pinned)))
             ;; kid-action
-            (fn [%1] Any (js/call gBrowser .pinTab %1))
+            (fn [%1 Any] Any (js/call gBrowser .pinTab %1))
             ;; prep-row
-            (fn [%1] Any (rmattr! %1 "style"))
+            (fn [%1 Any] Any (rmattr! %1 "style"))
             ;; move-row
-            (fn [tab row] Any
+            (fn
+              [tab Any
+               row Any] Any
               (when (not (same-node? (js/get row .parentNode) (js/get state .pinnedContainer)))
                 (js/call (js/get state .pinnedContainer) .appendChild row)
                 (place-row-in-firefox-order! tab row)))
@@ -431,24 +466,26 @@
             (fn [] Any
               (js/set! (js/get state .pinnedContainer) .hidden false)
               (js/call (all-rows) .forEach
-                (fn [%1] Any (js/call rows .syncAnyRow %1))))))
+                (fn [%1 Any] Any (js/call rows .syncAnyRow %1))))))
 
-        on-tab-unpinned
-        (fn [e] Any
+        on-tab-unpinned (Fn [Any] Any)
+        (fn [e Any] Any
           (cascade-pin-change e
             ;; drop-parent?
-            (fn [%1] Any (and (not= (js/get %1 .parentId) nil)
+            (fn [%1 Any] Any (and (not= (js/get %1 .parentId) nil)
                   (= (js/typeof (js/get %1 .parentId)) "number")
-                  (let [parent (tab-by-id (js/get %1 .parentId))]
+                  (let [parent Any (tab-by-id (js/get %1 .parentId))]
                     (and parent (js/get parent .pinned)))))
             ;; kid-pred
-            (fn [%1] Any (js/get %1 .pinned))
+            (fn [%1 Any] Any (js/get %1 .pinned))
             ;; kid-action
-            (fn [%1] Any (js/call gBrowser .unpinTab %1))
+            (fn [%1 Any] Any (js/call gBrowser .unpinTab %1))
             ;; prep-row
-            (fn [%1] Any (js/set! %1 .draggable true))
+            (fn [%1 Any] Any (js/set! %1 .draggable true))
             ;; move-row
-            (fn [tab row] Any
+            (fn
+              [tab Any
+               row Any] Any
               (when (not (same-node? (js/get row .parentNode) (js/get state .panel)))
                 (js/call (js/get state .panel) .insertBefore row (js/get state .spacer))
                 (place-row-in-firefox-order! tab row)))
@@ -458,11 +495,11 @@
                            ".gjoa-tab-row"))
                 (js/set! (js/get state .pinnedContainer) .hidden true)))))
 
-        on-tab-restoring
-        (fn [e] Any
-          (let [tab (js/get e .target)
-                url (tab-url tab)
-                idx (js/call (tabs!) .indexOf tab)]
+        on-tab-restoring (Fn [Any] Any)
+        (fn [e Any] Any
+          (let [tab Any (js/get e .target)
+                url String (tab-url tab)
+                idx Int (js/call (tabs!) .indexOf tab)]
             (when log
               (log "onTabRestoring"
                    {:idx idx
@@ -471,26 +508,26 @@
                     :currentParentId (some-> (js/call tree-of .get tab) (js/get .parentId))
                     :queueLen (js/get saved-tab-queue .length)}))
 
-            (let [entry (pop-closed-entry url)]
+            (let [entry Any (pop-closed-entry url)]
               (if entry
                 ;; closedTabs path — full restore
-                (let [td (tree-data! tab)]
+                (let [td Any (tree-data! tab)]
                   (js/set! td .id (js/get entry .id))
                   (js/set! td .name (undef-or (js/get entry .name) nil))
                   (js/set! td .state (undef-or (js/get entry .state) nil))
                   (js/set! td .collapsed (undef-or (js/get entry .collapsed) false))
                   (pin-tab-id tab (js/get td .id))
                   (js/set! td .parentId (undef-or (js/get entry .parentId) nil))
-                  (let [parent (tab-by-id (js/get entry .parentId))
-                        row (js/call row-of .get tab)]
+                  (let [parent Any (tab-by-id (js/get entry .parentId))
+                        row Any (js/call row-of .get tab)]
                     (when row
                       (place-restored-row! row parent
                         (js/get entry .prevSiblingId))
                       (when (some-> entry (js/get .descendantIds) (js/get .length))
-                        (let [expected
-                              (let [s (js/new Set)]
+                        (let [expected Any
+                              (let [s Any (js/new Set)]
                                 (js/call (js/get entry .descendantIds) .forEach
-                                  (fn [%1] Any (js/call s .add %1)))
+                                  (fn [%1 Any] Any (js/call s .add %1)))
                                 s)]
                           (renest-descendants!
                             (js/get row .nextElementSibling)
@@ -502,9 +539,9 @@
                     (scheduleSave)))
 
                 ;; Correction path
-                (let [td (tree-data! tab)]
+                (let [td Any (tree-data! tab)]
                   (when (not (js/get td .appliedSavedState))
-                    (let [correction (pop-saved-by-url saved-tab-queue url)]
+                    (let [correction Any (pop-saved-by-url saved-tab-queue url)]
                       (when correction
                         (when log
                           (log "onTabRestoring:correction"
@@ -524,24 +561,24 @@
                         (js/call rows .scheduleTreeResync)
                         (scheduleSave)))))))))
 
-        on-tab-select
+        on-tab-select (Fn [] Any)
         (fn [] Any
-          (let [sel (js/get gBrowser .selectedTab)]
+          (let [sel Any (js/get gBrowser .selectedTab)]
             ;; Cross-space auto-switch
             (when (and spaces sel)
-              (let [tab-space (js/call spaces .spaceOf sel)]
+              (let [tab-space Any (js/call spaces .spaceOf sel)]
                 (when (not= tab-space (js/call spaces .activeId))
                   (js/call spaces .setActive tab-space))))
 
             ;; Update selected attribute on all rows
             (js/call (tabs!) .forEach
-              (fn [%1] Any (let [row (js/call row-of .get %1)]
+              (fn [%1 Any] Any (let [row Any (js/call row-of .get %1)]
                  (when row
                    (toggle! row "selected"
                      (js/get %1 .selected))))))
 
             ;; Scroll & cursor follow
-            (let [row (js/call row-of .get (js/get gBrowser .selectedTab))]
+            (let [row Any (js/call row-of .get (js/get gBrowser .selectedTab))]
               (when (and row (not (js/get state .cursor)))
                 (js/call row .scrollIntoView
                   {:block "nearest" :inline "nearest"}))
@@ -552,34 +589,36 @@
             ;; switching to a blank gjoa newtab focuses the urlbar (FF default)
             (maybe-focus-urlbar!)))
 
-        on-tab-attr-modified
-        (fn [%1] Any (js/call rows .syncTabRow (js/get %1 .target)))
+        on-tab-attr-modified (Fn [Any] Any)
+        (fn [%1 Any] Any (js/call rows .syncTabRow (js/get %1 .target)))
 
-        on-tab-move
-        (fn [e] Any
-          (let [tab (js/get e .target)
-                row (js/call row-of .get tab)]
+        on-tab-move (Fn [Any] Any)
+        (fn [e Any] Any
+          (let [tab Any (js/get e .target)
+                row Any (js/call row-of .get tab)]
             (when row
-              (let [moved (place-row-in-firefox-order! tab row)]
+              (let [moved Any (place-row-in-firefox-order! tab row)]
                 (when (and moved (not (js/call moving-tabs .has tab)))
                   (js/call rows .scheduleTreeResync)
                   (scheduleSave))))))
 
         ;; install / teardown
-        install
+        install (Fn [] Any)
         (fn [] Any
-          (let [tc (js/get gBrowser .tabContainer)]
+          (let [tc Any (js/get gBrowser .tabContainer)]
             ;; Firefox's setDefaultIcon stamps about:newtab / about:home /
             ;; about:welcome with the branding icon32.png (FAVICON_DEFAULTS in
             ;; tabbrowser.js), which fires on navigation and clobbers the sailboat
             ;; our TabOpen belt + <link rel=icon> set. Wrap it so gjoa's own pages
             ;; keep the sailboat; every other URI falls through untouched (#100).
-            (let [orig (js/get gBrowser .setDefaultIcon)]
+            (let [orig Any (js/get gBrowser .setDefaultIcon)]
               (when (and orig (not (js/get gBrowser .gjoaIconPatched)))
                 (js/set! gBrowser .gjoaIconPatched true)
                 (js/set! gBrowser .setDefaultIcon
-                  (fn [tab uri] Any
-                    (let [spec (or (some-> uri (js/get .spec)) "")]
+                  (fn
+                    [tab Any
+                     uri Any] Any
+                    (let [spec String (or (some-> uri (js/get .spec)) "")]
                       (if (or (= spec "about:newtab") (= spec "about:home") (= spec "about:welcome"))
                         (try (js/call gBrowser .setIcon tab "chrome://gjoa/content/gjoa.svg")
                              (catch (_e Any) nil))
@@ -595,7 +634,7 @@
             (on! tc "TabUnpinned" on-tab-unpinned)
 
             ;; sessionstore-windows-restored observer
-            (let [on-session-restored
+            (let [on-session-restored (Fn [] Any)
                   (fn [] Any
                     (console/log
                       "gjoa-tabs: sessionstore-windows-restored — final tree resync")
@@ -610,21 +649,24 @@
                     ;; first load lands focus on the <browser>; put it in the urlbar
                     (maybe-focus-urlbar!))
 
-                  on-manual-restore
+                  on-manual-restore (Fn [] Any)
                   (fn [] Any
-                    (let [alive-urls
-                          (let [s (js/new Set)]
+                    (let [alive-urls Any
+                          (let [s Any (js/new Set)]
                             (js/call (tabs!) .forEach
-                              (fn [%1] Any (let [u (tab-url %1)]
+                              (fn [%1 Any] Any (let [u String (tab-url %1)]
                                  (when (and u (not= u "about:blank"))
                                    (js/call s .add u)))))
                             s)]
                       (js/set! saved-tab-queue .length 0)
                       (js/call (js/get state .lastLoadedNodes) .forEach
-                        (fn [%1 %2] Any (when (not (and (js/get %1 .url)
+                        (fn
+                          [%1 Any
+                           %2 Any] Any
+                          (when (not (and (js/get %1 .url)
                                          (js/call alive-urls .has
                                                (js/get %1 .url))))
-                           (let [entry (Object/assign {} %1)]
+                           (let [entry Any (Object/assign {} %1)]
                              (js/set! entry ._origIdx %2)
                              (js/call saved-tab-queue .push entry)))))
                       (js/set! state .inSessionRestore true)
@@ -633,7 +675,7 @@
                              {:queueLen (js/get saved-tab-queue .length)
                               :queueIds
                               (js/call saved-tab-queue .map
-                                (fn [%1] Any (js/get %1 .id)))}))))]
+                                (fn [%1 Any] Any (js/get %1 .id)))}))))]
 
               (js/call (js/get Services .obs) .addObserver
                 on-session-restored
