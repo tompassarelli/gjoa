@@ -111,7 +111,7 @@
      (chrome-eval OPEN-SECOND-JS)
      (await-true BOTH-READY-JS 8000)
      (chrome-eval RESET-BOTH-JS)
-     (let [created (JSON/parse (chrome-eval CREATE-IN-A-JS))]
+     (let [created Any (JSON/parse (chrome-eval CREATE-IN-A-JS))]
        (expect (> (js/get created .aCount) 1)
                "sanity: window A should have >1 space after create")
        ;; Give any (post-fix) cross-window roster propagation a tick to land.
