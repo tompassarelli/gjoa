@@ -19,9 +19,9 @@
   (js/get (js/get (js/call JSON .parse (readFileSync (join REPO "gjoa.json") "utf8")) .firefox) .version))
 
 (defn main! [] Any
-  (let [v (ff-version)
-        tag (str "FIREFOX_" (js/call v .replaceAll "." "_") "_RELEASE")
-        dir (join TMP (dirname REL))]
+  (let [v String (ff-version)
+       tag String (str "FIREFOX_" (js/call v .replaceAll "." "_") "_RELEASE")
+       dir Any (join TMP (dirname REL))]
     ;; pristine = the pinned upstream file at its release tag; patched = pristine + 0011.
     (sh (str "rm -rf " TMP " && mkdir -p " dir) nil)
     (sh (str "git -C " FF-SRC " show " tag ":" REL " > " (join TMP "pristine.mjs")) nil)
