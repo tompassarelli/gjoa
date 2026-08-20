@@ -67,7 +67,6 @@
              (str B "/platform/window-tabs.js")
              (str B "/platform/window.js")
              (str B "/platform/history.js")
-             (str B "/platform/tabs-reconciler.js")
              (str B "/platform/cross-window-tabs.js")
              (str B "/platform/index.js")
              (str B "/tabs/layout.js")

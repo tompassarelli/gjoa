@@ -1,14 +1,12 @@
 #lang beagle/js
 (ns gjoa.platform.index
   (:require [gjoa.platform.scheduler :refer [make-scheduler!]]
-            [gjoa.platform.tabs-reconciler :refer [make-tabs-reconciler!]]
             [gjoa.platform.window :refer [make-gjoa-window!]]
             [gjoa.platform.history :refer [make-persisted]]
             [gjoa.platform.cross-window-tabs :refer [make-cross-window-tabs]]))
 
 (js/export (defn make-gjoa! [deps Any] Any
   (let [scheduler Any (make-scheduler!)
-        tabs-reconciler Any (make-tabs-reconciler! {:scheduler scheduler})
         win Any (make-gjoa-window! scheduler)
         persisted Any (make-persisted (js/get deps .history))
         cross-window-tabs Any (make-cross-window-tabs)]
@@ -24,5 +22,4 @@
                   iid Any (js/call (js/get deps .history) .instanceId)]
               {:scheduler s :windowId wid :instanceId iid}))
      :destroy (fn [] Any
-                (js/call tabs-reconciler .destroy)
                 (js/call scheduler .destroy))})))
