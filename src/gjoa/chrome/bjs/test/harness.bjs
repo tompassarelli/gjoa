@@ -29,11 +29,11 @@
    "getComputedStyle" "MutationObserver"])
 
 (js/export (defn setup-harness! [] Any
-  (let [happy-window (js/new Window)
-        happy-doc (js/get happy-window .document)
+  (let [happy-window Any (js/new Window)
+        happy-doc Any (js/get happy-window .document)
 
-        (prefs (JsMap String Any)) (js/new Map)
-        (pref-observers (JsMap String Any)) (js/new Map)]
+        prefs (JsMap String Any) (js/new Map)
+        pref-observers (JsMap String Any) (js/new Map)]
 
     ;; Default prefs gjoa actually reads. Tests override via setPref.
     (js/call prefs .set "sidebar.verticalTabs" true)
@@ -41,45 +41,53 @@
     (js/call prefs .set "gjoa.compact.hoverHackDelay" 0)
     (js/call prefs .set "gjoa.debug" false)
 
-    (let [notify (fn [key] Any
+    (let [notify (Fn [String] Any) (fn [key String] Any
             (js/call (or (js/call pref-observers .get key) []) .forEach
               (fn [%1] Any (try
                  (js/call %1 .observe nil key "")
                  (catch (e Any)
                    (console/error "[harness] pref observer threw" e))))))
 
-          services {:prefs
-                     {:getBoolPref (fn [%1 %2] Any (if (js/call prefs .has %1)
+          services Any {:prefs
+                     {:getBoolPref (fn [%1 String
+                                       %2 Boolean] Any (if (js/call prefs .has %1)
                         (Boolean (js/call prefs .get %1))
                         (or %2 false)))
-                      :setBoolPref (fn [key value] Any
+                      :setBoolPref (fn [key String
+                                        value Boolean] Any
                         (js/call prefs .set key value)
                         (notify key))
-                      :getIntPref (fn [%1 %2] Any (if (js/call prefs .has %1)
+                      :getIntPref (fn [%1 String
+                                      %2 Int] Any (if (js/call prefs .has %1)
                         (Number (js/call prefs .get %1))
                         (or %2 0)))
-                      :setIntPref (fn [key value] Any
+                      :setIntPref (fn [key String
+                                       value Int] Any
                         (js/call prefs .set key value)
                         (notify key))
-                      :getCharPref (fn [%1 %2] Any (if (js/call prefs .has %1)
+                      :getCharPref (fn [%1 String
+                                       %2 String] Any (if (js/call prefs .has %1)
                         (String (js/call prefs .get %1))
                         (or %2 "")))
-                      :setCharPref (fn [key value] Any
+                      :setCharPref (fn [key String
+                                        value String] Any
                         (js/call prefs .set key value)
                         (notify key))
-                      :addObserver (fn [key observer] Any
+                      :addObserver (fn [key String
+                                        observer Any] Any
                         (when (not (js/call pref-observers .has key))
                           (js/call pref-observers .set key (js/new Set)))
                         (js/call (js/call pref-observers .get key) .add observer))
-                      :removeObserver (fn [%1 %2] Any (let [s (js/call pref-observers .get %1)]
+                      :removeObserver (fn [%1 String
+                                           %2 Any] Any (let [s Any (js/call pref-observers .get %1)]
                           (when s (js/call s .delete %2))))}
-                    :dirsvc {:get (fn [] Any (let [r {:path "/tmp"}] r))}}
+                    :dirsvc {:get (fn [] Any (let [r Any {:path "/tmp"}] r))}}
 
           ;; Save current globals before overriding
-          (saved (JsMap String Any)) (js/new Map)]
+          saved (JsMap String Any) (js/new Map)]
 
       (js/call GLOBALS-TO-OVERRIDE .forEach
-        (fn [%1] Any (js/call saved .set %1 (js/call Reflect .get globalThis %1))))
+        (fn [%1 String] Any (js/call saved .set %1 (js/call Reflect .get globalThis %1))))
 
       ;; Wire happy-dom into globals. (.set Reflect …) is Reflect.set — beagle
       ;; 77df8a9's aset is Int-indexed only; string property writes go through
@@ -91,14 +99,14 @@
       (js/call Reflect .set globalThis "Cu" {})
       (js/call Reflect .set globalThis "Cc" {})
       (js/call Reflect .set globalThis "ChromeUtils"
-        {:importESModule (fn [] Any (let [r {:SessionStore nil}] r))})
+        {:importESModule (fn [] Any (let [r Any {:SessionStore nil}] r))})
       (js/call Reflect .set globalThis "PathUtils"
-        {:join (fn [& parts] Any (js/call parts .join "/"))})
+        {:join (fn [& parts (Vec Any)] Any (js/call parts .join "/"))})
       (js/call Reflect .set globalThis "IOUtils"
         {:writeUTF8 (fn [] Any nil)
          :readUTF8 (fn [] Any (throw (js/new Error "no file")))
          :write (fn [] Any nil)
-         :stat (fn [] Any (let [r {:size 0}] r))})
+         :stat (fn [] Any (let [r Any {:size 0}] r))})
       (js/call Reflect .set globalThis "requestAnimationFrame"
         (js/call (js/get happy-window .requestAnimationFrame) .bind happy-window))
       (js/call Reflect .set globalThis "cancelAnimationFrame"
@@ -110,14 +118,14 @@
 
       ;; Map createXULElement to createElement
       (js/set! happy-doc .createXULElement
-        (fn [%1] Any (js/call happy-doc .createElement %1)))
+        (fn [%1 String] Any (js/call happy-doc .createElement %1)))
 
       ;; Pre-populate elements compact mode binds to
-      (let [sidebar-main (js/call happy-doc .createElement "div")]
+      (let [sidebar-main Any (js/call happy-doc .createElement "div")]
         (js/set! sidebar-main .id "sidebar-container")
         (js/call (js/get happy-doc .body) .appendChild sidebar-main))
 
-      (let [navigator-toolbox (js/call happy-doc .createElement "div")]
+      (let [navigator-toolbox Any (js/call happy-doc .createElement "div")]
         (js/set! navigator-toolbox .id "navigator-toolbox")
         (js/call (js/get happy-doc .body) .appendChild navigator-toolbox))
 
@@ -125,15 +133,16 @@
        :document happy-doc
        :prefs prefs
        :prefObservers pref-observers
-       :setPref (fn [key value] Any
+       :setPref (fn [key String
+                     value Any] Any
          (js/call prefs .set key value)
          (notify key))
        :flushRAF (fn [] Any
-         (let [abort (js/get (js/get happy-window .happyDOM) .abort)]
+         (let [abort Any (js/get (js/get happy-window .happyDOM) .abort)]
            (when abort (abort))))
        :cleanup (fn [] Any
          (js/call GLOBALS-TO-OVERRIDE .forEach
-           (fn [%1] Any (if (= (js/call saved .get %1) undefined)
+           (fn [%1 String] Any (if (= (js/call saved .get %1) undefined)
               (js/call Reflect .deleteProperty globalThis %1)
               (js/call Reflect .set globalThis %1 (js/call saved .get %1)))))
          (try
