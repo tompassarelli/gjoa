@@ -5,25 +5,26 @@
 
 (declare-extern [gBrowser] Any)
 
-(js/export (defn make-tabs-reconciler! [(deps Any)] Any
-  (let [log (create-logger! "reconciler/tabs")
-        scheduler (js/get deps .scheduler)
+(js/export (defn make-tabs-reconciler! [deps Any] Any
+  (let [log Any (create-logger! "reconciler/tabs")
+        scheduler Any (js/get deps .scheduler)
 
-        unregister (js/call scheduler .register
+        unregister Any (js/call scheduler .register
                      {:domain "tabs"
-                      :run (fn [%1] Any (log "reconcile" {:reasons %1}))})
+                      :run (fn [%1 Any] Any (log "reconcile" {:reasons %1}))})
 
-        on-tab-event (fn [%1] Any (js/call scheduler .markDirty "tabs" (js/get %1 .type)))
+        on-tab-event (Fn [Any] Any) (fn [%1 Any] Any
+                                      (js/call scheduler .markDirty "tabs" (js/get %1 .type)))
 
-        events ["TabOpen" "TabClose" "TabMove" "TabSelect"
-                "TabAttrModified" "TabPinned" "TabUnpinned"]
+        events (Vec String) ["TabOpen" "TabClose" "TabMove" "TabSelect"
+                             "TabAttrModified" "TabPinned" "TabUnpinned"]
 
-        destroy (fn [] Any
+        destroy (Fn [] Any) (fn [] Any
                   (js/call events .forEach
-                    (fn [%1] Any (off! (js/get gBrowser .tabContainer) %1 on-tab-event)))
+                    (fn [%1 String] Any (off! (js/get gBrowser .tabContainer) %1 on-tab-event)))
                   (unregister))]
 
     (js/call events .forEach
-      (fn [%1] Any (on! (js/get gBrowser .tabContainer) %1 on-tab-event)))
+      (fn [%1 String] Any (on! (js/get gBrowser .tabContainer) %1 on-tab-event)))
 
     {:destroy destroy})))
