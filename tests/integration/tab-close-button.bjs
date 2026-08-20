@@ -11,7 +11,7 @@
      (chrome-eval "
         for (const t of [...gBrowser.tabs].filter(t => t.getAttribute && t.getAttribute('gjoa-test-marker'))) { try { gBrowser.removeTab(t); } catch {} }
         return true;")
-     (let [stamp (str "tcb-" (Date/now))]
+     (let [stamp String (str "tcb-" (Date/now))]
        (chrome-eval (str "
           const p = Services.scriptSecurityManager.getSystemPrincipal();
           const t = gBrowser.addTab('about:blank', { triggeringPrincipal: p });
@@ -21,7 +21,7 @@
           return true;"))
        (await-true (str "return [...gBrowser.tabs].some(t => t.getAttribute('gjoa-test-marker') === '" stamp "');") 3000)
        ;; the row exists and carries a .gjoa-tab-close
-       (let [has-close (chrome-eval (str "
+       (let [has-close Bool (chrome-eval (str "
               const t = [...gBrowser.tabs].find(x => x.getAttribute('gjoa-test-marker') === '" stamp "');
               const row = [...document.querySelectorAll('#gjoa-tab-panel .gjoa-tab-row')].find(r => r._tab === t);
               return !!(row && row.querySelector('.gjoa-tab-close'));"))]
@@ -34,7 +34,7 @@
           x.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, button:0 }));
           return true;"))
        (await-true (str "return ![...gBrowser.tabs].some(t => t.getAttribute('gjoa-test-marker') === '" stamp "');") 3000)
-       (let [gone (chrome-eval (str "return ![...gBrowser.tabs].some(t => t.getAttribute('gjoa-test-marker') === '" stamp "');"))]
+       (let [gone Bool (chrome-eval (str "return ![...gBrowser.tabs].some(t => t.getAttribute('gjoa-test-marker') === '" stamp "');"))]
          (expect gone "clicking the × must close the tab"))))]))
 
 (js/export-default tests)
