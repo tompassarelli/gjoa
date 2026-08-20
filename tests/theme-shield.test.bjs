@@ -17,6 +17,6 @@
 
     (test "declares the current Firefox urlbar variables"
       (fn [] Any
-        (let [css (readFileSync SHIELD "utf8")]
+        (let [css String (readFileSync SHIELD "utf8")]
           (js/call (expect css) .toContain "--toolbar-field-focus-background-color:")
           (js/call (expect css) .toContain "--urlbar-box-background-color:"))))))
