@@ -12,20 +12,20 @@
 (declare-extern [process console] Any)
 
 (defn main! [] Any
-  (let [artifact-path (aget (js/get process .argv) 2)
-        engine-dir (aget (js/get process .argv) 3)
-        doc (json->doc (readFileSync artifact-path "utf8"))
-        file (js/get doc .file)
-        edits (js/get doc .edits)
-        target (join engine-dir file)]
+  (let [artifact-path Any (aget (js/get process .argv) 2)
+       engine-dir Any (aget (js/get process .argv) 3)
+       doc Any (json->doc (readFileSync artifact-path "utf8"))
+       file Any (js/get doc .file)
+       edits Any (js/get doc .edits)
+       target Any (join engine-dir file)]
     ;; the artifact's :file is replayed onto disk; reject any path that escapes
     ;; engine-dir (absolute or `..`) before reading/writing it (path traversal).
     (when (or (js/call file .includes "..")
               (not (js/call (resolve target) .startsWith (str (resolve engine-dir) sep))))
       (console/error (str "  claim-doc :file escapes engine-dir, refusing: " file))
       (js/call process .exit 1))
-    (let [src (readFileSync target "utf8")
-          r (replay edits src)]
+    (let [src Any (readFileSync target "utf8")
+         r Any (replay edits src)]
       (if (and (js/get r .ok) (parses? (js/get r .src)))
         (do
           (writeFileSync target (js/get r .src))
