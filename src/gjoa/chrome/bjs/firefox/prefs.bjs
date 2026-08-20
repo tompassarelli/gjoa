@@ -8,39 +8,55 @@
 ;; guard!/quiet! (gjoa.macros) leak literal ~@ into the gjoa-tabs bundle (a beagle bundler
 ;; macro-order quirk), so their try/catch is inlined here directly. See @019f0beb-4bdc.
 
-(js/export (defn get-bool [(name String) (default-value Any)] Any
+(js/export (defn get-bool
+  [name String
+   default-value Any] Any
   (pref-bool name (or default-value false))))
 
-(js/export (defn set-bool [(name String) (value Any)] Any
+(js/export (defn set-bool
+  [name String
+   value Any] Any
   (set-pref-bool! name value)))
 
-(js/export (defn get-int [(name String) (default-value Any)] Any
+(js/export (defn get-int
+  [name String
+   default-value Any] Any
   (pref-int name (or default-value 0))))
 
-(js/export (defn set-int [(name String) (value Any)] Any
+(js/export (defn set-int
+  [name String
+   value Any] Any
   (set-pref-int! name value)))
 
-(js/export (defn get-string [(name String) (default-value Any)] Any
+(js/export (defn get-string
+  [name String
+   default-value Any] Any
   (pref-str name (or default-value ""))))
 
-(js/export (defn set-string [(name String) (value Any)] Any
+(js/export (defn set-string
+  [name String
+   value Any] Any
   (set-pref-str! name value)))
 
 (js/export (defn ensure-vertical-tabs-default [] Any
-  (let [prefs (js/get Services .prefs)]
+  (let [prefs Any (js/get Services .prefs)]
     (try
       (when (not (js/call prefs .prefHasUserValue "sidebar.verticalTabs"))
         (js/call prefs .setBoolPref "sidebar.verticalTabs" true))
       (catch (_e Any) nil)))))
 
-(js/export (defn apply-menubar-default [(doc Any)] Any
+(js/export (defn apply-menubar-default [doc Any] Any
   (try
-    (let [mb (js/call doc .getElementById "toolbar-menubar")]
+    (let [mb Any (js/call doc .getElementById "toolbar-menubar")]
       (when mb (js/call mb .setAttribute "autohide" "false")))
     (catch (_e Any) nil))))
 
-(js/export (defn observe [(name String) (handler Any)] Any
-  (let [observer {:observe (fn [_subject _topic data] Any
+(js/export (defn observe
+  [name String
+   handler Any] Any
+  (let [observer Any {:observe (fn [_subject Any
+                                  _topic Any
+                                  data Any] Any
                     (try (handler data)
                       (catch (_e Any) (js/call console .error (str "gjoa prefs observer " name ":") _e))))}]
     (try (js/call (js/get Services .prefs) .addObserver name observer) (catch (_e Any) nil))
