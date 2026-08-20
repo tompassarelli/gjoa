@@ -58,7 +58,7 @@
   [(deftest "spaces #40bug3: restored tab re-anchors via persisted gjoa-space-id (not Main)" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
      (chrome-eval RESET-JS)
-     (let [parsed (JSON/parse (chrome-eval RESTORE-PROBE-JS))]
+     (let [parsed Any (JSON/parse (chrome-eval RESTORE-PROBE-JS))]
        (expect (js/get parsed .isWork)
                "restored tab with persisted gjoa-space-id resolves to Work")
        (expect (not (js/get parsed .isMain))
@@ -73,7 +73,7 @@
    (deftest "spaces #40bug3: tab with no space attr still falls back to Main" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
      (chrome-eval RESET-JS)
-     (let [parsed (JSON/parse (chrome-eval NO-ATTR-JS))]
+     (let [parsed Any (JSON/parse (chrome-eval NO-ATTR-JS))]
        (expect (js/get parsed .isMain)
                "a tab with no persisted space and no WeakMap entry defaults to Main")))]))
 
