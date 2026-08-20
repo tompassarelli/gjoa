@@ -11,24 +11,24 @@
 
 (defn log-path! [] String
   (or (js/get state .log-path)
-      (let [p (js/call PathUtils .join
+      (let [p String (js/call PathUtils .join
                 (js/get (js/call (js/get Services .dirsvc) .get "ProfD" (js/get Ci .nsIFile)) .path)
                 LOG-FILENAME)]
         (js/set! state .log-path p)
         p)))
 
 (defn flush-lines! [] Any
-  (let [batch (js/call lines .splice 0)]
+  (let [batch Any (js/call lines .splice 0)]
     (if (= 0 (js/get batch .length))
       (do (js/set! state .flush-pending false) nil)
-      (let [blob (js/call (js/new TextEncoder) .encode (str (js/call batch .join "\n") "\n"))
-            path (log-path!)]
+      (let [blob Any (js/call (js/new TextEncoder) .encode (str (js/call batch .join "\n") "\n"))
+            path String (log-path!)]
         (-> (js/call IOUtils .write path blob {:mode "appendOrCreate"})
             (js/call .then (fn [] Any
               (if (> (js/get lines .length) 0)
                 (flush-lines!)
                 (js/set! state .flush-pending false))))
-            (js/call .catch (fn [e] Any
+            (js/call .catch (fn [e Any] Any
               (console/error "[GJOA:log] write failed" e)
               (js/set! state .flush-pending false))))))))
 
@@ -36,14 +36,16 @@
   (when (not (js/get state .rotate-checked))
     (js/set! state .rotate-checked true)
     (-> (js/call IOUtils .stat (log-path!))
-        (js/call .then (fn [info] Any
+        (js/call .then (fn [info Any] Any
           (when (> (js/get info .size) LOG-MAX-BYTES)
             (js/call IOUtils .write (log-path!) (js/new Uint8Array 0) {:mode "overwrite"}))))
         (js/call .catch (fn [] Any nil)))))
 
-(js/export (defn create-logger! [(tag String)] Any
-  (let [prefix (str "[GJOA:" tag "]")]
-    (fn [event data] Any
+(js/export (defn create-logger! [tag String] Any
+  (let [prefix String (str "[GJOA:" tag "]")]
+    (fn
+      [event String
+       data Any] Any
       (when (js/call (js/get Services .prefs) .getBoolPref "gjoa.debug" false)
         (maybe-rotate!)
         (console/log prefix event (or data {}))
