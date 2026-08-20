@@ -15,7 +15,7 @@
 ;; no runtime presence, so nothing to require here.
 
 ;; Reset the pref + spaces between subtests.
-(defn reset [(mn Any)] Any
+(defn reset [mn Any] Any
   (js/await (js/call mn .executeScript (str "\n"
          "    try { Services.prefs.clearUserPref(\"gjoa.tabs.newTabPosition\"); } catch {}\n"
          "    if (window.Spaces) {\n"
@@ -36,8 +36,8 @@
      ;; walk the rendered rows and capture their inline padding (the
      ;; visual indent gjoa applies = level * 14 + 8 pixels). All single-
      ;; script so we don't lose state across marionette sandboxes.
-     (let [stamp (str "tabpos-default-" (Date/now))
-           data (chrome-eval
+     (let [stamp String (str "tabpos-default-" (Date/now))
+          data Any (chrome-eval
                   (str
                     "        const stamp = " (JSON/stringify stamp) ";\n"
                     "        const principal = Services.scriptSecurityManager.getSystemPrincipal();\n"
@@ -66,14 +66,14 @@
        (when (not= (js/get data .length) 4)
          (throw (js/new Error (str "expected 4 marker tabs, got " (js/get data .length) ": " (JSON/stringify data)))))
        ;; Root-level rows have padding-inline-start = 8px (level 0 * 14 + 8).
-       (let [non-root (js/call data .filter (fn [r] Any (or (not= (js/get r .pad) 8) (not= (js/get r .parentId) nil))))]
+       (let [non-root Any (js/call data .filter (fn [r Any] Any (or (not= (js/get r .pad) 8) (not= (js/get r .parentId) nil))))]
          (when (> (js/get non-root .length) 0)
            (throw (js/new Error (str "expected all root (pad=8, parentId=null); got: " (JSON/stringify data))))))))
 
    (deftest "tabpos default — Ctrl+T while a CHILD tab is selected spawns a sibling at same depth" [mn]
      (await-true "return !!document.getElementById(\"gjoa-tab-panel\");" 2000)
      (js/await (reset mn))
-     (let [stamp (str "tabpos-sibling-" (Date/now))]
+     (let [stamp String (str "tabpos-sibling-" (Date/now))]
        (chrome-eval (str "window.__stamp = \"" stamp "\";"))
 
        ;; Build: parent → child. Select the child.
@@ -103,7 +103,7 @@
        (await-true
          (str "return [...gBrowser.tabs].some(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-sib\");") 2000)
 
-       (let [data (chrome-eval
+       (let [data Any (chrome-eval
                     (str
                       "        const stamp = window.__stamp;\n"
                       "        const parent = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === stamp + \"-parent\");\n"
@@ -122,14 +122,14 @@
      (await-true "return !!window.gjoaTest && !!window.gjoaTest.vim;" 2000)
      (js/await (reset mn))
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"tabpos root\");")
-     (let [pref (chrome-eval "return Services.prefs.getCharPref(\"gjoa.tabs.newTabPosition\");")]
+     (let [pref String (chrome-eval "return Services.prefs.getCharPref(\"gjoa.tabs.newTabPosition\");")]
        (when (not= pref "root")
          (throw (js/new Error (str "pref not set: " pref))))
 
        ;; Open: parent → child → grandchild via the pref. With "root",
        ;; EVERY new tab should be at parentId=null even when an ownerTab
        ;; is supplied.
-       (let [stamp (str "tabpos-root-" (Date/now))]
+       (let [stamp String (str "tabpos-root-" (Date/now))]
          (chrome-eval
            (str
              "        const principal = Services.scriptSecurityManager.getSystemPrincipal();\n"
@@ -144,13 +144,13 @@
              "      "))
          (await-true
            (str "return [...gBrowser.tabs].some(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-c\");") 2000)
-         (let [parents (chrome-eval
+         (let [parents Any (chrome-eval
                          (str
                            "        return [...gBrowser.tabs]\n"
                            "          .filter(t => t.getAttribute && (t.getAttribute(\"gjoa-test-marker\") || \"\").startsWith(\"" stamp "\"))\n"
                            "          .map(t => ({ m: t.getAttribute(\"gjoa-test-marker\"), p: window.gjoaTest.treeOf.get(t).parentId }));\n"
                            "      "))
-               non-root (js/call parents .filter (fn [r] Any (not= (js/get r .p) nil)))]
+              non-root Any (js/call parents .filter (fn [r Any] Any (not= (js/get r .p) nil)))]
            (when (> (js/get non-root .length) 0)
              (throw (js/new Error (str ":tabpos root broken — non-root tabs: " (JSON/stringify parents)))))))))
 
@@ -158,7 +158,7 @@
      (await-true "return !!window.gjoaTest;" 2000)
      (js/await (reset mn))
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"tabpos child\");")
-     (let [stamp (str "tabpos-child-" (Date/now))]
+     (let [stamp String (str "tabpos-child-" (Date/now))]
        (chrome-eval
          (str
            "        const principal = Services.scriptSecurityManager.getSystemPrincipal();\n"
@@ -170,7 +170,7 @@
            "      "))
        (await-true
          (str "return [...gBrowser.tabs].some(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-c\");") 2000)
-       (let [data (chrome-eval
+       (let [data Any (chrome-eval
                     (str
                       "        const p = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-p\");\n"
                       "        const c = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-c\");\n"
@@ -188,7 +188,7 @@
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"tabpos\");")
      ;; The modeline gets a message — we don't assert the exact string,
      ;; just that the pref is unchanged (no-op behavior of bare :tabpos).
-     (let [pref (chrome-eval "return Services.prefs.getCharPref(\"gjoa.tabs.newTabPosition\");")]
+     (let [pref String (chrome-eval "return Services.prefs.getCharPref(\"gjoa.tabs.newTabPosition\");")]
        (when (not= pref "sibling")
          (throw (js/new Error (str "bare :tabpos should be read-only, pref changed to " pref))))))
 
@@ -196,7 +196,7 @@
      (js/await (reset mn))
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"tabpos sibling\");")
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"tabpos garbage\");")
-     (let [pref (chrome-eval "return Services.prefs.getCharPref(\"gjoa.tabs.newTabPosition\");")]
+     (let [pref String (chrome-eval "return Services.prefs.getCharPref(\"gjoa.tabs.newTabPosition\");")]
        (when (not= pref "sibling")
          (throw (js/new Error (str ":tabpos garbage should be rejected, pref was " pref))))))]))
 
