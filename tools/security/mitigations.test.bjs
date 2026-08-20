@@ -8,24 +8,24 @@
 (def REPO String (js/call process .cwd))
 (def MANIFEST String (join REPO "configs" "security-mitigations.json"))
 
-(defn regex-from-literal [(lit String)] Any
-  (let [m (js/call lit .match (js/new RegExp "^/(.*)/([a-z]*)$"))]
+(defn regex-from-literal [lit String] Any
+  (let [m Any (js/call lit .match (js/new RegExp "^/(.*)/([a-z]*)$"))]
     (if m (js/new RegExp (aget m 1) (aget m 2)) (js/new RegExp lit))))
 
 (describe "security mitigation contracts"
   (fn [] Any (test "every source assertion and validator corpus holds"
       (fn [] Any (js/call (expect (existsSync MANIFEST)) .toBe true)
-        (let [mits (js/get (js/call JSON .parse (readFileSync MANIFEST "utf8")) .mitigations)]
-          (doseq [id (js/call Object .keys mits)]
-            (let [entry (get mits id)
-                  src (readFileSync (join REPO (js/get entry .file)) "utf8")]
-              (doseq [rx (or (js/get entry .mustMatch) [])]
+        (let [mits Any (js/get (js/call JSON .parse (readFileSync MANIFEST "utf8")) .mitigations)]
+          (doseq [id String (js/call Object .keys mits)]
+            (let [entry Any (get mits id)
+                  src String (readFileSync (join REPO (js/get entry .file)) "utf8")]
+              (doseq [rx Any (or (js/get entry .mustMatch) [])]
                 (js/call (expect (js/call (js/new RegExp rx "m") .test src)) .toBe true))
               (when (js/get entry .extractRegex)
-                (let [m (js/call src .match (js/new RegExp (js/get (js/get entry .extractRegex) .from)))]
+                (let [m Any (js/call src .match (js/new RegExp (js/get (js/get entry .extractRegex) .from)))]
                   (js/call (expect m) .toBeTruthy)
-                  (let [re (regex-from-literal (aget m 1))]
-                    (doseq [s (js/get entry .mustReject)]
+                  (let [re Any (regex-from-literal (aget m 1))]
+                    (doseq [s Any (js/get entry .mustReject)]
                       (js/call (expect (js/call re .test s)) .toBe true))
-                    (doseq [s (js/get entry .mustAccept)]
+                    (doseq [s Any (js/get entry .mustAccept)]
                       (js/call (expect (js/call re .test s)) .toBe false))))))))))))
