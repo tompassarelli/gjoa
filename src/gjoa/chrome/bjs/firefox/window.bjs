@@ -24,10 +24,10 @@
 
 (js/export (defn system-principal! [] Any
   (if (= (js/get state .cached-principal) undefined)
-    (let [p (js/call (js/get Services .scriptSecurityManager) .getSystemPrincipal)]
+    (let [p Any (js/call (js/get Services .scriptSecurityManager) .getSystemPrincipal)]
       (js/set! state .cached-principal p)
       p)
     (js/get state .cached-principal))))
 
-(js/export (defn import-esm [(url String)] Any
+(js/export (defn import-esm [url String] Any
   (js/call ChromeUtils .importESModule url)))
