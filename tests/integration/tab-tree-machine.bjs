@@ -24,7 +24,7 @@
 
 ;; --- mode + reset helpers (mirrors tab-mode-toggle.bjs) ----------------------
 
-(defn reset! [(mn Any)] Any
+(defn reset! [mn Any] Any
   (js/await (js/call mn .executeScript (str
       "    try { Services.prefs.setBoolPref(\"sidebar.verticalTabs\", true); } catch {}\n"
       "    if (window.Spaces) {\n"
@@ -41,18 +41,20 @@
       "  ")))
   (await-true "return !document.getElementById(\"gjoa-tab-panel\").hasAttribute(\"gjoa-horizontal\");" 3000))
 
-(defn to-horizontal! [(mn Any)] Any
+(defn to-horizontal! [mn Any] Any
   (chrome-eval "Services.prefs.setBoolPref(\"sidebar.verticalTabs\", false);")
   (await-true "return document.getElementById(\"gjoa-tab-panel\").hasAttribute(\"gjoa-horizontal\");" 3000))
 
-(defn to-vertical! [(mn Any)] Any
+(defn to-vertical! [mn Any] Any
   (chrome-eval "Services.prefs.setBoolPref(\"sidebar.verticalTabs\", true);")
   (await-true "return !document.getElementById(\"gjoa-tab-panel\").hasAttribute(\"gjoa-horizontal\");" 3000))
 
 ;; --- tree construction -------------------------------------------------------
 
 ;; Create `n` marker root tabs `<stamp>-r0..r(n-1)`. Returns the marker list.
-(defn build-roots-js [(stamp String) (n Int)] String
+(defn build-roots-js
+  [stamp String
+     n Int] String
   (str "
     const principal = Services.scriptSecurityManager.getSystemPrincipal();
     const T = window.gjoaTest.treeOf;
@@ -68,7 +70,9 @@
     return out;"))
 
 ;; Nest the `child` marker tab under the `parent` marker tab (compose/fold).
-(defn nest-js [(child String) (parent String)] String
+(defn nest-js
+  [child String
+     parent String] String
   (str "
     const T = window.gjoaTest.treeOf;
     const find = m => [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === m);
@@ -80,7 +84,7 @@
     window.gjoaTest.rows.updateVisibility();
     return true;"))
 
-(defn await-marker-js [(marker String)] String
+(defn await-marker-js [marker String] String
   (str "return [...gBrowser.tabs].some(t => t.getAttribute(\"gjoa-test-marker\") === \"" marker "\");"))
 
 ;; --- the invariant checker (computed in-page, returns {ok, viol, count}) -----
@@ -132,8 +136,10 @@
   }
   return { ok: viol.length === 0, viol, count: nodes.length };")
 
-(defn assert-sound [(mn Any) (where String)] Any
-  (let [r (chrome-eval INVARIANTS-JS)]
+(defn assert-sound
+  [mn Any
+     where String] Any
+  (let [r Any (chrome-eval INVARIANTS-JS)]
     (expect (js/get r .ok)
       (str "tree invariants violated (" where "): " (JSON/stringify (js/get r .viol))))
     nil))
@@ -156,7 +162,11 @@
 
 ;; Synthetic drag of DOM row `src` onto row `tgt`, dropping at the fractional
 ;; (fx,fy) point inside the target (fx>=0.5 → "after"/right, fy<0.66 → not child).
-(defn drag-script [(src Int) (tgt Int) (fx Any) (fy Any)] String
+(defn drag-script
+  [src Int
+     tgt Int
+     fx Any
+     fy Any] String
   (str "
     const rows = [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row, #gjoa-tab-panel .gjoa-group-row\")];
     const source = rows[" src "]; const target = rows[" tgt "];
@@ -171,7 +181,7 @@
     fire(target, \"drop\", dx, dy); fire(source, \"dragend\", dx, dy);
     return true;"))
 
-(defn settle [] Any (js/await (js/new Promise (fn [r] Any (setTimeout (fn [] Any (r)) 250)))) nil)
+(defn settle [] Any (js/await (js/new Promise (fn [r Any] Any (setTimeout (fn [] Any (r)) 250)))) nil)
 
 ;; --- tests -------------------------------------------------------------------
 
@@ -179,14 +189,14 @@
   [(deftest "tree machine — invariants hold for flat roots, both modes" [mn]
      (await-true "return !!window.gjoaTest && !!document.getElementById(\"gjoa-tab-panel\");" 5000)
      (js/await (reset! mn))
-     (let [stamp (str "ttm-flat-" (Date/now))]
+     (let [stamp String (str "ttm-flat-" (Date/now))]
        (chrome-eval (build-roots-js stamp 3))
        (await-true (await-marker-js (str stamp "-r2")) 3000)
        (assert-sound mn "vertical/flat")
-       (let [rows (chrome-eval ROWS-JS)
-             roots (js/call rows .filter (fn [r] Any (js/get r .marker)))]
+       (let [rows Any (chrome-eval ROWS-JS)
+            roots Any (js/call rows .filter (fn [r Any] Any (js/get r .marker)))]
          (expect (>= (js/get roots .length) 3) "expected >= 3 marker roots")
-         (js/call roots .forEach (fn [r] Any (expect-eq (js/get r .level) 0 "flat roots must be level 0"))))
+         (js/call roots .forEach (fn [r Any] Any (expect-eq (js/get r .level) 0 "flat roots must be level 0"))))
        (js/await (to-horizontal! mn))
        (assert-sound mn "horizontal/flat")
        (js/await (to-vertical! mn))))
@@ -194,7 +204,7 @@
    (deftest "tree machine — compose/fold stays sound, both modes" [mn]
      (await-true "return !!window.gjoaTest;" 5000)
      (js/await (reset! mn))
-     (let [stamp (str "ttm-fold-" (Date/now))]
+     (let [stamp String (str "ttm-fold-" (Date/now))]
        (chrome-eval (build-roots-js stamp 3))
        (await-true (await-marker-js (str stamp "-r2")) 3000)
        ;; compose: r1 under r0, r2 under r1 (tabs-within-tabs, depth 2).
@@ -203,10 +213,10 @@
        (js/await (settle))
        (assert-sound mn "vertical/nested")
        ;; the nested chain must be level 0 / 1 / 2 in DOM pre-order.
-       (let [rows (chrome-eval ROWS-JS)
-             r0 (js/call rows .find (fn [r] Any (= (js/get r .marker) (str stamp "-r0"))))
-             r1 (js/call rows .find (fn [r] Any (= (js/get r .marker) (str stamp "-r1"))))
-             r2 (js/call rows .find (fn [r] Any (= (js/get r .marker) (str stamp "-r2"))))]
+       (let [rows Any (chrome-eval ROWS-JS)
+            r0 Any (js/call rows .find (fn [r Any] Any (= (js/get r .marker) (str stamp "-r0"))))
+            r1 Any (js/call rows .find (fn [r Any] Any (= (js/get r .marker) (str stamp "-r1"))))
+            r2 Any (js/call rows .find (fn [r Any] Any (= (js/get r .marker) (str stamp "-r2"))))]
          (expect (and r0 r1 r2) "nested markers must all be present")
          (expect-eq (js/get r0 .level) 0 "r0 root level 0")
          (expect-eq (js/get r1 .level) 1 "r1 child level 1")
@@ -219,7 +229,7 @@
    (deftest "tree machine — selecting a tab keeps the tree sound, both modes" [mn]
      (await-true "return !!window.gjoaTest;" 5000)
      (js/await (reset! mn))
-     (let [stamp (str "ttm-sel-" (Date/now))]
+     (let [stamp String (str "ttm-sel-" (Date/now))]
        (chrome-eval (build-roots-js stamp 3))
        (await-true (await-marker-js (str stamp "-r2")) 3000)
        (chrome-eval (nest-js (str stamp "-r1") (str stamp "-r0")))
@@ -229,14 +239,14 @@
        (chrome-eval (str "gBrowser.selectedTab = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-r1\"); return true;"))
        (js/await (settle))
        (assert-sound mn "horizontal/after-select")
-       (let [sel (chrome-eval (str "return gBrowser.selectedTab.getAttribute(\"gjoa-test-marker\");"))]
+       (let [sel String (chrome-eval (str "return gBrowser.selectedTab.getAttribute(\"gjoa-test-marker\");"))]
          (expect-eq sel (str stamp "-r1") "selection must land on the chosen child"))
        (js/await (to-vertical! mn))))
 
    (deftest "tree machine — horizontal move does NOT skip a tab to the leftmost column" [mn]
      (await-true "return !!window.gjoaTest;" 5000)
      (js/await (reset! mn))
-     (let [stamp (str "ttm-skip-" (Date/now))]
+     (let [stamp String (str "ttm-skip-" (Date/now))]
        ;; roots A,B,C with B holding a child B1 — the target-with-children case
        ;; that made the column-major drop-index resolve to the column head.
        (chrome-eval (build-roots-js stamp 4))
@@ -245,17 +255,17 @@
        (js/await (settle))
        (js/await (to-horizontal! mn))
        (js/await (settle))
-       (let [before (chrome-eval ROWS-JS)
-             first-root-before (js/get (js/call before .find (fn [r] Any (and (= (js/get r .kind) "tab") (= (js/get r .level) 0)))) .marker)
+       (let [before Any (chrome-eval ROWS-JS)
+            first-root-before Any (js/get (js/call before .find (fn [r Any] Any (and (= (js/get r .kind) "tab") (= (js/get r .level) 0)))) .marker)
              ;; DOM indices: drag r2 (C, rightmost root) onto r1 (B) "after" zone.
-             idx-c (js/call before .findIndex (fn [r] Any (= (js/get r .marker) (str stamp "-r2"))))
-             idx-b (js/call before .findIndex (fn [r] Any (= (js/get r .marker) (str stamp "-r1"))))]
+            idx-c Int (js/call before .findIndex (fn [r Any] Any (= (js/get r .marker) (str stamp "-r2"))))
+            idx-b Int (js/call before .findIndex (fn [r Any] Any (= (js/get r .marker) (str stamp "-r1"))))]
          (expect (and (>= idx-c 0) (>= idx-b 0)) (str "setup rows: idxC=" idx-c " idxB=" idx-b))
          (chrome-eval (drag-script idx-c idx-b 0.8 0.2))
          (js/await (settle))
          (assert-sound mn "horizontal/after-move")
-         (let [after (chrome-eval ROWS-JS)
-               first-root-after (js/get (js/call after .find (fn [r] Any (and (= (js/get r .kind) "tab") (= (js/get r .level) 0)))) .marker)]
+         (let [after Any (chrome-eval ROWS-JS)
+              first-root-after Any (js/get (js/call after .find (fn [r Any] Any (and (= (js/get r .kind) "tab") (= (js/get r .level) 0)))) .marker)]
            ;; the regression: the moved tab jumped to the front. r0 (A) must
            ;; remain the first root; the moved C must not have become leftmost.
            (expect-eq first-root-after first-root-before
@@ -267,7 +277,7 @@
    (deftest "tree machine — create-group adopts the whole multiselection (#95)" [mn]
      (await-true "return !!window.gjoaTest;" 5000)
      (js/await (reset! mn))
-     (let [stamp (str "ttm-grp-" (Date/now))]
+     (let [stamp String (str "ttm-grp-" (Date/now))]
        (chrome-eval (build-roots-js stamp 3))
        (await-true (await-marker-js (str stamp "-r2")) 3000)
        ;; multiselect r0 + r1, set the context tab to r0, fire "Create Group".
@@ -287,7 +297,7 @@
          return true;"))
        (js/await (settle))
        (assert-sound mn "vertical/after-create-group")
-       (let [r (chrome-eval (str "
+       (let [r Any (chrome-eval (str "
                const T = window.gjoaTest.treeOf;
                const find = m => [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === m);
                const a = find(\"" stamp "-r0\"), b = find(\"" stamp "-r1\");
