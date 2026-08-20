@@ -17,7 +17,9 @@
 (def CSS String (join REPO "src" "gjoa" "chrome" "css" "gjoa.uc.css"))
 (def LAYOUT String (join REPO "src" "gjoa" "chrome" "bjs" "drawer" "layout.bjs"))
 
-(defn has? [(s String) (pat String)] Any (js/call (js/new RegExp pat) .test s))
+(defn has?
+  [s String
+     pat String] Any (js/call (js/new RegExp pat) .test s))
 
 (describe "drawer flip-symmetry (#145/#146/#147)"
   (fn [] Any
@@ -30,8 +32,8 @@
     ;; must key off it, or the right-flipped drawer stops mirroring.
     (test "flip mechanism (sidebar-positionend) present in CSS + shadow overrides"
       (fn [] Any
-        (let [css (readFileSync CSS "utf8")
-              layout (readFileSync LAYOUT "utf8")]
+        (let [css String (readFileSync CSS "utf8")
+             layout String (readFileSync LAYOUT "utf8")]
           (js/call (expect (has? css "sidebar-positionend")) .toBe true)
           (js/call (expect (has? layout "sidebar-positionend")) .toBe true))))
 
@@ -51,6 +53,6 @@
     ;; insets from the ONE gap var. Both must remain or the gap regresses.
     (test "#145 customize panel uses #sidebar-box + the uniform --gjoa-card-gap"
       (fn [] Any
-        (let [css (readFileSync CSS "utf8")]
+        (let [css String (readFileSync CSS "utf8")]
           (js/call (expect (has? css "sidebar-box")) .toBe true)
           (js/call (expect (has? css "--gjoa-card-gap")) .toBe true))))))
