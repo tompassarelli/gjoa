@@ -130,7 +130,7 @@
 
 (js/export (def tests Any
   [(deftest "sidebar — collapse narrows to favicon strip (no inline width pins it wide); expand restores (#833c5b9)" [mn]
-     (let [pre (chrome-eval ENSURE-EXPANDED-WIDE)]
+     (let [pre Any (chrome-eval ENSURE-EXPANDED-WIDE)]
        ;; GUARD against a vacuous pass on a dead-chrome binary: if GjoaLoader
        ;; never ran, #gjoa-urlbar-toolbar / window.gjoaTest are absent and the
        ;; drawer's expand/collapse never wires up — the attribute toggle would
@@ -151,7 +151,7 @@
                       "return sm.hasAttribute('sidebar-launcher-expanded') &&"
                       "       sm.getBoundingClientRect().width > 200;")
                  5000))
-     (let [exp (chrome-eval MEASURE-SIDEBAR)]
+     (let [exp Any (chrome-eval MEASURE-SIDEBAR)]
        (expect (not (js/get exp .error)) (str "MEASURE-SIDEBAR (expanded) error: " (JSON/stringify exp)))
        (expect (> (Number (js/get exp .width)) 200)
          (str "expanded sidebar not wide — width " (js/call (Number (js/get exp .width)) .toFixed 1)
@@ -172,7 +172,7 @@
                       "const w = sm.getBoundingClientRect().width;"
                       "return w > 0 && w < 80 && sm.style.width === '';")
                  5000))
-     (let [col (chrome-eval MEASURE-SIDEBAR)]
+     (let [col Any (chrome-eval MEASURE-SIDEBAR)]
        (expect (not (js/get col .error)) (str "MEASURE-SIDEBAR (collapsed) error: " (JSON/stringify col)))
        (expect (not (js/get col .expandedAttr))
          (str "sidebar still has [sidebar-launcher-expanded] after collapse — measured "
@@ -198,7 +198,7 @@
         window.gjoaTest.rows.updateVisibility();
         return true;")
      (await-true "return document.querySelectorAll('#gjoa-tab-panel .gjoa-tab-row').length >= 2;" 3000)
-     (let [rhythm (chrome-eval MEASURE-RAIL-RHYTHM)]
+     (let [rhythm Any (chrome-eval MEASURE-RAIL-RHYTHM)]
        (expect (not (js/get rhythm .error)) (str "MEASURE-RAIL-RHYTHM error: " (JSON/stringify rhythm)))
        ;; The rail is ONE rhythm, not two calibrated ones: every adjacent icon pair —
        ;; tab to tab, tool to tool, and the two clusters against each other — sits the
@@ -241,14 +241,14 @@
                         "if (!sm || !sm.hasAttribute('sidebar-launcher-expanded')) return false;"
                         "return sm.style.width !== '' && sm.getBoundingClientRect().width > 200;")
                    5000))
-       (let [re (chrome-eval MEASURE-SIDEBAR)]
+       (let [re Any (chrome-eval MEASURE-SIDEBAR)]
          (expect (not (js/get re .error)) (str "MEASURE-SIDEBAR (re-expanded) error: " (JSON/stringify re)))
          (expect (and (js/get re .hasInlineWidth) (> (Number (js/get re .width)) 200))
            (str "re-expand did not restore the persisted width — width "
                 (js/call (Number (js/get re .width)) .toFixed 1) "px, inline '" (js/get re .inlineWidth)
                 "' (expected wide + inline 320px). "
                 (JSON/stringify re))))
-       (let [exp-footer (chrome-eval MEASURE-FOOTER-BTN)]
+       (let [exp-footer Any (chrome-eval MEASURE-FOOTER-BTN)]
          (expect (not= (js/get exp-footer .footerBtnHeight) (js/get rhythm .footerBtnHeight))
            (str "expanded footer button height (" (js/get exp-footer .footerBtnHeight)
                 ") must differ from the collapsed height (" (js/get rhythm .footerBtnHeight)
