@@ -11,10 +11,12 @@
   (:require [child_process :refer [execSync]]))
 (declare-extern [Error Object] Any)
 
-(js/export (defn sh [(cmd String) (opts Any)] String
-  (let [o (or opts {})
-        cfg {:encoding "utf8" :maxBuffer (or (js/get o .maxBuffer) (* 256 1024 1024))}
-        cfg2 (if (js/get o .cwd) (js/call Object .assign {} cfg {:cwd (js/get o .cwd)}) cfg)]
+(js/export (defn sh
+             [cmd String
+              opts Any] String
+  (let [o Any (or opts {})
+        cfg (Map Keyword String) {:encoding "utf8" :maxBuffer (or (js/get o .maxBuffer) (* 256 1024 1024))}
+        cfg2 Any (if (js/get o .cwd) (js/call Object .assign {} cfg {:cwd (js/get o .cwd)}) cfg)]
     (if (js/get o .quiet)
       (try (js/call (execSync cmd (js/call Object .assign {} cfg2 {:stdio ["ignore" "pipe" "ignore"]})) .toString)
         (catch (_e Error) ""))
