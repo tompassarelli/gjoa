@@ -4,22 +4,25 @@
 
 (declare-extern [String undefined] Any)
 
-(js/export (defn xul [(tag String) (attrs Any)] Any
-  (let [el (xul-new tag)]
+(js/export (defn xul
+  [tag String
+   attrs Any] Any
+  (let [el Any (xul-new tag)]
     (when attrs
-      (js/call (Object/entries attrs) .forEach (fn [entry] Any
-        (let [name (aget entry 0) value (aget entry 1)]
+      (js/call (Object/entries attrs) .forEach (fn [entry Any] Any
+        (let [name Any (aget entry 0)
+              value Any (aget entry 1)]
           (when (and (not (= value false))
                      (not (= value nil))
                      (not (= value undefined)))
             (js/call el .setAttribute name (String value)))))))
     el)))
 
-(js/export (defn xul-label [(attrs Any)] Any (xul "label" attrs)))
-(js/export (defn xul-hbox [(attrs Any)] Any (xul "hbox" attrs)))
-(js/export (defn xul-vbox [(attrs Any)] Any (xul "vbox" attrs)))
-(js/export (defn xul-box [(attrs Any)] Any (xul "box" attrs)))
-(js/export (defn xul-image [(attrs Any)] Any (xul "image" attrs)))
-(js/export (defn xul-menu-popup [(attrs Any)] Any (xul "menupopup" attrs)))
-(js/export (defn xul-menu-item [(attrs Any)] Any (xul "menuitem" attrs)))
-(js/export (defn xul-menu-separator [(attrs Any)] Any (xul "menuseparator" attrs)))
+(js/export (defn xul-label [attrs Any] Any (xul "label" attrs)))
+(js/export (defn xul-hbox [attrs Any] Any (xul "hbox" attrs)))
+(js/export (defn xul-vbox [attrs Any] Any (xul "vbox" attrs)))
+(js/export (defn xul-box [attrs Any] Any (xul "box" attrs)))
+(js/export (defn xul-image [attrs Any] Any (xul "image" attrs)))
+(js/export (defn xul-menu-popup [attrs Any] Any (xul "menupopup" attrs)))
+(js/export (defn xul-menu-item [attrs Any] Any (xul "menuitem" attrs)))
+(js/export (defn xul-menu-separator [attrs Any] Any (xul "menuseparator" attrs)))
