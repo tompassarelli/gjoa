@@ -42,7 +42,7 @@
 (js/export (def tests Any
   [(deftest "engine scriptlets: a +js() rule + the resource library yields injected_script" [mn]
      (js/await (js/call mn .setContext "chrome"))
-     (let [r (js/await (js/call mn .executeAsyncScript DRIVE))]
+     (let [r Any (js/await (js/call mn .executeAsyncScript DRIVE))]
        (when (js/get r .err)
          (throw (js/new Error (str "engine scriptlet path errored: " (js/get r .err)))))
        (expect (js/get r .ready) "content-classifier service must initialize")
