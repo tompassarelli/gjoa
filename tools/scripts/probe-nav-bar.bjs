@@ -74,26 +74,30 @@
   };
 ")
 
-(defn probe [(label String)] Any
-  (let [r (js/await (js/call mn .executeScript PROBE-SCRIPT))]
+(defn probe [label String] Any
+  (let [r Any (js/await (js/call mn .executeScript PROBE-SCRIPT))]
     (console/log (str "\n========== " label " (mode=" (js/get r .mode) ") =========="))
     (console/log "nav-bar:" (js/get r .navBar))
     (console/log "customization-target:" (js/get r .customizationTarget))
     (console/log "\nnav-bar children (left→right, visible only):")
-    (let [visible (js/call (js/get r .navBarChildren) .filter (fn [c] Any (and (not (js/get c .hidden)) (> (js/get c .width) 0))))]
+    (let [visible (Vec Any) (js/call (js/get r .navBarChildren) .filter (fn [c Any] Any (and (not (js/get c .hidden)) (> (js/get c .width) 0))))]
       (js/call visible .sort
-               (fn [a b] Any
-                 (let [(a-left Float) (js/get a .left) (b-left Float) (js/get b .left)] (- a-left b-left))))
-      (doseq [c visible]
+               (fn [a Any
+                    b Any] Any
+                 (let [a-left Float (js/get a .left)
+                       b-left Float (js/get b .left)] (- a-left b-left))))
+      (doseq [c Any visible]
         (console/log (str "  [" (js/call (String (js/get c .left)) .padStart 4) ".." (js/call (String (js/get c .right)) .padStart 4) "] w="
                            (js/call (String (js/get c .width)) .padStart 4) " order=" (js/call (js/get c .order) .padStart 3) "  "
                            (or (js/get c .id) (js/get c .tag)) "." (js/call (js/get c .cls) .slice 0 30)))))
     (console/log "\ncustomization-target children (visible only):")
-    (let [ctVisible (js/call (js/get r .ctChildren) .filter (fn [c] Any (and (not (js/get c .hidden)) (> (js/get c .width) 0))))]
+    (let [ctVisible (Vec Any) (js/call (js/get r .ctChildren) .filter (fn [c Any] Any (and (not (js/get c .hidden)) (> (js/get c .width) 0))))]
       (js/call ctVisible .sort
-               (fn [a b] Any
-                 (let [(a-left Float) (js/get a .left) (b-left Float) (js/get b .left)] (- a-left b-left))))
-      (doseq [c ctVisible]
+               (fn [a Any
+                    b Any] Any
+                 (let [a-left Float (js/get a .left)
+                       b-left Float (js/get b .left)] (- a-left b-left))))
+      (doseq [c Any ctVisible]
         (console/log (str "  [" (js/call (String (js/get c .left)) .padStart 4) ".." (js/call (String (js/get c .right)) .padStart 4) "] w="
                            (js/call (String (js/get c .width)) .padStart 4) " order=" (js/call (js/get c .order) .padStart 3) " mIS="
                            (js/call (js/get c .marginInlineStart) .padStart 6) "  " (or (js/get c .id) (js/get c .tag))))))))
@@ -120,8 +124,8 @@
 (js/await (js/call mn .newSession))
 (js/await (js/call mn .setContext "chrome"))
 
-(defn diagExt [(label String)] Any
-  (let [r (js/await (js/call mn .executeScript "
+(defn diagExt [label String] Any
+  (let [r Any (js/await (js/call mn .executeScript "
     const ext = document.getElementById(\"unified-extensions-button\");
     const ct = document.getElementById(\"nav-bar-customization-target\");
     const sb = document.getElementById(\"sidebar-container\");
@@ -150,10 +154,10 @@
 (try
   (do
     ;; Default boot — should be expanded mode (test profile sets verticalTabs+revamp=true).
-    (js/await (js/new Promise (fn [r] Any (setTimeout r 2000))))
+    (js/await (js/new Promise (fn [r Any] Any (setTimeout r 2000))))
     (js/await (probe "DEFAULT BOOT"))
     (js/await (diagExt "DEFAULT"))
-    (let [shot1 (js/await (js/call mn .takeScreenshot))]
+    (let [shot1 Any (js/await (js/call mn .takeScreenshot))]
       (js/await (writeFile "/tmp/gjoa-navbar-default.png" (js/call Buffer .from shot1 "base64"))))
     (console/log "\n→ saved /tmp/gjoa-navbar-default.png")
 
@@ -167,10 +171,10 @@
     }
     return null;
   "))
-    (js/await (js/new Promise (fn [r] Any (setTimeout r 500))))
+    (js/await (js/new Promise (fn [r Any] Any (setTimeout r 500))))
     (js/await (probe "AFTER REMOVE sidebar-launcher-expanded"))
     (js/await (diagExt "COMPACT"))
-    (let [shot2 (js/await (js/call mn .takeScreenshot))]
+    (let [shot2 Any (js/await (js/call mn .takeScreenshot))]
       (js/await (writeFile "/tmp/gjoa-navbar-compact.png" (js/call Buffer .from shot2 "base64"))))
     (console/log "\n→ saved /tmp/gjoa-navbar-compact.png")
 
@@ -184,10 +188,10 @@
     if (url) url.style.maxWidth = \"700px\";
     return null;
   "))
-    (js/await (js/new Promise (fn [r] Any (setTimeout r 300))))
+    (js/await (js/new Promise (fn [r Any] Any (setTimeout r 300))))
     (js/await (probe "WITH 700px URL CAP"))
     (js/await (diagExt "URL_CAP"))
-    (let [shot4 (js/await (js/call mn .takeScreenshot))]
+    (let [shot4 Any (js/await (js/call mn .takeScreenshot))]
       (js/await (writeFile "/tmp/gjoa-navbar-urlcap.png" (js/call Buffer .from shot4 "base64"))))
     (console/log "\n→ saved /tmp/gjoa-navbar-urlcap.png")
 
@@ -196,16 +200,16 @@
     Services.prefs.setBoolPref(\"sidebar.verticalTabs\", false);
     return null;
   "))
-    (js/await (js/new Promise (fn [r] Any (setTimeout r 1000))))
+    (js/await (js/new Promise (fn [r Any] Any (setTimeout r 1000))))
     (js/await (probe "HORIZONTAL TABS (verticalTabs=false)"))
-    (let [shot3 (js/await (js/call mn .takeScreenshot))]
+    (let [shot3 Any (js/await (js/call mn .takeScreenshot))]
       (js/await (writeFile "/tmp/gjoa-navbar-horizontal.png" (js/call Buffer .from shot3 "base64"))))
     (console/log "\n→ saved /tmp/gjoa-navbar-horizontal.png")
 
     ;; Also dump ALL toolbar children including hidden ones — useful to see what's
     ;; there but display:none'd.
     (console/log "\n========== ALL NAV-BAR CHILDREN (incl. hidden) ==========")
-    (let [all (js/await (js/call mn .executeScript "
+    (let [all Any (js/await (js/call mn .executeScript "
     const navBar = document.getElementById(\"nav-bar\");
     const ct = document.getElementById(\"nav-bar-customization-target\");
     const out = { navBarChildren: [], ctChildren: [] };
@@ -220,11 +224,11 @@
     return out;
   "))]
       (console/log "nav-bar:")
-      (doseq [c (js/get all .navBarChildren)]
+      (doseq [c Any (js/get all .navBarChildren)]
         (console/log (str "  " (if (or (js/get c .hidden) (= (js/get c .display) "none")) "[hidden]" "[show]  ")
                            "  ord=" (js/get c .order) "  " (js/get c .id))))
       (console/log "customization-target:")
-      (doseq [c (js/get all .ctChildren)]
+      (doseq [c Any (js/get all .ctChildren)]
         (console/log (str "  " (if (or (js/get c .hidden) (= (js/get c .display) "none")) "[hidden]" "[show]  ")
                            "  ord=" (js/get c .order) "  " (js/get c .id))))))
   (finally
