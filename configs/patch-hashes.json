@@ -7,10 +7,10 @@
     "0003-newtab-redirector-gjoa.patch": "27ddb125c9ac658577920b3ce80541b742020e595a5b311596f5c41e57e4527e",
     "0007-enable-sqlite-fts5.patch": "8c91ad1f85eb8628496fa5d4c7f7393ef2b29b5df1fa05ae6959ccdac8b6980d",
     "0008-content-classifier-cosmetic-filtering.patch": "7869ad3c951f6f7540ac8f8279f1f871930f1fe6f973e18db18ae3a95e1c22bd",
-    "0009-dark-mode-engine-color-inversion.patch": "9e4c2ea4b592511c5b1b2b76b182b89bd3dde737a34b77741ade0accc786b585",
+    "0009-dark-mode-engine-color-inversion.patch": "68f6cf6b97f22bf67cc949044eac05256fa41b95a41190508cfdc4fa0c0028b0",
     "0010-dark-mode-island-scrim.patch": "278407bdb296ffb9eddc9936453794615772e94ffb4ff5e2c3825675b19b72f8",
     "0012-dark-mode-role-resolver.patch": "54e483ec390c0ad6b09eb53284d877863ed541d7635592d46a1baa5f5d0442d0",
     "0013-dark-mode-text-solve.patch": "17aa29560fc9b6412a655cdbbe2564b42ef309930e17ef906c1cd891f3ccb586",
-    "0014-dark-mode-tier0.patch": "b224f8af040eff20e7cf9ebb534e8b31016646a1204567baf6e772ae7123acb4"
+    "0014-dark-mode-tier0.patch": "3a9fa1c1ca7057dc6c14ab5a627f15cbd8ec2184164b467ae5bed3260dc8a57a"
   }
 }
