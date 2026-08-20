@@ -16,7 +16,7 @@
 (js/export (def tests Any
   [(deftest "help overlay lists the : ex-commands" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
-     (let [txt (chrome-eval TRIGGER)]
+     (let [txt String (chrome-eval TRIGGER)]
        (expect (not= txt "NO-API") "gjoaTest.vim must be exposed (gjoa.test.exposeAPI)")
        (expect (not= txt "NO-WK") "the #gjoa-which-key help overlay should exist after :help")
        (expect (js/call txt .includes ": commands") "help overlay should have a ': commands' section")
