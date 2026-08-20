@@ -7,24 +7,25 @@
 
 (declare-extern [adapter-all-tabs adapter-selected-tab adapter-pin-tab adapter-unpin-tab adapter-toggle-pinned adapter-remove-tab adapter-duplicate-tab adapter-reload-tab adapter-select-tab adapter-open-tab window] Any)
 
-(defn resolve-tab [(ref Any)] Any
+(defn resolve-tab [ref Any] Any
   (if (= (js/typeof ref) "number")
     (tab-by-id ref)
     ref))
 
-(defn depth-of [(td Any)] Any
-  (loop [d td lv 0]
+(defn depth-of [td Any] Any
+  (loop [d Any td
+         lv Int 0]
     (if (or (= d nil) (= (js/get d .parentId) nil))
       lv
-      (let [parent (if (= (js/typeof (js/get d .parentId)) "number")
+      (let [parent Any (if (= (js/typeof (js/get d .parentId)) "number")
                      (tab-by-id (js/get d .parentId))
                      nil)]
         (if (= parent nil)
           (+ lv 1)
           (recur (js/call tree-of .get parent) (+ lv 1)))))))
 
-(defn project [(tab Any)] Any
-  (let [td (js/call tree-of .get tab)]
+(defn project [tab Any] Any
+  (let [td Any (js/call tree-of .get tab)]
     (when td
       {:id (js/get td .id)
        :url (or (some-> tab (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec)) "")
@@ -37,46 +38,51 @@
        :depth (depth-of td)})))
 
 (defn list-tabs [] Any
-  (let [out []
-        tabs (adapter-all-tabs)]
-    (js/call tabs .forEach (fn [%1] Any (let [p (project %1)]
+  (let [out (Vec Any) []
+        tabs Any (adapter-all-tabs)]
+    (js/call tabs .forEach (fn [%1 Any] Any (let [p Any (project %1)]
       (when p (js/call out .push p)))))
     out))
 
 (defn selected-tab [] Any
   (project (adapter-selected-tab)))
 
-(defn get-tab [(ref Any)] Any
-  (let [t (resolve-tab ref)]
+(defn get-tab [ref Any] Any
+  (let [t Any (resolve-tab ref)]
     (when t (project t))))
 
-(defn with-tab [(ref Any) (op Any) (reason Any) (scheduler Any) (log Any)] Any
-  (let [t (resolve-tab ref)]
+(defn with-tab
+  [ref Any
+   op Any
+   reason Any
+   scheduler Any
+   log Any] Any
+  (let [t Any (resolve-tab ref)]
     (if (not t)
       (log "ref:not-found" {:ref (if (= (js/typeof ref) "number") ref "(Tab elem)")})
       (do
         (op t)
         (js/call scheduler .markDirty "tabs" reason)))))
 
-(js/export (defn make-window-tabs! [(scheduler Any)] Any
-  (let [log (create-logger! "platform/tabs")]
+(js/export (defn make-window-tabs! [scheduler Any] Any
+  (let [log Any (create-logger! "platform/tabs")]
     {:list (fn [] Any (list-tabs))
      :selected (fn [] Any (selected-tab))
-     :get (fn [%1] Any (get-tab %1))
-     :pin (fn [%1] Any (with-tab %1 adapter-pin-tab "Gjoa.tabs.pin" scheduler log))
-     :unpin (fn [%1] Any (with-tab %1 adapter-unpin-tab "Gjoa.tabs.unpin" scheduler log))
-     :togglePinned (fn [%1] Any (with-tab %1 adapter-toggle-pinned "Gjoa.tabs.togglePinned" scheduler log))
-     :close (fn [%1] Any (with-tab %1 adapter-remove-tab "Gjoa.tabs.close" scheduler log))
-     :duplicate (fn [r] Any
-       (let [t (resolve-tab r)]
+     :get (fn [%1 Any] Any (get-tab %1))
+     :pin (fn [%1 Any] Any (with-tab %1 adapter-pin-tab "Gjoa.tabs.pin" scheduler log))
+     :unpin (fn [%1 Any] Any (with-tab %1 adapter-unpin-tab "Gjoa.tabs.unpin" scheduler log))
+     :togglePinned (fn [%1 Any] Any (with-tab %1 adapter-toggle-pinned "Gjoa.tabs.togglePinned" scheduler log))
+     :close (fn [%1 Any] Any (with-tab %1 adapter-remove-tab "Gjoa.tabs.close" scheduler log))
+     :duplicate (fn [r Any] Any
+       (let [t Any (resolve-tab r)]
          (when t
-           (let [dup (adapter-duplicate-tab t)]
+           (let [dup Any (adapter-duplicate-tab t)]
              (js/call scheduler .markDirty "tabs" "Gjoa.tabs.duplicate")
              (project dup)))))
-     :reload (fn [%1] Any (with-tab %1 adapter-reload-tab "Gjoa.tabs.reload" scheduler log))
-     :select (fn [%1] Any (with-tab %1 adapter-select-tab "Gjoa.tabs.select" scheduler log))
-     :activate (fn [r] Any
-       (let [t (resolve-tab r)]
+     :reload (fn [%1 Any] Any (with-tab %1 adapter-reload-tab "Gjoa.tabs.reload" scheduler log))
+     :select (fn [%1 Any] Any (with-tab %1 adapter-select-tab "Gjoa.tabs.select" scheduler log))
+     :activate (fn [r Any] Any
+       (let [t Any (resolve-tab r)]
          (if (not t)
            (do (log "activate:not-found") false)
            (do
@@ -84,7 +90,7 @@
              (try (js/call window .focus) (catch (e Any) nil))
              (js/call scheduler .markDirty "tabs" "Gjoa.tabs.activate")
              true))))
-     :open (fn [url] Any
-       (let [t (adapter-open-tab url)]
+     :open (fn [url String] Any
+       (let [t Any (adapter-open-tab url)]
          (js/call scheduler .markDirty "tabs" "Gjoa.tabs.open")
          (project t)))})))
