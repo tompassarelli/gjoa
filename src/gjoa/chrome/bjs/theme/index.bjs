@@ -35,8 +35,8 @@
 ;; "polar-night" and "system" leave the attribute OFF (the :root base16 defaults
 ;; paint canonical; "system" routes through useSystem instead); a named variant
 ;; like "nord" sets gjoa-theme to its id so the CSS [gjoa-theme="…"] block applies.
-(defn set-theme-attr! [(variant String)] Any
-  (let [root (js/get document .documentElement)]
+(defn set-theme-attr! [variant String] Any
+  (let [root Any (js/get document .documentElement)]
     (if (or (= variant "polar-night") (= variant "system"))
       (rmattr! root "gjoa-theme")
       (attr! root "gjoa-theme" variant))))
@@ -44,16 +44,16 @@
 ;; "system" routes the existing useSystem path (shield off, FF theme vars flow
 ;; in); every other variant keeps the shield on (useSystem off) so gjoa owns the
 ;; palette and the base16 token-set is what re-skins.
-(defn set-use-system! [(variant String)] Any
+(defn set-use-system! [variant String] Any
   (set-pref-bool! PREF-USE-SYSTEM (= variant "system")))
 
 (defn apply! [] Any
-  (let [v (variant-)]
+  (let [v String (variant-)]
     (set-theme-attr! v)
     (set-use-system! v)))
 
 ;; Public API (for a future toolbar button / command), exposed on window.
-(defn set-variant [(v String)] Any
+(defn set-variant [v String] Any
   (set-pref-str! PREF-VARIANT v)
   v)
 
@@ -63,13 +63,13 @@
 ;; gates and the picker agree with the chrome. A user pref still overrides.
 (defn set-theme-defaults! [] Any
   (try
-    (let [d (js/call (js/get Services .prefs) .getDefaultBranch "")]
+    (let [d Any (js/call (js/get Services .prefs) .getDefaultBranch "")]
       (js/call d .setCharPref PREF-VARIANT DEFAULT-VARIANT))
     (catch (e Any)
       (console/error "gjoa-theme: set-theme-defaults! failed" e))))
 
 (defn destroy! [] Any
-  (let [u (js/get state .unsub)]
+  (let [u Any (js/get state .unsub)]
     (when u (u)))
   (js/set! state .unsub nil)
   (rmattr! (js/get document .documentElement) "gjoa-theme"))
@@ -77,7 +77,11 @@
 (defn init-! [] Any
   (set-theme-defaults!)
   (apply!)
-  (let [observer {:observe (fn [_s _t _d] Any (apply!))}]
+  (let [observer Any {:observe (fn
+                                  [_s Any
+                                   _t Any
+                                   _d Any] Any
+                                  (apply!))}]
     (js/call (js/get Services .prefs) .addObserver PREF-VARIANT observer)
     (js/set! state .unsub
       (fn [] Any
