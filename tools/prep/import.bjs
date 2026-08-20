@@ -17,7 +17,7 @@
 ;; on a checkout without it, the committed manifest ships and the page honestly flags
 ;; any commit mismatch. Runs before overlay so the fresh manifest is what gets baked.
 (defn regen-sovereignty-manifest! [] Any
-  (let [tool ".beagle-tools/gjoa/tools/sovereignty/egress-scan.js"]
+  (let [tool String ".beagle-tools/gjoa/tools/sovereignty/egress-scan.js"]
     (if (not (existsSync tool))
       (js/call log .info "sovereignty: egress tool not present — keeping committed manifest")
       (do
@@ -31,7 +31,7 @@
 ;; only where the tool is compiled (the maintainer's tree). Empty list is correct
 ;; while zero patches carry a `security:` block.
 (defn regen-patch-disclosure! [] Any
-  (let [tool ".beagle-tools/gjoa/tools/security/patch-disclosure.js"]
+  (let [tool String ".beagle-tools/gjoa/tools/security/patch-disclosure.js"]
     (if (not (existsSync tool))
       (js/call log .info "security: patch-disclosure tool not present — keeping committed configs/security-patches.json")
       (do
