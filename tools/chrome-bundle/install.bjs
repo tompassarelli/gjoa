@@ -63,8 +63,8 @@
   (join REPO-ROOT "engine" "browser" "components" "gjoa" "GjoaLoader.bjs"))
 (def BEAGLE-REF-FILE String (join REPO-ROOT "configs" "beagle.ref"))
 (def BEAGLE-REF String
-  (let [lines (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
-        ref (js/call lines .find (fn [(l String)] Bool
+  (let [lines (Vec String) (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
+        ref Any (js/call lines .find (fn [l String] Bool
                            (and (> (js/get (js/call l .trim) .length) 0)
                                 (not (js/call (js/call l .trim) .startsWith "#")))))]
     (if ref
@@ -83,7 +83,7 @@
   (when (and (existsSync SRC-LOADER)
              (or (not (existsSync ENG-LOADER))
                  (> (js/get (statSync SRC-LOADER) .mtimeMs) (js/get (statSync ENG-LOADER) .mtimeMs))))
-    (let [r (spawnSync "bash" [BEAGLE-BUILD SRC-LOADER ENG-LOADER]
+    (let [r Any (spawnSync "bash" [BEAGLE-BUILD SRC-LOADER ENG-LOADER]
                        {:cwd REPO-ROOT
                         :env (js/call Object .assign {} (js/get process .env) {"BEAGLE_JS_RUNTIME_PREFIX" "resource:///modules/gjoa/beagle/"})
                         :stdio "inherit"})]
