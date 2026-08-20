@@ -40,10 +40,10 @@
 (js/export (def tests Any
   [(deftest "youtube: player-prune scriptlet strips adPlacements at document-start" [mn]
      (js/await (js/call mn .setContext "chrome"))
-     (let [navOk (js/await (js/call mn .executeAsyncScript NAV-JS [YT-URL]))]
+     (let [navOk Bool (js/await (js/call mn .executeAsyncScript NAV-JS [YT-URL]))]
        (js/await (js/call mn .setContext "content"))
        (js/await (js/call mn .executeAsyncScript "const[r]=arguments; setTimeout(()=>r(true), 3000);"))
-       (let [info (js/await (js/call mn .executeScript PROBE))]
+       (let [info Any (js/await (js/call mn .executeScript PROBE))]
          (cond
            (not navOk)
            (console/log "[youtube] SKIP — page did not load (network)")
