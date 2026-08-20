@@ -7,8 +7,8 @@
 (def PREFIX String "[2m[prep][0m")
 
 (js/export (def log Any
-  {:info  (fn [msg] Any (console/error (str PREFIX " " msg)))
-   :warn  (fn [msg] Any (console/error (str PREFIX " [33mwarn:[0m " msg)))
-   :error (fn [msg] Any (console/error (str PREFIX " [31merror:[0m " msg)))
-   :step  (fn [msg] Any (console/error (str PREFIX " [1m→[0m " msg)))
-   :ok    (fn [msg] Any (console/error (str PREFIX " [32m✓[0m " msg)))}))
+  {:info  (fn [msg String] Any (console/error (str PREFIX " " msg)))
+   :warn  (fn [msg String] Any (console/error (str PREFIX " [33mwarn:[0m " msg)))
+   :error (fn [msg String] Any (console/error (str PREFIX " [31merror:[0m " msg)))
+   :step  (fn [msg String] Any (console/error (str PREFIX " [1m→[0m " msg)))
+   :ok    (fn [msg String] Any (console/error (str PREFIX " [32m✓[0m " msg)))}))
