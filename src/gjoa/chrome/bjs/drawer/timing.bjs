@@ -8,15 +8,15 @@
 (js/export (def COLLAPSE-PROTECTION-MARGIN-MS Int 30))
 
 (js/export (defn transition-duration-ms [] Int
-  (let [raw (js/call (js/call (js/getComputedStyle (js/get document .documentElement)) .getPropertyValue
+  (let [raw Any (js/call (js/call (js/getComputedStyle (js/get document .documentElement)) .getPropertyValue
                 "--gjoa-transition-duration") .trim)]
     (cond
       (js/call raw .endsWith "ms")
-        (let [v (js/parseFloat raw)]
+        (let [v Float (js/parseFloat raw)]
           (if (and (js/Number.isFinite v) (> v 0)) v FALLBACK-TRANSITION-MS))
       (js/call raw .endsWith "s")
-        (let [(f Float) (js/parseFloat raw)
-              v (* f 1000)]
+        (let [f Float (js/parseFloat raw)
+              v Any (* f 1000)]
           (if (and (js/Number.isFinite v) (> v 0)) v FALLBACK-TRANSITION-MS))
       :else FALLBACK-TRANSITION-MS))))
 
