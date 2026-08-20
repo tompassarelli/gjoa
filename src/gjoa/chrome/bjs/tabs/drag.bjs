@@ -10,37 +10,45 @@
 
 ;; Walk siblings from `start` using `dir` (e.g. .-nextElementSibling),
 ;; return the first node satisfying `pred`, or nil.
-(defn find-sib! [(start Any) (pred Any) (dir Any)] Any
-  (loop [node start]
+(defn find-sib!
+  [start Any
+   pred Any
+   dir Any]
+  Any
+  (loop [node Any start]
     (cond
       (not node) nil
       (pred node) node
       :else (recur (dir node)))))
 
 ;; Set both targetIdx and idxBranch on a result map in one call.
-(defn set-idx! [(r Any) (idx Any) (branch Any)] Any
+(defn set-idx!
+  [r Any
+   idx Any
+   branch Any]
+  Any
   (js/set! r .targetIdx idx)
   (js/set! r .idxBranch branch))
 
 ;; Extract tabs from a row array: filter to rows with ._tab, map to the tab.
-(defn tabs-of [(rows Any)] Any
-  (js/call (js/call rows .filter (fn [%1] Any (js/get %1 ._tab))) .map
-        (fn [%1] Any (js/get %1 ._tab))))
+(defn tabs-of [rows Any] Any
+  (js/call (js/call rows .filter (fn [%1 Any] Any (js/get %1 ._tab))) .map
+        (fn [%1 Any] Any (js/get %1 ._tab))))
 
 ;; Is the row's tab pinned?  Returns a bool.
 ;; Covers both tab-rows and the (.-dragSource ds) pattern.
-(defn row-pinned? [(row Any)] Any
+(defn row-pinned? [row Any] Any
   (bool (and (js/get row ._tab) (js/get (js/get row ._tab) .pinned))))
 
 ;; Cross-container routing follows the row's CONTAINER, not its tab's flag: a row
 ;; the pinned section shows is a pin target even if the two disagree, so a drop
 ;; onto it can never degrade into a same-container reorder.
-(defn in-pinned-section? [(row Any)] Any
+(defn in-pinned-section? [row Any] Any
   (bool (and row (same-node? (js/get row .parentNode) (js/get state .pinnedContainer)))))
 
 ;; Pretty-printer for a row -- used in log lines so we can correlate source
 ;; vs target across event boundaries without dumping the whole element.
-(defn row-desc! [(row Any)] Any
+(defn row-desc! [row Any] Any
   (cond
     (not row)
     {:row "null"}
@@ -62,18 +70,21 @@
     :else {:kind "?"}))
 
 ;; Parent-id for a tab dropped INTO a group.
-(defn find-group-context-parent [(group Any) (log-fn Any)] Any
-  (let [id (some-> group (js/get ._group) (js/get .id))]
+(defn find-group-context-parent
+  [group Any
+   log-fn Any]
+  Any
+  (let [id Any (some-> group (js/get ._group) (js/get .id))]
     (log-fn "findGroupContextParent"
             {:groupId id
              :groupLevel (or (some-> group (js/get ._group) (js/get .level)) 0)})
     id))
 
 ;; Closest preceding tab in DOM. Skips groups. Uses find-sib!.
-(defn find-closest-tab-before! [(row Any)] Any
-  (let [hit (find-sib! (js/get row .previousElementSibling)
-                      (fn [%1] Any (js/get %1 ._tab))
-                      (fn [%1] Any (js/get %1 .previousElementSibling)))]
+(defn find-closest-tab-before! [row Any] Any
+  (let [hit Any (find-sib! (js/get row .previousElementSibling)
+                      (fn [%1 Any] Any (js/get %1 ._tab))
+                      (fn [%1 Any] Any (js/get %1 .previousElementSibling)))]
     (and hit (js/get hit ._tab))))
 
 ;; Resolve the grid cell (.gjoa-tab-row / .gjoa-group-row) actually under the
@@ -84,16 +95,20 @@
 ;; the #101 imprecision. Hit-testing the real rects makes the drop land on the
 ;; cell the user is actually pointing at. Returns nil when the pointer is in a
 ;; grid gap (the caller then falls back to the listener's own row).
-(defn cell-under! [(container Any) (client-x Any) (client-y Any)] Any
-  (let [rows (when container
+(defn cell-under!
+  [container Any
+   client-x Any
+   client-y Any]
+  Any
+  (let [rows Any (when container
                (js/call container .querySelectorAll
                  ".gjoa-tab-row:not([hidden]), .gjoa-group-row:not([hidden])"))
-        found {:v nil}]
+        found (Map Keyword Any) {:v nil}]
     (when rows
       (js/call rows .forEach
-        (fn [r] Any
+        (fn [r Any] Any
           (when (not (js/get found .v))
-            (let [rect (js/call r .getBoundingClientRect)]
+            (let [rect Any (js/call r .getBoundingClientRect)]
               (when (and (>= client-x (js/get rect .left)) (< client-x (js/get rect .right))
                          (>= client-y (js/get rect .top)) (< client-y (js/get rect .bottom)))
                 (js/set! found .v r)))))))
@@ -101,25 +116,25 @@
 
 ;; Last tab inside the group's visual subtree, or -- if the group has no
 ;; tabs in its subtree -- the closest preceding tab before the group.
-(defn find-last-tab-in-group-or-before! [(group Any)] Any
-  (let [subtree-tabs (tabs-of (js/call (subtree-rows! group) .slice 1))]
+(defn find-last-tab-in-group-or-before! [group Any] Any
+  (let [subtree-tabs Any (tabs-of (js/call (subtree-rows! group) .slice 1))]
     (if (js/get subtree-tabs .length)
       (last-of subtree-tabs)
       (find-closest-tab-before! group))))
-(js/export (defn make-drag! [(deps Any)] Any
-  (let [clear-selection (js/get deps .clearSelection)
-        schedule-tree-resync (js/get deps .scheduleTreeResync)
-        schedule-save (js/get deps .scheduleSave)
-        log (create-logger! "tabs/drag")
+(js/export (defn make-drag! [deps Any] Any
+  (let [clear-selection Any (js/get deps .clearSelection)
+        schedule-tree-resync Any (js/get deps .scheduleTreeResync)
+        schedule-save Any (js/get deps .scheduleSave)
+        log Any (create-logger! "tabs/drag")
 
         ;; Closure-private drag/drop cycle state
-        ds {:dragSource nil
+        ds (Map Keyword Any) {:dragSource nil
             :dropIndicator nil
             :dropTarget nil
             :dropPosition nil}
 
         ;; --- clearDropIndicator ---
-        clear-drop-indicator (fn [] Any
+        clear-drop-indicator (Fn [] Any) (fn [] Any
           (when (js/get ds .dropIndicator)
             (js/call (js/get ds .dropIndicator) .remove))
           (js/set! ds .dropTarget nil)
@@ -127,19 +142,21 @@
 
         ;; The pinned section is `hidden` (0x0, no drag events) while empty, so the
         ;; into-empty-pinned path is unreachable unless the drag reveals it.
-        clear-drop-strip (fn [] Any
-          (let [pc (js/get state .pinnedContainer)]
+        clear-drop-strip (Fn [] Any) (fn [] Any
+          (let [pc Any (js/get state .pinnedContainer)]
             (when (and pc (has? pc "gjoa-drop-strip"))
               (rmattr! pc "gjoa-drop-strip")
               (js/set! pc .hidden (not (bool (q pc ".gjoa-tab-row")))))))
 
         ;; --- showDropIndicator ---
-        show-drop-indicator (fn [target-row position] Any
-          (when-not (js/get ds .dropIndicator)
-            (let [el (xul-new "box")]
+        show-drop-indicator (Fn [Any String] Any) (fn
+                                                    [target-row Any
+                                                     position String] Any
+                                                    (when-not (js/get ds .dropIndicator)
+            (let [el Any (xul-new "box")]
               (js/set! el .id "gjoa-drop-indicator")
               (js/set! ds .dropIndicator el)))
-          (let [ind (js/get ds .dropIndicator)]
+          (let [ind Any (js/get ds .dropIndicator)]
             (rmattr! ind "gjoa-drop-child")
             (rmattr! ind "gjoa-fixed")
             (css! ind "")
@@ -152,21 +169,21 @@
                 (when (not (same-node? (js/get ind .parentNode)
                                        (js/get document .documentElement)))
                   (js/call (js/get document .documentElement) .appendChild ind))
-                (let [rect (js/call target-row .getBoundingClientRect)
-                      s (js/get ind .style)]
+                (let [rect Any (js/call target-row .getBoundingClientRect)
+                      s Any (js/get ind .style)]
                   (attr! ind "gjoa-fixed" "true")
                   (js/set! s .position "fixed")
                   (if (= position "child")
                     (do
                       (attr! ind "gjoa-drop-child" "true")
                       (js/set! s .left (str (js/get rect .left) "px"))
-                      (js/set! s .top (let [(rect-bottom Float) (js/get rect .bottom)]
+                      (js/set! s .top (let [rect-bottom Float (js/get rect .bottom)]
                                         (str (- rect-bottom 1) "px")))
                       (js/set! s .width (str (js/get rect .width) "px"))
                       (js/set! s .height "2px"))
-                    (let [(rect-left Float) (js/get rect .left)
-                          (rect-right Float) (js/get rect .right)
-                          x-edge (if (= position "before")
+                    (let [rect-left Float (js/get rect .left)
+                          rect-right Float (js/get rect .right)
+                          x-edge Float (if (= position "before")
                                    (- rect-left 1)
                                    (- rect-right 1))]
                       (js/set! s .left (str x-edge "px"))
@@ -174,7 +191,7 @@
                       (js/set! s .width "2px")
                       (js/set! s .height (str (js/get rect .height) "px"))))))
               ;; Vertical mode
-              (let [lvl (level-of-row! target-row)]
+              (let [lvl Int (level-of-row! target-row)]
                 (cond
                   (= position "child")
                   (do (attr! ind "gjoa-drop-child" "true")
@@ -184,7 +201,7 @@
                   (js/call target-row .before ind)
 
                   :else
-                  (let [st (subtree-rows! target-row)]
+                  (let [st (Vec Any) (subtree-rows! target-row)]
                     (js/call (last-of st) .after ind)))
                 (js/set! (js/get ind .style) .marginInlineStart
                       (str (+ (* (if (= position "child") (+ lvl 1) lvl)
@@ -193,17 +210,20 @@
                            "px"))))))
 
         ;; --- executeDrop ---
-        execute-drop (fn [src-row tgt-row position] Any
-          (clear-drop-indicator)
-          (let [tgt-level (level-of-row! tgt-row)]
+        execute-drop (Fn [Any Any String] Any) (fn
+                                                 [src-row Any
+                                                  tgt-row Any
+                                                  position String] Any
+                                                 (clear-drop-indicator)
+          (let [tgt-level Int (level-of-row! tgt-row)]
             (if (not (data-of! tgt-row))
               (log "executeDrop:abort"
                    {:reason "no-tgt-data" :target (row-desc! tgt-row)})
-              (let [src-pinned (or (row-pinned? src-row)
+              (let [src-pinned Bool (or (row-pinned? src-row)
                                    (in-pinned-section? src-row))
-                    tgt-pinned (or (row-pinned? tgt-row)
+                    tgt-pinned Bool (or (row-pinned? tgt-row)
                                    (in-pinned-section? tgt-row))
-                    is-cross-container (not= src-pinned tgt-pinned)]
+                    is-cross-container Bool (not= src-pinned tgt-pinned)]
 
                 (log "executeDrop:enter"
                      {:source (row-desc! src-row) :target (row-desc! tgt-row)
@@ -211,7 +231,7 @@
                       :tgtPinned tgt-pinned :isCrossContainer is-cross-container
                       :tgtLevel tgt-level})
 
-                (let [moved-rows
+                (let [moved-rows (Vec Any)
                       (cond
                         (and is-cross-container (js/get src-row ._tab))
                         [src-row]
@@ -224,18 +244,18 @@
 
                         (and (> (js/get selection .size) 1)
                              (js/call selection .has src-row))
-                        (js/call (all-rows) .filter (fn [%1] Any (js/call selection .has %1)))
+                        (js/call (all-rows) .filter (fn [%1 Any] Any (js/call selection .has %1)))
 
                         :else
                         (subtree-rows! src-row))]
 
                   (if (not (js/get moved-rows .length))
                     (log "executeDrop:abort" {:reason "no-movedRows"})
-                    (let [src-level (level-of-row! (aget moved-rows 0))
-                          new-src-level (if (= position "child")
+                    (let [src-level Int (level-of-row! (aget moved-rows 0))
+                          new-src-level Int (if (= position "child")
                                           (+ tgt-level 1)
                                           tgt-level)
-                          delta (- new-src-level src-level)]
+                          delta Int (- new-src-level src-level)]
 
                       (log "executeDrop:plan"
                            {:movedRowsCount (js/get moved-rows .length)
@@ -243,7 +263,7 @@
                             :delta delta})
 
                       ;; Compute new parent for source
-                      (let [(parent-result Any) {:value nil
+                      (let [parent-result Any {:value nil
                                                   :branch "no-tab-no-group->null"}]
                         (cond
                           (js/get tgt-row ._tab)
@@ -264,20 +284,20 @@
                                     "group/child->groupId")
                               (js/set! parent-result .value
                                     (find-group-context-parent tgt-row log)))
-                            (let [group-level (or (some-> tgt-row (js/get ._group) (js/get .level)) 0)]
+                            (let [group-level Int (or (some-> tgt-row (js/get ._group) (js/get .level)) 0)]
                               (js/set! parent-result .branch
                                     (str "group/" position
                                          "->siblingOfGroup(level="
                                          group-level ")"))
                               (if (<= group-level 0)
                                 (js/set! parent-result .value nil)
-                                (let [enc (find-sib!
+                                (let [enc Any (find-sib!
                                             (js/get tgt-row .previousElementSibling)
-                                            (fn [prev] Any
+                                            (fn [prev Any] Any
                                               (and (js/get prev ._group)
                                                    (< (or (js/get (js/get prev ._group) .level) 0)
                                                       group-level)))
-                                            (fn [%1] Any (js/get %1 .previousElementSibling)))]
+                                            (fn [%1 Any] Any (js/get %1 .previousElementSibling)))]
                                   (js/set! parent-result .value
                                         (and enc (js/get (js/get enc ._group) .id)))))))
 
@@ -288,22 +308,22 @@
                               :newParentForSource (js/get parent-result .value)})
 
                         ;; Update parentId for top-level moved tabs
-                        (let [moved-set (js/new Set moved-rows)
-                              mutation-count {:v 0}]
+                        (let [moved-set Any (js/new Set moved-rows)
+                              mutation-count (Map Keyword Int) {:v 0}]
                           (js/call moved-rows .forEach
-                            (fn [r] Any
+                            (fn [r Any] Any
                               (cond
                                 (js/get r ._tab)
-                                (let [td (tree-data! (js/get r ._tab))
-                                      parent (tab-by-id
+                                (let [td Any (tree-data! (js/get r ._tab))
+                                      parent Any (tab-by-id
                                                (undef-or (js/get td .parentId) 0))]
                                   (when (or (not parent)
                                             (not (js/call moved-set .has
                                                    (js/call row-of .get parent))))
-                                    (let [old-pid (js/get td .parentId)]
+                                    (let [old-pid Any (js/get td .parentId)]
                                       (js/set! td .parentId
                                             (js/get parent-result .value))
-                                      (let [(mutations Int) (js/get mutation-count .v)]
+                                      (let [mutations Int (js/get mutation-count .v)]
                                         (js/set! mutation-count .v (+ mutations 1)))
                                       (log "executeDrop:mutate"
                                            {:tab (js/get (js/get r ._tab) .label)
@@ -313,7 +333,7 @@
                                               (js/get parent-result .value)}))))
 
                                 (js/get r ._group)
-                                (let [(group-level Int) (or (js/get (js/get r ._group) .level) 0)]
+                                (let [group-level Int (or (js/get (js/get r ._group) .level) 0)]
                                   (js/set! (js/get r ._group) .level
                                         (Math/max 0 (+ group-level delta))))
 
@@ -321,13 +341,13 @@
                           (log "executeDrop:mutations"
                                {:parentIdMutations (js/get mutation-count .v)}))
 
-                        (let [moved-tabs (tabs-of moved-rows)]
+                        (let [moved-tabs (Vec Any) (tabs-of moved-rows)]
 
                           ;; Cross-container: pin/unpin BEFORE computing
                           ;; targetIdx
                           (when is-cross-container
                             (js/call moved-tabs .forEach
-                              (fn [%1] Any (cond
+                              (fn [%1 Any] Any (cond
                                  (and tgt-pinned (not (js/get %1 .pinned)))
                                  (js/call gBrowser .pinTab %1)
 
@@ -336,8 +356,8 @@
 
                                  :else nil))))
 
-                          (let [tabs-arr (tabs!)
-                                idx-result {:targetIdx 0
+                          (let [tabs-arr (Vec Any) (tabs!)
+                                idx-result (Map Keyword Any) {:targetIdx 0
                                             :idxBranch ""}]
 
                             ;; Compute target index in Firefox's tab list
@@ -346,27 +366,27 @@
                               (js/get tgt-row ._group)
                               (if (= position "child")
                                 ;; Drop INTO group
-                                (let [sub-tabs
+                                (let [sub-tabs (Vec Any)
                                       (tabs-of
                                         (js/call (subtree-rows! tgt-row) .slice 1))]
                                   (if (js/get sub-tabs .length)
-                                    (let [(sub-count Int) (js/get sub-tabs .length)
-                                          (last-sub-idx Int) (js/call tabs-arr .indexOf
+                                    (let [sub-count Int (js/get sub-tabs .length)
+                                          last-sub-idx Int (js/call tabs-arr .indexOf
                                                                (aget sub-tabs (- sub-count 1)))
-                                          idx (+ last-sub-idx 1)]
+                                          idx Int (+ last-sub-idx 1)]
                                       (set-idx! idx-result idx
                                         (str "group/child->after-lastSubtreeTab@"
                                              (- idx 1))))
                                     ;; Empty group
-                                    (let [first-after-row
+                                    (let [first-after-row Any
                                           (find-sib!
                                             (js/get tgt-row .nextElementSibling)
-                                            (fn [%1] Any (js/get %1 ._tab))
-                                            (fn [%1] Any (js/get %1 .nextElementSibling)))
-                                          first-after
+                                            (fn [%1 Any] Any (js/get %1 ._tab))
+                                            (fn [%1 Any] Any (js/get %1 .nextElementSibling)))
+                                          first-after Any
                                           (some-> first-after-row (js/get ._tab))]
                                       (if first-after
-                                        (let [idx (js/call tabs-arr .indexOf
+                                        (let [idx Int (js/call tabs-arr .indexOf
                                                     first-after)]
                                           (set-idx! idx-result idx
                                             (str "group/child(empty)->before-firstAfterGroup@"
@@ -375,13 +395,13 @@
                                           (js/get tabs-arr .length)
                                           "group/child(empty,end)->tabsArr.length")))))
                                 ;; Drop BEFORE/AFTER group
-                                (let [anchor-tab
+                                (let [anchor-tab Any
                                       (if (= position "before")
                                         (find-closest-tab-before! tgt-row)
                                         (find-last-tab-in-group-or-before!
                                           tgt-row))]
                                   (if anchor-tab
-                                    (let [(anchor-idx Int) (js/call tabs-arr .indexOf anchor-tab)]
+                                    (let [anchor-idx Int (js/call tabs-arr .indexOf anchor-tab)]
                                       (set-idx! idx-result
                                         (+ anchor-idx 1)
                                         (str "group/" position
@@ -393,7 +413,7 @@
 
                               ;; target is a tab, position "before"
                               (= position "before")
-                              (let [idx (js/call tabs-arr .indexOf (js/get tgt-row ._tab))]
+                              (let [idx Int (js/call tabs-arr .indexOf (js/get tgt-row ._tab))]
                                 (set-idx! idx-result idx
                                   (str "tab/before->" idx)))
 
@@ -405,18 +425,18 @@
                               ;; BELOW the parent in its column), so that walk resolves to
                               ;; the column head and the moved tab lands leftmost — the
                               ;; move-skip bug. There, anchor on the target's OWN index.
-                              (let [tgt-subtree
+                              (let [tgt-subtree Any
                                     (when (not (is-horizontal))
                                       (js/call (js/call (subtree-rows! tgt-row) .slice) .reverse))
-                                    tgt-sub-row
-                                    (when tgt-subtree (js/call tgt-subtree .find (fn [%1] Any (js/get %1 ._tab))))
-                                    tgt-sub-tab
+                                    tgt-sub-row Any
+                                    (when tgt-subtree (js/call tgt-subtree .find (fn [%1 Any] Any (js/get %1 ._tab))))
+                                    tgt-sub-tab Any
                                     (some-> tgt-sub-row (js/get ._tab))
-                                    (tgt-idx Int) (if tgt-sub-tab
+                                    tgt-idx Int (if tgt-sub-tab
                                                      (js/call tabs-arr .indexOf tgt-sub-tab)
                                                      (js/call tabs-arr .indexOf
                                                        (js/get tgt-row ._tab)))
-                                    idx (+ tgt-idx 1)]
+                                    idx Int (+ tgt-idx 1)]
                                 (set-idx! idx-result idx
                                   (str "tab/" position "->after->" idx))))
 
@@ -435,19 +455,19 @@
 
                             ;; Mark tabs as moving
                             (js/call moved-tabs .forEach
-                              (fn [%1] Any (js/call moving-tabs .add %1)))
+                              (fn [%1 Any] Any (js/call moving-tabs .add %1)))
 
                             ;; Move Firefox tabs via gBrowser.moveTabTo
-                            (let [(insert-state Any)
+                            (let [insert-state Any
                                     {:idx (js/get idx-result .targetIdx)}
-                                  (move-count Any) {:v 0}]
+                                  move-count Any {:v 0}]
                               (js/call moved-tabs .forEach
-                                (fn [t] Any
-                                  (let [current-idx
+                                (fn [t Any] Any
+                                  (let [current-idx Int
                                         (js/call (tabs!) .indexOf
                                           t)]
                                     (when (>= current-idx 0)
-                                      (let [(insert-idx Int) (js/get insert-state .idx)]
+                                      (let [insert-idx Int (js/get insert-state .idx)]
                                         (when (< current-idx insert-idx)
                                           (js/set! insert-state .idx (- insert-idx 1))))
                                       (when (not= current-idx
@@ -460,33 +480,33 @@
                                         (js/call gBrowser .moveTabTo t
                                           {:tabIndex
                                             (js/get insert-state .idx)})
-                                        (let [(moves Int) (js/get move-count .v)]
+                                        (let [moves Int (js/get move-count .v)]
                                           (js/set! move-count .v (+ moves 1))))
-                                      (let [(insert-idx Int) (js/get insert-state .idx)]
+                                      (let [insert-idx Int (js/get insert-state .idx)]
                                         (js/set! insert-state .idx (+ insert-idx 1)))))))
                               (log "executeDrop:moveSummary"
                                    {:actualMoves (js/get move-count .v)
                                     :totalTabs (js/get moved-tabs .length)}))
 
                             ;; Move group rows in DOM
-                            (let [group-rows
-                                  (js/call moved-rows .filter (fn [%1] Any (js/get %1 ._group)))]
+                            (let [group-rows (Vec Any)
+                                  (js/call moved-rows .filter (fn [%1 Any] Any (js/get %1 ._group)))]
                               (when (js/get group-rows .length)
                                 (if (= position "before")
                                   (js/call group-rows .forEach
-                                    (fn [%1] Any (js/call tgt-row .before %1)))
-                                  (let [st (subtree-rows! tgt-row)
-                                        anchor-rows
+                                    (fn [%1 Any] Any (js/call tgt-row .before %1)))
+                                  (let [st (Vec Any) (subtree-rows! tgt-row)
+                                        anchor-rows (Vec Any)
                                         (js/call st .filter
-                                          (fn [%1] Any (not (js/call moved-rows .includes %1))))
-                                        (anchor-count Int) (js/get anchor-rows .length)
-                                        anchor
+                                          (fn [%1 Any] Any (not (js/call moved-rows .includes %1))))
+                                        anchor-count Int (js/get anchor-rows .length)
+                                        anchor Any
                                         (if (> anchor-count 0)
                                           (aget anchor-rows (- anchor-count 1))
                                           tgt-row)
-                                        last-ins {:v anchor}]
+                                        last-ins (Map Keyword Any) {:v anchor}]
                                     (js/call group-rows .forEach
-                                      (fn [%1] Any (do (js/call (js/get last-ins .v) .after %1)
+                                      (fn [%1 Any] Any (do (js/call (js/get last-ins .v) .after %1)
                                            (js/set! last-ins .v %1))))))
                                 (log "executeDrop:groupDOMMove"
                                      {:groupRowsCount
@@ -502,18 +522,18 @@
                             (when (and (js/get tgt-row ._group)
                                        (= position "child")
                                        (js/get src-row ._tab))
-                              (let [st (subtree-rows! tgt-row)
-                                    anchor-rows
+                              (let [st (Vec Any) (subtree-rows! tgt-row)
+                                    anchor-rows (Vec Any)
                                     (js/call st .filter
-                                      (fn [%1] Any (not (js/call moved-rows .includes %1))))
-                                    (anchor-count Int) (js/get anchor-rows .length)
-                                    anchor
+                                      (fn [%1 Any] Any (not (js/call moved-rows .includes %1))))
+                                    anchor-count Int (js/get anchor-rows .length)
+                                    anchor Any
                                     (if (> anchor-count 0)
                                       (aget anchor-rows (- anchor-count 1))
                                       tgt-row)
-                                    last-ins {:v anchor}]
+                                    last-ins (Map Keyword Any) {:v anchor}]
                                 (js/call moved-rows .forEach
-                                  (fn [%1] Any (do (js/call (js/get last-ins .v) .after %1)
+                                  (fn [%1 Any] Any (do (js/call (js/get last-ins .v) .after %1)
                                        (js/set! last-ins .v %1))))
                                 (log "executeDrop:tabIntoGroupDOMMove"
                                      {:movedRows (js/get moved-rows .length)})))
@@ -525,9 +545,9 @@
                             (requestAnimationFrame
                               (fn [] Any
                                 (js/call moved-tabs .forEach
-                                  (fn [%1] Any (js/call moving-tabs .delete %1)))
+                                  (fn [%1 Any] Any (js/call moving-tabs .delete %1)))
                                 (js/call moved-tabs .forEach
-                                  (fn [%1] Any (let [r (js/call row-of .get %1)]
+                                  (fn [%1 Any] Any (let [r Any (js/call row-of .get %1)]
                                      (when r
                                        (toggle! r "busy"
                                          (has? %1 "busy"))))))
@@ -540,18 +560,21 @@
 
         ;; --- handleContainerDrop ---
         ;; container-action: (fn [tab] ...) when dropTarget IS the container
-        handle-container-drop (fn [e container-ref container-action] Any
-          (js/call e .preventDefault)
-          (let [tab (js/get (js/get ds .dragSource) ._tab)
-                (client-x Float) (js/get e .clientX)
-                (client-y Float) (js/get e .clientY)
-                start-x (js/get ds .dragStartX)
-                start-y (js/get ds .dragStartY)
+        handle-container-drop (Fn [Any Any (Fn [Any] Any)] Any) (fn
+                                                                  [e Any
+                                                                   container-ref Any
+                                                                   container-action (Fn [Any] Any)] Any
+                                                                  (js/call e .preventDefault)
+          (let [tab Any (js/get (js/get ds .dragSource) ._tab)
+                client-x Float (js/get e .clientX)
+                client-y Float (js/get e .clientY)
+                start-x Any (js/get ds .dragStartX)
+                start-y Any (js/get ds .dragStartY)
                 ;; dragstart may never have run for this element, so the origin
                 ;; is a pointer coordinate only when it is actually a number.
-                (dx Float) (- client-x (if (number? start-x) start-x client-x))
-                (dy Float) (- client-y (if (number? start-y) start-y client-y))
-                moved-px2 (+ (* dx dx) (* dy dy))]
+                dx Float (- client-x (if (number? start-x) start-x client-x))
+                dy Float (- client-y (if (number? start-y) start-y client-y))
+                moved-px2 Float (+ (* dx dx) (* dy dy))]
             (cond
               ;; #124 ROOT FIX (extended): the row-level drop got a movement
               ;; threshold, but the panel / pinned-container drops did NOT — so a
@@ -581,26 +604,26 @@
             (clear-drop-strip)))
 
         ;; --- [gjoa-dragging] safety net ---
-        _ (onc! document "mousedown"
+        _ Any (onc! document "mousedown"
             (fn [] Any
               (when (= (js/get ds .dragSource) nil)
                 (js/call (qa document "[gjoa-dragging]") .forEach
-                  (fn [%1] Any (rmattr! %1 "gjoa-dragging"))))))
+                  (fn [%1 Any] Any (rmattr! %1 "gjoa-dragging"))))))
 
         ;; --- setupDrag ---
-        setup-drag (fn [row] Any
+        setup-drag (Fn [Any] Any) (fn [row Any] Any
           (js/set! row .draggable true)
 
           ;; dragstart
           (on! row "dragstart"
-            (fn [e] Any
-              (let [t (js/get e .target)]
+            (fn [e Any] Any
+              (let [t Any (js/get e .target)]
                 (if (and (js/get t .classList)
                          (js/call (js/get t .classList) .contains "gjoa-tab-close"))
                   (js/call e .preventDefault)
                   (do
                     (js/set! ds .dragSource row)
-                    (let [pc (js/get state .pinnedContainer)]
+                    (let [pc Any (js/get state .pinnedContainer)]
                       (when (and pc (not (row-pinned? row))
                                  (not (bool (q pc ".gjoa-tab-row"))))
                         (js/set! pc .hidden false)
@@ -611,7 +634,7 @@
                     (js/set! ds .dragStartX (js/get e .clientX))
                     (js/set! ds .dragStartY (js/get e .clientY))
                     (log "dragstart" {:source (row-desc! row)})
-                    (let [dt (js/get e .dataTransfer)]
+                    (let [dt Any (js/get e .dataTransfer)]
                       (js/set! dt .effectAllowed "move")
                       (js/call dt .setData "text/plain" ""))
                     (attr! row "gjoa-dragging" "true"))))))
@@ -632,24 +655,24 @@
               (clear-drop-strip)))
 
           ;; dragover
-          (let [(last-logged Any) {:v nil}]
+          (let [last-logged Any {:v nil}]
             (on! row "dragover"
-              (fn [e] Any
+              (fn [e Any] Any
                 (when (and (js/get ds .dragSource)
                            (not (same-node? (js/get ds .dragSource) row))
                            (not (js/call (subtree-rows! (js/get ds .dragSource)) .includes
                                   row)))
                   (js/call e .preventDefault)
                   (js/set! (js/get e .dataTransfer) .dropEffect "move")
-                  (let [horizontal (is-horizontal)
+                  (let [horizontal Bool (is-horizontal)
                         ;; #101: in horizontal mode the drop maps to the real grid
                         ;; cell under the pointer, not whichever row's per-row
                         ;; listener happened to fire (they diverge near a column/
                         ;; row boundary). Skip the resolved cell if it's the drag
                         ;; source or inside its subtree; fall back to the listener
                         ;; row when the pointer is in a grid gap.
-                        target (if horizontal
-                                 (let [c (cell-under! (js/get row .parentNode)
+                        target Any (if horizontal
+                                 (let [c Any (cell-under! (js/get row .parentNode)
                                            (js/get e .clientX) (js/get e .clientY))]
                                    (if (and c
                                             (not (same-node? c (js/get ds .dragSource)))
@@ -657,16 +680,16 @@
                                      c
                                      row))
                                  row)
-                        rect (js/call target .getBoundingClientRect)
-                        (rect-left Float) (js/get rect .left)
-                        (rect-top Float) (js/get rect .top)
-                        (rect-w Float) (js/get rect .width)
-                        (rect-h Float) (js/get rect .height)
-                        (ptr-x Float) (js/get e .clientX)
-                        (ptr-y Float) (js/get e .clientY)
-                        (x Float) (- ptr-x rect-left)
-                        (y Float) (- ptr-y rect-top)
-                        pos-info {:branch ""}]
+                        rect Any (js/call target .getBoundingClientRect)
+                        rect-left Float (js/get rect .left)
+                        rect-top Float (js/get rect .top)
+                        rect-w Float (js/get rect .width)
+                        rect-h Float (js/get rect .height)
+                        ptr-x Float (js/get e .clientX)
+                        ptr-y Float (js/get e .clientY)
+                        x Float (- ptr-x rect-left)
+                        y Float (- ptr-y rect-top)
+                        pos-info (Map Keyword String) {:branch ""}]
                     (if horizontal
                       (cond
                         ;; child only in the bottom QUARTER (was the lower third —
@@ -690,7 +713,7 @@
                             (js/set! pos-info .branch
                                   "hz/x>=w/2->after")))
                       ;; Vertical 3-zone on Y
-                      (let [zone (/ rect-h 3)]
+                      (let [zone Float (/ rect-h 3)]
                         (cond
                           (< y zone)
                           (do (js/set! ds .dropPosition "before")
@@ -725,15 +748,15 @@
 
           ;; dragleave
           (on! row "dragleave"
-            (fn [e] Any
-              (let [related (js/get e .relatedTarget)]
+            (fn [e Any] Any
+              (let [related Any (js/get e .relatedTarget)]
                 (when (and (not (js/call row .contains related))
                            (same-node? (js/get ds .dropTarget) row))
                   (clear-drop-indicator)))))
 
           ;; drop
           (on! row "drop"
-            (fn [e] Any
+            (fn [e Any] Any
               (js/call e .preventDefault)
               ;; Commit to the cell the dragover RESOLVED (#101): for the
               ;; horizontal grid that's the real cell under the pointer, which can
@@ -741,14 +764,14 @@
               ;; dragover computed dropPosition for that resolved cell, so the drop
               ;; must use it too. Falls back to the listener row when no dragover
               ;; ran (dropTarget unset).
-              (let [tgt (or (js/get ds .dropTarget) row)
-                    (client-x Float) (js/get e .clientX)
-                    (client-y Float) (js/get e .clientY)
-                    start-x (js/get ds .dragStartX)
-                    start-y (js/get ds .dragStartY)
-                    (dx Float) (- client-x (if (number? start-x) start-x client-x))
-                    (dy Float) (- client-y (if (number? start-y) start-y client-y))
-                    moved-px2 (+ (* dx dx) (* dy dy))]
+              (let [tgt Any (or (js/get ds .dropTarget) row)
+                    client-x Float (js/get e .clientX)
+                    client-y Float (js/get e .clientY)
+                    start-x Any (js/get ds .dragStartX)
+                    start-y Any (js/get ds .dragStartY)
+                    dx Float (- client-x (if (number? start-x) start-x client-x))
+                    dy Float (- client-y (if (number? start-y) start-y client-y))
+                    moved-px2 Float (+ (* dx dx) (* dy dy))]
                 (log "drop/row:fired"
                      {:listenerOnRow (row-desc! row)
                       :resolvedTarget (row-desc! tgt)
@@ -790,10 +813,10 @@
               (clear-drop-indicator))))
 
         ;; --- setupPinnedContainerDrop ---
-        setup-pinned-container-drop (fn [container] Any
+        setup-pinned-container-drop (Fn [Any] Any) (fn [container Any] Any
           ;; dragover
           (on! container "dragover"
-            (fn [e] Any
+            (fn [e Any] Any
               (when (and (js/get ds .dragSource)
                          (not (row-pinned? (js/get ds .dragSource)))
                          (same-node? (js/get e .target) container))
@@ -801,7 +824,7 @@
                   ;; including the divider band below the last row, appends to the
                   ;; pinned list. `:last-of-type` is tag-based and can resolve to a
                   ;; space-filtered row with a 0-height rect.
-                  (let [last-row (last-of (Array/from
+                  (let [last-row Any (last-of (Array/from
                                             (qa container ".gjoa-tab-row:not([hidden])")))]
                     (js/call e .preventDefault)
                     (js/set! (js/get e .dataTransfer) .dropEffect "move")
@@ -817,7 +840,7 @@
 
           ;; drop
           (on! container "drop"
-            (fn [e] Any
+            (fn [e Any] Any
               (log "drop/pinnedContainer:fired"
                    {:hasDragSource (bool (js/get ds .dragSource))
                     :srcPinned
@@ -827,33 +850,33 @@
                          (or (same-node? (js/get e .target) container)
                              (same-node? (js/get ds .dropTarget) container)))
                 (handle-container-drop e container
-                  (fn [%1] Any (js/call gBrowser .pinTab %1)))))))
+                  (fn [%1 Any] Any (js/call gBrowser .pinTab %1)))))))
 
         ;; --- setupPanelDrop ---
-        setup-panel-drop (fn [p] Any
+        setup-panel-drop (Fn [Any] Any) (fn [p Any] Any
           ;; dragover
           (on! p "dragover"
-            (fn [e] Any
+            (fn [e Any] Any
               (when (and (js/get ds .dragSource)
                          (or (same-node? (js/get e .target) p)
                              (same-node? (js/get e .target) (js/get state .spacer))))
-                (let [src-pinned (row-pinned? (js/get ds .dragSource))
-                      anchor {:v nil}]
+                (let [src-pinned Any (row-pinned? (js/get ds .dragSource))
+                      anchor (Map Keyword Any) {:v nil}]
                   (if src-pinned
                       (js/set! anchor .v
                             (q p
                               (str ".gjoa-tab-row:last-of-type, "
                                    ".gjoa-group-row:last-of-type")))
                       ;; Find last root-level row not in source subtree
-                      (let [src-subtree
+                      (let [src-subtree Any
                             (js/new Set (subtree-rows! (js/get ds .dragSource)))
-                            panel-rows
+                            panel-rows (Vec Any)
                             (Array/from
                               (qa p
                                 ".gjoa-tab-row, .gjoa-group-row"))]
-                        (loop [i (let [(panel-count Int) (js/get panel-rows .length)] (- panel-count 1))]
+                        (loop [i Int (let [panel-count Int (js/get panel-rows .length)] (- panel-count 1))]
                           (when (>= i 0)
-                            (let [candidate (aget panel-rows i)]
+                            (let [candidate Any (aget panel-rows i)]
                               (if (and (= (level-of-row! candidate) 0)
                                        (not (js/call src-subtree .has candidate)))
                                 (js/set! anchor .v candidate)
@@ -873,7 +896,7 @@
 
           ;; drop
           (on! p "drop"
-            (fn [e] Any
+            (fn [e Any] Any
               (log "drop/panel:fired"
                    {:eventTargetIsPanel (same-node? (js/get e .target) p)
                     :eventTargetIsSpacer
@@ -884,7 +907,7 @@
                              (same-node? (js/get e .target) (js/get state .spacer))
                              (same-node? (js/get ds .dropTarget) p)))
                 (handle-container-drop e p
-                  (fn [%1] Any (when (js/get %1 .pinned)
+                  (fn [%1 Any] Any (when (js/get %1 .pinned)
                      (js/call gBrowser .unpinTab %1))))))))]
 
     ;; Return public API
