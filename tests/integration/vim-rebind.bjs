@@ -35,7 +35,7 @@
 (def closePicker-js String
   "try{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));}catch(e){} try{const p=document.getElementById('gjoa-picker'); if(p) p.hidden=true; const s=document.querySelector('.gjoa-search-input'); if(s) s.remove();}catch(e){} return 1;")
 
-(defn key-action [(ch String)] Any
+(defn key-action [ch String] Any
   [{:type "key" :id "kbd"
     :actions [{:type "keyDown" :value ch} {:type "keyUp" :value ch}]}])
 
