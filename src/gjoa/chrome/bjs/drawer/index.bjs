@@ -13,40 +13,40 @@
 (declare-extern [document console window] Any)
 
 (defn init! [] Any
-  (let [sidebar-main (by-id "sidebar-container")
-        navigator-toolbox (by-id "navigator-toolbox")
-        urlbar-container (by-id "urlbar-container")
-        nav-bar (by-id "nav-bar")
-        urlbar (by-id "urlbar")]
+  (let [sidebar-main Any (by-id "sidebar-container")
+        navigator-toolbox Any (by-id "navigator-toolbox")
+        urlbar-container Any (by-id "urlbar-container")
+        nav-bar Any (by-id "nav-bar")
+        urlbar Any (by-id "urlbar")]
 
     (if (or (not sidebar-main) (not navigator-toolbox) (not urlbar-container) (not nav-bar))
       (js/call console .error "gjoa-drawer: missing required elements")
 
       ;; BEFORE make-layout!: the layout's first act is the reparent, and the
       ;; guard must already hold any activation the user aimed at the urlbar.
-      (let [focus-guard (make-focus-guard!)
+      (let [focus-guard Any (make-focus-guard!)
 
-            layout (make-layout! {:sidebarMain sidebar-main
+            layout Any (make-layout! {:sidebarMain sidebar-main
                                   :navigatorToolbox navigator-toolbox
                                   :urlbarContainer urlbar-container
                                   :navBar nav-bar
                                   :urlbar urlbar})
 
-            drag-overlay (make-drag-overlay! {:sidebarMain sidebar-main})
+            drag-overlay Any (make-drag-overlay! {:sidebarMain sidebar-main})
 
-            compact (make-compact! {:sidebarMain sidebar-main
+            compact Any (make-compact! {:sidebarMain sidebar-main
                                     :navigatorToolbox navigator-toolbox
                                     :urlbar urlbar})
 
-            state {:urlbar-api nil :urlbar-key nil}]
+            state Any {:urlbar-api nil :urlbar-key nil}]
 
         (when urlbar
           (js/set! state .urlbar-api (make-urlbar! {:urlbar urlbar}))
           ;; Held on `state` because the teardown MUST remove it: it lives on
           ;; `document`, which outlives the bundle across a hot-reload.
           (js/set! state .urlbar-key
-            (fn [e] Any
-              (let [accel (or (js/get e .ctrlKey) (js/get e .metaKey))]
+            (fn [e Any] Any
+              (let [accel Any (or (js/get e .ctrlKey) (js/get e .metaKey))]
                 (when (and accel (not (js/get e .shiftKey)) (not (js/get e .altKey)))
                   (when (or (= (js/get e .key) "l") (= (js/get e .key) "L"))
                     (js/call (js/get state .urlbar-api) .activateFloating "current"))))))
@@ -61,9 +61,9 @@
         ;; test (or a hot-reload) re-opens it on a live window.
         (js/set! window .gjoaFocusGuard focus-guard)
 
-        (let [sidebar-button (make-sidebar-button! {:sidebarMain sidebar-main
+        (let [sidebar-button Any (make-sidebar-button! {:sidebarMain sidebar-main
                                                     :compact compact})
-              banner (make-banner!)]
+              banner Any (make-banner!)]
 
           ;; Defensive: never let the omni-icon's creation break the rest of the
           ;; drawer (the unload teardown etc.). Logs the real error if it throws.
