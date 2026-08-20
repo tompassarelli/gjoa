@@ -24,23 +24,23 @@
   (console/error "ERROR: --runs must be >= 2 (first run is dropped as warm-up).")
   (js/call process .exit 1))
 
-(defn localGjoa [(name String)] Any
+(defn localGjoa [name String] Any
   ;; Check common locations: a freshly-built ./result/bin/gjoa under cwd.
   (when (= name "gjoa")
-    (let [local (str (js/call process .cwd) "/result/bin/gjoa")]
+    (let [local String (str (js/call process .cwd) "/result/bin/gjoa")]
       (try
-        (let [stat (js/call Bun .file local)]
+        (let [stat Any (js/call Bun .file local)]
           (when (> (js/get stat .size) 0)
             local))
         (catch (e Error) nil)))))
 
-(defn findBinary [(name String)] String
-  (let [local (localGjoa name)]
+(defn findBinary [name String] String
+  (let [local (U String Nil) (localGjoa name)]
     (if local
       local
       ;; Fall back to PATH
-      (let [result (js/call Bun .spawnSync ["which" name])
-            path (js/call (js/call (js/get result .stdout) .toString) .trim)]
+      (let [result Any (js/call Bun .spawnSync ["which" name])
+            path String (js/call (js/call (js/get result .stdout) .toString) .trim)]
         (if (and (= (js/get result .exitCode) 0) path)
           path
           (do
@@ -53,37 +53,39 @@
 
 (defn dropCaches [] Any
   (when (not SKIP-CACHE-DROP)
-    (let [result (js/call Bun .spawnSync ["sudo" "sh" "-c" "sync; echo 3 > /proc/sys/vm/drop_caches"])]
+    (let [result Any (js/call Bun .spawnSync ["sudo" "sh" "-c" "sync; echo 3 > /proc/sys/vm/drop_caches"])]
       (when (not= (js/get result .exitCode) 0)
         (console/error "WARN: failed to drop caches (not root?). Use --skip-cache-drop or run with sudo.")))))
 
-(defn measureColdStart! [(binary String) (windowPattern String)] Any
+(defn measureColdStart!
+  [binary String
+   windowPattern String] Any
   ;; Create a temporary profile directory
-  (let [profileDir (str (join (js/call process .cwd) "tools" "bench") "/.bench-profile-" (js/call Date .now))]
+  (let [profileDir String (str (join (js/call process .cwd) "tools" "bench") "/.bench-profile-" (js/call Date .now))]
     (js/call Bun .spawnSync ["mkdir" "-p" profileDir])
     (try
       (js/await (dropCaches))
       ;; Small delay to let caches settle
       (js/await (js/call Bun .sleep 100))
 
-      (let [start (js/call performance .now)
+      (let [start Float (js/call performance .now)
             ;; Launch browser with fresh profile, pointing at about:blank
-            browser (js/call Bun .spawn [binary
+            browser Any (js/call Bun .spawn [binary
                                  "--no-remote"
                                  "--profile" profileDir
                                  "about:blank"] {:stdout "ignore"
                              :stderr "ignore"})
             ;; Wait for window to become visible using xdotool
-            xdotool (js/call Bun .spawn ["xdotool" "search" "--sync" "--onlyvisible" "--name" windowPattern] {:stdout "pipe"
+            xdotool Any (js/call Bun .spawn ["xdotool" "search" "--sync" "--onlyvisible" "--name" windowPattern] {:stdout "pipe"
                              :stderr "ignore"})]
         ;; Timeout after 30 seconds — kill xdotool so its wait resolves.
-        (let [state (atom false)
-              timeout (setTimeout (fn [] Any (reset! state true)
+        (let [state (Atom Bool) (atom false)
+              timeout Int (setTimeout (fn [] Any (reset! state true)
                                     (js/call xdotool .kill)
                                     (js/call browser .kill))
                                   30000)
-              exitCode (js/await (js/get xdotool .exited))
-              elapsed (- (js/call performance .now) start)]
+              exitCode Any (js/await (js/get xdotool .exited))
+              elapsed Float (- (js/call performance .now) start)]
           (clearTimeout timeout)
 
           ;; Kill the browser
@@ -104,22 +106,25 @@
         ;; Clean up profile
         (js/call Bun .spawnSync ["rm" "-rf" profileDir])))))
 
-(defn runBenchmark! [(binary String) (label String) (windowPattern String)] Any
-  (let [times (atom [])]
+(defn runBenchmark!
+  [binary String
+   label String
+   windowPattern String] Any
+  (let [times (Atom (Vec Any)) (atom [])]
     (console/log (str "\n  Running " label " (" NUM-RUNS " runs)..."))
     (console/log (str "  Binary: " binary))
 
-    (doseq [i (range NUM-RUNS)]
-      (let [t (js/await (measureColdStart! binary windowPattern))]
+    (doseq [i Int (range NUM-RUNS)]
+      (let [t Float (js/await (measureColdStart! binary windowPattern))]
         (swap! times conj t)
         (js/call (js/get process .stdout) .write (str "    Run " (+ i 1) "/" NUM-RUNS ": " (js/call t .toFixed 1) " ms\n"))
         ;; Brief pause between runs
         (js/await (js/call Bun .sleep 500))))
 
     ;; Drop first run as warm-up
-    (let [results (js/call @times .slice 1)
-          ci (confidence-interval95 results)
-          med (median results)]
+    (let [results (Vec Any) (js/call @times .slice 1)
+          ci Any (confidence-interval95 results)
+          med Float (median results)]
       (console/log (str "\n  " label " results (excluding warm-up run):"))
       (console/log (str "    Median: " (js/call med .toFixed 1) " ms"))
       (console/log (str "    Mean:   " (js/call (js/get ci .mean) .toFixed 1) " ms  ["
