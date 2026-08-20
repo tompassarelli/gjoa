@@ -13,99 +13,110 @@
   (:require [acorn :refer [parse]]
             [gjoa.tools.projector.reflector :refer [child-nodes]]))
 
-(defn parse-js [(src String)] Any
+(defn parse-js [src String] Any
   (parse src {:ecmaVersion "latest" :sourceType "module" :allowHashBang true}))
 
 ;; all Identifier names in a subtree (the body fingerprint).
-(defn collect-idents [(node Any) (acc Any)] Any
+(defn collect-idents [node Any
+                     acc Any] Any
   (when (some? node)
     (when (= (js/get node .type) "Identifier") (js/call acc .add (js/get node .name)))
-    (doseq [k (child-nodes node)] (collect-idents k acc)))
+    (doseq [k Any (child-nodes node)] (collect-idents k acc)))
   acc)
 
-(defn idents-of [(body Any)] Any
+(defn idents-of [body Any] Any
   (js/call Array .from (collect-idents body (js/new Set))))
 
 ;; simple param names of a method's function value (Identifier params; others -> "?").
-(defn param-names [(methodNode Any)] Any
-  (js/call (js/get (js/get methodNode .value) .params) .map (fn [(p Any)] String (if (= (js/get p .type) "Identifier") (js/get p .name) "?"))))
+(defn param-names [methodNode Any] Any
+  (js/call (js/get (js/get methodNode .value) .params) .map (fn [p Any] String (if (= (js/get p .type) "Identifier") (js/get p .name) "?"))))
 
 ;; the direct MethodDefinitions of a named class, in order:
 ;; [{name node body params ordinal} …].
-(defn find-class [(n Any) (cname String)] Any
+(defn find-class [n Any
+                 cname String] Any
   (if (and (some? n) (or (= (js/get n .type) "ClassDeclaration") (= (js/get n .type) "ClassExpression"))
            (some? (js/get n .id)) (= (js/get (js/get n .id) .name) cname))
     n
-    (let [kids (child-nodes n)]
-      (loop [i 0]
+    (let [kids Any (child-nodes n)]
+      (loop [i Int 0]
         (if (< i (js/get kids .length))
-          (let [r (find-class (aget kids i) cname)] (if (some? r) r (recur (+ i 1))))
+          (let [r Any (find-class (aget kids i) cname)] (if (some? r) r (recur (+ i 1))))
           nil)))))
 
-(defn class-methods [(classNode Any)] Any
-  (let [out []]
+(defn class-methods [classNode Any] Any
+  (let [out (Vec Any) []]
     (when (some? classNode)
-      (doseq [cb (child-nodes classNode)]
+      (doseq [cb Any (child-nodes classNode)]
         (when (= (js/get cb .type) "ClassBody")
-          (let [n [0]]
-            (doseq [m (child-nodes cb)]
+          (let [n (Vec Int) [0]]
+            (doseq [m Any (child-nodes cb)]
               (when (and (= (js/get m .type) "MethodDefinition") (some? (js/get m .key))
                          (some? (js/get m .value)) (some? (js/get (js/get m .value) .body)))
                 (js/call out .push {:name (js/get (js/get m .key) .name) :node m :body (js/get (js/get m .value) .body)
                             :params (param-names m) :ordinal (aget n 0)})
-                (let [(ordinal Int) (aget n 0)]
+                (let [ordinal Int (aget n 0)]
                   (aset n 0 (+ ordinal 1)))))))))
     out))
 
 ;; capture an anchor fingerprint for class.method from a pristine source.
-(js/export (defn capture-anchor [(src String) (cname String) (mname String)] Any
-  (let [ast (parse-js src)
-        c (find-class ast cname)]
+(js/export (defn capture-anchor [src String
+                                cname String
+                                mname String] Any
+  (let [ast Any (parse-js src)
+       c Any (find-class ast cname)]
     (if (nil? c) nil
-      (let [ms (class-methods c)
-            hit (js/call ms .find (fn [(m Any)] Bool (= (js/get m .name) mname)))]
+      (let [ms Any (class-methods c)
+           hit Any (js/call ms .find (fn [m Any] Bool (= (js/get m .name) mname)))]
         (if (nil? hit) nil
           {:params (js/get hit .params) :ordinal (js/get hit .ordinal) :idents (idents-of (js/get hit .body))}))))))
 
-(defn arr= [(a Any) (b Any)] Bool
+(defn arr= [a Any
+           b Any] Bool
   (and (= (js/get a .length) (js/get b .length))
-       (js/call a .every (fn [(x Any) (i Int)] Bool (= x (aget b i))))))
+       (js/call a .every (fn [x Any
+                             i Int] Bool (= x (aget b i))))))
 
 ;; Jaccard overlap of two identifier arrays.
-(defn jaccard [(a Any) (b Any)] Float
-  (let [sa (js/new Set a) sb (js/new Set b)
-        inter (js/call (js/call Array .from sa) .filter (fn [(x Any)] Bool (js/call sb .has x)))
-        uni (js/new Set (js/call (js/call Array .from sa) .concat (js/call Array .from sb)))]
-    (let [(inter-count Int) (js/get inter .length)
-          (uni-count Int) (js/get uni .size)]
+(defn jaccard [a Any
+              b Any] Float
+  (let [sa Any (js/new Set a)
+       sb Any (js/new Set b)
+       inter Any (js/call (js/call Array .from sa) .filter (fn [x Any] Bool (js/call sb .has x)))
+       uni Any (js/new Set (js/call (js/call Array .from sa) .concat (js/call Array .from sb)))]
+    (let [inter-count Int (js/get inter .length)
+         uni-count Int (js/get uni .size)]
       (if (= uni-count 0) 0 (/ inter-count uni-count)))))
 
 ;; fuzzy-find the renamed target in `src`'s class `cname` given the anchor.
 ;; Returns {:name :body :confidence :why} for the best candidate, or nil. Confidence
 ;; couples body-identifier overlap (the dominant signal) with param-match and a
 ;; position bonus; ONLY trust it (caller's job) when it's high AND unambiguous.
-(js/export (defn fuzzy-find [(src String) (cname String) (anchor Any)] Any
-  (let [ast (parse-js src)
-        c (find-class ast cname)]
+(js/export (defn fuzzy-find [src String
+                            cname String
+                            anchor Any] Any
+  (let [ast Any (parse-js src)
+       c Any (find-class ast cname)]
     (if (nil? c) nil
-      (let [ms (class-methods c)
-            scored (js/call ms .map (fn [(m Any)] Any
-                     (let [j (jaccard (idents-of (js/get m .body)) (js/get anchor .idents))
-                           pm (if (arr= (js/get m .params) (js/get anchor .params)) 1.0 0.0)
-                           pos (if (= (js/get m .ordinal) (js/get anchor .ordinal)) 1.0 0.0)
-                           ;; body overlap dominates; params is a strong gate; position a nudge.
-                           score (+ (* 0.7 j) (* 0.25 pm) (* 0.05 pos))]
+      (let [ms Any (class-methods c)
+           scored Any (js/call ms .map (fn [m Any] Any
+                     (let [j Float (jaccard (idents-of (js/get m .body)) (js/get anchor .idents))
+                          pm Float (if (arr= (js/get m .params) (js/get anchor .params)) 1.0 0.0)
+                          pos Float (if (= (js/get m .ordinal) (js/get anchor .ordinal)) 1.0 0.0)
+                          ;; body overlap dominates; params is a strong gate; position a nudge.
+                          score Float (+ (* 0.7 j) (* 0.25 pm) (* 0.05 pos))]
                        {:name (js/get m .name) :node m :score score :j j :pm pm})))]
         (if (= (js/get scored .length) 0) nil
-          (let [sorted (js/call (js/call scored .slice) .sort
-                                (fn [(a Any) (b Any)] Float
-                                  (let [(a-score Float) (js/get a .score)
-                                        (b-score Float) (js/get b .score)]
+          (let [sorted Any (js/call (js/call scored .slice) .sort
+                                (fn [a Any
+                                    b Any] Float
+                                  (let [a-score Float (js/get a .score)
+                                       b-score Float (js/get b .score)]
                                     (- b-score a-score))))
-                best (aget sorted 0)
-                (best-score Float) (js/get best .score)
-                (second Float) (if (> (js/get sorted .length) 1) (js/get (aget sorted 1) .score) 0)
-                margin (- best-score second)]
+               best Any (aget sorted 0)
+               best-score Float (js/get best .score)
+               second Float (if (> (js/get sorted .length) 1) (js/get (aget sorted 1) .score) 0)
+               margin Float (- best-score second)]
             {:name (js/get best .name)
              :body [(js/get (js/get (js/get best .node) .body) .start) (js/get (js/get (js/get best .node) .body) .end)]
              :confidence (js/get best .score)
@@ -116,7 +127,7 @@
 ;; the policy gate: should we AUTO-RECOVER with this match, or fail loudly?
 ;; Conservative: require strong body overlap, param match, AND a clear margin over
 ;; the runner-up (so ambiguous twins are rejected, not mis-applied).
-(js/export (defn confident? [(match Any)] Bool
+(js/export (defn confident? [match Any] Bool
   (and (some? match)
        (>= (js/get match .j) 0.6)        ; body is mostly the same identifiers
        (= (js/get match .pm) 1.0)        ; same parameter list
