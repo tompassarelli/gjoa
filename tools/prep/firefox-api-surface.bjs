@@ -31,12 +31,12 @@
 ;; derive [{:global g :members [member ...]} ...] from `(.<member> <Global> ...)`
 ;; calls in chrome.
 (defn scan-surface [] Any
-  (let [result []]
-    (doseq [g GLOBALS]
-      (let [out (sh (str "grep -rhoE '\\(\\.[a-zA-Z]+ " g "\\b' " CHROME " 2>/dev/null") {:quiet true})
-            members []]
-        (doseq [line (js/call out .split "\n")]
-          (let [m (js/call line .match (js/new RegExp "\\(\\.([a-zA-Z]+)"))]
+  (let [result (Vec Any) []]
+    (doseq [g Any GLOBALS]
+      (let [out String (sh (str "grep -rhoE '\\(\\.[a-zA-Z]+ " g "\\b' " CHROME " 2>/dev/null") {:quiet true})
+            members (Vec Any) []]
+        (doseq [line String (js/call out .split "\n")]
+          (let [m Any (js/call line .match (js/new RegExp "\\(\\.([a-zA-Z]+)"))]
             (when (and m (not (js/call members .includes (aget m 1))))
               (js/call members .push (aget m 1)))))
         (when (> (js/get members .length) 0)
@@ -44,22 +44,22 @@
     result))
 
 ;; does `member` still appear in non-test engine/ source? (definition or use)
-(defn resolves? [(member String)] Bool
-  (let [hits (sh (str "grep -rl --include=*.js --include=*.jsm --include=*.mjs --include=*.webidl --include=*.idl "
+(defn resolves? [member String] Bool
+  (let [hits String (sh (str "grep -rl --include=*.js --include=*.jsm --include=*.mjs --include=*.webidl --include=*.idl "
                       "-e '" member "' " ENGINE " 2>/dev/null | grep -vE '/test/|/tests/|_test' | head -1") {:quiet true})]
     (> (js/get (js/call hits .trim) .length) 0)))
 
 (defn main! [] Any
-  (let [surface (scan-surface)
-        missing []
-        total [0]]
+  (let [surface Any (scan-surface)
+        missing (Vec Any) []
+        total (Vec Int) [0]]
     (console/log "Firefox-API seam ratchet — gjoa's chrome dependency on upstream host globals:\n")
-    (doseq [entry surface]
-      (let [g (js/get entry .global)
-            members (js/get entry .members)]
+    (doseq [entry Any surface]
+      (let [g Any (js/get entry .global)
+            members Any (js/get entry .members)]
         (console/log (str "  " g " (" (js/get members .length) " members)"))
-        (doseq [member members]
-          (let [(seen Int) (aget total 0)]
+        (doseq [member Any members]
+          (let [seen Int (aget total 0)]
             (aset total 0 (+ seen 1)))
           (when (not (resolves? member))
             (js/call missing .push (str g "." member))))))
@@ -68,7 +68,7 @@
       (console/log (str "✓ all " (aget total 0) " Firefox-API members resolve in non-test engine/ source — no drift."))
       (do
         (console/log (str "⚠ " (js/get missing .length) " of " (aget total 0) " members did NOT resolve in engine/ — review before shipping a bump:"))
-        (doseq [m missing] (console/log (str "    " m)))
+        (doseq [m Any missing] (console/log (str "    " m)))
         (js/call process .exit 1)))))
 
 (when (js/get (js/import-meta) .main)
