@@ -7,38 +7,40 @@
 (js/export (def DOMAIN-ORDER Any ["prefs" "windows" "tabs" "snapshots" "sidebar" "command"]))
 
 (js/export (defn make-scheduler! [] Any
-  (let [log (create-logger! "scheduler")
+  (let [log Any (create-logger! "scheduler")
         ;; Both maps are keyed by domain name — the DOMAIN-ORDER vocabulary.
-        (reconcilers (JsMap String (Vec Any))) (js/new Map)
-        (pending (JsMap String (Vec Any))) (js/new Map)
-        state {:pendingFlush nil
+        reconcilers (JsMap String (Vec Any)) (js/new Map)
+        pending (JsMap String (Vec Any)) (js/new Map)
+        state Any {:pendingFlush nil
                :pendingResolve nil
                :lastReconcileMs nil
                :destroyed false}]
 
-    (letfn [(get-dirty [domain] Any
+    (letfn [(get-dirty [domain String] Any
                       (or (js/call pending .get domain)
-                          (let [fresh []]
+                          (let [fresh (Vec Any) []]
                             (js/call pending .set domain fresh)
                             fresh)))
 
           (run-once [] Any
                      (when (not (js/get state .destroyed))
-                       (let [started-at (js/call performance .now)
+                       (let [started-at Float (js/call performance .now)
                              ;; Freeze the dirty set before clearing it. Written
                              ;; entry-by-entry because the stdlib models Map's
                              ;; zero-argument constructor only.
-                             snapshot (let [(snap (JsMap String (Vec Any))) (js/new Map)]
+                             snapshot (JsMap String (Vec Any)) (let [snap (JsMap String (Vec Any)) (js/new Map)]
                                         (js/call pending .forEach
-                                          (fn [reasons domain] Any (js/call snap .set domain reasons)))
+                                          (fn [reasons (Vec Any)
+                                               domain String] Any
+                                            (js/call snap .set domain reasons)))
                                         snap)]
                          (js/call pending .clear)
-                         (js/call DOMAIN-ORDER .forEach (fn [domain] Any
-                           (let [reasons (js/call snapshot .get domain)]
+                         (js/call DOMAIN-ORDER .forEach (fn [domain String] Any
+                           (let [reasons (Vec Any) (js/call snapshot .get domain)]
                              (when (and reasons (not= (js/get reasons .length) 0))
-                               (let [handlers (or (js/call reconcilers .get domain) [])]
+                               (let [handlers (Vec Any) (or (js/call reconcilers .get domain) [])]
                                  (js/call handlers .forEach
-                                   (fn [%1] Any (try (js/call %1 .run reasons)
+                                   (fn [%1 Any] Any (try (js/call %1 .run reasons)
                                       (catch (e Any)
                                         (log "reconciler:error"
                                              {:domain domain
@@ -50,35 +52,36 @@
           (schedule [] Any
                      (when (not (or (js/get state .pendingFlush) (js/get state .destroyed)))
                        (js/set! state .pendingFlush
-                             (js/new Promise (fn [resolve] Any
+                             (js/new Promise (fn [resolve Any] Any
                                (js/set! state .pendingResolve resolve)
                                (queueMicrotask (fn [] Any
                                  (try (run-once)
                                    (finally
-                                     (let [(co Any) {:v false}]
+                                     (let [co Any {:v false}]
                                        (js/call pending .forEach
-                                         (fn [%1] Any (when (> (js/get %1 .length) 0)
+                                         (fn [%1 Any] Any (when (> (js/get %1 .length) 0)
                                             (js/set! co .v true))))
                                        (js/set! state .pendingFlush nil)
-                                       (let [local-resolve (js/get state .pendingResolve)]
+                                       (let [local-resolve Any (js/get state .pendingResolve)]
                                          (js/set! state .pendingResolve nil)
                                          (when (js/get co .v) (schedule))
                                          (when local-resolve (local-resolve)))))))))))))
 
-          (register [reconciler] Any
-                     (let [list (or (js/call reconcilers .get (js/get reconciler .domain))
-                                   (let [fresh []]
+          (register [reconciler Any] Any
+                     (let [list (Vec Any) (or (js/call reconcilers .get (js/get reconciler .domain))
+                                   (let [fresh (Vec Any) []]
                                      (js/call reconcilers .set (js/get reconciler .domain) fresh)
                                      fresh))]
                        (js/call list .push reconciler))
                      (log "register" {:domain (js/get reconciler .domain)})
                      (fn [] Any
-                       (let [arr (js/call reconcilers .get (js/get reconciler .domain))]
+                       (let [arr (Vec Any) (js/call reconcilers .get (js/get reconciler .domain))]
                          (when arr
-                           (let [i (js/call arr .indexOf reconciler)]
+                           (let [i Int (js/call arr .indexOf reconciler)]
                              (when (>= i 0) (js/call arr .splice i 1)))))))
 
-          (mark-dirty [domain reason] Any
+          (mark-dirty [domain String
+                       reason Any] Any
                        (when (not (js/get state .destroyed))
                          (js/call (get-dirty domain) .push reason)
                          (schedule)))
@@ -91,7 +94,8 @@
                          (flush!))))))
 
           (diag [] Any
-                 (let [out (reduce (fn [acc domain] Any
+                 (let [out Any (reduce (fn [acc Any
+                                         domain String] Any
                                      (assoc acc domain (or (js/call pending .get domain) [])))
                                    {}
                                    DOMAIN-ORDER)]
