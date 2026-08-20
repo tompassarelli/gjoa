@@ -26,38 +26,37 @@
 ;; using value-`=` throws `ReferenceError: $$bc$equiv is not defined` at load
 ;; (the 2026-06-22 break). A plain `<export>` (no `as`) binds `<export>` itself.
 ;; Preflight Gate Q asserts every bundle local has its prelude binding.
-(defn rewrite-core-import [(clause String)] String
-  (let [binds (js/call (js/call (js/call clause .split ",") .map (fn [(c String)] String
-                        (let [t (js/call c .trim)]
+(defn rewrite-core-import [clause String] String
+  (let [binds (Vec Any) (js/call (js/call (js/call clause .split ",") .map (fn [c String] String
+                        (let [t String (js/call c .trim)]
                           (if (= (js/get t .length) 0)
                             ""
-                            (let [parts (js/call t .split (js/new RegExp "\\s+as\\s+"))
-                                  exp (js/call (aget parts 0) .trim)
-                                  loc (if (> (js/get parts .length) 1) (js/call (aget parts 1) .trim) exp)]
-                              (str loc " = $$bc." exp)))))) .filter (fn [(s String)] Bool (> (js/get s .length) 0)))]
+                            (let [parts (Vec String) (js/call t .split (js/new RegExp "\\s+as\\s+"))
+                                  exp String (js/call (aget parts 0) .trim)
+                                  loc String (if (> (js/get parts .length) 1) (js/call (aget parts 1) .trim) exp)]
+                              (str loc " = $$bc." exp)))))) .filter (fn [s String] Bool (> (js/get s .length) 0)))]
     (if (= (js/get binds .length) 0)
       ""
       (str "const " (js/call binds .join ", ") ";"))))
 
-(defn process-file [(code String)] Any
-  (let [exports []
-        processed
-        (js/call (js/call (js/call (js/call code .split "\n") .filter (fn [line] Any (cond
+(defn process-file [code String] Any
+  (let [exports (Vec Any) []
+        processed String (js/call (js/call (js/call (js/call code .split "\n") .filter (fn [line String] Any (cond
                   ;; KEEP beagle/core.js runtime imports — the map below rewrites
                   ;; them to a `window.$$bc`-backed const prelude (see above).
                   (js/call (js/new RegExp "from\\s+['\"][^'\"]*beagle/core\\.js['\"]") .test line) true
                   (and (js/call (js/new RegExp "^import\\s+") .test line)
                        (js/call (js/new RegExp "from\\s+['\"]") .test line)) false
                   (js/call (js/new RegExp "^import\\(") .test line) false
-                  :else true))) .map (fn [line] Any (let [core-match (js/call line .match (js/new RegExp "^import\\s*\\{([^}]*)\\}\\s*from\\s*['\"][^'\"]*beagle/core\\.js['\"]"))]
+                  :else true))) .map (fn [line String] Any (let [core-match Any (js/call line .match (js/new RegExp "^import\\s*\\{([^}]*)\\}\\s*from\\s*['\"][^'\"]*beagle/core\\.js['\"]"))]
                 (if core-match
                   (rewrite-core-import (aget core-match 1))
-                  (let [fn-match (js/call line .match (js/new RegExp "^export\\s+function\\s+(\\w+)"))]
+                  (let [fn-match Any (js/call line .match (js/new RegExp "^export\\s+function\\s+(\\w+)"))]
                     (if fn-match
                       (do
                         (js/call exports .push (aget fn-match 1))
                         (js/call line .replace (js/new RegExp "^export\\s+function\\s+(\\w+)") "$1 = function"))
-                      (let [decl-match (js/call line .match (js/new RegExp "^export\\s+(?:const|let|var)\\s+(\\w+)"))]
+                      (let [decl-match Any (js/call line .match (js/new RegExp "^export\\s+(?:const|let|var)\\s+(\\w+)"))]
                         (if decl-match
                           (do
                             (js/call exports .push (aget decl-match 1))
@@ -65,26 +64,24 @@
                           line)))))))) .join "\n")]
     {:code processed :exports exports}))
 
-(defn build-one [(entry Entry)] Any
-  (let [all-exports []
-        blocks []
-        files (js/get entry .files)
-        n (js/get files .length)
-        failed
-        (js/await
-          (loop [i 0]
+(defn build-one [entry Entry] Any
+  (let [all-exports (Vec Any) []
+        blocks (Vec Any) []
+        files (Vec String) (js/get entry .files)
+        n Int (js/get files .length)
+        failed (U Bool (U Bool Any)) (js/await
+          (loop [i Int 0]
             (if (>= i n)
               false
-              (let [file (aget files i)
-                    abs-path (join REPO-ROOT file)
-                    fail
-                    (js/await
+              (let [file Any (aget files i)
+                    abs-path String (join REPO-ROOT file)
+                    fail Bool (js/await
                       (try
-                        (let [raw (js/await (readFile abs-path "utf-8"))
-                              result (process-file raw)
-                              code (js/get result .code)
-                              exports (js/get result .exports)]
-                          (doseq [e exports]
+                        (let [raw String (js/await (readFile abs-path "utf-8"))
+                              result (Map Keyword Any) (process-file raw)
+                              code Any (js/get result .code)
+                              exports Any (js/get result .exports)]
+                          (doseq [e Any exports]
                             (js/call all-exports .push e))
                           (js/call blocks .push (str "{\n" code "\n}"))
                           false)
@@ -96,19 +93,19 @@
                   (recur (+ i 1)))))))]
     (if failed
       false
-      (let [unique (js/call Array .from (js/new Set all-exports))
-            var-decl (if (> (js/get unique .length) 0)
+      (let [unique (Vec Any) (js/call Array .from (js/new Set all-exports))
+            var-decl String (if (> (js/get unique .length) 0)
                        (str "var " (js/call unique .join ", ") ";\n\n")
                        "")
-            body (js/call blocks .join "\n\n")
-            iife (str "(function() {\n\"use strict\";\n" var-decl body "\n})();")
-            output (str (js/get entry .banner) "\n\n" iife)
-            out-path (join OUT-DIR (js/get entry .out))]
+            body String (js/call blocks .join "\n\n")
+            iife String (str "(function() {\n\"use strict\";\n" var-decl body "\n})();")
+            output String (str (js/get entry .banner) "\n\n" iife)
+            out-path String (join OUT-DIR (js/get entry .out))]
         (js/await (writeFile out-path output))
         (console/log (str "✓ " out-path "  (" (js/get body .length) " bytes)"))
         true))))
 
 (js/await (mkdir OUT-DIR {:recursive true}))
 (def results Any (js/await (js/call Promise .all (js/call entries .map build-one))))
-(when (js/call results .some (fn [ok] Any (not ok)))
+(when (js/call results .some (fn [ok Bool] Any (not ok)))
   (js/call process .exit 1))
