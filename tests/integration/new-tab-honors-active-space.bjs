@@ -63,7 +63,7 @@
       ")
 
      ;; CRITICAL: the new tab's space must be Workspace, NOT Main.
-     (let [sp (chrome-eval "
+     (let [sp Any (chrome-eval "
         const newTab = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"new-in-workspace\");
         const ws = window.Spaces.list().find(s => s.name === \"Workspace\");
         const main = window.Spaces.list().find(s => s.name === \"Main\");
@@ -79,7 +79,7 @@
                (str "new tab not in active Workspace. sp=" (JSON/stringify sp))))
 
      ;; And the row must be visible in the sidebar while Workspace is active.
-     (let [visible-in-workspace (chrome-eval "
+     (let [visible-in-workspace Any (chrome-eval "
         return [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row\")]
           .filter(r => !r.hidden)
           .some(r => r._tab && r._tab.getAttribute(\"gjoa-test-marker\") === \"new-in-workspace\");
@@ -108,7 +108,7 @@
      (await-true "
         return [...gBrowser.tabs].some(t => t.getAttribute(\"gjoa-test-marker\") === \"no-owner\");
       ")
-     (let [sp (chrome-eval "
+     (let [sp Any (chrome-eval "
         const t = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"no-owner\");
         const ws = window.Spaces.active();
         return { inActive: window.Spaces.spaceOf(t) === ws.id, activeName: ws.name };
