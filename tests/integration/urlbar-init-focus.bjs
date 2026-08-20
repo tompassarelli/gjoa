@@ -50,7 +50,7 @@
 ;; Schedule the startup DOM surgery `off` ms after the activation: dropping and
 ;; re-setting sidebar-launcher-expanded drives the SAME collapse/expand pair
 ;; drawer/layout.bjs runs at init, reparenting #urlbar-container both ways.
-(defn arm-js [(off Any)] String
+(defn arm-js [off Any] String
   (str "
   const sm = document.getElementById('sidebar-container');
   const inp = gURLBar.inputField;
@@ -101,7 +101,9 @@
 ;; transport can normalize the private-use character away.
 (def CTRL String (js/call String .fromCharCode 57353))
 
-(defn click-actions [(x Any) (y Any)] Any
+(defn click-actions
+  [x Any
+     y Any] Any
   [{:type "pointer" :id "m" :parameters {:pointerType "mouse"}
     :actions [{:type "pointerMove" :duration 0 :origin "viewport" :x x :y y}
               {:type "pointerDown" :button 0}
@@ -126,9 +128,9 @@
      (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 3000)
      (await-true SETTLE 6000)
 
-     (doseq [vector VECTORS]
-       (doseq [off OFFSETS]
-         (let [pt (JSON/parse (chrome-eval SETUP))]
+     (doseq [vector Any VECTORS]
+       (doseq [off Int OFFSETS]
+         (let [pt Any (JSON/parse (chrome-eval SETUP))]
            (cond
              (= vector "native")
                (chrome-eval "gURLBar.focus(); gURLBar.select(); return 1;")
@@ -137,11 +139,11 @@
              :else
                (js/await (js/call mn .performActions ctrl-l-actions)))
 
-           (let [armed (JSON/parse (chrome-eval (arm-js off)))]
+           (let [armed Any (JSON/parse (chrome-eval (arm-js off)))]
              (expect (js/get armed .active)
                (str vector " @" off "ms: the activation itself never reached the urlbar input"))
              (await-true "return !!(window.__gjoaInitFocus && window.__gjoaInitFocus.done);" 4000)
-             (let [st (JSON/parse (chrome-eval READ))]
+             (let [st Any (JSON/parse (chrome-eval READ))]
                (expect (js/get st .isInput)
                  (str vector " @" off "ms: the reparent took focus off the urlbar input — active="
                       (js/get st .activeId)))
@@ -162,8 +164,8 @@
      (await-true SETTLE 6000)
      ;; Blur BEFORE arming: an armed guard treats a bare blur as theft too (that
      ;; is the reparent's own signature), and the subject here is the click.
-     (let [pt (JSON/parse (chrome-eval SETUP))
-           before (chrome-eval "
+     (let [pt Any (JSON/parse (chrome-eval SETUP))
+          before Any (chrome-eval "
             Services.prefs.setIntPref('gjoa.urlbar.focusRescues', 0);
             window.gjoaFocusGuard.rearm();
             return Services.prefs.getIntPref('gjoa.urlbar.focusRescues', 0);
@@ -182,7 +184,7 @@
           return 1;
         ")
        (await-true "return window.__gjoaFrames >= 4;" 2000)
-       (let [st (JSON/parse (chrome-eval "
+       (let [st Any (JSON/parse (chrome-eval "
               return JSON.stringify({
                 active: document.activeElement ? (document.activeElement.id ||
                         document.activeElement.localName) : null,
@@ -205,8 +207,8 @@
      (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")
      (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 3000)
      (await-true SETTLE 6000)
-     (let [pt (JSON/parse (chrome-eval SETUP))
-           cpt (JSON/parse (chrome-eval CONTENT-POINT))]
+     (let [pt Any (JSON/parse (chrome-eval SETUP))
+          cpt Any (JSON/parse (chrome-eval CONTENT-POINT))]
        (chrome-eval "
           Services.prefs.setIntPref('gjoa.urlbar.focusRescues', 0);
           window.gjoaFocusGuard.rearm();
@@ -218,7 +220,7 @@
        (await-true "return document.activeElement === gBrowser.selectedBrowser;" 2000)
        (chrome-eval FOUR-FRAMES)
        (await-true "return window.__gjoaFrames >= 4;" 2000)
-       (let [st (JSON/parse (chrome-eval "
+       (let [st Any (JSON/parse (chrome-eval "
               return JSON.stringify({
                 onBrowser: document.activeElement === gBrowser.selectedBrowser,
                 active: document.activeElement ? (document.activeElement.id ||
@@ -238,7 +240,7 @@
      (expect (chrome-eval ENSURE-EXPANDED) "no #urlbar in this window")
      (await-true "return !!document.getElementById('gjoa-urlbar-toolbar');" 3000)
      (await-true SETTLE 6000)
-     (let [pt (JSON/parse (chrome-eval SETUP))]
+     (let [pt Any (JSON/parse (chrome-eval SETUP))]
        (chrome-eval "
           Services.prefs.setIntPref('gjoa.urlbar.focusRescues', 0);
           window.gjoaFocusGuard.rearm();
@@ -248,7 +250,7 @@
        (await-true "return document.activeElement === gURLBar.inputField; /* click landed */" 2000)
        (chrome-eval (str "gBrowser.selectedBrowser.focus();\n" FOUR-FRAMES))
        (await-true "return window.__gjoaFrames >= 4;" 2000)
-       (let [st (JSON/parse (chrome-eval "
+       (let [st Any (JSON/parse (chrome-eval "
               return JSON.stringify({
                 isInput: document.activeElement === gURLBar.inputField,
                 active: document.activeElement ? (document.activeElement.id ||
@@ -292,7 +294,7 @@
         return 1;
       ")
      (await-true "return window.__gjoaFrames >= 4;" 2000)
-     (let [st (JSON/parse (chrome-eval "
+     (let [st Any (JSON/parse (chrome-eval "
             return JSON.stringify({
               active: document.activeElement ? (document.activeElement.id ||
                       document.activeElement.localName) : null,
