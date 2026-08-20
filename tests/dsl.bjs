@@ -15,11 +15,13 @@
 ;; Use [mn ctx] when the body needs ctx (skip / restartGjoa). The params come
 ;; from the call site, so they are NOT gensym-renamed — that is what lets the
 ;; macros below reference `mn` for free.
-(defmacro deftest [name params & body]
+(defmacro deftest
+  [name Any
+     params Any & body (Vec Any)]
   `{:name ~name :run (fn ~params Any ~@body)})
 
 ;; (chrome-eval "return …;") → (js/await (js/call mn .executeScript "return …;"))
-(defmacro chrome-eval [script]
+(defmacro chrome-eval [script Any]
   `(js/await (js/call mn .executeScript ~script)))
 
 ;; (await-true "return cond;") → poll until the script returns truthy (1.5s).
@@ -28,23 +30,33 @@
 ;; `:refer wait-for` (the symbol resolves at the call site, not here). beagle
 ;; won't flag the missing import at compile time — it surfaces as a runtime
 ;; `wait_for is not defined`.
-(defmacro await-true [script & timeout]
+(defmacro await-true [script Any & timeout (Vec Any)]
   `(js/await (wait-for mn ~script ~@timeout)))
 
 ;; (expect cond "msg") → throw "msg" when cond is falsy.
-(defmacro expect [cond msg]
+(defmacro expect
+  [cond Any
+     msg Any]
   `(when (not ~cond) (throw (js/new Error ~msg))))
 
 ;; (expect-eq actual expected "msg") → throw when actual !== expected, with both
 ;; values in the message (str-coerced; no JSON dependency at the call site).
-(defmacro expect-eq [actual expected msg]
-  `(let [_a ~actual _e ~expected]
+(defmacro expect-eq
+  [actual Any
+     expected Any
+     msg Any]
+  `(let [_a Any ~actual
+        _e Any ~expected]
      (when (not= _a _e)
        (throw (js/new Error (str ~msg " — expected " _e ", got " _a))))))
 
 ;; (expect-includes haystack needle "msg") → throw when haystack lacks needle.
-(defmacro expect-includes [haystack needle msg]
-  `(let [_h ~haystack _n ~needle]
+(defmacro expect-includes
+  [haystack Any
+     needle Any
+     msg Any]
+  `(let [_h Any ~haystack
+        _n Any ~needle]
      (when (not (js/call _h .includes _n))
        (throw (js/new Error (str ~msg " — " _h " has no " _n))))))
 
@@ -53,22 +65,25 @@
 ;; Poll `script` (chrome JS returning a bool) until truthy or `timeout-ms`
 ;; (default 1.5s) elapses, then throw with the last error. 20ms cadence.
 (js/export (defn wait-for
-  ([(mn Any) (script String)] Any
+  ([mn Any
+   script String] Any
     (wait-for mn script nil))
-  ([(mn Any) (script String) (timeout-ms Any)] Any
-    (let [(timeout Int) (or timeout-ms 1500)
-          deadline (+ (Date/now) timeout)]
-      (loop [last-err nil]
+  ([mn Any
+   script String
+   timeout-ms Any] Any
+    (let [timeout Int (or timeout-ms 1500)
+         deadline Int (+ (Date/now) timeout)]
+      (loop [last-err Any nil]
         (if (< (Date/now) deadline)
-          (let [r (js/await
+          (let [r Any (js/await
                     (try
-                      (let [ok (js/await (js/call mn .executeScript script))]
+                      (let [ok Any (js/await (js/call mn .executeScript script))]
                         {:done ok :err last-err})
                       (catch (e Any) {:done false :err e})))]
             (if (:done r)
               nil
               (do
-                (js/await (js/new Promise (fn [res] Any (setTimeout (fn [] Any (res)) 20))))
+                (js/await (js/new Promise (fn [res Any] Any (setTimeout (fn [] Any (res)) 20))))
                 (recur (:err r)))))
           (throw (js/new Error
                    (str "timed out waiting for: " (js/call script .slice 0 160)
@@ -77,8 +92,8 @@
                           ""))))))))))
 
 ;; Resolve after `ms` milliseconds.
-(js/export (defn sleep [(ms Any)] Any
-  (js/await (js/new Promise (fn [res] Any (setTimeout (fn [] Any (res)) ms))))))
+(js/export (defn sleep [ms Any] Any
+  (js/await (js/new Promise (fn [res Any] Any (setTimeout (fn [] Any (res)) ms))))))
 
 ;; Navigate the selected tab to `url` and resolve when it finishes loading
 ;; (nsIWebProgressListener STATE_STOP|STATE_IS_WINDOW; 15s safety). Shared by the
