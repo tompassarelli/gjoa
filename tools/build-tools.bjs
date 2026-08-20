@@ -18,8 +18,8 @@
 ;; checkout of that same object. Never compile against the moving shared checkout.
 (def BEAGLE-REF-FILE String (join REPO-ROOT "configs" "beagle.ref"))
 (def BEAGLE-REF String
-  (let [lines (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
-        ref (js/call lines .find (fn [(l String)] Bool
+  (let [lines (Vec String) (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
+        ref Any (js/call lines .find (fn [l String] Bool
                            (and (> (js/get (js/call l .trim) .length) 0)
                                 (not (js/call (js/call l .trim) .startsWith "#")))))]
     (if ref
@@ -37,18 +37,18 @@
 (def SRC-DIRS Any ["tools" "tests"])
 
 ;; Recursively collect every *.bjs path under `dir` (synchronous — small tree).
-(defn find-bjs [(dir String)] Any
-  (let [out []
-        entries (readdirSync dir {:withFileTypes true})
-        n (js/get entries .length)]
-    (loop [i 0]
+(defn find-bjs [dir String] Any
+  (let [out (Vec Any) []
+        entries (Vec Any) (readdirSync dir {:withFileTypes true})
+        n Int (js/get entries .length)]
+    (loop [i Int 0]
       (when (< i n)
-        (let [entry (aget entries i)
-              full (join dir (js/get entry .name))]
+        (let [entry Any (aget entries i)
+              full String (join dir (js/get entry .name))]
           (if (js/call entry .isDirectory)
-            (let [sub (find-bjs full)
-                  m (js/get sub .length)]
-              (loop [j 0]
+            (let [sub (Vec String) (find-bjs full)
+                  m Int (js/get sub .length)]
+              (loop [j Int 0]
                 (when (< j m)
                   (js/call out .push (aget sub j))
                   (recur (+ j 1)))))
@@ -58,44 +58,47 @@
     out))
 
 ;; Recompile only when the source is newer than its output (or output missing).
-(defn stale? [(src String) (out String)] Bool
+(defn stale?
+  [src String
+   out String] Bool
   (if (existsSync out)
-    (let [out-m (js/get (statSync out) .mtimeMs)]
+    (let [out-m Any (js/get (statSync out) .mtimeMs)]
       (or (> (js/get (statSync src) .mtimeMs) out-m)
           (> (js/get (statSync BEAGLE-REF-FILE) .mtimeMs) out-m)))
     true))
 
 (defn run [] (Promise Any)
-  (let [files []
-        nd (js/get SRC-DIRS .length)]
-    (loop [d 0]
+  (let [files (Vec Any) []
+        nd Int (js/get SRC-DIRS .length)]
+    (loop [d Int 0]
       (when (< d nd)
-        (let [root (join REPO-ROOT (aget SRC-DIRS d))]
+        (let [root String (join REPO-ROOT (aget SRC-DIRS d))]
           (when (existsSync root)
-            (let [found (find-bjs root)
-                  m (js/get found .length)]
-              (loop [k 0] (when (< k m) (js/call files .push (aget found k)) (recur (+ k 1)))))))
+            (let [found (Vec String) (find-bjs root)
+                  m Int (js/get found .length)]
+              (loop [k Int 0] (when (< k m) (js/call files .push (aget found k)) (recur (+ k 1)))))))
         (recur (+ d 1))))
-    (let [sorted (js/call files .sort)
-          n (js/get sorted .length)
-          stale-count (loop [i 0 count 0]
+    (let [sorted (Vec Any) (js/call files .sort)
+          n Int (js/get sorted .length)
+          stale-count Int (loop [i Int 0
+                                 count Int 0]
                         (if (< i n)
-                          (let [src (aget sorted i)
-                                rel (relative REPO-ROOT src)
-                                out (join OUT-ROOT "gjoa" (js/call rel .replace (js/new RegExp "\\.bjs$") ".js"))]
+                          (let [src Any (aget sorted i)
+                                rel String (relative REPO-ROOT src)
+                                out String (join OUT-ROOT "gjoa" (js/call rel .replace (js/new RegExp "\\.bjs$") ".js"))]
                             (recur (+ i 1) (if (stale? src out) (+ count 1) count)))
                           count))]
       (if (= stale-count 0)
         (console/error (str "[2m[tools][0m compiled 0, " n " cached → .beagle-tools/gjoa/"))
-        (let [proc (js/call Bun .spawn {:cmd ["bash" BEAGLE-BUILD-ALL "tools" "tests" "--out" OUT-ROOT]
+        (let [proc Any (js/call Bun .spawn {:cmd ["bash" BEAGLE-BUILD-ALL "tools" "tests" "--out" OUT-ROOT]
                                         :cwd REPO-ROOT
                                         :stdout "pipe"
                                         :stderr "pipe"})
-              results (js/await (js/call Promise .all [(js/call (js/new Response (js/get proc .stdout)) .text)
+              results Any (js/await (js/call Promise .all [(js/call (js/new Response (js/get proc .stdout)) .text)
                                                        (js/call (js/new Response (js/get proc .stderr)) .text)
                                                        (js/get proc .exited)]))
-              code (aget results 2)
-              output (js/call (str (or (aget results 0) "") (or (aget results 1) "")) .trim)]
+              code Any (aget results 2)
+              output String (js/call (str (or (aget results 0) "") (or (aget results 1) "")) .trim)]
           (if (not= code 0)
             (do
               (console/error output)
