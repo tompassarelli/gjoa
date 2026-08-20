@@ -66,15 +66,15 @@
      (await-true "return !!(window.gjoaTest && window.gjoaTest.vim && document.getElementById('gjoa-tab-panel'));" 10000)
      ;; run EVERY case, collect mismatches, assert once — so one run shows the whole
      ;; gap surface instead of stopping at the first wrong row.
-     (let [fails []]
-       (doseq [c CASES]
+     (let [fails (Vec String) []]
+       (doseq [c Any CASES]
          ;; fresh tab per case → fresh _gjoaEditableFrames set (vim-content-focus path)
          (chrome-eval (str "var t=gBrowser.addTab('data:text/html,'+encodeURIComponent('<!DOCTYPE html><body style=\"height:2000px\">'+"
                            (JSON/stringify (js/get c .html))
                            "+'</body>'),{triggeringPrincipal:Services.scriptSecurityManager.getSystemPrincipal()});gBrowser.selectedTab=t;return 1;"))
          (await-true on-data-js 8000)
          (js/await (sleep 1200))
-         (let [verdict (chrome-eval editable-js)]
+         (let [verdict Any (chrome-eval editable-js)]
            (when (not= verdict (js/get c .editable))
              (js/call fails .push (str (js/get c .name) " (want " (js/get c .editable) ", got " verdict ")")))))
        (expect (= 0 (js/get fails .length))
