@@ -29,10 +29,10 @@ After editing src/gjoa/ or gjoa.json: `bun run import`.
 ;; fail-OPEN if the network probe can't run (e.g. offline) so it
 ;; never blocks legitimate work; it does ALWAYS produce output.
 (defn printSecurityBanner! [] Any
-  (let [(r Any) (try
+  (let [r Any (try
                    (js/await (check!))
                    (catch (e Error)
-                     (let [warn (js/get log .warn)]
+                     (let [warn Any (js/get log .warn)]
                        (warn (str "[security] check threw: " (js/get e .message) " — proceeding without status")))
                      nil))]
     (cond
@@ -40,12 +40,12 @@ After editing src/gjoa/ or gjoa.json: `bun run import`.
       nil
 
       (= (js/get r .status) "OK")
-      (let [ok (js/get log .ok)]
+      (let [ok Any (js/get log .ok)]
         (ok (str "[security] " (js/get r .summary))))
 
       :else
-      (let [bar (js/call "═" .repeat 72)
-            header (cond
+      (let [bar String (js/call "═" .repeat 72)
+            header String (cond
                      (= (js/get r .status) "CRITICAL") "🛑 SECURITY: CRITICAL"
                      (= (js/get r .status) "STALE")    "⚠  SECURITY: STALE"
                      :else                        "?  SECURITY: UNKNOWN")]
@@ -68,7 +68,7 @@ After editing src/gjoa/ or gjoa.json: `bun run import`.
         (console/error "")))))
 
 (defn main! [] Any
-  (let [cmd (aget (js/get process .argv) 2)]
+  (let [cmd Any (aget (js/get process .argv) 2)]
     (cond
       (= cmd "download")
       (do
@@ -78,7 +78,7 @@ After editing src/gjoa/ or gjoa.json: `bun run import`.
       (= cmd "import")
       (do
         (when (not (existsSync ENGINE-DIR))
-          (let [err (js/get log .error)]
+          (let [err Any (js/get log .error)]
             (err "engine/ does not exist — run `bun run download` first"))
           (js/call process .exit 1))
         (js/await (printSecurityBanner!))
@@ -86,12 +86,12 @@ After editing src/gjoa/ or gjoa.json: `bun run import`.
 
       (= cmd "clean")
       (if (existsSync ENGINE-DIR)
-        (let [step (js/get log .step)
-              ok (js/get log .ok)]
+        (let [step Any (js/get log .step)
+              ok Any (js/get log .ok)]
           (step "removing engine/")
           (js/await (rm ENGINE-DIR {:recursive true}))
           (ok "engine/ removed"))
-        (let [info (js/get log .info)]
+        (let [info Any (js/get log .info)]
           (info "engine/ already absent")))
 
       (or (= cmd "help") (= cmd "--help") (= cmd "-h"))
@@ -101,13 +101,13 @@ After editing src/gjoa/ or gjoa.json: `bun run import`.
       (do
         (console/error USAGE)
         (when cmd
-          (let [err (js/get log .error)]
+          (let [err Any (js/get log .error)]
             (err (str "unknown command: " cmd))))
         (js/call process .exit (if cmd 1 0))))))
 
 (js/call (main!) .catch
-  (fn [err] Any
-    (let [err-fn (js/get log .error)]
+  (fn [err Any] Any
+    (let [err-fn Any (js/get log .error)]
       (err-fn (or (js/get err .message) (String err))))
     (when (js/get (js/get process .env) .DEBUG)
       (console/error (js/get err .stack)))
