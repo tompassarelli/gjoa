@@ -20,7 +20,7 @@
 (js/export (def tests Any
   [(deftest "Spaces — window.Spaces is exposed with a default 'Main' space" [mn]
      (await-true "return !!window.Spaces && window.Spaces.list().length >= 1;")
-     (let [list (chrome-eval "return window.Spaces.list().map(s => ({ name: s.name }));")]
+     (let [list Any (chrome-eval "return window.Spaces.list().map(s => ({ name: s.name }));")]
        (expect (and (js/get list .length) (= (js/get (aget list 0) .name) "Main"))
                (str "expected default 'Main', got " (JSON/stringify list))))
      (expect-eq (chrome-eval "return window.Spaces.active().name;") "Main" "active space"))
@@ -28,7 +28,7 @@
    (deftest "Spaces — creating + switching hides original tabs and shows new-space tabs" [mn]
      ;; 0. Baseline: visible tabs in default space.
      (await-true "return !!window.Spaces;")
-     (let [before (chrome-eval (visible-tab-rows))]
+     (let [before Any (chrome-eval (visible-tab-rows))]
        ;; 1. Create a "Work" space and switch to it.
        (chrome-eval "
         const s = window.Spaces.create(\"Work\");
@@ -114,7 +114,7 @@
      (expect-eq (chrome-eval "return window.Spaces.active().name;") "Main"
                 "active space after deleting Doomed")
      ;; Orphan tab: spaceOf must return default (active), and isVisible must be true.
-     (let [orphan (chrome-eval "
+     (let [orphan Any (chrome-eval "
         const t = window.Spaces._testOrphanTab;
         const def = window.Spaces.list()[0].id;
         return { vis: window.Spaces.isVisible(t), sid: window.Spaces.spaceOf(t), defId: def };
