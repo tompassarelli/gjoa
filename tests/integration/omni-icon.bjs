@@ -13,7 +13,7 @@
      ;; exists, so await the button itself — not just the nav-bar — to avoid
      ;; racing the bundle's load.
      (await-true "return !!document.getElementById('gjoa-omni-icon-button');" 5000)
-     (let [r (chrome-eval "
+     (let [r Any (chrome-eval "
         const btn = document.getElementById('gjoa-omni-icon-button');
         const menu = document.getElementById('gjoa-omni-icon-menu');
         const items = menu ? [...menu.querySelectorAll('menuitem')].map(m => m.getAttribute('label')) : [];
