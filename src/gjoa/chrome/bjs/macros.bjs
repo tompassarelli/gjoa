@@ -1,70 +1,99 @@
 #lang beagle/js
 (ns gjoa.macros)
-(defmacro pref-bool [name default]
+(defmacro pref-bool
+  [name Any
+   default Any]
   `(try (js/call (js/get Services .prefs) .getBoolPref ~name ~default)
         (catch (_e Any) ~default)))
 
-(defmacro pref-int [name default]
+(defmacro pref-int
+  [name Any
+   default Any]
   `(try (js/call (js/get Services .prefs) .getIntPref ~name ~default)
         (catch (_e Any) ~default)))
 
-(defmacro pref-str [name default]
+(defmacro pref-str
+  [name Any
+   default Any]
   `(try (js/call (js/get Services .prefs) .getStringPref ~name ~default)
         (catch (_e Any)
           (try (js/call (js/get Services .prefs) .getCharPref ~name ~default)
                (catch (_e2 Any) ~default)))))
 
-(defmacro set-pref-bool! [name value]
+(defmacro set-pref-bool!
+  [name Any
+   value Any]
   `(try (js/call (js/get Services .prefs) .setBoolPref ~name ~value)
         (catch (_e Any) nil)))
 
-(defmacro set-pref-int! [name value]
+(defmacro set-pref-int!
+  [name Any
+   value Any]
   `(try (js/call (js/get Services .prefs) .setIntPref ~name ~value)
         (catch (_e Any) nil)))
 
-(defmacro set-pref-str! [name value]
+(defmacro set-pref-str!
+  [name Any
+   value Any]
   `(try (js/call (js/get Services .prefs) .setStringPref ~name ~value)
         (catch (_e Any) nil)))
-(defmacro key= [e k]
+(defmacro key=
+  [e Any
+   k Any]
   `(= (js/get e .key) ~k))
-(defmacro xul-new [tag]
+(defmacro xul-new [tag Any]
   `(js/call document .createXULElement ~tag))
 
-(defmacro html-new [tag]
+(defmacro html-new [tag Any]
   `(js/call document .createElement ~tag))
-(defmacro attr! [el name value]
+(defmacro attr!
+  [el Any
+   name Any
+   value Any]
   `(js/call el .setAttribute ~name ~value))
 ;; NOTE: mi/sep expand to primitives (not the xul-new/attr! macros) so any
 ;; consumer of mi/sep need not also :refer those macros. beagle's syntax-quote
 ;; is non-hygienic (does not namespace-qualify symbols), so a macro that expands
 ;; to another macro only resolves if the *use site* imports the inner macro too.
 ;; Keeping these self-contained avoids that footgun. See task #13.
-(defmacro mi [label handler]
-  `(let [_item (js/call document .createXULElement "menuitem")]
+(defmacro mi
+  [label Any
+   handler Any]
+  `(let [_item Any (js/call document .createXULElement "menuitem")]
      (js/call _item .setAttribute "label" ~label)
      (js/call _item .addEventListener "command" ~handler)
      _item))
 
 (defmacro sep []
   `(js/call document .createXULElement "menuseparator"))
-(defmacro dispatch-key [e guard-name action]
+(defmacro dispatch-key
+  [e Any
+   guard-name Any
+   action Any]
   `(if (not (key-enabled ~guard-name)) false
      (do (js/call e .preventDefault) (js/call e .stopImmediatePropagation)
          ~action true)))
-(defmacro with-ctx [row-binding body]
+(defmacro with-ctx
+  [row-binding Any
+   body Any]
   `(when (js/get state .contextTab)
-     (let [~row-binding (js/call row-of .get (js/get state .contextTab))]
+     (let [~row-binding Any (js/call row-of .get (js/get state .contextTab))]
        (when ~row-binding ~body))))
-(defmacro with-tab [action]
+(defmacro with-tab [action Any]
   `(when (js/get state .contextTab) (~action (js/get state .contextTab))))
-(defmacro walk-sibs [start callback]
-  `(let [_cb ~callback]
-     (letfn [(_walk [(_n Any)] Any
+(defmacro walk-sibs
+  [start Any
+   callback Any]
+  `(let [_cb Any ~callback]
+     (letfn [(_walk [_n Any] Any
                (when _n
                  (_cb _n)
                  (_walk (js/get _n .nextElementSibling))))]
        (_walk ~start))))
-(defmacro on! [el event handler]
+(defmacro on!
+  [el Any
+   event Any
+   handler Any]
   `(js/call el .addEventListener ~event ~handler))
 ;; Register a once-listener. For window "unload" handlers this ALSO pushes the
 ;; handler into the loader's hot-reload teardown registry (window.__gjoaHR) — so
@@ -72,46 +101,81 @@
 ;; bundle can forget to register its teardown (by construction: every bundle's
 ;; main teardown IS its unload handler). Non-window / non-unload uses are inert:
 ;; the runtime guard skips anything without __gjoaHR.
-(defmacro on1! [el event handler]
-  `(let [_el ~el _ev ~event _h ~handler]
+(defmacro on1!
+  [el Any
+   event Any
+   handler Any]
+  `(let [_el Any ~el
+         _ev Any ~event
+         _h Any ~handler]
      (js/call _el .addEventListener _ev _h {:once true})
      (when (and (= _ev "unload") (js/get _el .__gjoaHR) (js/get (js/get _el .__gjoaHR) .teardowns))
        (js/call (js/get (js/get _el .__gjoaHR) .teardowns) .push _h))
      _h))
-(defmacro xul [tag cls]
-  `(let [_e (js/call document .createXULElement ~tag)]
+(defmacro xul
+  [tag Any
+   cls Any]
+  `(let [_e Any (js/call document .createXULElement ~tag)]
      (js/set! _e .className ~cls) _e))
-(defmacro htm [tag cls]
-  `(let [_e (js/call document .createElement ~tag)]
+(defmacro htm
+  [tag Any
+   cls Any]
+  `(let [_e Any (js/call document .createElement ~tag)]
      (js/set! _e .className ~cls) _e))
-(defmacro xul-id [tag id]
-  `(let [_e (js/call document .createXULElement ~tag)]
+(defmacro xul-id
+  [tag Any
+   id Any]
+  `(let [_e Any (js/call document .createXULElement ~tag)]
      (js/set! _e .id ~id) _e))
-(defmacro bool [x]
+(defmacro bool [x Any]
   `(boolean ~x))
-(defmacro has? [el name]
+(defmacro has?
+  [el Any
+   name Any]
   `(js/call el .hasAttribute ~name))
-(defmacro rmattr! [el name]
+(defmacro rmattr!
+  [el Any
+   name Any]
   `(js/call el .removeAttribute ~name))
-(defmacro toggle! [el name value]
+(defmacro toggle!
+  [el Any
+   name Any
+   value Any]
   `(js/call el .toggleAttribute ~name ~value))
-(defmacro undef-or [val fallback]
+(defmacro undef-or
+  [val Any
+   fallback Any]
   `(if (not= ~val undefined) ~val ~fallback))
-(defmacro css! [el text]
+(defmacro css!
+  [el Any
+   text Any]
   `(js/set! (js/get el .style) .cssText ~text))
-(defmacro onc! [el event handler]
+(defmacro onc!
+  [el Any
+   event Any
+   handler Any]
   `(js/call el .addEventListener ~event ~handler true))
-(defmacro off! [el event handler]
+(defmacro off!
+  [el Any
+   event Any
+   handler Any]
   `(js/call el .removeEventListener ~event ~handler))
-(defmacro offc! [el event handler]
+(defmacro offc!
+  [el Any
+   event Any
+   handler Any]
   `(js/call el .removeEventListener ~event ~handler true))
 (defmacro tabs! []
   `(Array/from (js/get gBrowser .tabs)))
-(defmacro by-id [id]
+(defmacro by-id [id Any]
   `(js/call document .getElementById ~id))
-(defmacro q [el sel]
+(defmacro q
+  [el Any
+   sel Any]
   `(js/call el .querySelector ~sel))
-(defmacro qa [el sel]
+(defmacro qa
+  [el Any
+   sel Any]
   `(js/call el .querySelectorAll ~sel))
 ;; ---- error handling ----
 ;; guard!: run body, log+swallow any throw. quiet!: run body, swallow silently
@@ -119,16 +183,20 @@
 ;; resolves at the USE SITE (non-hygienic syntax-quote; see the mi/sep note
 ;; above), so the calling fn must have `console` in scope. The wrapping fn stays
 ;; effectful — keep its `!` (E019).
-(defmacro guard! [label & body]
+(defmacro guard!
+  [label Any
+   & body (Vec Any)]
   `(try (do ~@body)
         (catch (_e Any) (js/call console .error ~label _e))))
-(defmacro quiet! [fallback & body]
+(defmacro quiet!
+  [fallback Any
+   & body (Vec Any)]
   `(try (do ~@body)
         (catch (_e Any) ~fallback)))
 ;; ---- array ----
 ;; last element without the hand-rolled `(- (.-length x) 1)` off-by-one math.
 ;; Evaluates the array once (so it's also safe on a side-effecting expression).
-(defmacro last-of [arr]
+(defmacro last-of [arr Any]
   `(let [_a ~arr
-         (_n Int) (js/get _a .length)]
+         _n Int (js/get _a .length)]
      (aget _a (- _n 1))))
