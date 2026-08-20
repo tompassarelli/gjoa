@@ -17,31 +17,45 @@
 (def GJOA-JSON String (join REPO-ROOT "gjoa.json"))
 
 (def tty Any (js/get (js/get process .stdout) .isTTY))
-(defn c [(s String) (code String)] String
+(defn c
+  [s String
+   code String] String
   (if tty (str "[" code "m" s "[0m") s))
-(defn green [(s String)] String (c s "32"))
-(defn red [(s String)] String (c s "31"))
-(defn yellow [(s String)] String (c s "33"))
-(defn dim [(s String)] String (c s "2"))
-(defn bold [(s String)] String (c s "1"))
+(defn green [s String] String (c s "32"))
+(defn red [s String] String (c s "31"))
+(defn yellow [s String] String (c s "33"))
+(defn dim [s String] String (c s "2"))
+(defn bold [s String] String (c s "1"))
 
 ;; Accumulated GateResult records (plain JS objects):
 ;;   {:id :name :passed :warned :detail :fix}
 (def results Any [])
 
-(defn pass [(id String) (name String) (detail String)] Any
+(defn pass
+  [id String
+   name String
+   detail String] Any
   (js/call results .push {:id id :name name :passed true :detail detail}))
-(defn fail [(id String) (name String) (detail String) (fix String)] Any
+(defn fail
+  [id String
+   name String
+   detail String
+   fix String] Any
   (js/call results .push {:id id :name name :passed false :detail detail :fix fix}))
 ;; A WARN does not fail the gate (passed: true) but flags a non-fatal,
 ;; inconclusive result the operator should be aware of — e.g. a nix eval that
 ;; timed out rather than genuinely failed.
-(defn warn [(id String) (name String) (detail String)] Any
+(defn warn
+  [id String
+   name String
+   detail String] Any
   (js/call results .push {:id id :name name :passed true :warned true :detail detail}))
 
-(defn sh [(cmd String) (opts Any)] Any
+(defn sh
+  [cmd String
+   opts Any] Any
   (try
-    (let [out (execSync cmd {:encoding "utf8"
+    (let [out Any (execSync cmd {:encoding "utf8"
                              :timeout (or (js/get opts .timeout) 30000)
                              :stdio ["ignore" "pipe" "pipe"]})]
       {:ok true :out out})
@@ -49,25 +63,25 @@
       ;; A timeout (execSync sends SIGTERM and sets code 'ETIMEDOUT') is not a
       ;; real failure of the command — surface it so callers can WARN/skip
       ;; rather than treat it as a hard error.
-      (let [timedOut (or (= (js/get e .code) "ETIMEDOUT") (= (js/get e .signal) "SIGTERM"))
-            stderr (if (js/get e .stderr) (js/call (js/get e .stderr) .toString) "")
-            stdout (if (js/get e .stdout) (js/call (js/get e .stdout) .toString) "")]
+      (let [timedOut Bool (or (= (js/get e .code) "ETIMEDOUT") (= (js/get e .signal) "SIGTERM"))
+            stderr (U Any String) (if (js/get e .stderr) (js/call (js/get e .stderr) .toString) "")
+            stdout (U Any String) (if (js/get e .stdout) (js/call (js/get e .stdout) .toString) "")]
         {:ok false
          :timedOut timedOut
          :out (or (str stderr stdout) (js/get e .message))}))))
 
 ;; ── Gate A: patches apply cleanly against fresh source ─────────────────────
 (defn gateA! [] Any
-  (let [cache (str (js/get (js/get process .env) .HOME) "/.cache/gjoa/sources")
-        gjoa (js/call JSON .parse (readFileSync GJOA-JSON "utf8"))
-        tarball (str cache "/firefox-" (js/get (js/get gjoa .firefox) .version) ".source.tar.xz")]
+  (let [cache String (str (js/get (js/get process .env) .HOME) "/.cache/gjoa/sources")
+        gjoa Any (js/call JSON .parse (readFileSync GJOA-JSON "utf8"))
+        tarball String (str cache "/firefox-" (js/get (js/get gjoa .firefox) .version) ".source.tar.xz")]
     (if (not (existsSync tarball))
       (fail "A" "patches apply clean on fresh source"
         (str "tarball not cached at " tarball)
         "run `bun run download` to populate the cache")
-      (let [tmp "/tmp/gjoa-preflight-engine"]
+      (let [tmp String "/tmp/gjoa-preflight-engine"]
         (sh (str "rm -rf " tmp " && mkdir -p " tmp) {})
-        (let [extract (sh (str "tar -xJf " tarball " -C " tmp " --strip-components=1") {:timeout 180000})]
+        (let [extract Any (sh (str "tar -xJf " tarball " -C " tmp " --strip-components=1") {:timeout 180000})]
           (if (not (js/get extract .ok))
             (fail "A" "patches apply clean on fresh source" "tarball extract failed" (js/call (js/get extract .out) .slice 0 400))
             (do
@@ -75,22 +89,22 @@
               ;; Apply patches cumulatively in the same order as `bun run import`.
               ;; Mutate `tmp` so each patch sees its predecessors, and stop on the
               ;; first failed apply because later patches depend on that tree.
-              (let [patches (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [p] Any (js/call p .endsWith ".patch"))) .sort)
-                    failed []
-                    drifted []
-                    stopped (atom false)]
-                (doseq [p patches]
+              (let [patches (Vec Any) (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [p String] Any (js/call p .endsWith ".patch"))) .sort)
+                    failed (Vec Any) []
+                    drifted (Vec Any) []
+                    stopped (Atom Bool) (atom false)]
+                (doseq [p Any patches]
                   (when (not @stopped)
-                    (let [path (join PATCHES-DIR p)
+                    (let [path String (join PATCHES-DIR p)
                           ;; Drift WARN is computed BEFORE the real apply, on the
                           ;; current cumulative tree (--dry-run leaves it untouched):
                           ;; GNU patch reports "Hunk #N succeeded at M (offset L lines)"
                           ;; for offset git apply tolerates silently. Largest |offset|.
-                          pr (sh (str "cd " tmp " && patch -p1 --dry-run --fuzz=0 --force -i " path " 2>&1 | grep -oiE 'offset -?[0-9]+' | grep -oE '[0-9]+' | sort -rn | head -1") {})
-                          off (parseInt (js/call (or (js/get pr .out) "") .trim) 10)
+                          pr Any (sh (str "cd " tmp " && patch -p1 --dry-run --fuzz=0 --force -i " path " 2>&1 | grep -oiE 'offset -?[0-9]+' | grep -oE '[0-9]+' | sort -rn | head -1") {})
+                          off Int (parseInt (js/call (or (js/get pr .out) "") .trim) 10)
                           ;; Real cumulative apply (no --check): mutate tmp so the
                           ;; next patch sees this one's added lines.
-                          r (sh (str "cd " tmp " && git apply " path) {})]
+                          r Any (sh (str "cd " tmp " && git apply " path) {})]
                       (if (not (js/get r .ok))
                         (do
                           (js/call failed .push (str p ": " (js/call (or (aget (js/call (js/get r .out) .split "\n") 0) "") .trim)))
@@ -110,14 +124,14 @@
 
 ;; ── Gate B: chrome registration uses a known-working pattern ──────────────
 (defn gateB [] Any
-  (let [ours (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "jar.mn")]
+  (let [ours String (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "jar.mn")]
     (if (not (existsSync ours))
       (fail "B" "jar.mn pattern matches working example"
         (str ours " missing")
         "restore from git")
-      (let [content (readFileSync ours "utf8")
-            usesBrowserJar (js/call (js/new RegExp "^browser\\.jar:" "m") .test content)
-            hasContentDecl (js/call (js/new RegExp "^% content\\s+gjoa\\s+%content/gjoa/" "m") .test content)]
+      (let [content String (readFileSync ours "utf8")
+            usesBrowserJar Bool (js/call (js/new RegExp "^browser\\.jar:" "m") .test content)
+            hasContentDecl Bool (js/call (js/new RegExp "^% content\\s+gjoa\\s+%content/gjoa/" "m") .test content)]
         (cond
           (not usesBrowserJar)
           (fail "B" "jar.mn pattern matches working example"
@@ -134,23 +148,24 @@
 
 ;; ── Gate C: no production-mode TODO/no-op landmines ───────────────────────
 (defn gateC [] Any
-  (let [prodFiles ["src/gjoa/browser/components/gjoa/GjoaLoader.sys.mjs"
+  (let [prodFiles (Vec String) ["src/gjoa/browser/components/gjoa/GjoaLoader.sys.mjs"
                    "src/gjoa/chrome/bjs/security/index.bjs"
                    "src/gjoa/chrome/bjs/drawer/index.bjs"
                    "src/gjoa/chrome/bjs/spaces/index.bjs"
                    "src/gjoa/chrome/bjs/tabs/index.bjs"]
-        landmines []
-        stub-return (js/new RegExp "^\\s*return\\s*;?\\s*//\\s*(TODO|FIXME|future)" "i")
-        stub-comment (js/new RegExp "//\\s*(future commit|nothing yet|not yet implemented)" "i")]
-    (doseq [f prodFiles]
-      (let [path (join REPO-ROOT f)]
+        landmines (Vec Any) []
+        stub-return Regex (js/new RegExp "^\\s*return\\s*;?\\s*//\\s*(TODO|FIXME|future)" "i")
+        stub-comment Regex (js/new RegExp "//\\s*(future commit|nothing yet|not yet implemented)" "i")]
+    (doseq [f String prodFiles]
+      (let [path String (join REPO-ROOT f)]
         (when (existsSync path)
-          (let [lines (js/call (readFileSync path "utf8") .split "\n")]
+          (let [lines (Vec String) (js/call (readFileSync path "utf8") .split "\n")]
             ;; Only flag literal "TODO" / "future commit" / "nothing yet" inside
             ;; executable code (not in jsdoc/regular comments that describe
             ;; intent). Heuristic: line ends with `return;` or matches the
             ;; specific dead-stub pattern.
-            (js/call lines .forEach (fn [l i] Any (when (or (js/call stub-return .test l) (js/call stub-comment .test l))
+            (js/call lines .forEach (fn [l String
+                                         i Int] Any (when (or (js/call stub-return .test l) (js/call stub-comment .test l))
                   (js/call landmines .push (str f ":" (+ i 1) ": " (js/call l .trim))))))))))
     (if (> (js/get landmines .length) 0)
       (fail "C" "no production-mode TODO/no-op landmines"
@@ -160,12 +175,12 @@
 
 ;; ── Gate D: dep floors satisfied ──────────────────────────────────────────
 (defn gateD [] Any
-  (let [flakeContent (readFileSync FLAKE "utf8")
-        minNssMatch (js/call flakeContent .match (js/new RegExp "minNssVersion\\s*=\\s*\"([^\"]+)\""))
-        minNss (if minNssMatch (aget minNssMatch 1) nil)]
+  (let [flakeContent String (readFileSync FLAKE "utf8")
+        minNssMatch Any (js/call flakeContent .match (js/new RegExp "minNssVersion\\s*=\\s*\"([^\"]+)\""))
+        minNss (U Any Nil) (if minNssMatch (aget minNssMatch 1) nil)]
     (if (nil? minNss)
       (pass "D" "dep floors satisfied" "no minNssVersion gate declared")
-      (let [probe (sh
+      (let [probe Any (sh
                     (str "nix eval --impure --raw --expr '(import (builtins.getFlake \"git+file://" REPO-ROOT "\").inputs.nixpkgs { system = \"x86_64-linux\"; }).nss_latest.version' 2>&1")
                     {:timeout 60000})]
         (if (not (js/get probe .ok))
@@ -173,7 +188,7 @@
             (str "fix the nix eval error and re-run:\n" (js/call (js/get probe .out) .slice -300)))
           ;; compareVersions: if nixpkgs >= minNss, overlay short-circuits (good).
           ;; if behind, our overlay activates and Mozilla tarball is fetched.
-          (let [nixpkgsNss (js/call (js/call (js/call (js/get probe .out) .trim) .split "\n") .pop)]
+          (let [nixpkgsNss Any (js/call (js/call (js/call (js/get probe .out) .trim) .split "\n") .pop)]
             (pass "D" "dep floors satisfied"
               (str "minNssVersion=" minNss ", nixpkgs nss_latest=" nixpkgsNss " → overlay "
                    ;; Beagle's `>=` is numeric, so use localeCompare for versions
@@ -193,14 +208,14 @@
 (defn gateF [] Any
   ;; Strip nix comment lines before matching so we don't false-positive
   ;; on `__noChroot = true` written inside an explanation comment.
-  (let [flakeContent (js/call (js/call (js/call (readFileSync FLAKE "utf8") .split "\n") .filter (fn [l] Any (not (js/call (js/new RegExp "^\\s*#") .test l)))) .join "\n")
-        usesNoChroot (js/call (js/new RegExp "__noChroot\\s*=\\s*true") .test flakeContent)
-        usesImpure (js/call (js/new RegExp "__impure\\s*=\\s*true") .test flakeContent)]
+  (let [flakeContent String (js/call (js/call (js/call (readFileSync FLAKE "utf8") .split "\n") .filter (fn [l String] Any (not (js/call (js/new RegExp "^\\s*#") .test l)))) .join "\n")
+        usesNoChroot Bool (js/call (js/new RegExp "__noChroot\\s*=\\s*true") .test flakeContent)
+        usesImpure Bool (js/call (js/new RegExp "__impure\\s*=\\s*true") .test flakeContent)]
     (if (and (not usesNoChroot) (not usesImpure))
       (pass "F" "nix daemon will accept flake settings" "no privileged settings in flake.nix")
-      (let [cfg (sh "nix show-config 2>/dev/null" {:timeout 15000})
-            sandboxLine (or (js/call (js/call (js/get cfg .out) .split "\n") .find (fn [l] Any (js/call (js/new RegExp "^sandbox = ") .test l))) "")
-            sandbox (js/call (or (aget (js/call sandboxLine .split "=") 1) "") .trim)]
+      (let [cfg Any (sh "nix show-config 2>/dev/null" {:timeout 15000})
+            sandboxLine (U Any String) (or (js/call (js/call (js/get cfg .out) .split "\n") .find (fn [l String] Any (js/call (js/new RegExp "^sandbox = ") .test l))) "")
+            sandbox String (js/call (or (aget (js/call sandboxLine .split "=") 1) "") .trim)]
         (if (and usesNoChroot (= sandbox "true"))
           (fail "F" "nix daemon will accept flake settings"
             "flake uses __noChroot but daemon has sandbox=true → rejected at eval"
@@ -210,7 +225,7 @@
 
 ;; ── Gate G: nix flake evaluates without errors ────────────────────────────
 (defn gateG [] Any
-  (let [r (sh
+  (let [r Any (sh
             (str "nix eval --impure --raw '" REPO-ROOT "#gjoa.outPath' 2>&1")
             {:timeout 120000})]
     (if (not (js/get r .ok))
@@ -221,29 +236,35 @@
           "nix eval timed out — not a real eval failure; re-run with a clean tree or longer timeout")
         (fail "G" "nix flake evaluates without errors"
           "evaluation failed — build cannot proceed"
-          (js/call (js/call (js/call (js/call (js/get r .out) .split "\n") .filter (fn [l] Any (js/call (js/call l .toLowerCase) .includes "error"))) .slice 0 5) .join "\n      ")))
+          (js/call (js/call (js/call (js/call (js/get r .out) .split "\n") .filter (fn [l String] Any (js/call (js/call l .toLowerCase) .includes "error"))) .slice 0 5) .join "\n      ")))
       (pass "G" "nix flake evaluates without errors" (str "derivation resolves to " (js/call (js/call (js/call (js/call (js/get r .out) .trim) .split "\n") .pop) .slice -50))))))
 
 ;; ── Gate I: chrome bundle three-way alignment ─────────────────────────────
 (defn gateI [] Any
-  (let [loaderPath (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "GjoaLoader.bjs")
-        jarPath (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "jar.mn")
-        bakePath (join REPO-ROOT "tools" "prep" "chrome-bake.bjs")]
+  (let [loaderPath String (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "GjoaLoader.bjs")
+        jarPath String (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "jar.mn")
+        bakePath String (join REPO-ROOT "tools" "prep" "chrome-bake.bjs")]
     (if (not (js/call [loaderPath jarPath bakePath] .every existsSync))
       (fail "I" "chrome bundle three-way alignment" "one of loader/jar/bake missing" "investigate")
-      (let [loader (readFileSync loaderPath "utf8")
-            jar (readFileSync jarPath "utf8")
-            bake (readFileSync bakePath "utf8")
-            loaderScripts (js/call (js/call (js/call Array .from (js/call loader .matchAll (js/new RegExp "\"(gjoa-[a-z-]+\\.uc\\.js)\"" "g"))) .map (fn [m] Any (aget m 1))) .sort)
-            jarScripts (js/call (js/call (js/call (js/call Array .from (js/call jar .matchAll (js/new RegExp "scripts/(gjoa-[a-z-]+\\.uc\\.js)" "g"))) .map (fn [m] Any (aget m 1))) .filter (fn [v i a] Any (= (js/call a .indexOf v) i))) .sort)
-            bakeScripts (js/call (js/call (js/call Array .from (js/call bake .matchAll (js/new RegExp "\"(gjoa-[a-z-]+\\.uc\\.js)\"" "g"))) .map (fn [m] Any (aget m 1))) .sort)
+      (let [loader String (readFileSync loaderPath "utf8")
+            jar String (readFileSync jarPath "utf8")
+            bake String (readFileSync bakePath "utf8")
+            loaderScripts (Vec Any) (js/call (js/call (js/call Array .from (js/call loader .matchAll (js/new RegExp "\"(gjoa-[a-z-]+\\.uc\\.js)\"" "g"))) .map (fn [m Any] Any (aget m 1))) .sort)
+            jarScripts (Vec Any) (js/call (js/call (js/call (js/call Array .from (js/call jar .matchAll (js/new RegExp "scripts/(gjoa-[a-z-]+\\.uc\\.js)" "g"))) .map (fn [m Any] Any (aget m 1))) .filter (fn [v String
+                                                                                                                                                                                                                i Int
+                                                                                                                                                                                                                a (Vec String)] Any (= (js/call a .indexOf v) i))) .sort)
+            bakeScripts (Vec Any) (js/call (js/call (js/call Array .from (js/call bake .matchAll (js/new RegExp "\"(gjoa-[a-z-]+\\.uc\\.js)\"" "g"))) .map (fn [m Any] Any (aget m 1))) .sort)
             ;; CSS bundles include the bare `gjoa.uc.css` (no hyphen suffix), so the
             ;; style pattern must allow an optional `-...` segment.
-            loaderStyles (js/call (js/call (js/call Array .from (js/call loader .matchAll (js/new RegExp "\"(gjoa(?:-[a-z-]+)?\\.uc\\.css)\"" "g"))) .map (fn [m] Any (aget m 1))) .sort)
-            jarStyles (js/call (js/call (js/call (js/call Array .from (js/call jar .matchAll (js/new RegExp "styles/(gjoa(?:-[a-z-]+)?\\.uc\\.css)" "g"))) .map (fn [m] Any (aget m 1))) .filter (fn [v i a] Any (= (js/call a .indexOf v) i))) .sort)
-            bakeStyles (js/call (js/call (js/call Array .from (js/call bake .matchAll (js/new RegExp "\"(gjoa(?:-[a-z-]+)?\\.uc\\.css)\"" "g"))) .map (fn [m] Any (aget m 1))) .sort)
-            eq (fn [(a Any) (b Any)] Any (and (= (js/get a .length) (js/get b .length))
-                      (js/call a .every (fn [x i] Any (= x (aget b i))))))]
+            loaderStyles (Vec Any) (js/call (js/call (js/call Array .from (js/call loader .matchAll (js/new RegExp "\"(gjoa(?:-[a-z-]+)?\\.uc\\.css)\"" "g"))) .map (fn [m Any] Any (aget m 1))) .sort)
+            jarStyles (Vec Any) (js/call (js/call (js/call (js/call Array .from (js/call jar .matchAll (js/new RegExp "styles/(gjoa(?:-[a-z-]+)?\\.uc\\.css)" "g"))) .map (fn [m Any] Any (aget m 1))) .filter (fn [v String
+                                                                                                                                                                                                                    i Int
+                                                                                                                                                                                                                    a (Vec String)] Any (= (js/call a .indexOf v) i))) .sort)
+            bakeStyles (Vec Any) (js/call (js/call (js/call Array .from (js/call bake .matchAll (js/new RegExp "\"(gjoa(?:-[a-z-]+)?\\.uc\\.css)\"" "g"))) .map (fn [m Any] Any (aget m 1))) .sort)
+            eq (Fn [Any Any] Any) (fn [a Any
+                                       b Any] Any (and (= (js/get a .length) (js/get b .length))
+                      (js/call a .every (fn [x String
+                                             i Int] Any (= x (aget b i))))))]
         (cond
           (or (not (eq loaderScripts jarScripts)) (not (eq loaderScripts bakeScripts)))
           (fail "I" "chrome bundle three-way alignment"
@@ -265,10 +286,10 @@
 ;; attacker JS into pages. Assert it still matches the digest recorded in
 ;; scriptlet-resources.PROVENANCE.md.
 (defn gateJ [] Any
-  (let [script (join REPO-ROOT "tools" "prep" "verify-scriptlet-resources.sh")]
+  (let [script String (join REPO-ROOT "tools" "prep" "verify-scriptlet-resources.sh")]
     (if (not (existsSync script))
       (fail "J" "scriptlet bundle integrity" "verify-scriptlet-resources.sh missing" "restore the F10 verifier")
-      (let [r (sh (str "bash " script) {})]
+      (let [r Any (sh (str "bash " script) {})]
         (if (js/get r .ok)
           (pass "J" "scriptlet bundle integrity" "scriptlet-resources.json matches the pinned SHA-256")
           (fail "J" "scriptlet bundle integrity"
@@ -285,10 +306,10 @@
     (fail "K" "engine/ reflects current source (import-currency)"
       "no engine/.gjoa-import-stamp — engine/ is unimported"
       "run `bun run import` to (re)build engine/ from src/gjoa/ + patches/")
-    (let [stamp-r (sh (str "stat -c %Y '" IMPORT-STAMP "'") {})
-          newest-r (sh "find src/gjoa patches tools/prep -type f -printf '%T@\\n' 2>/dev/null | sort -rn | head -1" {})
-          stamp-out (js/call (or (js/get stamp-r .out) "") .trim)
-          newest-out (js/call (or (js/get newest-r .out) "") .trim)]
+    (let [stamp-r Any (sh (str "stat -c %Y '" IMPORT-STAMP "'") {})
+          newest-r Any (sh "find src/gjoa patches tools/prep -type f -printf '%T@\\n' 2>/dev/null | sort -rn | head -1" {})
+          stamp-out String (js/call (or (js/get stamp-r .out) "") .trim)
+          newest-out String (js/call (or (js/get newest-r .out) "") .trim)]
       (if (or (not (js/get stamp-r .ok)) (not (js/get newest-r .ok)) (= stamp-out "") (= newest-out ""))
         (warn "K" "engine/ reflects current source (import-currency)"
           "could not determine source/stamp mtimes — skipping (non-fatal)")
@@ -314,28 +335,28 @@
 ;; dep marker. DECLARED count; check-contract returns the EVALUATED count. Any gap =
 ;; the parser silently dropped a declared dep (the cpp-symbol/cpp-member skew) — fail-closed.
 (def DEP-BULLET-RE Any (js/new RegExp "(?:#|;;)\\s*-\\s*((?:rust|cpp|webidl|js)-[a-z-]+)\\s+\\S" "gm"))
-(defn count-declared-deps [(text String)] Int
-  (let [m (js/call text .match DEP-BULLET-RE)]
+(defn count-declared-deps [text String] Int
+  (let [m Any (js/call text .match DEP-BULLET-RE)]
     (if m (js/get m .length) 0)))
 (defn gateL [] Any
-  (let [patch-files (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .map (fn [(p String)] String (join PATCHES-DIR p)))
-        files (js/call patch-files .concat (js/call OVERLAY-FILES .filter (fn [(f String)] Bool (existsSync f))))
-        not-found []
-        ambiguous []
-        unsupported []
-        dropped []
-        resolved []]
-    (doseq [f files]
-      (let [text (readFileSync f "utf8")
-            results (check-contract text)
-            declared (count-declared-deps text)]
+  (let [patch-files (Vec Any) (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [p String] Bool (js/call p .endsWith ".patch"))) .map (fn [p String] String (join PATCHES-DIR p)))
+        files (Vec Any) (js/call patch-files .concat (js/call OVERLAY-FILES .filter (fn [f String] Bool (existsSync f))))
+        not-found (Vec Any) []
+        ambiguous (Vec Any) []
+        unsupported (Vec Any) []
+        dropped (Vec Any) []
+        resolved (Vec Any) []]
+    (doseq [f Any files]
+      (let [text String (readFileSync f "utf8")
+            results Any (check-contract text)
+            declared Int (count-declared-deps text)]
         ;; reconciliation: every declared `# depends-on` bullet MUST produce an evaluated
         ;; result; a shortfall = the parser silently dropped a dep (unknown/typo'd kind).
-        (let [(result-count Int) (js/get results .length)
-              delta (- declared result-count)]
+        (let [result-count Int (js/get results .length)
+              delta Int (- declared result-count)]
           (if (> delta 0)
             (js/call dropped .push (str (basename f) ": " delta " declared depends-on bullet(s) parsed to nothing (unknown/typo'd kind — vocabulary drift)"))))
-        (doseq [r results]
+        (doseq [r Any results]
           (cond
             (= (js/get r .verdict) "not-found")
             (js/call not-found .push (str (basename f) ": " (js/get r .kind) " `" (js/get r .symbol) "` — " (js/get r .detail)))
@@ -366,10 +387,12 @@
 ;; configs/beagle.ref. CI supplies BEAGLE_PIN_ROOT for its checkout of the same
 ;; object. This is a hard fail because the emit/runtime contract is ref-specific.
 (def BEAGLE-REF-FILE String (join REPO-ROOT "configs" "beagle.ref"))
-(defn beagle-pin-dir [(pinned String)] String
+(defn beagle-pin-dir [pinned String] String
   (or (js/get (js/get process .env) .BEAGLE_PIN_ROOT)
       (join (js/get (js/get process .env) .HOME) "code" "beagle" "pins" pinned)))
-(defn gate-m-fix [(pinned String) (pin-dir String)] String
+(defn gate-m-fix
+  [pinned String
+   pin-dir String] String
   (str "create the immutable content-addressed pin for this full object ID:\n"
        "      `git -C ~/code/beagle/main worktree add --detach " pin-dir " " pinned "`\n"
        "      write `" pin-dir ".pin` naming Gjoa as a consumer\n"
@@ -381,16 +404,16 @@
     (fail "M" "beagle compiler pinned (beagle-currency)"
       "no configs/beagle.ref — gjoa has no reproducible Beagle compiler object"
       "record the intended full object ID, then create its immutable content-addressed pin")
-    (let [lines (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
-          pinned (js/call (or (js/call lines .find (fn [(l String)] Bool
+    (let [lines (Vec String) (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
+          pinned String (js/call (or (js/call lines .find (fn [l String] Bool
                                            (and (> (js/get (js/call l .trim) .length) 0)
                                                 (not (js/call (js/call l .trim) .startsWith "#"))))) "") .trim)
-          valid-ref (js/call (js/new RegExp "^[0-9a-f]+$") .test pinned)
-          pin-dir (beagle-pin-dir pinned)
-          r (if valid-ref
+          valid-ref Bool (js/call (js/new RegExp "^[0-9a-f]+$") .test pinned)
+          pin-dir String (beagle-pin-dir pinned)
+          r (U Any (Map Keyword (U Bool String))) (if valid-ref
               (sh (str "git -C " pin-dir " rev-parse HEAD") {})
               {:ok false :out ""})
-          actual (js/call (or (js/get r .out) "") .trim)]
+          actual String (js/call (or (js/get r .out) "") .trim)]
       (cond
         (= pinned "") (fail "M" "beagle compiler pinned (beagle-currency)"
                         "configs/beagle.ref has no ref line"
@@ -421,43 +444,43 @@
   (join REPO-ROOT "src" "gjoa" "browser" "components" "gjoa" "GjoaLoader.bjs"))
 (def PREF-DIR String (join REPO-ROOT "src" "gjoa" "defaults" "pref"))
 
-(defn quoted-strings [(s String)] Any
-  (let [m (js/call s .match (js/new RegExp "\"[^\"]+\"" "g"))]
-    (if m (js/call m .map (fn [(q String)] String (js/call q .slice 1 -1))) [])))
+(defn quoted-strings [s String] Any
+  (let [m Any (js/call s .match (js/new RegExp "\"[^\"]+\"" "g"))]
+    (if m (js/call m .map (fn [q String] String (js/call q .slice 1 -1))) [])))
 
-(defn preset-pref-names [(loader String)] Any
+(defn preset-pref-names [loader String] Any
   ;; pref-names referenced in the PRIVACY-PRESETS def: quoted strings containing a
   ;; "." (pref names have dots; "bool"/"int" and the profile-id keys don't).
-  (let [start (js/call loader .indexOf "(def PRIVACY-PRESETS")
-        end (js/call loader .indexOf "(defn apply-privacy-profile!")
-        block (if (and (>= start 0) (> end start)) (js/call loader .slice start end) "")]
-    (js/call (quoted-strings block) .filter (fn [(q String)] Bool (js/call q .includes ".")))))
+  (let [start Int (js/call loader .indexOf "(def PRIVACY-PRESETS")
+        end Int (js/call loader .indexOf "(defn apply-privacy-profile!")
+        block String (if (and (>= start 0) (> end start)) (js/call loader .slice start end) "")]
+    (js/call (quoted-strings block) .filter (fn [q String] Bool (js/call q .includes ".")))))
 
 (defn gateN [] Any
   (if (not (and (existsSync REGISTRY-FILE) (existsSync LOADER-FILE) (existsSync PREF-DIR)))
     (warn "N" "knobs backed + reversible (knob-not-delete)"
       "no about:gjoa registry/loader/prefs — skipping")
-    (let [reg (js/call JSON .parse (readFileSync REGISTRY-FILE "utf8"))
-          loader (readFileSync LOADER-FILE "utf8")
-          pref-src (js/call (js/call (js/call (readdirSync PREF-DIR) .filter (fn [(f String)] Bool (js/call f .endsWith ".bjs"))) .map (fn [(f String)] String (readFileSync (join PREF-DIR f) "utf8"))) .join "\n")
-          src (str pref-src "\n" loader)
-          pv (js/get reg .privacy)
-          sel (and pv (js/get pv .selector))
-          profiles (or (and sel (js/get sel .profiles)) [])
-          knob-prefs []
-          _g (doseq [g (or (and pv (js/get pv .granular)) [])] (js/call knob-prefs .push (js/get g .pref)))
-          _ps (doseq [p profiles] (doseq [k (js/call Object .keys (js/get p .sets))] (js/call knob-prefs .push k)))
-          _s (doseq [sec (or (js/get reg .sections) [])]
-               (doseq [s (or (js/get sec .settings) [])] (js/call knob-prefs .push (js/get s .pref)))
+    (let [reg Any (js/call JSON .parse (readFileSync REGISTRY-FILE "utf8"))
+          loader String (readFileSync LOADER-FILE "utf8")
+          pref-src String (js/call (js/call (js/call (readdirSync PREF-DIR) .filter (fn [f String] Bool (js/call f .endsWith ".bjs"))) .map (fn [f String] String (readFileSync (join PREF-DIR f) "utf8"))) .join "\n")
+          src String (str pref-src "\n" loader)
+          pv Any (js/get reg .privacy)
+          sel Any (and pv (js/get pv .selector))
+          profiles (U Any (Vec Any)) (or (and sel (js/get sel .profiles)) [])
+          knob-prefs (Vec Any) []
+          _g Any (doseq [g Any (or (and pv (js/get pv .granular)) [])] (js/call knob-prefs .push (js/get g .pref)))
+          _ps Any (doseq [p Any profiles] (doseq [k String (js/call Object .keys (js/get p .sets))] (js/call knob-prefs .push k)))
+          _s Any (doseq [sec Any (or (js/get reg .sections) [])]
+               (doseq [s Any (or (js/get sec .settings) [])] (js/call knob-prefs .push (js/get s .pref)))
                ;; sections may group settings under named subsections (e.g.
                ;; "Dark mode & color" -> Dark mode / Theme); walk those too so
                ;; every nested knob is still backing-checked.
-               (doseq [sub (or (js/get sec .subsections) [])]
-                 (doseq [s (or (js/get sub .settings) [])] (js/call knob-prefs .push (js/get s .pref)))))
-          dangling (js/call knob-prefs .filter (fn [(pf String)] Bool (not (js/call src .includes (str "\"" pf "\"")))))
-          reg-prefs (js/call (js/call Array .from (js/new Set (js/call profiles .flatMap (fn [(p Any)] Any (js/call Object .keys (js/get p .sets)))))) .sort)
-          preset-prefs (js/call (js/call Array .from (js/new Set (preset-pref-names loader))) .sort)
-          drift (not (= (js/call reg-prefs .join "|") (js/call preset-prefs .join "|")))]
+               (doseq [sub Any (or (js/get sec .subsections) [])]
+                 (doseq [s Any (or (js/get sub .settings) [])] (js/call knob-prefs .push (js/get s .pref)))))
+          dangling (Vec Any) (js/call knob-prefs .filter (fn [pf String] Bool (not (js/call src .includes (str "\"" pf "\"")))))
+          reg-prefs (Vec Any) (js/call (js/call Array .from (js/new Set (js/call profiles .flatMap (fn [p Any] Any (js/call Object .keys (js/get p .sets)))))) .sort)
+          preset-prefs (Vec Any) (js/call (js/call Array .from (js/new Set (preset-pref-names loader))) .sort)
+          drift Bool (not (= (js/call reg-prefs .join "|") (js/call preset-prefs .join "|")))]
       (cond
         (> (js/get dangling .length) 0)
         (fail "N" "knobs backed + reversible (knob-not-delete)"
@@ -478,13 +501,13 @@
 ;; BEAGLE_JS_RUNTIME_PREFIX). Every .bjs-authored .sys.mjs must use that prefix
 ;; or Firefox cannot load the module. Fail before the multi-hour build.
 (defn gateO [] Any
-  (let [gjoaDir (join REPO-ROOT "engine" "browser" "components" "gjoa")]
+  (let [gjoaDir String (join REPO-ROOT "engine" "browser" "components" "gjoa")]
     (if (not (existsSync gjoaDir))
       (warn "O" "no bare beagle/ import in shipped gjoa .sys.mjs"
         "engine/ not extracted yet — run after `bun run import`")
-      (let [dirs (str gjoaDir " " (join REPO-ROOT "engine" "toolkit" "components" "content-classifier"))
-            r (sh (str "grep -rlE \"from 'beagle/\" " dirs " --include=*.sys.mjs 2>/dev/null || true") {})
-            hits (js/call (or (js/get r .out) "") .trim)]
+      (let [dirs String (str gjoaDir " " (join REPO-ROOT "engine" "toolkit" "components" "content-classifier"))
+            r Any (sh (str "grep -rlE \"from 'beagle/\" " dirs " --include=*.sys.mjs 2>/dev/null || true") {})
+            hits String (js/call (or (js/get r .out) "") .trim)]
         (if (= hits "")
           (pass "O" "no bare beagle/ import in shipped gjoa .sys.mjs"
             "all $$bc runtime imports resolve to resource:///modules/gjoa/beagle/")
@@ -496,28 +519,28 @@
 ;; configs/patch-hashes.json records the expected SHA-256 of every patch. Gate P
 ;; rejects changed, unrecorded, and deleted patch entries.
 (def PATCH-HASHES-FILE String (join REPO-ROOT "configs" "patch-hashes.json"))
-(defn sha256-file [(path String)] String
+(defn sha256-file [path String] String
   (js/call (js/call (createHash "sha256") .update (readFileSync path)) .digest "hex"))
 (defn gateP [] Any
   (if (not (existsSync PATCH-HASHES-FILE))
     (fail "P" "patch hashes match recorded manifest"
       "no configs/patch-hashes.json — patch drift is unguarded"
       "create configs/patch-hashes.json with {\"algorithm\":\"sha256\",\"patches\":{<file>:<sha256>}} for every patches/*.patch")
-    (let [manifest (js/call JSON .parse (readFileSync PATCH-HASHES-FILE "utf8"))
-          recorded (or (js/get manifest .patches) {})
-          patches (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .sort)
-          mismatched []
-          missing []]
+    (let [manifest Any (js/call JSON .parse (readFileSync PATCH-HASHES-FILE "utf8"))
+          recorded (U Any (Map Any Any)) (or (js/get manifest .patches) {})
+          patches (Vec Any) (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [p String] Bool (js/call p .endsWith ".patch"))) .sort)
+          mismatched (Vec Any) []
+          missing (Vec Any) []]
       ;; current patches whose hash drifted or that aren't recorded at all
-      (doseq [p patches]
-        (let [actual (sha256-file (join PATCHES-DIR p))
-              expected (aget recorded p)]
+      (doseq [p Any patches]
+        (let [actual String (sha256-file (join PATCHES-DIR p))
+              expected Any (aget recorded p)]
           (cond
             (nil? expected) (js/call missing .push (str p " (no entry in manifest)"))
             (not (= actual expected))
             (js/call mismatched .push (str p ": recorded " (js/call expected .slice 0 12) "… actual " (js/call actual .slice 0 12) "…")))))
       ;; manifest entries whose patch was deleted (stale record)
-      (let [stale (js/call (js/call Object .keys recorded) .filter (fn [(k String)] Bool (= (js/call patches .indexOf k) -1)))]
+      (let [stale (Vec Any) (js/call (js/call Object .keys recorded) .filter (fn [k String] Bool (= (js/call patches .indexOf k) -1)))]
         (cond
           (or (> (js/get mismatched .length) 0) (> (js/get missing .length) 0) (> (js/get stale .length) 0))
           (fail "P" "patch hashes match recorded manifest"
@@ -553,9 +576,9 @@
 (def GJOA-BUNDLE-DIST-DIR String
   (join REPO-ROOT "dist" "chrome" "JS"))
 ;; Canonical direct export surface of the vendored core.js.
-(defn core-export-surface [(src String)] Any
-  (let [surface (js/new Set)]
-    (doseq [m (js/call Array .from (js/call src .matchAll (js/new RegExp "export\\s+(?:function|const)\\s+([A-Za-z_$][A-Za-z0-9_$]*)" "g")))]
+(defn core-export-surface [src String] Any
+  (let [surface Any (js/new Set)]
+    (doseq [m Any (js/call Array .from (js/call src .matchAll (js/new RegExp "export\\s+(?:function|const)\\s+([A-Za-z_$][A-Za-z0-9_$]*)" "g")))]
       (js/call surface .add (aget m 1)))
     surface))
 
@@ -571,16 +594,16 @@
 ;; via the prelude's `$$bc.X` (form a); whether that prelude EXISTS at all is the
 ;; separate binding-presence assertion in gateQ. (Scanning `$$bc$L` suffixes for
 ;; closure would mis-check a local against the export set — the wrong invariant.)
-(defn referenced-runtime-symbols [(src String)] Any
-  (let [refs (js/new Set)]
+(defn referenced-runtime-symbols [src String] Any
+  (let [refs Any (js/new Set)]
     ;; (a) namespace property access
-    (doseq [m (js/call Array .from (js/call src .matchAll (js/new RegExp "\\$\\$bc\\.([A-Za-z_$][A-Za-z0-9_$]*)" "g")))]
+    (doseq [m Any (js/call Array .from (js/call src .matchAll (js/new RegExp "\\$\\$bc\\.([A-Za-z_$][A-Za-z0-9_$]*)" "g")))]
       (js/call refs .add (aget m 1)))
     ;; (b) ESM named imports from any `…/beagle/core.js` specifier. Capture the
     ;; brace clause, then each `X` / `X as Y` (imported name X must be exported).
-    (doseq [m (js/call Array .from (js/call src .matchAll (js/new RegExp "import\\s*\\{([^}]*)\\}\\s*from\\s*['\"][^'\"]*beagle/core\\.js['\"]" "g")))]
-      (doseq [clause (js/call (aget m 1) .split ",")]
-        (let [t (js/call clause .trim)]
+    (doseq [m Any (js/call Array .from (js/call src .matchAll (js/new RegExp "import\\s*\\{([^}]*)\\}\\s*from\\s*['\"][^'\"]*beagle/core\\.js['\"]" "g")))]
+      (doseq [clause String (js/call (aget m 1) .split ",")]
+        (let [t String (js/call clause .trim)]
           (when (> (js/get t .length) 0)
             (js/call refs .add (js/call (aget (js/call t .split (js/new RegExp "\\s")) 0) .trim))))))
     refs))
@@ -593,22 +616,22 @@
       (fail "Q" "$$bc runtime export-closure (emit ↔ core.js)"
         "dist/chrome/JS is missing"
         "run `bun run chrome:dist` to produce the canonical chrome bundle output")
-      (let [surface (core-export-surface (readFileSync VENDORED-CORE "utf8"))
-          bundle-files (js/call (js/call (readdirSync GJOA-BUNDLE-DIST-DIR) .filter (fn [(f String)] Bool (js/call f .endsWith ".uc.js"))) .map (fn [(f String)] String (join GJOA-BUNDLE-DIST-DIR f)))
+      (let [surface Any (core-export-surface (readFileSync VENDORED-CORE "utf8"))
+            bundle-files (Vec Any) (js/call (js/call (readdirSync GJOA-BUNDLE-DIST-DIR) .filter (fn [f String] Bool (js/call f .endsWith ".uc.js"))) .map (fn [f String] String (join GJOA-BUNDLE-DIST-DIR f)))
           ;; Any other emitted gjoa .sys.mjs that imports the beagle runtime.
-          gjoa-dir (join ENGINE-DIR "browser" "components" "gjoa")
-          mjs-files (if (existsSync gjoa-dir)
-                      (js/call (js/call (readdirSync gjoa-dir) .filter (fn [(f String)] Bool
+          gjoa-dir String (join ENGINE-DIR "browser" "components" "gjoa")
+            mjs-files (Vec Any) (if (existsSync gjoa-dir)
+                      (js/call (js/call (readdirSync gjoa-dir) .filter (fn [f String] Bool
                                        (and (js/call f .endsWith ".sys.mjs")
-                                            (js/call (readFileSync (join gjoa-dir f) "utf8") .includes "beagle/core.js")))) .map (fn [(f String)] String (join gjoa-dir f)))
+                                            (js/call (readFileSync (join gjoa-dir f) "utf8") .includes "beagle/core.js")))) .map (fn [f String] String (join gjoa-dir f)))
                       [])
           ;; GjoaLoader is always in mjs-files if present (it imports core.js),
           ;; but include it explicitly so a non-importing-but-$$bc file is caught too.
-          files (js/call (js/call Array .from (js/new Set (js/call [GJOA-LOADER-MJS] .concat bundle-files mjs-files))) .filter (fn [(f String)] Bool (existsSync f)))
-          offenders []]
-      (doseq [f files]
-        (let [refs (referenced-runtime-symbols (readFileSync f "utf8"))]
-          (doseq [sym (js/call Array .from refs)]
+          files (Vec Any) (js/call (js/call Array .from (js/new Set (js/call [GJOA-LOADER-MJS] .concat bundle-files mjs-files))) .filter (fn [f String] Bool (existsSync f)))
+            offenders (Vec Any) []]
+      (doseq [f Any files]
+        (let [refs Any (referenced-runtime-symbols (readFileSync f "utf8"))]
+          (doseq [sym Any (js/call Array .from refs)]
             (when (not (js/call surface .has sym))
               (js/call offenders .push (str (basename f) ": " sym))))))
       ;; binding-presence: in a .uc.js bundle the value-runtime locals `$$bc$L`
@@ -617,19 +640,19 @@
       ;; prelude from beagle's stripped core.js import. Export-closure (above)
       ;; cannot catch a missing prelude. Assert that every local a bundle references
       ;; is declared in that same bundle; otherwise loading raises ReferenceError.
-      (doseq [f bundle-files]
+      (doseq [f Any bundle-files]
         (when (existsSync f)
-          (let [src (readFileSync f "utf8")
-                declared (js/new Set)
-                referenced (js/new Set)]
+          (let [src String (readFileSync f "utf8")
+                declared Any (js/new Set)
+                referenced Any (js/new Set)]
             ;; declared: LHS of each `const $$bc$L = $$bc.…` prelude binding.
-            (doseq [m (js/call Array .from (js/call src .matchAll (js/new RegExp "\\$\\$bc\\$([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*\\$\\$bc\\." "g")))]
+            (doseq [m Any (js/call Array .from (js/call src .matchAll (js/new RegExp "\\$\\$bc\\$([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*\\$\\$bc\\." "g")))]
               (js/call declared .add (aget m 1)))
             ;; referenced: every `$$bc$L` occurrence (incl. the decl LHS, which is
             ;; thus self-satisfied — only body-only refs can be orphans).
-            (doseq [m (js/call Array .from (js/call src .matchAll (js/new RegExp "\\$\\$bc\\$([A-Za-z_$][A-Za-z0-9_$]*)" "g")))]
+            (doseq [m Any (js/call Array .from (js/call src .matchAll (js/new RegExp "\\$\\$bc\\$([A-Za-z_$][A-Za-z0-9_$]*)" "g")))]
               (js/call referenced .add (aget m 1)))
-            (doseq [sym (js/call Array .from referenced)]
+            (doseq [sym Any (js/call Array .from referenced)]
               (when (not (js/call declared .has sym))
                 (js/call offenders .push (str (basename f) ": $$bc$" sym " referenced but unbound — no `const $$bc$" sym " = $$bc.<export>` prelude (bundler rewrite-core-import missing/regressed)")))))))
       (if (> (js/get offenders .length) 0)
@@ -654,43 +677,43 @@
     (fail "R" "security mitigations intact"
       "no configs/security-mitigations.json — security mitigation checks are unavailable"
       "create configs/security-mitigations.json with {\"mitigations\":{<id>:{file,mustMatch,[extractRegex,mustReject,mustAccept]}}}")
-    (let [manifest (js/call JSON .parse (readFileSync MITIGATIONS-FILE "utf8"))
-          mits (or (js/get manifest .mitigations) {})
-          ids (js/call Object .keys mits)
-          problems []]
-      (doseq [id ids]
-        (let [e (aget mits id)
-              rel (js/get e .file)
-              path (join REPO-ROOT rel)]
+    (let [manifest Any (js/call JSON .parse (readFileSync MITIGATIONS-FILE "utf8"))
+          mits (U Any (Map Any Any)) (or (js/get manifest .mitigations) {})
+          ids (Vec String) (js/call Object .keys mits)
+          problems (Vec Any) []]
+      (doseq [id String ids]
+        (let [e Any (aget mits id)
+              rel Any (js/get e .file)
+              path String (join REPO-ROOT rel)]
           (if (not (existsSync path))
             (js/call problems .push (str id ": source file " rel " is missing"))
-            (let [src (readFileSync path "utf8")]
+            (let [src String (readFileSync path "utf8")]
               ;; (1) every mustMatch regex must still hit the source.
-              (doseq [rx (or (js/get e .mustMatch) [])]
+              (doseq [rx Any (or (js/get e .mustMatch) [])]
                 (when (not (js/call (js/new RegExp rx "m") .test src))
                   (js/call problems .push (str id ": required pattern /" rx "/ is absent from " rel))))
               ;; (2) extract the validator regex literal from source text + re-test
               ;; it against the reject/accept corpus (cannot import the actor).
-              (let [ex (js/get e .extractRegex)]
+              (let [ex Any (js/get e .extractRegex)]
                 (when ex
-                  (let [m (js/call src .match (js/new RegExp (js/get ex .from)))]
+                  (let [m Any (js/call src .match (js/new RegExp (js/get ex .from)))]
                     (if (not (and m (aget m 1)))
                       (js/call problems .push (str id ": extractRegex /" (js/get ex .from) "/ found no regex literal in " rel))
-                      (let [(lit Any) (aget m 1)
+                      (let [lit Any (aget m 1)
                             ;; strip the surrounding slashes (and any flags) → the regex body.
-                            (body-m Any) (js/call lit .match (js/new RegExp "^/(.*)/([a-z]*)$"))
-                            (body Any) (if body-m (aget body-m 1) lit)
-                            (flags Any) (if body-m (aget body-m 2) "")
-                            (re Any) (try (js/new RegExp body flags) (catch (_e Error) nil))]
+                            body-m Any (js/call lit .match (js/new RegExp "^/(.*)/([a-z]*)$"))
+                            body Any (if body-m (aget body-m 1) lit)
+                            flags Any (if body-m (aget body-m 2) "")
+                            re Any (try (js/new RegExp body flags) (catch (_e Error) nil))]
                         (if (not re)
                           (js/call problems .push (str id ": extracted literal `" lit "` is not a constructable RegExp"))
                           (do
                             ;; mustReject: each MUST be rejected (regex matches → safeSelector drops it).
-                            (doseq [s (or (js/get e .mustReject) [])]
+                            (doseq [s Any (or (js/get e .mustReject) [])]
                               (when (not (js/call re .test s))
                                 (js/call problems .push (str id ": mustReject " (js/call JSON .stringify s) " is NOT rejected by the current " (js/get ex .name) " — breakout no longer blocked"))))
                             ;; mustAccept: each MUST be accepted (regex must NOT match).
-                            (doseq [s (or (js/get e .mustAccept) [])]
+                            (doseq [s Any (or (js/get e .mustAccept) [])]
                               (when (js/call re .test s)
                                 (js/call problems .push (str id ": mustAccept " (js/call JSON .stringify s) " is now WRONGLY rejected by " (js/get ex .name) " — over-broad, real rules dropped")))))))))))))))
       (if (> (js/get problems .length) 0)
@@ -704,40 +727,40 @@
 ;; ── Gate S: security-critical patches persist ────────────────────────────────
 ;; A patch whose header carries a `# security:` block must apply and every upstream
 ;; anchor it `depends-on` must resolve. Non-apply and unresolved anchors fail closed.
-(defn patch-security-block? [(text String)] Bool
+(defn patch-security-block? [text String] Bool
   ;; `# security:` (with optional indent) anywhere in the header region.
   (js/call (js/new RegExp "^#\\s*security:\\s*$" "m") .test text))
 (defn gateS! [] Any
-  (let [patches (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .sort)
-        sec-patches (js/call patches .filter (fn [(p String)] Bool
+  (let [patches (Vec Any) (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [p String] Bool (js/call p .endsWith ".patch"))) .sort)
+        sec-patches (Vec Any) (js/call patches .filter (fn [p String] Bool
                                        (patch-security-block? (readFileSync (join PATCHES-DIR p) "utf8"))))]
     (if (= (js/get sec-patches .length) 0)
       (pass "S" "security-critical patches persist"
         "no `security:`-tagged patches (vacuously green; gate arms automatically when one is added)")
       ;; Build a fresh extract once, apply patches cumulatively in order; record the
       ;; apply result of each security-tagged patch, and resolve its declared anchors.
-      (let [cache (str (js/get (js/get process .env) .HOME) "/.cache/gjoa/sources")
-            gjoa (js/call JSON .parse (readFileSync GJOA-JSON "utf8"))
-            tarball (str cache "/firefox-" (js/get (js/get gjoa .firefox) .version) ".source.tar.xz")]
+      (let [cache String (str (js/get (js/get process .env) .HOME) "/.cache/gjoa/sources")
+            gjoa Any (js/call JSON .parse (readFileSync GJOA-JSON "utf8"))
+            tarball String (str cache "/firefox-" (js/get (js/get gjoa .firefox) .version) ".source.tar.xz")]
         (if (not (existsSync tarball))
           (fail "S" "security-critical patches persist"
             (str (js/get sec-patches .length) " security-tagged patch(es) but the source tarball is not cached at " tarball " — cannot prove they apply (fail-closed)")
             "run `bun run download` to populate the cache, then re-run preflight")
-          (let [tmp "/tmp/gjoa-preflight-sec-engine"]
+          (let [tmp String "/tmp/gjoa-preflight-sec-engine"]
             (sh (str "rm -rf " tmp " && mkdir -p " tmp) {})
-            (let [extract (sh (str "tar -xJf " tarball " -C " tmp " --strip-components=1") {:timeout 180000})]
+            (let [extract Any (sh (str "tar -xJf " tarball " -C " tmp " --strip-components=1") {:timeout 180000})]
               (if (not (js/get extract .ok))
                 (fail "S" "security-critical patches persist" "tarball extract failed (fail-closed)" (js/call (js/get extract .out) .slice 0 400))
                 (do
                   (sh (str "cd " tmp " && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -q -m baseline") {:timeout 60000})
-                  (let [failed []
-                        unresolved []
-                        stopped (atom false)]
-                    (doseq [p patches]
+                  (let [failed (Vec Any) []
+                        unresolved (Vec Any) []
+                        stopped (Atom Bool) (atom false)]
+                    (doseq [p Any patches]
                       (when (not @stopped)
-                        (let [ppath (join PATCHES-DIR p)
-                              is-sec (js/call sec-patches .includes p)
-                              r (sh (str "cd " tmp " && git apply " ppath) {})]
+                        (let [ppath String (join PATCHES-DIR p)
+                              is-sec Bool (js/call sec-patches .includes p)
+                              r Any (sh (str "cd " tmp " && git apply " ppath) {})]
                           (when (not (js/get r .ok))
                             (reset! stopped true)
                             ;; only a SECURITY patch failing to apply is itself a security
@@ -747,8 +770,8 @@
                             (js/call failed .push (str p (if is-sec " (SECURITY)" " (blocks downstream security patches)") ": "
                                                (js/call (or (aget (js/call (js/get r .out) .split "\n") 0) "") .trim)))))))
                     ;; resolve declared anchors of each security-tagged patch (fail-closed).
-                    (doseq [p sec-patches]
-                      (doseq [cr (check-contract (readFileSync (join PATCHES-DIR p) "utf8"))]
+                    (doseq [p Any sec-patches]
+                      (doseq [cr Any (check-contract (readFileSync (join PATCHES-DIR p) "utf8"))]
                         (when (= (js/get cr .verdict) "not-found")
                           (js/call unresolved .push (str p ": " (js/get cr .kind) " `" (js/get cr .symbol) "` — " (js/get cr .detail))))))
                     (if (or (> (js/get failed .length) 0) (> (js/get unresolved .length) 0))
@@ -765,7 +788,7 @@
 ;; generated topology.md is current.
 (defn gateT [] Any
   (try
-    (let [out (js/call (execSync "bun tools/stewardship/topology.mjs check 2>&1") .toString)]
+    (let [out Any (js/call (execSync "bun tools/stewardship/topology.mjs check 2>&1") .toString)]
       (pass "T" "stewardship tapestry intact (docs ↔ machinery)" (js/call out .trim)))
     (catch (e Any)
       (fail "T" "stewardship tapestry intact (docs ↔ machinery)"
@@ -778,7 +801,7 @@
 ;; split domain is a batching/comprehension smell with a known minimal renumber.
 (defn gateU [] Any
   (try
-    (let [out (js/call (execSync "bun .beagle-tools/gjoa/tools/prep/patch-order.js check --strict 2>&1") .toString)]
+    (let [out Any (js/call (execSync "bun .beagle-tools/gjoa/tools/prep/patch-order.js check --strict 2>&1") .toString)]
       (pass "U" "patch numbering coherent (domains contiguous)" (js/call out .trim)))
     (catch (e Any)
       (warn "U" "patch numbering coherent (domains contiguous)"
@@ -791,7 +814,7 @@
 ;; hygiene, not a build stop).
 (defn gateV [] Any
   (try
-    (let [out (js/call (execSync "bun .beagle-tools/gjoa/tools/prep/upstream-provenance.js check --strict 2>&1") .toString)]
+    (let [out Any (js/call (execSync "bun .beagle-tools/gjoa/tools/prep/upstream-provenance.js check --strict 2>&1") .toString)]
       (pass "V" "upstream provenance lock current" (js/call out .trim)))
     (catch (e Any)
       (warn "V" "upstream provenance lock current"
@@ -801,10 +824,10 @@
 ;; text below the readable floor. Assert the shipped default so the suite measures
 ;; the configuration users receive.
 (defn gateW [] Any
-  (let [f (join PREF-DIR "dark-mode-prefs.bjs")]
+  (let [f String (join PREF-DIR "dark-mode-prefs.bjs")]
     (if (not (existsSync f))
       (warn "W" "dark-mode contrast backstop ships ON" "dark-mode-prefs.bjs absent — skipping")
-      (let [src (readFileSync f "utf8")]
+      (let [src String (readFileSync f "utf8")]
         (if (js/call src .match (js/new RegExp "\\(pref\\s+\"gjoa\\.darkmode\\.normalize\\.enabled\"\\s+true\\)"))
           (pass "W" "dark-mode contrast backstop ships ON" "gjoa.darkmode.normalize.enabled defaults true (APCA no-black-on-black backstop active)")
           (fail "W" "dark-mode contrast backstop ships ON"
@@ -814,15 +837,15 @@
 ;; Gate X — mirrors release.yml's tag-vs-displayVersion check locally, before push.
 ;; Only fires when HEAD carries a v* tag; untagged commits have nothing to compare.
 (defn gateX [] Any
-  (let [tagRes (sh "git describe --exact-match --tags HEAD 2>/dev/null" {})]
+  (let [tagRes Any (sh "git describe --exact-match --tags HEAD 2>/dev/null" {})]
     (if (not (js/get tagRes .ok))
       (pass "X" "release tag matches gjoa.json displayVersion" "HEAD is not tagged — nothing to check")
-      (let [tag (js/call (js/get tagRes .out) .trim)]
+      (let [tag String (js/call (js/get tagRes .out) .trim)]
         (if (not (js/call tag .match (js/new RegExp "^v[0-9]")))
           (pass "X" "release tag matches gjoa.json displayVersion" (str "HEAD tag `" tag "` is not a version tag — skipping"))
-          (let [gjoa (js/call JSON .parse (readFileSync GJOA-JSON "utf8"))
-                tagVersion (js/call tag .slice 1)
-                configVersion (js/get gjoa .displayVersion)]
+          (let [gjoa Any (js/call JSON .parse (readFileSync GJOA-JSON "utf8"))
+                tagVersion (Vec Any) (js/call tag .slice 1)
+                configVersion Any (js/get gjoa .displayVersion)]
             (if (= tagVersion configVersion)
               (pass "X" "release tag matches gjoa.json displayVersion" (str "HEAD tag `" tag "` matches displayVersion " configVersion))
               (fail "X" "release tag matches gjoa.json displayVersion"
@@ -835,19 +858,19 @@
   (console/log (dim "Mandatory gate before any nix or full-mach build."))
   (console/log "")
 
-  (let [gates [["A" gateA!] ["B" gateB] ["C" gateC] ["D" gateD]
+  (let [gates (Vec (Vec Any)) [["A" gateA!] ["B" gateB] ["C" gateC] ["D" gateD]
                ["F" gateF] ["G" gateG]
                ["I" gateI] ["J" gateJ] ["K" gateK] ["L" gateL] ["M" gateM]
                ["N" gateN] ["O" gateO] ["P" gateP] ["Q" gateQ]
                ["R" gateR] ["S" gateS!] ["T" gateT] ["U" gateU] ["V" gateV]
                ["W" gateW] ["X" gateX]]]
-    (doseq [gate gates]
-      (let [fn (aget gate 1)]
+    (doseq [gate (Vec Any) gates]
+      (let [fn Any (aget gate 1)]
         (try (fn)
           (catch (e Error) (fail "?" (js/get fn .name) "gate threw" (js/get e .message)))))))
 
-  (doseq [r results]
-    (let [mark (cond (js/get r .warned) (yellow "⚠")
+  (doseq [r Any results]
+    (let [mark String (cond (js/get r .warned) (yellow "⚠")
                      (js/get r .passed) (green "✓")
                      :else (red "✗"))]
       (console/log (str mark "  " (bold (js/get r .id)) "  " (js/get r .name)))
@@ -855,7 +878,7 @@
       (when (and (not (js/get r .passed)) (js/get r .fix))
         (console/log (str "     " (yellow (str "fix: " (js/call (js/call (js/get r .fix) .split "\n") .join "\n          "))))))))
 
-  (let [failed (js/get (js/call results .filter (fn [r] Any (not (js/get r .passed)))) .length)]
+  (let [failed Int (js/get (js/call results .filter (fn [r Any] Any (not (js/get r .passed)))) .length)]
     (console/log "")
     (if (= failed 0)
       (do
@@ -869,4 +892,4 @@
 
 ;; Run the CLI only when invoked directly, never on import.
 (when (js/get (js/import-meta) .main)
-  (js/call (main!) .catch (fn [e] Any (console/error e) (js/call process .exit 1))))
+  (js/call (main!) .catch (fn [e Error] Any (console/error e) (js/call process .exit 1))))
