@@ -23,7 +23,7 @@
 ;; MarionetteError carries an optional `remote` payload (the raw server error).
 (js/export
   (js/class MarionetteError extends Error
-    (constructor [(message String) (remote Any)]
+    (constructor [message String remote Any]
       Any
       (super message)
       (js/set! this .name "MarionetteError")
