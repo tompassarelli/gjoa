@@ -44,20 +44,24 @@
 
 ;; parse `(pref "name" value)` forms from every pref source -> Map{name -> value-str}.
 (defn collect-prefs [] Any
-  (let [(m (JsMap String String)) (js/new Map)]
+  (let [m (JsMap String String) (js/new Map)]
     (when (existsSync PREF-DIR)
-      (doseq [name (readdirSync PREF-DIR)]
+      (doseq [name String (readdirSync PREF-DIR)]
         (when (js/call name .endsWith ".bjs")
-          (let [src (readFileSync (join PREF-DIR name) "utf8")]
-            (doseq [mt (js/call src .matchAll (js/new RegExp "\\(pref\\s+\"([^\"]+)\"\\s+([^)]+)\\)" "g"))]
+          (let [src String (readFileSync (join PREF-DIR name) "utf8")]
+            (doseq [mt Any (js/call src .matchAll (js/new RegExp "\\(pref\\s+\"([^\"]+)\"\\s+([^)]+)\\)" "g"))]
               (js/call m .set (aget mt 1) (js/call (aget mt 2) .trim)))))))
     m))
 
 (defn audit [] Any
-  (let [prefs (collect-prefs) disabled [] gaps []]
-    (doseq [entry CATALOG]
-      (let [name (aget entry 0) vector (aget entry 1) want (aget entry 2)
-            have (js/call prefs .get name)]
+  (let [prefs Any (collect-prefs)
+        disabled (Vec Any) []
+        gaps (Vec Any) []]
+    (doseq [entry Any CATALOG]
+      (let [name Any (aget entry 0)
+            vector Any (aget entry 1)
+            want Any (aget entry 2)
+            have Any (js/call prefs .get name)]
         (if (and (not= have undefined)
                  (or (= have want) (and (= want "") (or (= have "\"\"") (= have "")))))
           (js/call disabled .push {:name name :vector vector :value have})
@@ -65,17 +69,19 @@
     {:disabled disabled :gaps gaps :catalogued (js/get CATALOG .length)}))
 
 (defn main! [] Any
-  (let [a (audit) disabled (js/get a .disabled) gaps (js/get a .gaps)]
+  (let [a Any (audit)
+        disabled Any (js/get a .disabled)
+        gaps Any (js/get a .gaps)]
     (when (js/call (js/get process .argv) .includes "--json")
       (console/log (js/call JSON .stringify a nil 2))
       (js/call process .exit 0))
     (console/log (str "\nFirefox-inherited egress — what gjoa's default prefs disable\n"
                       "(parsed from src/gjoa/defaults/pref/*.bjs)\n"))
     (console/log (str "DISABLED by gjoa (" (js/get disabled .length) "/" (js/get CATALOG .length) " catalogued vectors):"))
-    (doseq [d disabled] (console/log (str "  ✓ " (js/get d .vector) "  — " (js/get d .name) "=" (js/get d .value))))
+    (doseq [d Any disabled] (console/log (str "  ✓ " (js/get d .vector) "  — " (js/get d .name) "=" (js/get d .value))))
     (when (> (js/get gaps .length) 0)
       (console/log (str "\nNOT disabled — Firefox default still applies (" (js/get gaps .length) ") — the gap list:"))
-      (doseq [g gaps] (console/log (str "  • " (js/get g .vector) "  — " (js/get g .name) " " (js/get g .have)))))
+      (doseq [g Any gaps] (console/log (str "  • " (js/get g .vector) "  — " (js/get g .name) " " (js/get g .have)))))
     (console/log (str "\nNOTE: SafeBrowsing egress is intentionally KEPT (security feature). This"))
     (console/log "  catalog is the known-vector set; absence here ≠ proof of no other egress —")
     (console/log "  it is the audited, named list, paired with egress-scan.js (our own code).")))
