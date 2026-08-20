@@ -2,7 +2,7 @@
 ;; tools/projector/reflector.bjs — Phase 5, the JS round-trip reflector.
 ;; Parse a JS source file (acorn) into a SELF-CONTAINED lossless CST and render
 ;; it back BYTE-IDENTICALLY. The CST stores the literal source `segs` interleaved
-;; with structural `kids`, mirroring the Beagle/Fram node vocabulary
+;; with structural `kids`, mirroring the Beagle Store node vocabulary
 ;; (kind / v(seg) / child / tail). render() concatenates segs+kids using ONLY the
 ;; stored data — never the original source — so byte-identity proves losslessness.
 ;;   bun .beagle-tools/gjoa/tools/projector/reflector.js <file.js>   # round-trip gate

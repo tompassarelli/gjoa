@@ -3,8 +3,7 @@
 ;; A "claim-doc" is the persistable replacement for a textual patch: a list of
 ;; identity-anchored `set-body` verbs — {:verb "set-body" :class C :method M :body T}
 ;; — anchored to (class, method) IDENTITY, not line numbers. It serializes to JSON.
-;; This is the stable verb layer (independent of Fram's fN/CRDT ordering internals,
-;; which are mid-rewrite): the live-Fram-store projection of the AST itself is a
+;; This is the stable verb layer; the live Beagle Store projection of the AST is a
 ;; later integration step. Replaying a doc reproduces the edit; because it anchors
 ;; by name, it survives upstream reflow that `.rej`s the textual patch.
 (ns gjoa.tools.projector.claims

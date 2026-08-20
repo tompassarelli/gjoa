@@ -22,7 +22,7 @@
 ;; METHOD: static AST (acorn) over each JS source — real call/new/assign sinks with
 ;; file:line + the statically-known endpoint. It finds DIRECT egress; egress reached
 ;; only through a dynamically-resolved callee is the transitive claim-graph upgrade
-;; (Phase 2 — project the call graph into Fram, ask "what reaches a sink" in Datalog).
+;; (Phase 2 — project the call graph into Beagle Store, ask "what reaches a sink" in Datalog).
 ;;
 ;;   bun .beagle-tools/gjoa/tools/sovereignty/egress-scan.js          # human report
 ;;   bun .beagle-tools/gjoa/tools/sovereignty/egress-scan.js --json   # machine manifest

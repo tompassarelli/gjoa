@@ -4,7 +4,7 @@ _Anti-rot doc. The core fork-survival concern: minimizing the cost of tracking t
 
 gjoa tracks the Firefox release declared in `gjoa.json` (`firefox.version`). Mozilla ships a new release ~monthly and refactors constantly: methods move modules, struct fields get removed, JS object properties get deleted, signatures change. Every edit gjoa owns against that moving tree is a liability that has to be re-rolled when upstream churns under it. The fork survives by **owning the smallest, cheapest-to-maintain surface possible**, and by **seeing churn coming before it costs a build** (a Lane 3 mach/nix compile is 30–60 min; a `.rej` discovered mid-compile burns the whole thing).
 
-The surface we own today: **10 `patches/`** (against Mozilla source) + the `src/gjoa/` overlay (chrome JS + the `GjoaLoader.bjs` ESM loader) + pinned `beagle`/`fram` toolchain deps. The discipline below keeps that surface from rotting.
+The surface we own today: **10 `patches/`** (against Mozilla source) + the `src/gjoa/` overlay (chrome JS + the `GjoaLoader.bjs` ESM loader) + the pinned Beagle Store toolchain. The discipline below keeps that surface from rotting.
 
 ## The Lane doctrine — conflict cadence is a function of seam depth
 
@@ -106,11 +106,11 @@ A textual `.patch` is anchored to line numbers and surrounding context; when Moz
 
 ## Pinned toolchain — churn isolation on the authoring side
 
-Upstream churn isn't only Mozilla's. Gjoa freezes the moving `beagle` compiler and `fram` engine dependencies:
+Upstream churn isn't only Mozilla's. Gjoa freezes the moving Beagle Store toolchain:
 
 - `configs/beagle.ref` pins beagle — **compiler and runtime** — from canonical upstream `https://github.com/tompassarelli/beagle`. The immutable checkout at `~/code/beagle/pins/<full-object-id>` supplies the compiler via `PLTCOLLECTS`, and `core.js` is vendored from that same object. **Gate M** fails unless the checkout's full `HEAD` exactly equals the configured ID.
 
-This means Firefox churn and beagle churn are **decoupled**: a Firefox bump can't move the compiler, and a beagle bump is a deliberate, reviewed event (create a new content-addressed pin → update `configs/beagle.ref` → re-import → re-vendor), never an ambient surprise.
+This means Firefox churn and Beagle Store churn are **decoupled**: a Firefox bump can't move the compiler, and a Beagle Store bump is a deliberate, reviewed event (create a new content-addressed pin → update `configs/beagle.ref` → re-import → re-vendor), never an ambient surprise.
 
 ## The standing strategy, in one line per lever
 
