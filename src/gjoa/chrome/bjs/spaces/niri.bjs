@@ -25,21 +25,23 @@
 ;; BOTH name and idx so the driver can name-match OR fall back to position — niri
 ;; workspaces are unnamed/numeric by default, so name-only matching silently
 ;; no-ops for most real configs (this was the "it never switched" bug).
-(js/export (defn reduce-event [(cache Any) (ev Any)] Any
+(js/export (defn reduce-event
+  [cache Any
+   ev Any] Any
   (cond
     (js/get ev .WorkspacesChanged)
     ;; Keys and values come off the niri IPC stream as decoded JSON — the wire
     ;; shape is niri's to declare, not gjoa's.
-    (let [(next (JsMap Any Any)) (js/new Map)
-          arr (js/get (js/get ev .WorkspacesChanged) .workspaces)]
-      (js/call arr .forEach (fn [%1] Any (js/call next .set (js/get %1 .id) %1)))
+    (let [next (JsMap Any Any) (js/new Map)
+          arr Any (js/get (js/get ev .WorkspacesChanged) .workspaces)]
+      (js/call arr .forEach (fn [%1 Any] Any (js/call next .set (js/get %1 .id) %1)))
       {:cache next :switch nil})
 
     (js/get ev .WorkspaceActivated)
-    (let [a (js/get ev .WorkspaceActivated)]
+    (let [a Any (js/get ev .WorkspaceActivated)]
       (if (not (js/get a .focused))
         {:cache cache :switch nil}
-        (let [ws (js/call cache .get (js/get a .id))]
+        (let [ws Any (js/call cache .get (js/get a .id))]
           (if ws
             {:cache cache :switch {:name (js/get ws .name) :idx (js/get ws .idx)}}
             {:cache cache :switch nil}))))
@@ -57,28 +59,30 @@
 ;; setActive no-ops when already active; onActivated re-selects a tab in the target
 ;; space — we never touch the selected tab or delete (protected "Main"). Returns the
 ;; action taken {:action "activate"|"create"|"none" ...} for logging + tests.
-(js/export (defn switch-to-target [(spaces Any) (target Any)] Any
+(js/export (defn switch-to-target
+  [spaces Any
+   target Any] Any
   (if (not (and spaces target))
     {:action "none" :reason "no-spaces-or-target"}
-    (let [name (js/get target .name)
-          idx (js/get target .idx)]
+    (let [name Any (js/get target .name)
+          idx Any (js/get target .idx)]
       (cond
         (and name (> (js/get name .length) 0))
-        (let [match (js/call (js/call spaces .list) .find
-                      (fn [%1] Any (= (js/call (js/get %1 .name) .toLowerCase) (js/call name .toLowerCase))))]
+        (let [match Any (js/call (js/call spaces .list) .find
+                      (fn [%1 Any] Any (= (js/call (js/get %1 .name) .toLowerCase) (js/call name .toLowerCase))))]
           (if match
             (do (js/call spaces .setActive (js/get match .id))
                 {:action "activate" :id (js/get match .id) :by "name"})
-            (let [created (js/call spaces .create name)]
+            (let [created Any (js/call spaces .create name)]
               (js/call spaces .setActive (js/get created .id))
               {:action "create" :id (js/get created .id) :name name})))
 
         ;; idx arrives off the niri IPC stream: it is a 1-based position only if
         ;; it is actually a positive integer, so the guard proves that first.
         (and (number? idx) (js/call Number .isInteger idx) (> idx 0))
-        (let [(pos Int) (Math/trunc idx)
-              lst (js/call spaces .list)
-              at (aget lst (- pos 1))]
+        (let [pos Int (Math/trunc idx)
+              lst Any (js/call spaces .list)
+              at Any (aget lst (- pos 1))]
           (if at
             (do (js/call spaces .setActive (js/get at .id))
                 {:action "activate" :id (js/get at .id) :by "idx"})
@@ -88,42 +92,42 @@
 
 ;; --- Lifecycle / streaming ---------------------------------------------------
 (def st Any
-  (let [(cache (JsMap Any Any)) (js/new Map)]
+  (let [cache (JsMap Any Any) (js/new Map)]
     {:proc nil :alive false :debounce-id nil
      :cache cache :pending nil :backoff 500}))
 
-(defn apply-switch! [(target Any)] Any
+(defn apply-switch! [target Any] Any
   ;; Debounce rapid niri switches: only the last focus in the window is applied.
-  (let [delay (pref-int "gjoa.niri.debounceMs" 120)]
+  (let [delay Int (pref-int "gjoa.niri.debounceMs" 120)]
     (js/set! st .pending target)
     (when (js/get st .debounce-id) (clearTimeout (js/get st .debounce-id)))
     (js/set! st .debounce-id
       (setTimeout
         (fn [] Any
           (js/set! st .debounce-id nil)
-          (let [tgt (js/get st .pending)
-                spaces (js/get window .Spaces)]
+          (let [tgt Any (js/get st .pending)
+                spaces Any (js/get window .Spaces)]
             (js/set! st .pending nil)
             (when (and tgt spaces)
               ;; Mark niri-originated so a future gjoa→niri reflector won't ping-pong.
               (js/set! st .__niriDriving true)
               (try
-                (let [res (switch-to-target spaces tgt)]
+                (let [res (Map Keyword Any) (switch-to-target spaces tgt)]
                   (console/log "gjoa-niri: workspace" (str "name=" (js/get tgt .name) " idx=" (js/get tgt .idx))
                                "->" (js/get res .action) (or (js/get res .by) (js/get res .reason) "")))
                 (catch (e Any) (console/error "gjoa-niri: switch failed" e))
                 (finally (js/set! st .__niriDriving false))))))
         delay))))
 
-(defn handle-line! [(line String)] Any
-  (let [ev (try (JSON/parse line) (catch (_e Any) nil))]
+(defn handle-line! [line String] Any
+  (let [ev Any (try (JSON/parse line) (catch (_e Any) nil))]
     (when ev
       ;; Visible confirmation that niri events are actually arriving (diagnoses the
       ;; "is it even connected?" half of "not sure it was working").
       (when (js/get ev .WorkspacesChanged)
         (console/log "gjoa-niri: workspaces changed,"
           (js/get (js/get (js/get ev .WorkspacesChanged) .workspaces) .length) "workspaces"))
-      (let [r (reduce-event (js/get st .cache) ev)]
+      (let [r (Map Keyword Any) (reduce-event (js/get st .cache) ev)]
         (js/set! st .cache (js/get r .cache))
         (when (js/get r .switch) (apply-switch! (js/get r .switch)))))))
 
@@ -131,66 +135,70 @@
 ;; chunks, NOT lines. Given the carried-over buffer + a fresh chunk, return the
 ;; complete newline-terminated lines (empty lines dropped) plus the leftover
 ;; partial to carry forward. This is the fragile heart of the stream parser.
-(js/export (defn frame-lines [(buf String) (chunk String)] Any
-  (let [lines []]
-    (loop [rest (str buf chunk)]
-      (let [nl (js/call rest .indexOf "\n")]
+(js/export (defn frame-lines
+  [buf String
+   chunk String] Any
+  (let [lines (Vec String) []]
+    (loop [rest String (str buf chunk)]
+      (let [nl Int (js/call rest .indexOf "\n")]
         (if (< nl 0)
           {:lines lines :rest rest}
-          (let [line (js/call rest .slice 0 nl)]
+          (let [line String (js/call rest .slice 0 nl)]
             (when (> (js/get line .length) 0) (js/call lines .push line))
             (recur (js/call rest .slice (+ nl 1))))))))))
 
 ;; Async read→frame→dispatch loop; the returned promise resolves on child EOF
 ;; (niri exited / killed). Self-recursive at top level to avoid a nested defn.
-(defn pump-step! [(proc Any) (buf Any)] Any
+(defn pump-step!
+  [proc Any
+   buf Any] Any
   (-> (js/call (js/get proc .stdout) .readString)
-      (js/call .then (fn [chunk] Any
+      (js/call .then (fn [chunk Any] Any
         (if (= chunk "")
           nil
-          (let [framed (frame-lines (js/get buf .s) chunk)]
+          (let [framed (Map Keyword Any) (frame-lines (js/get buf .s) chunk)]
             (js/set! buf .s (js/get framed .rest))
-            (js/call (js/get framed .lines) .forEach (fn [%1] Any (handle-line! %1)))
+            (js/call (js/get framed .lines) .forEach (fn [%1 String] Any (handle-line! %1)))
             (pump-step! proc buf)))))))
 
-(defn pump! [(proc Any)] Any
+(defn pump! [proc Any] Any
   (pump-step! proc {:s ""}))
 
 (defn schedule-respawn! [] Any
-  (let [(b Int) (js/get st .backoff)]
+  (let [b Int (js/get st .backoff)]
     (js/set! st .backoff (Math/min (* b 2) 30000))
     (setTimeout (fn [] Any (when (js/get st .alive) (spawn!))) b)))
 
 (defn spawn! [] Any
-  (let [sp (get-subprocess)]
+  (let [sp Any (get-subprocess)]
   (-> (js/call sp .pathSearch "niri")
-      (js/call .then (fn [niri] Any
+      (js/call .then (fn [niri String] Any
         (-> (js/call sp .call
               {:command niri :arguments ["msg" "event-stream"] :stderr "stdout"})
-            (js/call .then (fn [proc] Any
+            (js/call .then (fn [proc Any] Any
               (js/set! st .proc proc)
               (js/set! st .alive true)
               (js/set! st .backoff 500)
               (console/log "gjoa-niri: event-stream attached")
               (-> (pump! proc)
-                  (js/call .then (fn [_] Any
+                  (js/call .then (fn [_ Any] Any
                     (js/set! st .proc nil)
                     (when (js/get st .alive) (schedule-respawn!))))))))))
-      (js/call .catch (fn [e] Any
+      (js/call .catch (fn [e Any] Any
         (console/error "gjoa-niri: spawn failed (niri on PATH?)" e)
         (when (js/get st .alive) (schedule-respawn!)))))))
 
 (defn teardown! [] Any
   (js/set! st .alive false)
   (when (js/get st .debounce-id) (clearTimeout (js/get st .debounce-id)))
-  (let [p (js/get st .proc)] (when p (try (js/call p .kill) (catch (_e Any) nil))))
+  (let [p Any (js/get st .proc)] (when p (try (js/call p .kill) (catch (_e Any) nil))))
   (js/set! st .proc nil))
 
 ;; --- Entry point -------------------------------------------------------------
 ;; Called per browser window from tabs/index.bjs after window.Spaces is set.
 (js/export (defn make-niri-binding! [] Any
-  (let [enabled (pref-bool "gjoa.niri.enabled" true)
-        sock (try (js/call (js/get Services .env) .get "NIRI_SOCKET") (catch (_e Any) ""))]
+  (let [enabled Bool (pref-bool "gjoa.niri.enabled" true)
+        sock Any (try (js/call (js/get Services .env) .get "NIRI_SOCKET") (catch (_e Any) ""))]
     (cond
       (not enabled)
       (console/log "gjoa-niri: disabled via pref")
