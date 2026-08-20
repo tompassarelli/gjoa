@@ -44,24 +44,27 @@
     nil
     (do
       (js/call log .step "dist/chrome/ missing — running chrome:dist")
-      (let [proc (js/call Bun .spawn {:cmd ["bun" "run" "chrome:dist"]
+      (let [proc Any (js/call Bun .spawn {:cmd ["bun" "run" "chrome:dist"]
                               :cwd REPO-ROOT
                               :stdout "inherit"
                               :stderr "inherit"})
-            code (js/await (js/get proc .exited))]
+            code Any (js/await (js/get proc .exited))]
         (when (not= code 0)
           (throw (js/new Error (str "chrome:dist failed (exit " code ")"))))))))
 
-(defn bakeOne [(srcSubdir String) (dstSubdir String) (names Any)] Any
-  (let [dstDir (join BAKE-ROOT dstSubdir)
-        n (js/get names .length)]
+(defn bakeOne
+  [srcSubdir String
+   dstSubdir String
+   names Any] Any
+  (let [dstDir Any (join BAKE-ROOT dstSubdir)
+        n Any (js/get names .length)]
     (js/await (mkdir dstDir {:recursive true}))
     ;; Sequential index loop so each copyFile is awaited in order (a `doseq`
     ;; would emit .forEach, which does NOT await its async body).
-    (loop [i 0]
+    (loop [i Int 0]
       (when (< i n)
-        (let [fname (aget names i)
-              src (join DIST-CHROME srcSubdir fname)]
+        (let [fname Any (aget names i)
+              src Any (join DIST-CHROME srcSubdir fname)]
           (do
             (when (not (existsSync src))
               (throw (js/new Error (str "chrome-bake: expected " src
