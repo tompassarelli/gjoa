@@ -54,7 +54,10 @@
 
 ;; Chrome-side drawSnapshot luminance at pixel (px,py) of `url` (0=black..255=white).
 ;; No content executeScript -> survives engine inversion (which discards the content BC).
-(defn render-lum-js [(url String) (px Int) (py Int)] String
+(defn render-lum-js
+  [url String
+     px Int
+     py Int] String
   (str "const done = arguments[arguments.length-1];"
        "(async () => { try {"
        "  const win = Services.wm.getMostRecentWindow('navigator:browser');"
@@ -74,7 +77,7 @@
      (chrome-eval DARK-JS)
      ;; actor measures /light -> 'active' -> sets colorInversionOverride -> recascade.
      ;; Read the PAINTED page chrome-side (content getComputedStyle discards under invert).
-     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT-TOP 150 100) []))]
+     (let [lum Any (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT-TOP 150 100) []))]
        (console/log (str "[darkmode] actor /light center-lum=" lum))
        (expect (< (Number lum) 80) (str "themeless-light should invert to dark; lum=" lum))))
    ;; Dark mode's ENGINE default-invert darkens a themeless page at cascade time,
@@ -83,7 +86,7 @@
    (deftest "darkmode: engine default-invert darkens a themeless page (painted)" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
      (chrome-eval DARK-PREPAINT-JS)
-     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT-TOP 150 100) []))]
+     (let [lum Any (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT-TOP 150 100) []))]
        (console/log (str "[darkmode] dark /light center-lum=" lum))
        (expect (< (Number lum) 80) (str "themeless-light should invert to DARK under dark-mode default-invert; lum=" lum))))
    ;; A native-dark page (authored #111) is left un-inverted pre-paint by
@@ -97,7 +100,7 @@
      ;; /dark bakes a white probe top-left (0,0,80,80). Native-dark is NOT inverted
      ;; pre-paint (PresShell::Initialize only flips themeless pages), so the white
      ;; probe STAYS WHITE; if inversion wrongly fired it would go black. Painted read.
-     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js DARK-TOP 40 40) []))]
+     (let [lum Any (js/await (js/call mn .executeAsyncScript (render-lum-js DARK-TOP 40 40) []))]
        (console/log (str "[darkmode] dark /dark white-probe-lum=" lum))
        (expect (> (Number lum) 150) (str "native-dark must NOT invert: the white probe should stay WHITE; lum=" lum))))
    ;; Dark sets pre-paint default-invert unconditionally. System follows the OS.
@@ -141,14 +144,14 @@
                        " Services.prefs.setStringPref('gjoa.darkmode.user.off', '127.0.0.1');"
                        " Services.prefs.savePrefFile(null);"
                        " return 'seeded';"))
-     (let [client (js/await (js/call ctx .restartGjoa))]
+     (let [client Any (js/await (js/call ctx .restartGjoa))]
        (js/await (js/call client .setContext "chrome"))
        (js/await (js/call client .executeAsyncScript "const [r]=arguments; setTimeout(()=>r(1), 1500);" []))
-       (let [navOk (js/await (js/call client .executeAsyncScript NAV-JS [LIGHT-TOP]))]
+       (let [navOk Bool (js/await (js/call client .executeAsyncScript NAV-JS [LIGHT-TOP]))]
          (expect navOk "light fixture loaded after restart")
          (js/await (js/call client .executeAsyncScript SETTLE-JS []))
          (js/await (js/call client .setContext "content"))
-         (let [box (js/await (js/call client .executeAsyncScript (str "const [resolve]=arguments;"
+         (let [box Any (js/await (js/call client .executeAsyncScript (str "const [resolve]=arguments;"
                           " const d=document.createElement('div'); d.id='dm-w';"
                           " d.style.backgroundColor='rgb(255,255,255)';"
                           " document.body.appendChild(d);"
@@ -170,7 +173,7 @@
      (js/await (js/call mn .setContext "chrome"))
      (chrome-eval DARK-PREPAINT-JS)
      (chrome-eval "Services.prefs.setCharPref('gjoa.darkmode.user.force-native', '127.0.0.1'); return 'fn';")
-     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT-TOP 150 100) []))]
+     (let [lum Any (js/await (js/call mn .executeAsyncScript (render-lum-js LIGHT-TOP 150 100) []))]
        (console/log (str "[dm-override] force-native /light center-lum=" lum))
        (expect (> (Number lum) 150) (str "force-native must KEEP themeless-light un-inverted (light); lum=" lum)))
      (chrome-eval "Services.prefs.clearUserPref('gjoa.darkmode.user.force-native'); return 'clean';"))
@@ -182,7 +185,7 @@
      (js/await (js/call mn .setContext "chrome"))
      (chrome-eval DARK-PREPAINT-JS)
      (chrome-eval "Services.prefs.setCharPref('gjoa.darkmode.user.force-invert', '127.0.0.1'); return 'fi';")
-     (let [lum (js/await (js/call mn .executeAsyncScript (render-lum-js DARK-TOP 150 100) []))]
+     (let [lum Any (js/await (js/call mn .executeAsyncScript (render-lum-js DARK-TOP 150 100) []))]
        (console/log (str "[dm-override] force-invert /dark center-lum=" lum))
        (expect (> (Number lum) 150) (str "force-invert must invert the native-dark page (#111 -> light center); lum=" lum)))
      (chrome-eval "Services.prefs.clearUserPref('gjoa.darkmode.user.force-invert'); return 'clean';"))]))
