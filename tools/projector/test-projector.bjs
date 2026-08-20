@@ -75,7 +75,7 @@
   (let [graph Any (build-graph!)
        ;; functions (NOT macros — macros inline away and are correctly not nodes)
        symbols (Vec String) ["enabled?" "apply!" "parse-hosts" "allow-hosts" "make-sidebar-button!" "all-tabs"]]
-    (doseq [sym (Vec String) symbols]
+    (doseq [sym String symbols]
       (let [truth Any (beagle-callers sym)
            proj Any (js/new Set (projected-callers graph sym))
            missing Any (js/call truth .filter (fn [c String] Bool (not (js/call proj .has c))))]

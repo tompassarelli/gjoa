@@ -252,7 +252,7 @@
                 pass (Atom Int) (atom 0)
                 fail (Atom Int) (atom 0)
                 skip (Atom Int) (atom 0)
-                start Any (js/call Date .now)]
+                start Number (js/call Date .now)]
 
             (let [killGjoa (Fn [] Any) (fn [] Any
                     (let [g Any (deref gjoa)]
@@ -283,7 +283,7 @@
                   runOneTest (Fn [String Any] Any) (fn [file String
                        t Any] Any
                     (emit {:type "test:start" :name (js/get t .name) :file file})
-                    (let [tStart Any (js/call Date .now)
+                    (let [tStart Number (js/call Date .now)
                           ctx (Map Keyword (U Any (Fn [Any] Any) (Fn [] Any))) {:profilePath (js/get (deref profile) .path)
                                :headed (boolean (js/get opts .headed))
                                :skip (fn [reason String] Any (throw (SkipError! reason)))

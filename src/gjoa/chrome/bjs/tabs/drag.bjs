@@ -249,7 +249,7 @@
                         :else
                         (subtree-rows! src-row))]
 
-                  (if (not (js/get moved-rows .length))
+                  (if (= (js/get moved-rows .length) 0)
                     (log "executeDrop:abort" {:reason "no-movedRows"})
                     (let [src-level Int (level-of-row! (aget moved-rows 0))
                           new-src-level Int (if (= position "child")

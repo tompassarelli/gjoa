@@ -536,16 +536,16 @@
                                            (let [text-left Float (js/get (js/call text-el .getBoundingClientRect) .left)]
                                              (- text-left rect-left))
                                            36)
-                              kids (Array/from (js/get container .children))
-                              input-idx (js/call kids .indexOf input-box) Any
+                              kids Any (Array/from (js/get container .children))
+                              input-idx Any (js/call kids .indexOf input-box)
                               ;; EVERY visible leading child, search-mode switcher included — the
                               ;; resting bar shows that chip, so a ghost without it reads as the
                               ;; engine icon vanishing the instant the palette floats.
-                              leading (js/call (if (>= input-idx 0) (js/call kids .slice 0 input-idx) kids) .filter
-                                        visible?) Any
-                              value (or (some-> window (js/get .gURLBar) (js/get .value)) "") Any
-                              has-value? (not= (js/call value .trim) "") Any
-                              text-str (if has-value? value ph) Any]
+                              leading Any (js/call (if (>= input-idx 0) (js/call kids .slice 0 input-idx) kids) .filter
+                                            visible?)
+                              value Any (or (some-> window (js/get .gURLBar) (js/get .value)) "")
+                              has-value? Any (not= (js/call value .trim) "")
+                              text-str Any (if has-value? value ph)]
                           (js/set! g .id "gjoa-urlbar-ghost")
                           (attr! g "aria-hidden" "true")
                           ;; LAYOUT-NEUTRAL like the bar it replaces (`.urlbar[breakout]` is

@@ -197,6 +197,6 @@
 ;; last element without the hand-rolled `(- (.-length x) 1)` off-by-one math.
 ;; Evaluates the array once (so it's also safe on a side-effecting expression).
 (defmacro last-of [arr Any]
-  `(let [_a ~arr
+  `(let [_a Any ~arr
          _n Int (js/get _a .length)]
      (aget _a (- _n 1))))

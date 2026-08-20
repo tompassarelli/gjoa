@@ -534,7 +534,7 @@
       ;; current patches whose hash drifted or that aren't recorded at all
       (doseq [p Any patches]
         (let [actual String (sha256-file (join PATCHES-DIR p))
-              expected Any (aget recorded p)]
+              expected Any (js/get recorded p)]
           (cond
             (nil? expected) (js/call missing .push (str p " (no entry in manifest)"))
             (not (= actual expected))
@@ -682,7 +682,7 @@
           ids (Vec String) (js/call Object .keys mits)
           problems (Vec Any) []]
       (doseq [id String ids]
-        (let [e Any (aget mits id)
+        (let [e Any (js/get mits id)
               rel Any (js/get e .file)
               path String (join REPO-ROOT rel)]
           (if (not (existsSync path))
@@ -844,7 +844,7 @@
         (if (not (js/call tag .match (js/new RegExp "^v[0-9]")))
           (pass "X" "release tag matches gjoa.json displayVersion" (str "HEAD tag `" tag "` is not a version tag — skipping"))
           (let [gjoa Any (js/call JSON .parse (readFileSync GJOA-JSON "utf8"))
-                tagVersion (Vec Any) (js/call tag .slice 1)
+                tagVersion String (js/call tag .slice 1)
                 configVersion Any (js/get gjoa .displayVersion)]
             (if (= tagVersion configVersion)
               (pass "X" "release tag matches gjoa.json displayVersion" (str "HEAD tag `" tag "` matches displayVersion " configVersion))

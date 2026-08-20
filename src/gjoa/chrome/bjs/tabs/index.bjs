@@ -689,7 +689,7 @@
                       (let [pfx-ns Any (or (js/get window .pfx) (do (js/set! window .pfx {}) (js/get window .pfx)))]
 
                         (js/set! pfx-ns .measure
-                          (fn [& els Any] Any
+                          (fn [& els (Vec Any)] Any
                             (js/call els .map (fn
                                                 [el Any
                                                  i Int] Any
@@ -706,7 +706,7 @@
                                    :bottom (Math/round (js/get r .bottom))}))))))
 
                         (js/set! pfx-ns .gaps
-                          (fn [& els Any] Any
+                          (fn [& els (Vec Any)] Any
                             (js/call (js/call els .slice 1) .map (fn
                                                                    [el Any
                                                                     i Int] Any

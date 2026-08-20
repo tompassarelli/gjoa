@@ -60,7 +60,7 @@
 
        :rename (fn [id Any
                     name Any] Any
-         (let [s (Map Keyword Any) (js/call spaces .get id)]
+         (let [s Any (js/call spaces .get id)]
            (when s
              (when (not= (js/get s .name) name)
                (js/set! s .name name)
@@ -69,7 +69,7 @@
 
        :setIcon (fn [id Any
                      icon Any] Any
-         (let [s (Map Keyword Any) (js/call spaces .get id)]
+         (let [s Any (js/call spaces .get id)]
            (when s
              (if icon
                (js/set! s .icon icon)

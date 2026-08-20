@@ -37,7 +37,7 @@
 (defn validate [c Any] Any
   (let [required (Vec String) ["name" "binaryName" "appId" "vendor" "displayVersion"
                   "license" "github" "firefox" "branding" "urls"]]
-    (doseq [k Int required]
+    (doseq [k String required]
       (if (= (get c k) undefined)
         (throw (js/new Error (str "gjoa.json missing required field: " k)))))
     (if (not (js/get (js/get c .firefox) .version))

@@ -209,15 +209,15 @@
         tag String (version->tag version)
         names Any (list-patches)
         patches (Map Any Any) {}]
-    (doseq [n Int names]
+    (doseq [n String names]
       (let [text Any (readFileSync (join PATCHES-DIR n) "utf8")
             files Any (diff-touches text)
             hunksByFile Any (diff-hunks text)
             fobj (Map Any Any) {}]
         (doseq [f String files]
-          (aset fobj f {:oid (blob-oid tag f)
-                        :hunks (file-hunk-records tag f (or (js/call hunksByFile .get f) []))}))
-        (aset patches n fobj)))
+          (js/set! fobj f {:oid (blob-oid tag f)
+                           :hunks (file-hunk-records tag f (or (js/call hunksByFile .get f) []))}))
+        (js/set! patches n fobj)))
     (let [digest String (aggregate-digest patches)
           doc (Map Keyword Any) {:note (str "Upstream provenance lock (churn anti-rot). Per patch, per touched file: the git "
                               "blob OID (whole-file) PLUS per-hunk anchors {oid, hunks:[{header,range,hash}]} — "

@@ -23,7 +23,7 @@
             (rmattr! elem "gjoa-has-hover")
             value
             (let [collapse-until Int (js/get st .collapse-until)
-                  cr Any (- collapse-until (Date/now))]
+                  cr Int (- collapse-until (Date/now))]
               (if (> cr 0)
                 (do
                   (dbg "setHover:revealDropped" {:collapseRemaining cr})

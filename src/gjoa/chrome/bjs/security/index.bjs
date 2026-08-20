@@ -95,8 +95,8 @@
                 (if (not (newer? my-version latest))
                   (console/log (str "[security] OK — " my-version
                                      " matches or exceeds latest stable " latest))
-                (let [my (HVec Int Int Int) (parse-version my-version)
-                      up (HVec Int Int Int) (parse-version latest)
+                (let [my (Vec Int) (parse-version my-version)
+                      up (Vec Int) (parse-version latest)
                       ;; parse-version yields a [major minor patch] triple whose
                       ;; every element is an integer or the 0 fallback.
                       up-major Int (aget up 0)

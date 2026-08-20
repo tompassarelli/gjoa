@@ -36,7 +36,7 @@
                                         snap)]
                          (js/call pending .clear)
                          (js/call DOMAIN-ORDER .forEach (fn [domain String] Any
-                           (let [reasons (Vec Any) (js/call snapshot .get domain)]
+                           (let [reasons (U (Vec Any) Nil) (js/call snapshot .get domain)]
                              (when (and reasons (not= (js/get reasons .length) 0))
                                (let [handlers (Vec Any) (or (js/call reconcilers .get domain) [])]
                                  (js/call handlers .forEach
@@ -75,7 +75,7 @@
                        (js/call list .push reconciler))
                      (log "register" {:domain (js/get reconciler .domain)})
                      (fn [] Any
-                       (let [arr (Vec Any) (js/call reconcilers .get (js/get reconciler .domain))]
+                       (let [arr (U (Vec Any) Nil) (js/call reconcilers .get (js/get reconciler .domain))]
                          (when arr
                            (let [i Int (js/call arr .indexOf reconciler)]
                              (when (>= i 0) (js/call arr .splice i 1)))))))

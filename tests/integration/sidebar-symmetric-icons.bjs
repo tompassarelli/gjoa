@@ -90,7 +90,7 @@
      ;; equivalent is a loop/recur that returns the latest probe result
      ;; on either convergence or deadline.
      (let [deadline Int (+ (Date/now) 3000)
-          r Any (js/await (loop [acc Int {}]
+          r Any (js/await (loop [acc (Map Any Any) {}]
                (if (>= (Date/now) deadline)
                  acc
                  (let [_ Any (js/await (js/new Promise (fn [res Any] Any (setTimeout res 200))))
@@ -100,8 +100,8 @@
                                  sidebar-top Float (js/get (js/get nr .sidebar) .top)
                                  sidebar-bottom Float (js/get (js/get nr .sidebar) .bottom)
                                  bottom-icon-bottom Float (js/get (js/get nr .bottomIcon) .bottom)
-                                 tg Any (- top-icon-top sidebar-top)
-                                 bg String (- sidebar-bottom bottom-icon-bottom)]
+                                 tg Float (- top-icon-top sidebar-top)
+                                 bg Float (- sidebar-bottom bottom-icon-bottom)]
                               (<= (Math/abs (- tg bg)) TOLERANCE-PX)))
                      nr
                      (recur nr))))))]

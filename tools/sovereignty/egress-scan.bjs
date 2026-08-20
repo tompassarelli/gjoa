@@ -49,7 +49,7 @@
   (when (and node (= (js/typeof node) "object"))
     (when (and (js/get node .type) (= (js/typeof (js/get node .type)) "string")) (visit node))
     (doseq [k String (js/call Object .keys node)]
-      (let [v Any (aget node k)]
+      (let [v Any (js/get node k)]
         (if (js/call Array .isArray v)
           (doseq [c Any v] (walk c visit))
           (walk v visit))))))

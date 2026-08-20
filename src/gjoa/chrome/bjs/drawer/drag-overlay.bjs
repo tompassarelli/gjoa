@@ -33,7 +33,7 @@
             asb-left Float (js/get asb-rect .left)
             container-left Float (js/get container-rect .left)
             container-top Float (js/get container-rect .top)
-            height (Math/max 0.0 (- bottom top))]
+            height Float (Math/max 0.0 (- bottom top))]
         (js/set! (js/get ov .style) .left (str (- asb-left container-left) "px"))
         (js/set! (js/get ov .style) .top (str (- top container-top) "px"))
         (js/set! (js/get ov .style) .width (str (js/get asb-rect .width) "px"))

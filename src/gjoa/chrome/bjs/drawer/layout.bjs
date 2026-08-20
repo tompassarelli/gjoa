@@ -123,7 +123,7 @@
                                           "--gjoa-sidebar-inset"))
                                       10)
                     sidebar-w Float (js/get (js/call sidebar-main .getBoundingClientRect) .width)
-                    w (Math/max 0.0 (- sidebar-w (* inset 2)))]
+                    w Float (Math/max 0.0 (- sidebar-w (* inset 2)))]
                 (js/call (js/get urlbar .style) .setProperty "--urlbar-width" (str w "px"))
                 ;; #150: stash the resting width so the FLIPPED breakout-extend
                 ;; CSS can grow the bar toward the page (leftward) instead of the
@@ -213,10 +213,10 @@
                               bottom-icon-bottom Float (js/get bottom-icon .bottom)
                               sidebar-top Float (js/get sidebar-rect .top)
                               sidebar-bottom Float (js/get sidebar-rect .bottom)
-                              top-gap Any (- top-icon-top sidebar-top)
-                              bottom-gap Any (- sidebar-bottom bottom-icon-bottom)
+                              top-gap Float (- top-icon-top sidebar-top)
+                              bottom-gap Float (- sidebar-bottom bottom-icon-bottom)
                               BOTTOM-OFFSET Int 4
-                              delta Any (- (+ top-gap BOTTOM-OFFSET) bottom-gap)]
+                              delta Float (- (+ top-gap BOTTOM-OFFSET) bottom-gap)]
                           (if (< (Math/abs delta) 0.5)
                             (do
                               (log (str "symfooter:converged topGap="
@@ -228,7 +228,7 @@
                                                             (js/call (getComputedStyle (js/get document .documentElement)) .getPropertyValue
                                                               "--gjoa-symmetric-footer"))
                                                           0)
-                                  next (Math/max 0 (Math/round (- current-var (* delta 0.6))))]
+                                  next Int (Math/max 0 (Math/round (- current-var (* delta 0.6))))]
                               (js/call (js/get (js/get document .documentElement) .style) .setProperty
                                             "--gjoa-symmetric-footer" (str next "px"))
                               (log (str "symfooter:pass topGap=" (js/call top-gap .toFixed 1)
@@ -442,7 +442,7 @@
         (let [width-obs Any (js/new ResizeObserver
                           (fn [] Any
                             (when (has? sidebar-main "sidebar-launcher-expanded")
-                              (let [w (Math/round (js/get (js/call sidebar-main .getBoundingClientRect) .width))]
+                              (let [w Int (Math/round (js/get (js/call sidebar-main .getBoundingClientRect) .width))]
                                 (when (> w 0) (set-pref-int! WIDTH-PREF w))))))]
           (js/call width-obs .observe sidebar-main)
 

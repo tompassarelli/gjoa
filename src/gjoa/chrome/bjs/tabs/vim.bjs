@@ -354,12 +354,14 @@
           (when (data-of! row)
             (let [my-level Int (level-of-row! row)
                   sub (Vec Any) (subtree-rows! row)
-                  last-row Any (aget sub (- (js/get sub .length) 1))
+                  sub-count Int (js/get sub .length)
+                  last-row Any (aget sub (- sub-count 1))
                   next-row Any (js/get last-row .nextElementSibling)]
               (when (and next-row (not= next-row (js/get state .spacer))
                          (= (level-of-row! next-row) my-level))
                 (let [next-sub (Vec Any) (subtree-rows! next-row)
-                      anchor Any (aget next-sub (- (js/get next-sub .length) 1))]
+                      next-sub-count Int (js/get next-sub .length)
+                      anchor Any (aget next-sub (- next-sub-count 1))]
                   (insert-after-each! anchor sub))
                 (js/call rows .updateVisibility)
                 (scheduleSave)))))
@@ -385,7 +387,8 @@
           (when (and row (js/get row ._tab))
             (let [my-level Int (level-of-row! row)
                   sub (Vec Any) (subtree-rows! row)
-                  last-row Any (aget sub (- (js/get sub .length) 1))
+                  sub-count Int (js/get sub .length)
+                  last-row Any (aget sub (- sub-count 1))
                   next-row Any (js/get last-row .nextElementSibling)]
               (when (and next-row (not= next-row (js/get state .spacer))
                          (= (level-of-row! next-row) my-level))
@@ -395,7 +398,8 @@
                     (js/set! (tree-data! (js/get row ._tab)) .parentId
                           (js/get (tree-data! (js/get next-row ._tab)) .id))))
                 (let [next-sub (Vec Any) (subtree-rows! next-row)
-                      anchor Any (aget next-sub (- (js/get next-sub .length) 1))]
+                      next-sub-count Int (js/get next-sub .length)
+                      anchor Any (aget next-sub (- next-sub-count 1))]
                   (insert-after-each! anchor sub))
                 (commit-tree (subtree-rows! row))))))
 
@@ -417,7 +421,8 @@
             (let [sub (Vec Any) (subtree-rows! row)
                   p Any (parent-row-of row)
                   p-sub Any (when p (subtree-rows! p))
-                  anchor Any (when p-sub (aget p-sub (- (js/get p-sub .length) 1)))]
+                  p-sub-count Int (if p-sub (js/get p-sub .length) 0)
+                  anchor Any (when (> p-sub-count 0) (aget p-sub (- p-sub-count 1)))]
               (js/set! (tree-data! (js/get row ._tab)) .parentId nil)
               (when (and anchor (not (js/call sub .includes anchor)))
                 (insert-after-each! anchor sub))
@@ -576,7 +581,7 @@
         current-host (Fn [] String) (fn [] String
           (try
             (let [uri String (current-spec)]
-              (if (not uri) "" (js/call (js/get (js/new URL uri) .hostname) .toLowerCase)))
+              (if (not (bool uri)) "" (js/call (js/get (js/new URL uri) .hostname) .toLowerCase)))
             (catch (_e Any) "")))
 
         current-host-blacklisted (Fn [] Bool) (fn [] Bool
@@ -885,8 +890,9 @@
                                 (when clone-row
                                   (js/call obs .disconnect)
                                   (js/set! (tree-data! clone) .parentId sibling-parent-id)
-                                  (let [st (Vec Any) (subtree-rows! source-row)]
-                                    (js/call (aget st (- (js/get st .length) 1)) .after clone-row))
+                                  (let [st (Vec Any) (subtree-rows! source-row)
+                                        st-count Int (js/get st .length)]
+                                    (js/call (aget st (- st-count 1)) .after clone-row))
                                   (js/call rows .syncTabRow clone)
                                   (js/call rows .updateVisibility)
                                   (scheduleSave)))))]
@@ -922,7 +928,7 @@
           (let [gjoa-api Any (js/get window .Gjoa)]
             (if (and (= scope "all") gjoa-api)
               (let [all-tabs Any (js/call (js/get gjoa-api .tabs) .all)]
-                (if (not (js/get all-tabs .length))
+                (if (= (js/get all-tabs .length) 0)
                   (modeline-msg "No tabs" 3000)
                   ;; Window ids come back over the cross-window tabs API.
                   (let [window-labels (JsMap Any String) (js/new Map)]
@@ -953,7 +959,7 @@
                                    (str "tabs (" (js/get (js/call spaces .active) .name) ") >")
                                    "tabs (window) >")
                     items Any (build-window-items filter-fn)]
-                (if (not (js/get items .length))
+                (if (= (js/get items .length) 0)
                   (modeline-msg "No tabs" 3000)
                   (js/call picker .show
                     {:prompt prompt-label
@@ -1079,7 +1085,7 @@
             (when (and (js/get env .spaces) (js/get (js/get env .spaces) .tabSpaces))
               (js/call (js/get (js/get env .spaces) .tabSpaces) .forEach
                 (fn [%1 Any] Any (js/call tab-space-map .set (aget %1 0) (aget %1 1)))))
-            (if (not (js/get tab-nodes .length))
+            (if (= (js/get tab-nodes .length) 0)
               (do (modeline-msg "Restore: no tabs in event" 3000) nil)
               (let [max-saved-id Int (js/call (js/get Math .max) .apply nil
                                          (js/call [0] .concat (js/call tab-nodes .map (fn [%1 Any] Any (or (js/get %1 .id) 0)))))
@@ -1165,7 +1171,7 @@
 
         apply-filter (Fn [String] Any) (fn [query String] Any
           (let [q String (js/call (js/call query .trim) .toLowerCase)]
-            (if (not q)
+            (if (not (bool q))
               (clear-filter)
               (let [all-r (Vec Any) (all-rows)
                     matched Any (js/new Set)]
@@ -1349,7 +1355,7 @@
                 (js/call spaces .setActive (js/get next .id))
                 (modeline-msg (str ":space -> \"" (js/get next .name) "\"") 1500)))))
 
-        end-ex-mode (Fn [String] Any) (fn [cmd String] Any
+        end-ex-mode (Fn [(U String Nil)] Any) (fn [cmd (U String Nil)] Any
           (let [sp Any (q (js/get vs .modeline) ".gjoa-search-prefix")]
             (when sp (js/call sp .remove)))
           (let [si Any (q (js/get vs .modeline) ".gjoa-search-input")]
@@ -1365,8 +1371,9 @@
                       row Any (js/call rows .createGroupRow label
                             (if (js/get state .cursor) (level-of-row! (js/get state .cursor)) 0))]
                   (if (js/get state .cursor)
-                    (let [st (Vec Any) (subtree-rows! (js/get state .cursor))]
-                      (js/call (aget st (- (js/get st .length) 1)) .after row))
+                    (let [st (Vec Any) (subtree-rows! (js/get state .cursor))
+                          st-count Int (js/get st .length)]
+                      (js/call (aget st (- st-count 1)) .after row))
                     (js/call (js/get state .panel) .insertBefore row (js/get state .spacer)))
                   (set-cursor row)
                   (js/call rows .updateVisibility)
@@ -1396,7 +1403,7 @@
 
                 (or (= name "checkpoint") (= name "cp"))
                 (let [label String (js/call (js/call (js/call args .slice 1) .join " ") .trim)]
-                  (if (not label)
+                  (if (not (bool label))
                     (modeline-msg "Usage: :checkpoint <label>" 3000)
                     (do (scheduleSave)
                         (setTimeout
@@ -1414,9 +1421,9 @@
                 (let [arg String (js/call (js/call (js/call args .slice 1) .join " ") .trim)]
                   (-> (js/call history .getTagged 100)
                       (js/call .then (fn [tagged Any] Any
-                        (if (not (js/get tagged .length))
+                        (if (= (js/get tagged .length) 0)
                           (modeline-msg "No tagged sessions yet" 4000)
-                          (if (not arg)
+                          (if (not (bool arg))
                             (js/call picker .show
                               {:prompt "restore >"
                                :items (js/call tagged .map (fn [%1 Any] Any (session-picker-item %1)))
@@ -1429,7 +1436,7 @@
                             (let [needle String (js/call arg .toLowerCase)
                                   matches Any (js/call tagged .filter
                                     (fn [%1 Any] Any (js/call (js/call (or (label-of (js/get %1 .tag)) "") .toLowerCase) .includes needle)))]
-                              (if (not (js/get matches .length))
+                              (if (= (js/get matches .length) 0)
                                 (modeline-msg (str "No sessions match \"" arg "\"") 3000)
                                 (-> (restore-event (aget matches 0))
                                     (js/call .then (fn [] Any (modeline-msg
@@ -1456,19 +1463,19 @@
                           "Blacklist is empty") 5000))
                     (or (= sub "remove") (= sub "rm") (= sub "del"))
                     (let [host String (or (some-> (aget args 2) (js/call .trim)) (current-host))]
-                      (if (not host) (modeline-msg "No host to remove" 3000)
+                      (if (not (bool host)) (modeline-msg "No host to remove" 3000)
                         (modeline-msg
                           (if (blacklist-remove host) (str "Removed: " host)
                             (str "Not in blacklist: " host)) 3000)))
                     :else
                     (let [host String (or (some-> (aget args 1) (js/call .trim)) (current-host))]
-                      (if (not host) (modeline-msg "No host to blacklist" 3000)
+                      (if (not (bool host)) (modeline-msg "No host to blacklist" 3000)
                         (do (blacklist-add host)
                             (modeline-msg (str "Blacklisted: " host) 3000))))))
 
                 (or (= name "unblacklist") (= name "ubl"))
                 (let [host String (or (some-> (aget args 1) (js/call .trim)) (current-host))]
-                  (if (not host) (modeline-msg "No host to remove" 3000)
+                  (if (not (bool host)) (modeline-msg "No host to remove" 3000)
                     (modeline-msg
                       (if (blacklist-remove host) (str "Removed: " host)
                         (str "Not in blacklist: " host)) 3000)))
@@ -1503,7 +1510,7 @@
                 (= name "tabpos")
                 (let [valid (Vec String) ["sibling" "root" "child"]
                       arg String (js/call (or (aget args 1) "") .toLowerCase)]
-                  (if (not arg)
+                  (if (not (bool arg))
                     (let [cur String (js/call (js/get Services .prefs) .getCharPref
                                 "gjoa.tabs.newTabPosition" "sibling")]
                       (modeline-msg (str ":tabpos = " cur
@@ -1524,7 +1531,7 @@
                       (js/call spaces .setActive (js/get s .id))
                       (modeline-msg (str ":space new \"" (js/get s .name) "\" -> switched") 2500))
                     (= sub "rename")
-                    (if (not rest) (modeline-msg "Usage: :space rename <name>" 3000)
+                    (if (not (bool rest)) (modeline-msg "Usage: :space rename <name>" 3000)
                       (do (js/call spaces .rename (js/call spaces .activeId) rest)
                           (modeline-msg (str ":space rename \"" rest "\"") 2500)))
                     (= sub "delete")
@@ -1535,7 +1542,7 @@
                         (do (js/call spaces .delete (js/get cur .id))
                             (modeline-msg (str ":space delete \"" (js/get cur .name) "\"") 2500))))
                     (= sub "switch")
-                    (if (not rest) (modeline-msg "Usage: :space switch <name>" 3000)
+                    (if (not (bool rest)) (modeline-msg "Usage: :space switch <name>" 3000)
                       (let [match Any (js/call (js/call spaces .list) .find
                                     (fn [%1 Any] Any (= (js/call (js/get %1 .name) .toLowerCase)
                                         (js/call rest .toLowerCase))))]
@@ -1571,7 +1578,7 @@
                                          (js/call evs .filter (fn [%1 Any] Any (event-has-space %1 active-space)))
                                          evs)
                               display-evs (Vec Any) (js/call filtered .slice 0 100)]
-                          (if (not (js/get display-evs .length))
+                          (if (= (js/get display-evs .length) 0)
                             (modeline-msg
                               (if q (str "No events match \"" q "\"") "No history yet") 3000)
                             (js/call picker .show
@@ -1608,7 +1615,7 @@
                              (let [cmd Any (js/get item .data)
                        first-word String (or (aget (js/call (js/call (js/call q .trim) .toLowerCase) .split
                                                     (js/new RegExp "\\s+")) 0) "")]
-                   (if (not first-word) true
+                   (if (not (bool first-word)) true
                      (let [hay String (js/call (str (js/get cmd .name) " "
                                                   (or (js/get item .secondary) "")) .toLowerCase)]
                        (js/call hay .includes first-word)))))
