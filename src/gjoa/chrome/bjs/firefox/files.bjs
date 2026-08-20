@@ -6,33 +6,37 @@
 (js/export (defn profile-dir [] String
   (js/get (js/call (js/get Services .dirsvc) .get "ProfD" (js/get Ci .nsIFile)) .path)))
 
-(js/export (defn profile-path [(subpath String)] String
+(js/export (defn profile-path [subpath String] String
   (js/call PathUtils .join (profile-dir) subpath)))
 
-(js/export (defn join-path [(a String) (b String)] String
+(js/export (defn join-path
+  [a String
+   b String] String
   (js/call PathUtils .join a b)))
 
-(js/export (defn parent-path [(path String)] Any
+(js/export (defn parent-path [path String] Any
   (js/call PathUtils .parent path)))
 
-(js/export (defn read-text [(path String)] Any
+(js/export (defn read-text [path String] Any
   (js/call IOUtils .readUTF8 path)))
 
-(js/export (defn write-text [(path String) (data String)] Any
+(js/export (defn write-text
+  [path String
+   data String] Any
   (js/call IOUtils .writeUTF8 path data)))
 
-(js/export (defn exists? [(path String)] Any
-  (js/call (js/call IOUtils .exists path) .catch (fn [_e] Any false))))
+(js/export (defn exists? [path String] Any
+  (js/call (js/call IOUtils .exists path) .catch (fn [_e Any] Any false))))
 
-(js/export (defn stat-file [(path String)] Any
+(js/export (defn stat-file [path String] Any
   (js/call (js/call (js/call IOUtils .stat path) .then
-      (fn [s] Any
-        (let [result {:size (js/get s .size) :lastModified (js/get s .lastModified)}]
+      (fn [s Any] Any
+        (let [result Any {:size (js/get s .size) :lastModified (js/get s .lastModified)}]
           result))) .catch
-    (fn [_e] Any nil))))
+    (fn [_e Any] Any nil))))
 
-(js/export (defn ensure-dir [(path String)] Any
+(js/export (defn ensure-dir [path String] Any
   (js/call IOUtils .makeDirectory path {:ignoreExisting true :createAncestors true})))
 
-(js/export (defn remove-file [(path String)] Any
-  (js/call (js/call IOUtils .remove path) .catch (fn [_e] Any nil))))
+(js/export (defn remove-file [path String] Any
+  (js/call (js/call IOUtils .remove path) .catch (fn [_e Any] Any nil))))
