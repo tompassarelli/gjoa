@@ -22,8 +22,8 @@
 (defn pinned-ref [] String
   (if (not (existsSync BEAGLE-REF-FILE))
     (throw (js/new Error "configs/beagle.ref is missing"))
-    (let [lines (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
-          ref (js/call lines .find (fn [(l String)] Bool
+    (let [lines Any (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
+          ref Any (js/call lines .find (fn [l String] Bool
                              (and (> (js/get (js/call l .trim) .length) 0)
                                   (not (js/call (js/call l .trim) .startsWith "#")))))]
       (if ref
@@ -59,20 +59,21 @@
 (defn vendor-core-js! [] Any
   (if (not (existsSync BEAGLE-CORE-SRC))
     (throw (js/new Error (str "vendor-core-js!: " BEAGLE-CORE-SRC " not found — is the Beagle content pin (" BEAGLE-PIN-ROOT ") present?")))
-    (let [body (readFileSync BEAGLE-CORE-SRC "utf8")
-          ref (js/call (pinned-ref) .slice 0 12)
-          header (str "// AUTO-VENDORED by tools/prep/overlay.bjs from "
+    (let [body Any (readFileSync BEAGLE-CORE-SRC "utf8")
+          ref String (js/call (pinned-ref) .slice 0 12)
+          header String (str "// AUTO-VENDORED by tools/prep/overlay.bjs from "
                       "$BEAGLE_PIN_ROOT/beagle-lib/lib/beagle/core.js (configs/beagle.ref = " ref ").\n"
                       "// DO NOT EDIT BY HAND — re-vendored on every `bun run import` so the\n"
                       "// $$bc value-semantics runtime always matches the beagle the chrome was\n"
                       "// compiled against. Bump configs/beagle.ref + re-import to change it.\n")
-          out (str header body)]
+          out String (str header body)]
       (writeFileSync VENDORED-CORE-DST out)
       (js/call log .step (str "vendored beagle/core.js @ " ref)))))
 
-(defn count-files [(dir String)] Int
+(defn count-files [dir String] Int
   (reduce
-    (fn [(count Int) name] Int (let [path (join dir name)]
+    (fn [count Int
+         name String] Int (let [path Any (join dir name)]
         (if (js/call (statSync path) .isDirectory)
           (+ count (count-files path))
           (+ count 1))))
@@ -84,7 +85,7 @@
     (do
       (js/call log .info "no src/gjoa/ overlays present, skipping")
       nil)
-    (let [entries (readdirSync SRC-DIR)]
+    (let [entries Any (readdirSync SRC-DIR)]
       (if (= (js/get entries .length) 0)
         (do
           (js/call log .info "src/gjoa/ is empty, skipping overlay")
@@ -101,9 +102,9 @@
           ;; The chrome loader is authored in beagle. cp -a above copied the
           ;; .bjs source verbatim; compile it to the .sys.mjs ESM that jar.mn
           ;; packages, then drop the stray source so only the module ships.
-          (let [loader-src (join SRC-DIR "browser" "components" "gjoa" "GjoaLoader.bjs")
-                loader-out (join ENGINE-DIR "browser" "components" "gjoa" "GjoaLoader.sys.mjs")
-                stray (join ENGINE-DIR "browser" "components" "gjoa" "GjoaLoader.bjs")]
+          (let [loader-src Any (join SRC-DIR "browser" "components" "gjoa" "GjoaLoader.bjs")
+                loader-out Any (join ENGINE-DIR "browser" "components" "gjoa" "GjoaLoader.sys.mjs")
+                stray Any (join ENGINE-DIR "browser" "components" "gjoa" "GjoaLoader.bjs")]
             (when (existsSync loader-src)
               ;; beagle emits `import * as $$bc from 'beagle/core.js'` (the value-
               ;; semantics runtime) into the .sys.mjs. Firefox's chrome ES loader can't
@@ -112,7 +113,7 @@
               ;; placed beagle/core.js in engine/; moz.build registers it). The prefix
               ;; replaces `beagle/`, so beagle/core.js -> <prefix>core.js (and a future
               ;; beagle/hamt.js -> <prefix>hamt.js, no dangling specifier).
-              (let [proc (js/call Bun .spawnSync {:cmd ["bash" BEAGLE-BUILD loader-src loader-out]
+              (let [proc Any (js/call Bun .spawnSync {:cmd ["bash" BEAGLE-BUILD loader-src loader-out]
                                           :cwd REPO-ROOT
                                           :env (js/call Object .assign {} (js/get process .env) {"BEAGLE_JS_RUNTIME_PREFIX"
                                                   "resource:///modules/gjoa/beagle/"})
@@ -122,5 +123,5 @@
                   (throw (js/new Error (str "beagle-build failed compiling GjoaLoader.bjs:\n"
                                       (js/call (js/get proc .stderr) .toString)))))
                 (when (existsSync stray) (rmSync stray)))))
-          (let [file-count (count-files SRC-DIR)]
+          (let [file-count Int (count-files SRC-DIR)]
             (js/call log .ok (str "overlaid " file-count " file" (if (= file-count 1) "" "s"))))))))))
