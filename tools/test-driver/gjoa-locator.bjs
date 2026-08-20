@@ -22,31 +22,30 @@
 ;;   installRoot — Absolute path to the install root (where gjoa-dev/ lives).
 
 ;; Tiny dirname helper: no node:path dirname import needed for this single use.
-(defn dirname [(p String)] String
-  (let [i (js/call p .lastIndexOf "/")]
+(defn dirname [p String] String
+  (let [i Any (js/call p .lastIndexOf "/")]
     (if (< i 0) "." (js/call p .slice 0 i))))
 
 ;; Find the gjoa binary. Throws with a setup hint if not present.
 (js/export (defn locate-gjoa
   ([] Any (locate-gjoa (js/call process .cwd)))
-  ([(cwd String)] Any
-    (let [(gjoa-bin (U String Nil)) (js/get (js/get process .env) .GJOA_BIN)]
+  ([cwd String] Any
+    (let [gjoa-bin (U String Nil) (js/get (js/get process .env) .GJOA_BIN)]
       (if gjoa-bin
         (do
           (when (not (existsSync gjoa-bin))
             (throw (js/new Error (str "$GJOA_BIN points at " gjoa-bin " but no such file exists"))))
           {:path gjoa-bin :installRoot (dirname gjoa-bin)})
 
-        (let [engineDir (join cwd ENGINE-DIR)]
+        (let [engineDir String (join cwd ENGINE-DIR)]
           (when (not (existsSync engineDir))
             (throw (js/new Error (str "gjoa-locator: " engineDir " not found.\n"
                    "Run from the gjoa repo root, or set $GJOA_BIN."))))
 
-          (let [objDir
-                (loop [names (readdirSync engineDir)]
+          (let [objDir (U Nil (U String Any)) (loop [names (Vec String) (readdirSync engineDir)]
                   (if (empty? names)
                     nil
-                    (let [name (first names)]
+                    (let [name Any (first names)]
                       (if (and (js/call name .startsWith "obj-")
                                (js/call (statSync (join engineDir name)) .isDirectory))
                         (join engineDir name)
@@ -55,13 +54,12 @@
               (throw (js/new Error (str "gjoa-locator: no engine/obj-* build dir found.\n"
                      "Run `mach build faster` (Lane 2) inside engine/ first."))))
 
-            (let [binDir (join objDir "dist" "bin")
-                  result
-                  (loop [candidates ["gjoa-bin" "gjoa" "firefox-bin" "firefox"]]
+            (let [binDir String (join objDir "dist" "bin")
+                  result (U Nil (Map Keyword Any)) (loop [candidates (Vec String) ["gjoa-bin" "gjoa" "firefox-bin" "firefox"]]
                     (if (empty? candidates)
                       nil
-                      (let [candidate (first candidates)
-                            p (join binDir candidate)]
+                      (let [candidate String (first candidates)
+                            p String (join binDir candidate)]
                         (if (existsSync p)
                           {:path p :installRoot binDir}
                           (recur (rest candidates))))))]
