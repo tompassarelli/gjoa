@@ -8,20 +8,20 @@
 (def SHOW-DELAY-MS Int 2000)
 
 (js/export (defn make-banner! [] Any
-  (let [log (create-logger! "drawer/banner")
-        identity-box (by-id "identity-box")]
+  (let [log Any (create-logger! "drawer/banner")
+        identity-box Any (by-id "identity-box")]
     (if (not identity-box)
       (do (log "init:no-identity-box")
           {:destroy (fn [] Any nil)})
-      (let [state {:timer nil :banner nil}
+      (let [state Any {:timer nil :banner nil}
 
-            show (fn [] Any
+            show (Fn [] Any) (fn [] Any
               (when (not (js/get state .banner))
-                (let [el (xul-id "hbox" "gjoa-insecure-banner")]
+                (let [el Any (xul-id "hbox" "gjoa-insecure-banner")]
                   (attr! el "align" "center")
                   (attr! el "pack" "center")
                   (js/set! el .textContent "Gjoa - HTTP Alert: Not Secure")
-                  (let [browser-el (by-id "browser")]
+                  (let [browser-el Any (by-id "browser")]
                     (if (and browser-el (js/get browser-el .parentNode))
                       (do
                         (js/call (js/get browser-el .parentNode) .insertBefore el browser-el)
@@ -29,7 +29,7 @@
                         (log "show"))
                       (log "show:no-browser-parent"))))))
 
-            hide (fn [] Any
+            hide (Fn [] Any) (fn [] Any
               (when (js/get state .timer)
                 (js/clearTimeout (js/get state .timer))
                 (js/set! state .timer nil))
@@ -38,18 +38,18 @@
                 (js/set! state .banner nil)
                 (log "hide")))
 
-            check! (fn [] Any
-              (let [browser (js/get gBrowser .selectedBrowser)
-                    uri (if (and browser
+            check! (Fn [] Any) (fn [] Any
+              (let [browser Any (js/get gBrowser .selectedBrowser)
+                    uri Any (if (and browser
                                  (js/get browser .currentURI)
                                  (js/get (js/get browser .currentURI) .spec))
                           (js/get (js/get browser .currentURI) .spec)
                           "")
-                    is-internal (or (js/call uri .startsWith "about:")
+                    is-internal Any (or (js/call uri .startsWith "about:")
                                     (js/call uri .startsWith "chrome:"))
-                    is-customizing (has? (js/get document .documentElement)
+                    is-customizing Bool (has? (js/get document .documentElement)
                                                   "customizing")
-                    is-insecure (and (js/call (js/get identity-box .classList) .contains
+                    is-insecure Any (and (js/call (js/get identity-box .classList) .contains
                                                "notSecure")
                                      (not is-internal)
                                      (not is-customizing))]
@@ -61,8 +61,8 @@
                   (when (not is-insecure)
                     (hide)))))
 
-            class-observer (js/new MutationObserver check!)
-            opts {:attributes true}]
+            class-observer Any (js/new MutationObserver check!)
+            opts Any {:attributes true}]
 
         (js/set! opts .attributeFilter ["class"])
         (js/call class-observer .observe identity-box opts)
