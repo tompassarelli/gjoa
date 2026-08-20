@@ -1,37 +1,40 @@
 #lang beagle/js
 (ns gjoa.platform.history)
 
-(defn- is-of-kind [(kind String)] Any
-  (let [prefix (str kind ":")]
-    (fn [%1] Any (and (js/get %1 .tag)
+(defn- is-of-kind [kind String] Any
+  (let [prefix String (str kind ":")]
+    (fn [%1 Any] Any (and (js/get %1 .tag)
           (js/call (js/get %1 .tag) .startsWith prefix)))))
 
-(js/export (defn make-persisted [(history Any)] Any
+(js/export (defn make-persisted [history Any] Any
   {:history
-   {:recent (fn [%1] Any (js/call history .getRecent (or (and %1 (js/get %1 .limit)) 50)))
-    :search (fn [query opts] Any
+   {:recent (fn [%1 Any] Any (js/call history .getRecent (or (and %1 (js/get %1 .limit)) 50)))
+    :search (fn [query Any
+                 opts Any] Any
       (js/call history .search query
         {:taggedOnly (or (and opts (js/get opts .taggedOnly)) false)
          :limit (or (and opts (js/get opts .limit)) 50)}))
-    :byId (fn [%1] Any (js/call history .getById %1))
+    :byId (fn [%1 Any] Any (js/call history .getById %1))
     :instanceId (fn [] Any (js/call history .instanceId))}
 
    :checkpoints
-   {:list (fn [opts] Any
+   {:list (fn [opts Any] Any
       (js/call (js/call history .getTagged (or (and opts (js/get opts .limit)) 100)) .then
-        (fn [%1] Any (js/call %1 .filter (is-of-kind "checkpoint")))))
-    :search (fn [query opts] Any
+        (fn [%1 Any] Any (js/call %1 .filter (is-of-kind "checkpoint")))))
+    :search (fn [query Any
+                 opts Any] Any
       (js/call (js/call history .search query {:taggedOnly true
                                      :limit (or (and opts (js/get opts .limit)) 50)}) .then
-        (fn [%1] Any (js/call %1 .filter (is-of-kind "checkpoint")))))
-    :tag (fn [%1] Any (js/call history .tagLatest "checkpoint" %1))}
+        (fn [%1 Any] Any (js/call %1 .filter (is-of-kind "checkpoint")))))
+    :tag (fn [%1 Any] Any (js/call history .tagLatest "checkpoint" %1))}
 
    :sessions
-   {:list (fn [opts] Any
+   {:list (fn [opts Any] Any
       (js/call (js/call history .getTagged (or (and opts (js/get opts .limit)) 100)) .then
-        (fn [%1] Any (js/call %1 .filter (is-of-kind "session")))))
-    :search (fn [query opts] Any
+        (fn [%1 Any] Any (js/call %1 .filter (is-of-kind "session")))))
+    :search (fn [query Any
+                 opts Any] Any
       (js/call (js/call history .search query {:taggedOnly true
                                      :limit (or (and opts (js/get opts .limit)) 50)}) .then
-        (fn [%1] Any (js/call %1 .filter (is-of-kind "session")))))
-    :tag (fn [%1] Any (js/call history .tagLatest "session" %1))}}))
+        (fn [%1 Any] Any (js/call %1 .filter (is-of-kind "session")))))
+    :tag (fn [%1 Any] Any (js/call history .tagLatest "session" %1))}}))
