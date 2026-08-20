@@ -30,33 +30,33 @@
 
 ;; ── derive the patch model ──────────────────────────────────────────────────
 
-(defn parse-num [(name String)] Int
-  (let [m (js/call name .match (js/new RegExp "^(\\d{4})"))]
+(defn parse-num [name String] Int
+  (let [m Any (js/call name .match (js/new RegExp "^(\\d{4})"))]
     (if m (parseInt (aget m 1) 10) -1)))
 
-(defn slug-of [(name String)] String
+(defn slug-of [name String] String
   (js/call (js/call name .replace (js/new RegExp "^\\d{4}-") "") .replace (js/new RegExp "\\.patch$") ""))
 
-(defn pad4 [(n Int)] String
-  (let [s (js/call n .toString)]
+(defn pad4 [n Int] String
+  (let [s Any (js/call n .toString)]
     (cond (< n 10) (str "000" s) (< n 100) (str "00" s) (< n 1000) (str "0" s) :else s)))
 
 ;; Files a patch edits, read straight from the unified diff (git format first,
 ;; plain `+++ b/` fallback) — the ground truth, independent of header `touches:`.
-(defn diff-touches [(text String)] Any
-  (let [out (js/new Set)]
-    (doseq [m (js/call text .matchAll (js/new RegExp "^diff --git a/(\\S+)\\s+b/\\S+$" "gm"))]
+(defn diff-touches [text String] Any
+  (let [out Any (js/new Set)]
+    (doseq [m Any (js/call text .matchAll (js/new RegExp "^diff --git a/(\\S+)\\s+b/\\S+$" "gm"))]
       (js/call out .add (aget m 1)))
     (when (= (js/get out .size) 0)
-      (doseq [m (js/call text .matchAll (js/new RegExp "^\\+\\+\\+ b/(\\S+)$" "gm"))]
+      (doseq [m Any (js/call text .matchAll (js/new RegExp "^\\+\\+\\+ b/(\\S+)$" "gm"))]
         (js/call out .add (aget m 1))))
     (Array/from out)))
 
 ;; Bucket a patch into a subsystem domain by its touched dirs. First match wins
 ;; (a patch reaching browser chrome is "chrome" even if it also dips into core).
 ;; Order encodes engine depth: chrome (UI) shallowest, engine (layout/servo) deepest.
-(defn domain-of [(files Any)] String
-  (let [hit (fn [(re String)] Bool (js/call files .some (fn [(f String)] Bool (js/call (js/new RegExp re) .test f))))]
+(defn domain-of [files Any] String
+  (let [hit (Fn [String] Bool) (fn [re String] Bool (js/call files .some (fn [f String] Bool (js/call (js/new RegExp re) .test f))))]
     (cond
       (hit "^browser/") "chrome"
       (hit "^toolkit/") "toolkit"
@@ -64,132 +64,139 @@
       (hit "^third_party/") "third_party"
       :else "build")))
 
-(defn depth-rank [(domain String)] Int
+(defn depth-rank [domain String] Int
   (cond (= domain "chrome") 0 (= domain "third_party") 1
         (= domain "toolkit") 2 (= domain "engine") 3 :else 4))
 
 (defn load-all [] Any
-  (let [names (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [(p String)] Bool (js/call p .endsWith ".patch"))) .sort)]
-    (js/call names .map (fn [(n String)] Any
-        (let [text (readFileSync (join PATCHES-DIR n) "utf8")
-              files (diff-touches text)]
+  (let [names Any (js/call (js/call (readdirSync PATCHES-DIR) .filter (fn [p String] Bool (js/call p .endsWith ".patch"))) .sort)]
+    (js/call names .map (fn [n String] Any
+        (let [text Any (readFileSync (join PATCHES-DIR n) "utf8")
+              files Any (diff-touches text)]
           {:name n :num (parse-num n) :slug (slug-of n)
            :files files :domain (domain-of files)})))))
 
 ;; ── file-overlap connected components (union-find) ──────────────────────────
 
-(defn uf-find [(parent Any) (x Int)] Int
-  (loop [r x] (if (= (aget parent r) r) r (recur (aget parent r)))))
+(defn uf-find
+  [parent Any
+   x Int] Int
+  (loop [r Int x] (if (= (aget parent r) r) r (recur (aget parent r)))))
 
-(defn components [(patches Any)] Any
-  (let [n (js/get patches .length)
-        parent (js/new Array n)
-        (by-file (JsMap String Int)) (js/new Map)]
-    (loop [i 0] (when (< i n) (aset parent i i) (recur (+ i 1))))
-    (loop [i 0]
+(defn components [patches Any] Any
+  (let [n Any (js/get patches .length)
+        parent Any (js/new Array n)
+        by-file (JsMap String Int) (js/new Map)]
+    (loop [i Int 0] (when (< i n) (aset parent i i) (recur (+ i 1))))
+    (loop [i Int 0]
       (when (< i n)
-        (doseq [f (js/get (aget patches i) .files)]
-          (let [seen (js/call by-file .get f)]
+        (doseq [f String (js/get (aget patches i) .files)]
+          (let [seen Int? (js/call by-file .get f)]
             (if (nil? seen)
               (js/call by-file .set f i)
               (aset parent (uf-find parent seen) (uf-find parent i)))))
         (recur (+ i 1))))
-    (let [(groups (JsMap Int (Vec Any))) (js/new Map)]
-      (loop [i 0]
+    (let [groups (JsMap Int (Vec Any)) (js/new Map)]
+      (loop [i Int 0]
         (when (< i n)
-          (let [r (uf-find parent i)]
+          (let [r Int (uf-find parent i)]
             (when (not (js/call groups .has r)) (js/call groups .set r []))
             (js/call (js/call groups .get r) .push (aget patches i)))
           (recur (+ i 1))))
       (Array/from (js/call groups .values)))))
 
 ;; files touched by >=2 members of a group (what binds the component together)
-(defn shared-in-group [(group Any)] Any
-  (let [(counts (JsMap String Int)) (js/new Map) out []]
-    (doseq [p group]
-      (doseq [f (js/get p .files)]
-        (let [prev (js/call counts .get f)]
+(defn shared-in-group [group Any] Any
+  (let [counts (JsMap String Int) (js/new Map)
+        out (Vec Any) []]
+    (doseq [p Any group]
+      (doseq [f String (js/get p .files)]
+        (let [prev Int? (js/call counts .get f)]
           (js/call counts .set f (if (nil? prev) 1 (+ prev 1))))))
-    (doseq [e (Array/from (js/call counts .entries))]
+    (doseq [e Any (Array/from (js/call counts .entries))]
       (when (> (aget e 1) 1) (js/call out .push (aget e 0))))
     (js/call out .sort)))
 
 ;; ── domain runs + split detection ───────────────────────────────────────────
 
-(defn by-num [(patches Any)] Any
+(defn by-num [patches Any] Any
   (js/call (js/call patches .slice) .sort
-           (fn [(a Any) (b Any)] Int
-             (let [(a-num Int) (js/get a .num) (b-num Int) (js/get b .num)] (- a-num b-num)))))
+           (fn [a Any
+                b Any] Int
+             (let [a-num Int (js/get a .num)
+                   b-num Int (js/get b .num)] (- a-num b-num)))))
 
-(defn domain-runs [(patches Any)] Any
-  (let [runs []]
-    (doseq [p (by-num patches)]
-      (let [last (if (> (js/get runs .length) 0) (aget runs (- (js/get runs .length) 1)) nil)]
+(defn domain-runs [patches Any] Any
+  (let [runs (Vec Any) []]
+    (doseq [p Any (by-num patches)]
+      (let [last Any (if (> (js/get runs .length) 0) (aget runs (- (js/get runs .length) 1)) nil)]
         (if (and last (= (js/get last .domain) (js/get p .domain)))
           (js/call (js/get last .members) .push p)
           (js/call runs .push {:domain (js/get p .domain) :members [p]}))))
     runs))
 
 ;; domains appearing in >1 run = split (a foreign patch wedged in the block)
-(defn split-domains [(runs Any)] Any
-  (let [(counts (JsMap Any Int)) (js/new Map) out []]
-    (doseq [r runs]
-      (let [d (js/get r .domain)
-            prev (js/call counts .get d)]
+(defn split-domains [runs Any] Any
+  (let [counts (JsMap Any Int) (js/new Map)
+        out (Vec Any) []]
+    (doseq [r Any runs]
+      (let [d Any (js/get r .domain)
+            prev Int? (js/call counts .get d)]
         (js/call counts .set d (if (nil? prev) 1 (+ prev 1)))))
-    (doseq [e (Array/from (js/call counts .entries))]
+    (doseq [e Any (Array/from (js/call counts .entries))]
       (when (> (aget e 1) 1) (js/call out .push (aget e 0))))
     out))
 
 ;; ── minimal renumber via longest-increasing-subsequence ─────────────────────
 
-(defn canonical [(patches Any)] Any
-  (js/call (js/call patches .slice) .sort (fn [(a Any) (b Any)] Int
-      (let [dr (- (depth-rank (js/get a .domain)) (depth-rank (js/get b .domain)))
-            (a-num Int) (js/get a .num)
-            (b-num Int) (js/get b .num)]
+(defn canonical [patches Any] Any
+  (js/call (js/call patches .slice) .sort (fn [a Any
+                                               b Any] Int
+      (let [dr Int (- (depth-rank (js/get a .domain)) (depth-rank (js/get b .domain)))
+            a-num Int (js/get a .num)
+            b-num Int (js/get b .num)]
         (if (not= dr 0) dr (- a-num b-num))))))
 
 ;; values of the longest strictly-increasing subsequence of distinct `nums`.
-(defn lis-keep [(nums Any)] Any
-  (let [(n Int) (js/get nums .length)
-        len (js/new Array n)
-        prev (js/new Array n)]
-    (loop [i 0]
+(defn lis-keep [nums Any] Any
+  (let [n Int (js/get nums .length)
+        len Any (js/new Array n)
+        prev Any (js/new Array n)]
+    (loop [i Int 0]
       (when (< i n)
         (aset len i 1) (aset prev i -1)
-        (loop [j 0]
+        (loop [j Int 0]
           (when (< j i)
-            (let [(len-j Int) (aget len j)]
+            (let [len-j Int (aget len j)]
               (when (and (< (aget nums j) (aget nums i)) (> (+ 1 len-j) (aget len i)))
                 (aset len i (+ 1 len-j))
                 (aset prev i j)))
             (recur (+ j 1))))
         (recur (+ i 1))))
-    (let [best (loop [i 0 bi -1 bl -1]
+    (let [best Int (loop [i Int 0 bi Any -1 bl Any -1]
                  (if (>= i n) bi
                    (if (> (aget len i) bl) (recur (+ i 1) i (aget len i)) (recur (+ i 1) bi bl))))
-          keep (js/new Set)]
-      (loop [k best] (when (>= k 0) (js/call keep .add (aget nums k)) (recur (aget prev k))))
+          keep Any (js/new Set)]
+      (loop [k Int best] (when (>= k 0) (js/call keep .add (aget nums k)) (recur (aget prev k))))
       keep)))
 
 ;; canonical order with the LIS pinned; everything else slots into the lowest
 ;; free integer above its nearest kept predecessor.
-(defn renumber-plan [(patches Any)] Any
-  (let [canon (canonical patches)
-        nums (js/call canon .map (fn [(p Any)] Int (js/get p .num)))
-        keep (lis-keep nums)
-        used (js/new Set (js/call patches .map (fn [(p Any)] Int (js/get p .num))))
-        moves []]
-    (loop [i 0]
+(defn renumber-plan [patches Any] Any
+  (let [canon Any (canonical patches)
+        nums Any (js/call canon .map (fn [p Any] Int (js/get p .num)))
+        keep Any (lis-keep nums)
+        used Any (js/new Set (js/call patches .map (fn [p Any] Int (js/get p .num))))
+        moves (Vec Any) []]
+    (loop [i Int 0]
       (when (< i (js/get canon .length))
-        (let [p (aget canon i)]
+        (let [p Any (aget canon i)]
           (when (not (js/call keep .has (js/get p .num)))
-            (let [(lo Int) (loop [j (- i 1)]
+            (let [lo Int (loop [j Int (- i 1)]
                              (cond (< j 0) 0
                                    (js/call keep .has (js/get (aget canon j) .num)) (js/get (aget canon j) .num)
                                    :else (recur (- j 1))))
-                  slot (loop [s (+ lo 1)] (if (js/call used .has s) (recur (+ s 1)) s))]
+                  slot Int (loop [s Int (+ lo 1)] (if (js/call used .has s) (recur (+ s 1)) s))]
               (js/call used .add slot)
               (js/call moves .push {:from-name (js/get p .name) :to-name (str (pad4 slot) "-" (js/get p .slug) ".patch")
                             :from (js/get p .num) :to slot :domain (js/get p .domain)}))))
@@ -198,77 +205,78 @@
 
 ;; ── render ──────────────────────────────────────────────────────────────────
 
-(defn gaps [(patches Any)] Any
-  (let [nums (js/call (by-num patches) .map (fn [(p Any)] Int (js/get p .num)))
-        out []]
-    (loop [i 1]
+(defn gaps [patches Any] Any
+  (let [nums Any (js/call (by-num patches) .map (fn [p Any] Int (js/get p .num)))
+        out (Vec Any) []]
+    (loop [i Int 1]
       (when (< i (js/get nums .length))
-        (let [(prev Int) (aget nums (- i 1)) (cur Int) (aget nums i)]
+        (let [prev Int (aget nums (- i 1))
+              cur Int (aget nums i)]
           (when (> cur (+ prev 1)) (js/call out .push (str (pad4 (+ prev 1)) "–" (pad4 (- cur 1))))))
         (recur (+ i 1))))
     out))
 
 (defn analyze! [] Any
-  (let [patches (load-all)
-        comps (js/call (components patches) .filter (fn [(g Any)] Bool (> (js/get g .length) 1)))
-        runs (domain-runs patches)
-        splits (split-domains runs)
-        moves (renumber-plan patches)]
+  (let [patches Any (load-all)
+        comps Any (js/call (components patches) .filter (fn [g Any] Bool (> (js/get g .length) 1)))
+        runs Any (domain-runs patches)
+        splits Any (split-domains runs)
+        moves Any (renumber-plan patches)]
     (console/log (str "patch order + batching analysis  (" (js/get patches .length) " patches)\n"))
     (console/log "  #     domain       slug")
-    (doseq [p (by-num patches)]
+    (doseq [p Any (by-num patches)]
       (console/log (str "  " (pad4 (js/get p .num)) "  " (js/call (js/get p .domain) .padEnd 11) "  " (js/get p .slug))))
     (console/log "\nfile-overlap components (the only HARD ordering constraints):")
     (if (= (js/get comps .length) 0)
       (console/log "  (none — every patch touches a disjoint file set; fully reorderable)")
-      (doseq [g comps]
-        (console/log (str "  · {" (js/call (js/call (by-num g) .map (fn [(p Any)] String (pad4 (js/get p .num)))) .join ", ") "}"
+      (doseq [g Any comps]
+        (console/log (str "  · {" (js/call (js/call (by-num g) .map (fn [p Any] String (pad4 (js/get p .num)))) .join ", ") "}"
                           "  share: " (js/call (shared-in-group g) .join ", ")))))
     (console/log (str "\ndomain sequence (by number):  "
-                      (js/call (js/call runs .map (fn [(r Any)] String
+                      (js/call (js/call runs .map (fn [r Any] String
                                           (str (js/get r .domain) "×" (js/get (js/get r .members) .length)))) .join " · ")))
     (if (= (js/get splits .length) 0)
       (console/log "  ✓ every domain is contiguous — batching is optimal")
-      (doseq [d splits]
-        (let [where (js/call runs .filter (fn [(r Any)] Bool (= (js/get r .domain) d)))]
+      (doseq [d Any splits]
+        (let [where Any (js/call runs .filter (fn [r Any] Bool (= (js/get r .domain) d)))]
           (console/log (str "  ⚠ domain '" d "' is SPLIT across " (js/get where .length) " runs at "
-                            (js/call (js/call where .map (fn [(r Any)] String
-                                                 (str "[" (js/call (js/call (js/get r .members) .map (fn [(p Any)] String (pad4 (js/get p .num)))) .join ",") "]"))) .join " and "))))))
-    (let [g (gaps patches)]
+                            (js/call (js/call where .map (fn [r Any] String
+                                                 (str "[" (js/call (js/call (js/get r .members) .map (fn [p Any] String (pad4 (js/get p .num)))) .join ",") "]"))) .join " and "))))))
+    (let [g Any (gaps patches)]
       (when (> (js/get g .length) 0) (console/log (str "\nnumbering gaps: " (js/call g .join ", ") "  (dropped/absorbed patches)"))))
     (console/log "\nverdict: APPLY-SOUND (alpha-apply order satisfies every overlap constraint).")
     (if (= (js/get moves .length) 0)
       (console/log "  batching is OPTIMAL — numbers ascend by engine depth, every domain contiguous.")
       (do
         (console/log (str "  batching is " (js/get moves .length) " move(s) short of optimal. Minimal renumber:"))
-        (doseq [m moves]
+        (doseq [m Any moves]
           (console/log (str "    " (js/get m .from-name) "  →  " (pad4 (js/get m .to)) "   (" (js/get m .domain) ")")))
         (console/log "  theory: numbers ascend by engine depth — chrome → third_party → toolkit → engine.")))))
 
-(defn check! [(strict Bool)] Any
-  (let [patches (load-all)
-        splits (split-domains (domain-runs patches))
-        moves (renumber-plan patches)]
+(defn check! [strict Bool] Any
+  (let [patches Any (load-all)
+        splits Any (split-domains (domain-runs patches))
+        moves Any (renumber-plan patches)]
     (if (= (js/get splits .length) 0)
       (do (console/log (str "patch-order ok — " (js/get patches .length) " patches, every domain contiguous, apply-sound"))
           0)
       (do
         (console/error (str "patch-order: " (js/get splits .length) " split domain(s): " (js/call splits .join ", ")
-                            " — minimal fix: " (js/call (js/call moves .map (fn [(m Any)] String (str (js/get m .from-name) "→" (pad4 (js/get m .to))))) .join ", ")))
+                            " — minimal fix: " (js/call (js/call moves .map (fn [m Any] String (str (js/get m .from-name) "→" (pad4 (js/get m .to))))) .join ", ")))
         (when strict (js/call process .exit 2))
         0))))
 
 ;; --apply: rename the patch files + rekey configs/patch-hashes.json (content
 ;; unchanged, so hashes are preserved). Prose references are reported for review.
 (defn apply-renumber! [] Any
-  (let [patches (load-all)
-        moves (renumber-plan patches)]
+  (let [patches Any (load-all)
+        moves Any (renumber-plan patches)]
     (if (= (js/get moves .length) 0)
       (console/log "patch-order: nothing to renumber.")
-      (let [hashes (js/call JSON .parse (readFileSync HASHES "utf8"))]
-        (doseq [m moves]
+      (let [hashes Any (js/call JSON .parse (readFileSync HASHES "utf8"))]
+        (doseq [m Any moves]
           (renameSync (join PATCHES-DIR (js/get m .from-name)) (join PATCHES-DIR (js/get m .to-name)))
-          (let [h (aget (js/get hashes .patches) (js/get m .from-name))]
+          (let [h Any (aget (js/get hashes .patches) (js/get m .from-name))]
             (when h
               (aset (js/get hashes .patches) (js/get m .to-name) h)
               (js/delete! (js/get hashes .patches) (js/get m .from-name))))
@@ -278,20 +286,20 @@
                           "Review tracked references to renamed patch paths."))))))
 
 (defn main! [] Any
-  (let [argv (js/call (js/get process .argv) .slice 2)
-        cmd (or (aget argv 0) "analyze")
-        strict (js/call argv .includes "--strict")]
+  (let [argv Any (js/call (js/get process .argv) .slice 2)
+        cmd Any (or (aget argv 0) "analyze")
+        strict Any (js/call argv .includes "--strict")]
     (cond
       (= cmd "analyze") (analyze!)
       (= cmd "check") (check! strict)
       (and (= cmd "renumber") (js/call argv .includes "--apply")) (apply-renumber!)
       (= cmd "renumber")
-      (let [moves (renumber-plan (load-all))]
+      (let [moves Any (renumber-plan (load-all))]
         (if (= (js/get moves .length) 0)
           (console/log "renumber: already optimal — nothing to move.")
           (do
             (console/log "renumber plan (dry — pass --apply to execute):")
-            (doseq [m moves] (console/log (str "  " (js/get m .from-name) "  →  " (js/get m .to-name)))))))
+            (doseq [m Any moves] (console/log (str "  " (js/get m .from-name) "  →  " (js/get m .to-name)))))))
       :else (do (console/error "usage: patch-order <analyze|check [--strict]|renumber [--apply]>") (js/call process .exit 1)))))
 
 (when (js/get (js/import-meta) .main) (main!))
