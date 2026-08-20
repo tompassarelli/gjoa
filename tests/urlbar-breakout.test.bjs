@@ -20,7 +20,9 @@
 (def CSS String (join REPO "src" "gjoa" "chrome" "css" "gjoa.uc.css"))
 (def URLBAR String (join REPO "src" "gjoa" "chrome" "bjs" "drawer" "urlbar.bjs"))
 
-(defn has? [(s String) (pat String)] Any (js/call (js/new RegExp pat) .test s))
+(defn has?
+  [s String
+     pat String] Any (js/call (js/new RegExp pat) .test s))
 
 (describe "floating-urlbar breakout (#149/#150)"
   (fn [] Any
@@ -34,8 +36,8 @@
     ;; synchronous inline-restore flash.
     (test "#149 two-phase teardown present (gjoa-urlbar-teardown + finish-teardown)"
       (fn [] Any
-        (let [ub (readFileSync URLBAR "utf8")
-              css (readFileSync CSS "utf8")]
+        (let [ub String (readFileSync URLBAR "utf8")
+             css String (readFileSync CSS "utf8")]
           (js/call (expect (has? ub "gjoa-urlbar-teardown")) .toBe true)
           (js/call (expect (has? ub "finish-teardown")) .toBe true)
           ;; the CSS rule that instantly hides on the teardown attr
@@ -44,7 +46,7 @@
     ;; #150 — the flipped breakout branch (grows toward page, not off-screen).
     (test "#150 flip-aware breakout branch (sidebar-positionend + breakout-extend)"
       (fn [] Any
-        (let [css (readFileSync CSS "utf8")]
+        (let [css String (readFileSync CSS "utf8")]
           (js/call (expect (has? css "sidebar-positionend")) .toBe true)
           (js/call (expect (has? css "breakout-extend")) .toBe true))))
 
