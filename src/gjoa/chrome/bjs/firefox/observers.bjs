@@ -6,14 +6,21 @@
 ;; guard!/quiet! (gjoa.macros) leak literal ~@ into the gjoa-tabs bundle (a beagle bundler
 ;; macro-order quirk in that large bundle — breaks the whole bundle incl. vim), so their
 ;; try/catch is inlined here directly. See north @019f0beb-4bdc.
-(js/export (defn on [(topic String) (handler Any)] Any
-  (let [observer {:observe (fn [subject _topic data] Any
+(js/export (defn on
+  [topic String
+   handler Any] Any
+  (let [observer Any {:observe (fn [subject Any
+                                  _topic Any
+                                  data Any] Any
                     (try (handler subject data)
                       (catch (_e Any) (js/call console .error (str "gjoa obs handler " topic ":") _e))))}]
     (try (js/call (js/get Services .obs) .addObserver observer topic) (catch (_e Any) nil))
     (fn [] Any
       (try (js/call (js/get Services .obs) .removeObserver observer topic) (catch (_e Any) nil))))))
 
-(js/export (defn notify [(topic String) (subject Any) (data Any)] Any
+(js/export (defn notify
+  [topic String
+   subject Any
+   data Any] Any
   (try (js/call (js/get Services .obs) .notifyObservers subject topic data)
     (catch (_e Any) (js/call console .error (str "gjoa obs notify " topic ":") _e)))))
