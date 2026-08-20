@@ -64,7 +64,7 @@
 (def NEW-TAB-URL String "chrome://gjoa-newtab/content/newtab.html")
 
 (def STYLE-SHEET-SERVICE Any
-  (let [cid "@mozilla.org/content/style-sheet-service;1"]
+  (let [cid String "@mozilla.org/content/style-sheet-service;1"]
     (js/call (get Cc cid) .getService (js/get Ci .nsIStyleSheetService))))
 
 ;; browser.xhtml is the only chrome document we want to inject into for now.
@@ -91,7 +91,7 @@
 ;; Reads an environment variable, returning "" if unset or on any failure.
 ;; Matches the gjoa.security pattern; nsIEnvironment.get never throws for a
 ;; missing var but we stay defensive.
-(defn dev-env [(name String)] String
+(defn dev-env [name String] String
   (try
     (or (js/call (js/get Services .env) .get name) "")
     (catch (_e Any) "")))
@@ -107,7 +107,7 @@
 ;; the link's. The opt-in GJOA_DEV_LOADER=1 gate above is the primary defense;
 ;; this is belt on the target. (Full belt = the deferred MOZ_GJOA_DEV_LOADER
 ;; compile-out.) Any read throwing → treat as unsafe.
-(defn dev-dir-safe? [(dir Any)] Boolean
+(defn dev-dir-safe? [dir Any] Boolean
   (try
     ;; 0o022 = group-write | other-write.
     (= (bit-and (js/get dir .permissions) 0o022) 0)
@@ -125,18 +125,20 @@
   (if (not= (dev-env "GJOA_DEV_LOADER") "1")
     nil
     ;; GreD = Gecko runtime directory = the install root containing the binary.
-    (let [dir (js/call (js/get Services .dirsvc) .get "GreD" (js/get Ci .nsIFile))]
+    (let [dir Any (js/call (js/get Services .dirsvc) .get "GreD" (js/get Ci .nsIFile))]
       (js/call dir .append "gjoa-dev")
       (if (and (js/call dir .exists) (js/call dir .isDirectory) (dev-dir-safe? dir)) dir nil))))
 
-(defn list-files [(dir Any) (suffix String)] Any
-  (let [out []]
+(defn list-files
+  [dir Any
+   suffix String] Any
+  (let [out (Vec Any) []]
     (if (or (not (js/call dir .exists)) (not (js/call dir .isDirectory)))
       out
-      (let [entries (js/get dir .directoryEntries)]
+      (let [entries Any (js/get dir .directoryEntries)]
         (loop []
           (when (js/call entries .hasMoreElements)
-            (let [f (js/call (js/call entries .getNext) .QueryInterface (js/get Ci .nsIFile))]
+            (let [f Any (js/call (js/call entries .getNext) .QueryInterface (js/get Ci .nsIFile))]
               (when (and (js/call f .isFile) (js/call (js/get f .leafName) .endsWith suffix))
                 (js/call out .push f)))
             (recur)))
@@ -144,7 +146,10 @@
 
 ;; --- Loading -----------------------------------------------------------------
 
-(defn load-script-url-into [(window Any) (url String) (label String)] Any
+(defn load-script-url-into
+  [window Any
+   url String
+   label String] Any
   (try
     (do
       (js/call (js/get Services .scriptloader) .loadSubScriptWithOptions url {:target window :ignoreCache true})
@@ -152,20 +157,24 @@
     (catch (e Any)
       (console/error (str "gjoa-loader: script " label " threw at load time") e))))
 
-(defn register-style-sheet-url [(url String) (label String)] Any
+(defn register-style-sheet-url
+  [url String
+   label String] Any
   (when (not (js/call (js/get st .loaded-sheets) .has url))
     (try
-      (let [uri (js/call (js/get Services .io) .newURI url)]
+      (let [uri Any (js/call (js/get Services .io) .newURI url)]
         (js/call STYLE-SHEET-SERVICE .loadAndRegisterSheet uri (js/get STYLE-SHEET-SERVICE .AGENT_SHEET))
         (js/call (js/get st .loaded-sheets) .add url)
         (console/log (str "gjoa-loader: registered stylesheet " label)))
       (catch (e Any)
         (console/error (str "gjoa-loader: stylesheet " label " threw at register time") e)))))
 
-(defn load-script-into [(window Any) (file Any)] Any
+(defn load-script-into
+  [window Any
+   file Any] Any
   (load-script-url-into window (js/get (js/call (js/get Services .io) .newFileURI file) .spec) (js/get file .leafName)))
 
-(defn register-style-sheet [(file Any)] Any
+(defn register-style-sheet [file Any] Any
   (register-style-sheet-url (js/get (js/call (js/get Services .io) .newFileURI file) .spec) (js/get file .leafName)))
 
 ;; --- Dev live-reload: a running browser can NEVER hold a stale bundle ----------
@@ -179,26 +188,26 @@
 ;; built bundle — nothing to watch.
 
 (defn unregister-sheets [] Any
-  (doseq [url (Array/from (js/get st .loaded-sheets))]
+  (doseq [url String (Array/from (js/get st .loaded-sheets))]
     (try
-      (let [uri (js/call (js/get Services .io) .newURI url)]
+      (let [uri Any (js/call (js/get Services .io) .newURI url)]
         (when (js/call STYLE-SHEET-SERVICE .sheetRegistered uri (js/get STYLE-SHEET-SERVICE .AGENT_SHEET))
           (js/call STYLE-SHEET-SERVICE .unregisterSheet uri (js/get STYLE-SHEET-SERVICE .AGENT_SHEET))))
       (catch (_e Any) nil)))
   (js/call (js/get st .loaded-sheets) .clear))
 
-(defn stamp-mtime [(dev-dir Any)] Number
+(defn stamp-mtime [dev-dir Any] Number
   (try
-    (let [f (js/call dev-dir .clone)]
+    (let [f Any (js/call dev-dir .clone)]
       (js/call f .append ".bundle-stamp")
       (if (js/call f .exists) (js/get f .lastModifiedTime) 0))
     (catch (_e Any) 0)))
 
-(defn hot-reload! [(window Any)] Any
+(defn hot-reload! [window Any] Any
   (try
-    (let [hr (js/get window .__gjoaHR)]
+    (let [hr Any (js/get window .__gjoaHR)]
       (when hr
-        (doseq [f (Array/from (js/get hr .teardowns))]
+        (doseq [f Any (Array/from (js/get hr .teardowns))]
           (try (f) (catch (_e Any) nil)))
         (js/set! hr .teardowns [])))
     (unregister-sheets)
@@ -207,19 +216,21 @@
     (catch (e Any)
       (console/error "gjoa-loader: hot-reload! failed" e))))
 
-(defn start-dev-watch! [(window Any) (dev-dir Any)] Any
+(defn start-dev-watch!
+  [window Any
+   dev-dir Any] Any
   (when (not (js/get window .__gjoaHRWatching))
     (js/set! window .__gjoaHRWatching true)
-    (let [(state Any) {:last (stamp-mtime dev-dir)}]
+    (let [state (Map Keyword Number) {:last (stamp-mtime dev-dir)}]
       (js/call window .setInterval
         (fn [] Any
-          (let [cur (stamp-mtime dev-dir)]
+          (let [cur Number (stamp-mtime dev-dir)]
             (when (and (> cur 0) (not= cur (js/get state .last)))
               (js/set! state .last cur)
               (hot-reload! window))))
         750))))
 
-(defn load-into-chrome-window! [(window Any)] Any
+(defn load-into-chrome-window! [window Any] Any
   ;; .uc.js bundles reference the beagle value-semantics runtime, which a
   ;; loadSubScript bundle can't `import` (not an ESM context). Expose the
   ;; vendored runtime NAMESPACE on the window the bundles load into as
@@ -237,28 +248,28 @@
   ;; hot-reload! resets .teardowns to [] (in hot-reload!) before re-running the bundles.
   (when (not (js/get window .__gjoaHR))
     (js/set! window .__gjoaHR {:teardowns []}))
-  (let [dev (dev-mode-dir)]
+  (let [dev Any (dev-mode-dir)]
     (if dev
-      (let [js-dir (js/call dev .clone)
-            css-dir (js/call dev .clone)]
+      (let [js-dir Any (js/call dev .clone)
+            css-dir Any (js/call dev .clone)]
         (js/call js-dir .append "JS")
         (js/call css-dir .append "CSS")
-        (doseq [css (list-files css-dir ".uc.css")]
+        (doseq [css Any (list-files css-dir ".uc.css")]
           (register-style-sheet css))
-        (doseq [js (list-files js-dir ".uc.js")]
+        (doseq [js Any (list-files js-dir ".uc.js")]
           (load-script-into window js))
         (start-dev-watch! window dev))
       ;; Production: load from chrome://gjoa/content/{scripts,styles}/, baked
       ;; into omni.ja by `bun run chrome:dist` + tools/prep/chrome-bake.bjs.
       (do
-        (doseq [css PROD-STYLES]
+        (doseq [css String PROD-STYLES]
           (register-style-sheet-url (str "chrome://gjoa/content/styles/" css) css))
-        (doseq [js PROD-SCRIPTS]
+        (doseq [js String PROD-SCRIPTS]
           (load-script-url-into window (str "chrome://gjoa/content/scripts/" js) js))))))
 
 ;; Firefox creates parts of browser chrome during delayed startup, so loading at
 ;; chrome-document-loaded can permanently skip bundles gated on those elements.
-(defn load-browser-window! [(window Any)] Any
+(defn load-browser-window! [window Any] Any
   (when (and window
              (= (some-> window (js/get .location) (js/get .href)) TARGET-BROWSER-URL)
              (not= (some-> window (js/get .document) (js/get .readyState)) "loading")
@@ -272,7 +283,7 @@
         (console/error "gjoa-loader: browser-window load failed" e)))))
 
 (defn load-existing-browser-windows! [] Any
-  (let [windows (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
+  (let [windows Any (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
     (loop []
       (when (js/call windows .hasMoreElements)
         (load-browser-window! (js/call windows .getNext))
@@ -281,20 +292,21 @@
 ;; --- Observer registration (called from BrowserGlue at app-startup) ----------
 
 (def observer Any
-  {:observe (fn [(subject Any) (topic Any)] Any
+  {:observe (fn [subject Any
+                topic Any] Any
     (cond
       (= topic "chrome-document-loaded")
         ;; subject IS the Document directly (chrome-document-loaded contract);
         ;; no QueryInterface is required.
-        (let [doc subject
-              window (some-> doc (js/get .defaultView))]
+        (let [doc Any subject
+              window Any (some-> doc (js/get .defaultView))]
           (load-browser-window! window))
       (= topic "browser-delayed-startup-finished")
         (load-browser-window! subject)))})
 
 (defn set-defaults [] Any
   (try
-    (let [d (js/call (js/get Services .prefs) .getDefaultBranch "")]
+    (let [d Any (js/call (js/get Services .prefs) .getDefaultBranch "")]
       (js/call d .setCharPref "browser.toolbars.bookmarks.visibility" "never")
       (js/call d .setBoolPref "sidebar.verticalTabs" true)
       (js/call d .setBoolPref "gjoa.sidebar.menuBar" false)
@@ -418,9 +430,9 @@
 
 (defn apply-lockdown! [] Any
   (try
-    (let [d (js/call (js/get Services .prefs) .getDefaultBranch "")
-          on (js/call (js/get Services .prefs) .getBoolPref LOCKDOWN-PREF false)]
-      (doseq [p LOCKDOWN-PROBES] (js/call d .setBoolPref p (not on)))
+    (let [d Any (js/call (js/get Services .prefs) .getDefaultBranch "")
+          on Boolean (js/call (js/get Services .prefs) .getBoolPref LOCKDOWN-PREF false)]
+      (doseq [p String LOCKDOWN-PROBES] (js/call d .setBoolPref p (not on)))
       (console/log (str "gjoa-loader: maximal-lockdown "
                         (if on "ON — captive-portal/connectivity probes disabled"
                                "off — wifi-detection probes active (default)"))))
@@ -428,7 +440,10 @@
       (console/error "gjoa-loader: apply-lockdown failed" e))))
 
 (def lockdown-observer Any
-  {:observe (fn [(_subject Any) (_topic Any) (_data Any)] Any (apply-lockdown!))})
+  {:observe (fn [_subject Any
+                _topic Any
+                _data Any] Any
+              (apply-lockdown!))})
 
 ;; --- privacy profiles --------------------------------------------------------
 ;; CURATED presets. `gjoa.privacy.profile` selects one ("minimal"/"balanced"/
@@ -469,19 +484,23 @@
 
 (defn apply-privacy-profile! [] Any
   (try
-    (let [id (js/call (js/get Services .prefs) .getCharPref "gjoa.privacy.profile" "balanced")
-          preset (get PRIVACY-PRESETS id)
-          d (js/call (js/get Services .prefs) .getDefaultBranch "")]
+    (let [id String (js/call (js/get Services .prefs) .getCharPref "gjoa.privacy.profile" "balanced")
+          preset (U (Vec (HVec String (U Int Boolean) String)) Nil) (get PRIVACY-PRESETS id)
+          d Any (js/call (js/get Services .prefs) .getDefaultBranch "")]
       (when (and (not (= id "custom")) preset)
-        (doseq [leaf preset]
-          (let [name (aget leaf 0) v (aget leaf 1)]
+        (doseq [leaf (HVec String (U Int Boolean) String) preset]
+          (let [name String (aget leaf 0)
+                v (U Int Boolean) (aget leaf 1)]
             (if (= (aget leaf 2) "int") (js/call d .setIntPref name v) (js/call d .setBoolPref name v))))
         (console/log (str "gjoa-loader: privacy profile '" id "' applied"))))
     (catch (e Any)
       (console/error "gjoa-loader: apply-privacy-profile failed" e))))
 
 (def profile-observer Any
-  {:observe (fn [(_subject Any) (_topic Any) (_data Any)] Any (apply-privacy-profile!))})
+  {:observe (fn [_subject Any
+                _topic Any
+                _data Any] Any
+              (apply-privacy-profile!))})
 
 ;; --- about: pages -------------------------------------------------------------
 ;; Register a privileged chrome page as a real about:<what> page at runtime (no
@@ -489,20 +508,24 @@
 ;; and renders the verifiable truth. (NOTE: about-module flag/principal semantics are
 ;; FF-version-sensitive — needs one in-browser confirmation; wrapped so a failure only
 ;; logs and never blocks startup.)
-(defn register-about! [(what String) (url String) (class-id String)] Any
+(defn register-about!
+  [what String
+   url String
+   class-id String] Any
   (try
-    (let [about-module
+    (let [about-module (Map Keyword Any)
           {:QueryInterface (js/call ChromeUtils .generateQI ["nsIAboutModule"])
-           :newChannel (fn [(uri Any) (load-info Any)] Any
-                         (let [ch (js/call (js/get Services .io) .newChannelFromURIWithLoadInfo
+           :newChannel (fn [uri Any
+                            load-info Any] Any
+                         (let [ch Any (js/call (js/get Services .io) .newChannelFromURIWithLoadInfo
                                     (js/call (js/get Services .io) .newURI url) load-info)]
                            (js/set! ch .originalURI uri)
                            ch))
-           :getURIFlags (fn [(_uri Any)] Any (js/get (js/get Ci .nsIAboutModule) .ALLOW_SCRIPT))}
-          factory
+           :getURIFlags (fn [_uri Any] Any (js/get (js/get Ci .nsIAboutModule) .ALLOW_SCRIPT))}
+          factory (Map Keyword Any)
           {:QueryInterface (js/call ChromeUtils .generateQI ["nsIFactory"])
-           :createInstance (fn [(iid Any)] Any (js/call about-module .QueryInterface iid))}
-          registrar (js/call (js/get Components .manager) .QueryInterface (js/get Ci .nsIComponentRegistrar))]
+           :createInstance (fn [iid Any] Any (js/call about-module .QueryInterface iid))}
+          registrar Any (js/call (js/get Components .manager) .QueryInterface (js/get Ci .nsIComponentRegistrar))]
       (js/call registrar .registerFactory (js/call Components .ID class-id)
         (str "about:" what) (str "@mozilla.org/network/protocol/about;1?what=" what) factory)
       (console/log (str "gjoa-loader: registered about:" what)))
@@ -553,7 +576,7 @@
       (js/call (js/get Services .obs) .addObserver observer "chrome-document-loaded")
       (js/call (js/get Services .obs) .addObserver observer "browser-delayed-startup-finished")
       (load-existing-browser-windows!)
-      (let [dev (dev-mode-dir)]
+      (let [dev Any (dev-mode-dir)]
         (if dev
           (console/log (str "gjoa-loader: dev mode active — sourcing chrome from " (js/get dev .path)))
           (console/log "gjoa-loader: production mode — loading chrome bundles from chrome://gjoa/content/")))))}))
