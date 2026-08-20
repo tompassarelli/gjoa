@@ -22,32 +22,32 @@
 
 (defn enabled? [] Boolean (pref-bool PREF-ENABLED true))
 
-(defn parse-hosts [(csv String)] Any
-  (let [t (js/call csv .trim)]
+(defn parse-hosts [csv String] (Vec String)
+  (let [t String (js/call csv .trim)]
     (if (= (js/get t .length) 0) []
-      (js/call (js/call (js/call t .split ",") .map (fn [%1] Any (js/call %1 .trim))) .filter (fn [%1] Any (> (js/get %1 .length) 0))))))
+      (js/call (js/call (js/call t .split ",") .map (fn [%1 String] Any (js/call %1 .trim))) .filter (fn [%1 String] Any (> (js/get %1 .length) 0))))))
 
-(defn allow-hosts [] Any (parse-hosts (pref-str PREF-ALLOW-HOSTS "")))
+(defn allow-hosts [] (Vec String) (parse-hosts (pref-str PREF-ALLOW-HOSTS "")))
 
 (defn current-host [] String
   (try
-    (let [b (js/get gBrowser .selectedBrowser)
-          u (when b (js/get b .currentURI))]
+    (let [b Any (js/get gBrowser .selectedBrowser)
+          u Any (when b (js/get b .currentURI))]
       (if (and u (js/get u .host)) (js/get u .host) ""))
     (catch (_e Any) "")))
 
-(defn host-allowed? [(h String)] Boolean
+(defn host-allowed? [h String] Boolean
   (and (> (js/get h .length) 0) (> (js/call (allow-hosts) .indexOf h) -1)))
 
 ;; Toggle a host in the allow-list. Returns true if the host is now ALLOWED
 ;; (blocking off for it). Rejects empty / comma-bearing hosts (CSV safety). The
 ;; overlay observes PREF-ALLOW-HOSTS and rebuilds the engine — no restart.
-(defn toggle-host [(h String)] Boolean
+(defn toggle-host [h String] Boolean
   (if (or (= (js/get h .length) 0) (> (js/call h .indexOf ",") -1))
     false
-    (let [hosts (allow-hosts)
-          idx (js/call hosts .indexOf h)
-          was-allowed (> idx -1)]
+    (let [hosts (Vec String) (allow-hosts)
+          idx Int (js/call hosts .indexOf h)
+          was-allowed Boolean (> idx -1)]
       (if was-allowed (js/call hosts .splice idx 1) (js/call hosts .push h))
       (set-pref-str! PREF-ALLOW-HOSTS (js/call hosts .join ","))
       (js/call (js/get Services .prefs) .savePrefFile nil)
@@ -57,17 +57,21 @@
 (defn apply! [] Any (set-pref-bool! PREF-PROTECTION (enabled?)))
 
 (defn toggle [] Boolean
-  (let [n (not (enabled?))]
+  (let [n Boolean (not (enabled?))]
     (set-pref-bool! PREF-ENABLED n)
     n))
 
 (defn destroy! [] Any
-  (let [u (js/get state .unsub)] (when u (u)))
+  (let [u Any (js/get state .unsub)] (when u (u)))
   (js/set! state .unsub nil))
 
 (defn init-! [] Any
   (apply!)
-  (let [obs {:observe (fn [_s _t _d] Any (apply!))}]
+  (let [obs Any {:observe (fn
+                            [_s Any
+                             _t Any
+                             _d Any] Any
+                            (apply!))}]
     (js/call (js/get Services .prefs) .addObserver PREF-ENABLED obs)
     (js/set! state .unsub (fn [] Any (js/call (js/get Services .prefs) .removeObserver PREF-ENABLED obs))))
   (js/set! window .gjoaBlocking
