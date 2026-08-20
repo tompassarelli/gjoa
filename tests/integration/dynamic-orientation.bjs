@@ -10,22 +10,22 @@
 (js/export (def tests Any
   [(deftest "dynamic orientation pref defaults ON" [mn]
      (await-true "return !!gBrowser;" 5000)
-     (let [dyn (chrome-eval "return Services.prefs.getBoolPref('gjoa.layout.dynamicOrientation', false);")]
+     (let [dyn Bool (chrome-eval "return Services.prefs.getBoolPref('gjoa.layout.dynamicOrientation', false);")]
        (expect dyn "gjoa.layout.dynamicOrientation must default ON")))
 
    (deftest "narrow window crosses threshold → horizontal; wide → vertical" [mn]
      (await-true "return !!gBrowser;" 5000)
      ;; Force a known wide state first, then narrow below the threshold.
-     (let [(threshold Int) (chrome-eval "return Services.prefs.getIntPref('gjoa.layout.narrowThreshold', 1000);")]
+     (let [threshold Int (chrome-eval "return Services.prefs.getIntPref('gjoa.layout.narrowThreshold', 1000);")]
        ;; Go narrow (threshold - 200): should flip to horizontal (verticalTabs=false).
        (chrome-eval (str "window.resizeTo(" (- threshold 200) ", 800); return true;"))
        (js/await (sleep 600))
-       (let [narrow (chrome-eval "return { w: window.innerWidth, vertical: Services.prefs.getBoolPref('sidebar.verticalTabs', true) };")]
+       (let [narrow Any (chrome-eval "return { w: window.innerWidth, vertical: Services.prefs.getBoolPref('sidebar.verticalTabs', true) };")]
          (js/call console .log (str "NARROW=" (JSON/stringify narrow)))
          ;; Go wide (threshold + 400): should flip back to vertical.
          (chrome-eval (str "window.resizeTo(" (+ threshold 400) ", 800); return true;"))
          (js/await (sleep 600))
-         (let [wide (chrome-eval "return { w: window.innerWidth, vertical: Services.prefs.getBoolPref('sidebar.verticalTabs', true) };")]
+         (let [wide Any (chrome-eval "return { w: window.innerWidth, vertical: Services.prefs.getBoolPref('sidebar.verticalTabs', true) };")]
            (js/call console .log (str "WIDE=" (JSON/stringify wide)))
            ;; Only assert the flip if the OS/WM actually honored the resize
            ;; (innerWidth tracks the request). Under a tiling compositor that
