@@ -35,12 +35,12 @@
 ;; Extract diff-touched paths from a patch body. Looks for
 ;; `diff --git a/<path> b/<path>` lines (git-format) and falls back to
 ;; `--- a/<path>` (plain unified diff).
-(defn extractTouches [(text String)] Any
-  (let [out (js/new Set)]
-    (doseq [m (js/call text .matchAll (js/new RegExp "^diff --git a/(\\S+)\\s+b/\\S+$" "gm"))]
+(defn extractTouches [text String] Any
+  (let [out Any (js/new Set)]
+    (doseq [m Any (js/call text .matchAll (js/new RegExp "^diff --git a/(\\S+)\\s+b/\\S+$" "gm"))]
       (js/call out .add (aget m 1)))
     (when (= (js/get out .size) 0)
-      (doseq [m (js/call text .matchAll (js/new RegExp "^---\\s+a/(\\S+)$" "gm"))]
+      (doseq [m Any (js/call text .matchAll (js/new RegExp "^---\\s+a/(\\S+)$" "gm"))]
         (js/call out .add (aget m 1))))
     (Array/from out)))
 
@@ -59,21 +59,23 @@
 ;;   #   mitigates: <one-line what it blocks>
 ;;   #   persist: true
 ;; Returns nil if absent. Gate S arms on presence; check-all requires `id:`.
-(js/export (defn parseSecurity [(text String)] Any
+(js/export (defn parseSecurity [text String] Any
   (if (not (js/call (js/new RegExp "^#\\s*security:\\s*$" "m") .test text))
     nil
-    (let [im (js/call (js/new RegExp "^#\\s*id:\\s*(\\S+)\\s*$" "m") .exec text)
-          mm (js/call (js/new RegExp "^#\\s*mitigates:\\s*(.+?)\\s*$" "m") .exec text)
-          pm (js/call (js/new RegExp "^#\\s*persist:\\s*(\\S+)\\s*$" "m") .exec text)
-          refs []]
+    (let [im Any (js/call (js/new RegExp "^#\\s*id:\\s*(\\S+)\\s*$" "m") .exec text)
+          mm Any (js/call (js/new RegExp "^#\\s*mitigates:\\s*(.+?)\\s*$" "m") .exec text)
+          pm Any (js/call (js/new RegExp "^#\\s*persist:\\s*(\\S+)\\s*$" "m") .exec text)
+          refs (Vec Any) []]
       ;; Collect each `#     - <ref>` line that follows the `#   refs:` marker, up to
       ;; the next non-list `#   key:` field or the diff body. Bounded scan over lines;
       ;; `in-refs` is threaded through the loop (no mutable cell).
-      (let [lines (js/call text .split "\n")
-            n (js/get lines .length)]
-        (loop [i 0 in-refs false]
+      (let [lines Any (js/call text .split "\n")
+            n Any (js/get lines .length)]
+        (loop [i Int 0
+               in-refs Bool
+               false]
           (when (< i n)
-            (let [l (aget lines i)]
+            (let [l Any (aget lines i)]
               (cond
                 (js/call (js/new RegExp "^#\\s*refs:\\s*$") .test l) (recur (+ i 1) true)
                 (and in-refs (js/call (js/new RegExp "^#\\s*-\\s+\\S") .test l))
@@ -87,29 +89,31 @@
        :mitigates (if mm (aget mm 1) nil)
        :persist (if pm (= (js/call (aget pm 1) .toLowerCase) "true") false)}))))
 
-(defn parseHeader [(text String)] Any
+(defn parseHeader [text String] Any
   (if (not (js/call text .startsWith HEADER-TAG))
     ;; Header may be preceded by nothing, but must be at the very top of the file.
     {:hasHeader false :declaredBaseline nil :appliedUpstream nil :forwarded nil :security nil}
-    (let [bm (js/call (js/new RegExp "^#\\s*baseline-firefox:\\s*(\\S+)\\s*$" "m") .exec text)
-          am (js/call (js/new RegExp "^#\\s*applied-upstream:\\s*(\\S+)\\s*$" "m") .exec text)
-          fm (js/call (js/new RegExp "^#\\s*forwarded:\\s*(\\S+)\\s*$" "m") .exec text)]
+    (let [bm Any (js/call (js/new RegExp "^#\\s*baseline-firefox:\\s*(\\S+)\\s*$" "m") .exec text)
+          am Any (js/call (js/new RegExp "^#\\s*applied-upstream:\\s*(\\S+)\\s*$" "m") .exec text)
+          fm Any (js/call (js/new RegExp "^#\\s*forwarded:\\s*(\\S+)\\s*$" "m") .exec text)]
       {:hasHeader true
        :declaredBaseline (if bm (aget bm 1) nil)
        :appliedUpstream (if am (aget am 1) nil)
        :forwarded (if fm (aget fm 1) nil)
        :security (parseSecurity text)})))
 
-(defn formatHeader [(baseline String) (touches Any)] String
-  (let [lines (js/call [HEADER-TAG
+(defn formatHeader
+  [baseline String
+   touches Any] String
+  (let [lines Any (js/call [HEADER-TAG
                         (str "#   baseline-firefox: " baseline)
-                        "#   touches:"] .concat (js/call touches .map (fn [p] Any (str "#     - " p))) ["#" ""])]
+                        "#   touches:"] .concat (js/call touches .map (fn [p String] Any (str "#     - " p))) ["#" ""])]
     (js/call lines .join "\n")))
 
-(defn loadPatch [(filename String)] Any
-  (let [text (js/await (readFile (join PATCHES-DIR filename) "utf8"))
-        parsed (parseHeader text)
-        touches (extractTouches text)]
+(defn loadPatch [filename String] Any
+  (let [text Any (js/await (readFile (join PATCHES-DIR filename) "utf8"))
+        parsed Any (parseHeader text)
+        touches Any (extractTouches text)]
     {:filename filename
      :text text
      :hasHeader (js/get parsed .hasHeader)
@@ -120,12 +124,12 @@
      :touches touches}))
 
 (defn listPatches [] Any
-  (let [entries (js/await (readdir PATCHES-DIR))]
-    (js/call (js/call entries .filter (fn [n] Any (js/call n .endsWith ".patch"))) .sort)))
+  (let [entries Any (js/await (readdir PATCHES-DIR))]
+    (js/call (js/call entries .filter (fn [n String] Any (js/call n .endsWith ".patch"))) .sort)))
 
 (defn loadCurrentBaseline [] String
-  (let [raw (js/await (readFile (join REPO-ROOT "gjoa.json") "utf8"))
-        cfg (js/call JSON .parse raw)]
+  (let [raw Any (js/await (readFile (join REPO-ROOT "gjoa.json") "utf8"))
+        cfg Any (js/call JSON .parse raw)]
     (js/get (js/get cfg .firefox) .version)))
 
 ;; Public verb: warn on any patch without a header or with a baseline
@@ -133,13 +137,15 @@
 ;; problems found (0 = clean). Non-fatal: prints to stderr; caller
 ;; decides whether to bail.
 (js/export (defn check-all [] Any
-  (let [current (js/await (loadCurrentBaseline))
-        names (js/await (listPatches))]
-    (loop [i 0 problems 0]
+  (let [current Any (js/await (loadCurrentBaseline))
+        names Any (js/await (listPatches))]
+    (loop [i Int 0
+           problems Int
+           0]
       (if (>= i (js/get names .length))
         problems
-        (let [n (aget names i)
-              p (js/await (loadPatch n))]
+        (let [n Any (aget names i)
+              p Any (js/await (loadPatch n))]
           (cond
             (not (js/get p .hasHeader))
             (do
@@ -180,29 +186,31 @@
 ;; AFTER you've just regenerated the patch against the current source,
 ;; otherwise the baseline label will lie.
 (js/export (defn retrofit-all [] Any
-  (let [current (js/await (loadCurrentBaseline))
-        names (js/await (listPatches))]
-    (loop [i 0 changed 0]
+  (let [current Any (js/await (loadCurrentBaseline))
+        names Any (js/await (listPatches))]
+    (loop [i Int 0
+           changed Int
+           0]
       (if (>= i (js/get names .length))
         (do
           (console/error (str "[patch-header] done. " changed " patch(es) updated."))
           undefined)
-        (let [n (aget names i)
-              p (js/await (loadPatch n))]
+        (let [n Any (aget names i)
+              p Any (js/await (loadPatch n))]
           (if (js/get p .hasHeader)
             (recur (+ i 1) changed)
-            (let [header (formatHeader current (js/get p .touches))
-                  wrote (js/await (writeFile (join PATCHES-DIR n) (str header (js/get p .text)) "utf8"))
-                  logged (console/error (str "[patch-header] " n ": added header (baseline=" current ", touches=" (js/get (js/get p .touches) .length) ")"))]
+            (let [header String (formatHeader current (js/get p .touches))
+                  wrote Any (js/await (writeFile (join PATCHES-DIR n) (str header (js/get p .text)) "utf8"))
+                  logged Nil (console/error (str "[patch-header] " n ": added header (baseline=" current ", touches=" (js/get (js/get p .touches) .length) ")"))]
               (recur (+ i 1) (+ changed 1))))))))))
 
 ;; CLI entrypoint. The .ts used `import.meta.main`; under bun the compiled
 ;; module is invoked directly, so dispatch on process.argv.
 (defn main! [] Any
-  (let [cmd (aget (js/get process .argv) 2)]
+  (let [cmd Any (aget (js/get process .argv) 2)]
     (cond
       (= cmd "check")
-      (let [problems (js/await (check-all))]
+      (let [problems Any (js/await (check-all))]
         (js/call process .exit (if (= problems 0) 0 2)))
 
       (= cmd "retrofit")
