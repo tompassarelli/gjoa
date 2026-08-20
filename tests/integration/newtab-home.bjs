@@ -14,12 +14,12 @@
   [(deftest "newtab: the gjoa new-tab page is the home page too" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
      ;; GjoaLoader.set-defaults pointed the home page at about:newtab ...
-     (let [home (chrome-eval
+     (let [home String (chrome-eval
                   "return Services.prefs.getDefaultBranch('').getCharPref('browser.startup.homepage', '');")]
        (expect-eq home "about:newtab"
                   "browser.startup.homepage default should be about:newtab"))
      ;; ... and about:newtab resolves to the gjoa custom new-tab page.
-     (let [ntu (chrome-eval
+     (let [ntu Any (chrome-eval
                  (str "const {AboutNewTab}=ChromeUtils.importESModule('resource:///modules/AboutNewTab.sys.mjs');"
                       " return AboutNewTab.newTabURL;"))]
        (expect-eq ntu NEWTAB-URL
