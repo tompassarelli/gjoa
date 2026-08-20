@@ -31,11 +31,11 @@ Prepare environment first:
 ")))
 
 (defn check-environment [] Any
-  (let [warnings []
-        push (fn [w] Any (js/call warnings .push w))]
+  (let [warnings (Vec Any) []
+        push (Fn [String] Any) (fn [w String] Any (js/call warnings .push w))]
     ;; Check turbo boost
-    (let [intel-turbo (js/call Bun .spawnSync ["cat" "/sys/devices/system/cpu/intel_pstate/no_turbo"])
-          amd-boost (js/call Bun .spawnSync ["cat" "/sys/devices/system/cpu/cpufreq/boost"])]
+    (let [intel-turbo Any (js/call Bun .spawnSync ["cat" "/sys/devices/system/cpu/intel_pstate/no_turbo"])
+          amd-boost Any (js/call Bun .spawnSync ["cat" "/sys/devices/system/cpu/cpufreq/boost"])]
       (cond
         (= (js/get intel-turbo .exitCode) 0)
         (when (= (js/call (js/call (js/get intel-turbo .stdout) .toString) .trim) "0")
@@ -48,56 +48,56 @@ Prepare environment first:
         :else nil))
 
     ;; Check governor
-    (let [governor (js/call Bun .spawnSync ["cat" "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"])]
+    (let [governor Any (js/call Bun .spawnSync ["cat" "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"])]
       (when (= (js/get governor .exitCode) 0)
-        (let [gov (js/call (js/call (js/get governor .stdout) .toString) .trim)]
+        (let [gov String (js/call (js/call (js/get governor .stdout) .toString) .trim)]
           (when (not (= gov "performance"))
             (push (str "CPU governor is '" gov "' (want 'performance'). Run: sudo bash tools/bench/env.sh"))))))
 
     ;; Check ASLR
-    (let [aslr (js/call Bun .spawnSync ["cat" "/proc/sys/kernel/randomize_va_space"])]
+    (let [aslr Any (js/call Bun .spawnSync ["cat" "/proc/sys/kernel/randomize_va_space"])]
       (when (= (js/get aslr .exitCode) 0)
-        (let [val (js/call (js/call (js/get aslr .stdout) .toString) .trim)]
+        (let [val String (js/call (js/call (js/get aslr .stdout) .toString) .trim)]
           (when (not (= val "0"))
             (push (str "ASLR is enabled (" val "). Run: sudo bash tools/bench/env.sh"))))))
 
     ;; Check xdotool
-    (let [xdotool (js/call Bun .spawnSync ["which" "xdotool"])]
+    (let [xdotool Any (js/call Bun .spawnSync ["which" "xdotool"])]
       (when (not (= (js/get xdotool .exitCode) 0))
         (push "xdotool not found — required for window detection. Install it.")))
 
     {:warnings warnings}))
 
 (defn print-environment-status [] Any
-  (let [warnings (js/get (check-environment) .warnings)]
+  (let [warnings Any (js/get (check-environment) .warnings)]
     (if (= (js/get warnings .length) 0)
       (console/log "  Environment: OK (turbo off, performance governor, ASLR off)")
       (do
         (console/log "  Environment warnings:")
-        (doseq [w warnings]
+        (doseq [w Any warnings]
           (console/log (str "    WARN: " w)))))
     (console/log "")))
 
-(defn find-binary [(name String)] Any
+(defn find-binary [name String] Any
   (if (= name "gjoa")
-    (let [local (str (js/call process .cwd) "/result/bin/gjoa")
-          stat (try (js/call Bun .file local) (catch (e Any) nil))]
+    (let [local String (str (js/call process .cwd) "/result/bin/gjoa")
+          stat Any (try (js/call Bun .file local) (catch (e Any) nil))]
       (if (and stat (> (js/get stat .size) 0))
         local
-        (let [result (js/call Bun .spawnSync ["which" name])
-              path (js/call (js/call (js/get result .stdout) .toString) .trim)]
+        (let [result Any (js/call Bun .spawnSync ["which" name])
+              path String (js/call (js/call (js/get result .stdout) .toString) .trim)]
           (if (and (= (js/get result .exitCode) 0) path) path nil))))
-    (let [result (js/call Bun .spawnSync ["which" name])
-          path (js/call (js/call (js/get result .stdout) .toString) .trim)]
+    (let [result Any (js/call Bun .spawnSync ["which" name])
+          path String (js/call (js/call (js/get result .stdout) .toString) .trim)]
       (if (and (= (js/get result .exitCode) 0) path) path nil))))
 
-(defn run-subcommand [(script String)] Any
-  (let [args (js/call (js/get Bun .argv) .slice 3) ; pass through all args after subcommand
-        cmd (js/call ["bun" (str (js/call process .cwd) "/.beagle-tools/gjoa/tools/bench/" script)] .concat args)
-        proc (js/call Bun .spawn cmd {:stdout "inherit"
+(defn run-subcommand [script String] Any
+  (let [args (Vec Any) (js/call (js/get Bun .argv) .slice 3) ; pass through all args after subcommand
+        cmd (Vec Any) (js/call ["bun" (str (js/call process .cwd) "/.beagle-tools/gjoa/tools/bench/" script)] .concat args)
+        proc Any (js/call Bun .spawn cmd {:stdout "inherit"
                 :stderr "inherit"
                 :stdin "inherit"})
-        code (js/await (js/get proc .exited))]
+        code Any (js/await (js/get proc .exited))]
     (when (not (= code 0)) (js/call process .exit code))))
 
 ;; --- Main ---
@@ -111,8 +111,8 @@ Prepare environment first:
     (console/log "\n=== Gjoa Benchmark Suite ===\n")
 
     ;; Auto-detect binaries
-    (let [gjoa-bin (find-binary "gjoa")
-          firefox-bin (find-binary "firefox")]
+    (let [gjoa-bin (U String Nil) (find-binary "gjoa")
+          firefox-bin (U String Nil) (find-binary "firefox")]
       (console/log (str "  Gjoa binary:    " (or gjoa-bin "NOT FOUND")))
       (console/log (str "  Firefox binary: " (or firefox-bin "NOT FOUND")))
       (console/log ""))
