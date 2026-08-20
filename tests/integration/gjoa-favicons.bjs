@@ -6,7 +6,9 @@
 (ns gjoa.tests.integration.gjoa-favicons
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect]]))
 
-(defn open-js [(url String) (marker String)] String
+(defn open-js
+  [url String
+     marker String] String
   (str "
     const p = Services.scriptSecurityManager.getSystemPrincipal();
     const t = gBrowser.addTab('" url "', { triggeringPrincipal: p });
@@ -14,7 +16,7 @@
     gBrowser.selectedTab = t;
     return true;"))
 
-(defn icon-js [(marker String)] String
+(defn icon-js [marker String] String
   (str "
     const t = [...gBrowser.tabs].find(x => x.getAttribute('gjoa-test-marker') === '" marker "');
     const img = (t && t.image) || '';
@@ -26,7 +28,7 @@
      (await-true "return !!gBrowser;" 5000)
      (chrome-eval (open-js "about:gjoa" "fav-gjoa"))
      (await-true "const t = [...gBrowser.tabs].find(x => x.getAttribute('gjoa-test-marker') === 'fav-gjoa'); return !!(t && t.image && t.image.includes('gjoa.svg'));" 5000)
-     (let [img (chrome-eval (icon-js "fav-gjoa"))]
+     (let [img String (chrome-eval (icon-js "fav-gjoa"))]
        (expect (js/call img .includes "gjoa.svg")
          (str "about:gjoa tab icon should be chrome://gjoa/content/gjoa.svg, got: " img))))
 
@@ -34,7 +36,7 @@
      (await-true "return !!gBrowser;" 5000)
      (chrome-eval (open-js "about:newtab" "fav-newtab"))
      (await-true "const t = [...gBrowser.tabs].find(x => x.getAttribute('gjoa-test-marker') === 'fav-newtab'); return !!(t && t.image && t.image.includes('gjoa.svg'));" 5000)
-     (let [img (chrome-eval (icon-js "fav-newtab"))]
+     (let [img String (chrome-eval (icon-js "fav-newtab"))]
        (expect (js/call img .includes "gjoa.svg")
          (str "new-tab tab icon should be chrome://gjoa/content/gjoa.svg, got: " img))))]))
 
