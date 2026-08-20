@@ -12,12 +12,15 @@
 ;; beagle `=` is STRUCTURAL: the panel, the pinned container, the spacer and the
 ;; row children all have ZERO own enumerable keys, so they compare EQUAL. Any
 ;; guard asking "is this node THAT node" must use identity or it is dead code.
-(js/export (defn same-node? [(a Any) (b Any)] Any
-  (bool (Object/is a b))))
+(js/export (defn same-node?
+             [a Any
+              b Any]
+             Any
+             (bool (Object/is a b))))
 
 ;; SessionStore resolution — may not exist at import time
 (js/export (def SS Any
-  (let [try-global (try
+  (let [try-global Any (try
                      (if (not= (js/typeof SessionStore) "undefined")
                        SessionStore
                        nil)
@@ -44,22 +47,25 @@
       (catch (e Any)
         (console/error "gjoa-tabs: persistTabAttribute failed" e))))))
 
-(js/export (defn pin-tab-id [(tab Any) (id Any)] Any
-  (try
+(js/export (defn pin-tab-id
+             [tab Any
+              id Any]
+             Any
+             (try
     (attr! tab PIN-ATTR (String id))
     (catch (_e Any) nil))))
 
-(js/export (defn read-pinned-id [(tab Any)] Int
+(js/export (defn read-pinned-id [tab Any] Int
   (try
-    (let [raw (and (js/get tab .getAttribute) (js/call tab .getAttribute PIN-ATTR))]
+    (let [raw Any (and (js/get tab .getAttribute) (js/call tab .getAttribute PIN-ATTR))]
       (or (and raw (Number raw)) 0))
     (catch (_e Any) 0))))
 
-(js/export (defn tree-data! [(tab Any)] Any
+(js/export (defn tree-data! [tab Any] Any
   (if (js/call tree-of .has tab)
     (js/call tree-of .get tab)
-    (let [pinned-id (read-pinned-id tab)
-          id (if pinned-id
+    (let [pinned-id Int (read-pinned-id tab)
+          id Int (if pinned-id
                (do
                  (when (>= pinned-id (js/get state .nextTabId))
                    (js/set! state .nextTabId (+ pinned-id 1)))
@@ -68,7 +74,7 @@
                        :label (js/get tab .label)
                        :nextTabId (js/get state .nextTabId)})
                  pinned-id)
-               (let [(fresh Int) (js/get state .nextTabId)]
+               (let [fresh Int (js/get state .nextTabId)]
                  (js/set! state .nextTabId (+ fresh 1))
                  (pin-tab-id tab fresh)
                  (log "treeData:fresh"
@@ -80,51 +86,51 @@
             {:id id :parentId nil :name nil :state nil :collapsed false})
       (js/call tree-of .get tab)))))
 
-(js/export (defn tab-by-id [(id Any)] Any
+(js/export (defn tab-by-id [id Any] Any
   (if (or (= id nil) (= id undefined)
           (not= (js/typeof id) "number") (not id))
     nil
     (js/call (tabs!) .find
-           (fn [%1] Any (let [td (js/call tree-of .get %1)]
+           (fn [%1 Any] Any (let [td Any (js/call tree-of .get %1)]
               (and td (= (js/get td .id) id))))))))
 
-(js/export (defn group-by-id [(id Any)] Any
+(js/export (defn group-by-id [id Any] Any
   (when id
     (js/call (all-rows) .find
-           (fn [%1] Any (let [g (js/get %1 ._group)]
+           (fn [%1 Any] Any (let [g Any (js/get %1 ._group)]
               (and g (= (js/get g .id) id))))))))
 
-(js/export (defn parent-of-tab! [(tab Any)] Any
+(js/export (defn parent-of-tab! [tab Any] Any
   (tab-by-id (js/get (tree-data! tab) .parentId))))
 
-(js/export (defn level-of! [(tab Any)] Int
-  (let [seen (js/new Set)]
-    (loop [t tab lv 0]
+(js/export (defn level-of! [tab Any] Int
+  (let [seen Any (js/new Set)]
+    (loop [t Any tab lv Int 0]
       (if (or (nil? t) (js/call seen .has t))
         lv
         (do
           (js/call seen .add t)
-          (let [pid (js/get (tree-data! t) .parentId)]
+          (let [pid Any (js/get (tree-data! t) .parentId)]
             (cond
               (or (= pid nil) (= pid undefined)) lv
               (= (js/typeof pid) "string")
-                (let [group (group-by-id pid)]
+                (let [group Any (group-by-id pid)]
                   (if (nil? (some-> group (js/get ._group)))
                     lv
-                    (let [(group-level Int) (or (js/get (js/get group ._group) .level) 0)]
+                    (let [group-level Int (or (js/get (js/get group ._group) .level) 0)]
                       (+ lv 1 group-level))))
               :else
-                (let [p (tab-by-id pid)]
+                (let [p Any (tab-by-id pid)]
                   (if (nil? p) lv (recur p (+ lv 1))))))))))))
 
-(js/export (defn level-of-row! [(row Any)] Int
+(js/export (defn level-of-row! [row Any] Int
   (cond
     (nil? row) 0
     (js/get row ._group) (or (js/get (js/get row ._group) .level) 0)
     (js/get row ._tab) (level-of! (js/get row ._tab))
     :else 0)))
 
-(js/export (defn data-of! [(row Any)] Any
+(js/export (defn data-of! [row Any] Any
   (cond
     (js/get row ._group) (js/get row ._group)
     (js/get row ._tab) (tree-data! (js/get row ._tab))
@@ -134,28 +140,28 @@
   (tabs!)))
 
 (js/export (defn all-rows [] (Vec Any)
-  (let [pinned (if (js/get state .pinnedContainer)
+  (let [pinned (Vec Any) (if (js/get state .pinnedContainer)
                  (Array/from (qa (js/get state .pinnedContainer) ".gjoa-tab-row"))
                  [])
-        tree-rows (if (js/get state .panel)
+        tree-rows (Vec Any) (if (js/get state .panel)
                     (Array/from (qa (js/get state .panel)
                                   ".gjoa-tab-row, .gjoa-group-row"))
                     [])]
     (js/call pinned .concat tree-rows))))
 
-(js/export (defn has-children! [(row Any)] Bool
-  (let [next (js/get row .nextElementSibling)]
+(js/export (defn has-children! [row Any] Bool
+  (let [next Any (js/get row .nextElementSibling)]
     (if (or (not next) (= next (js/get state .spacer)))
       false
       (> (level-of-row! next) (level-of-row! row))))))
 
-(js/export (defn subtree-rows! [(row Any)] (Vec Any)
+(js/export (defn subtree-rows! [row Any] (Vec Any)
   (if (not row)
     []
-    (let [lv (level-of-row! row)
-          out [row]]
-      (loop [cur (aget out 0)]
-        (let [nxt (js/get cur .nextElementSibling)]
+    (let [lv Int (level-of-row! row)
+          out (Vec Any) [row]]
+      (loop [cur Any (aget out 0)]
+        (let [nxt Any (js/get cur .nextElementSibling)]
           (when (and nxt (not= nxt (js/get state .spacer))
                      (> (level-of-row! nxt) lv))
             (js/call out .push nxt)
@@ -165,23 +171,23 @@
 (js/export (defn is-horizontal [] Bool
   (bool (and (js/get state .panel) (has? (js/get state .panel) "gjoa-horizontal")))))
 
-(js/export (defn tab-url [(tab Any)] String
+(js/export (defn tab-url [tab Any] String
   ;; (or … "") coalesces every nilable branch (some-> spec, session url) to ""
   ;; so the declared String return is provably non-nil under beagle 77df8a9.
   (if (nil? tab) ""
-    (let [spec (some-> tab (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec))]
+    (let [spec Any (some-> tab (js/get .linkedBrowser) (js/get .currentURI) (js/get .spec))]
       (if (and spec (not= spec "about:blank")) (or spec "")
         (or (when SS
               (try
-                (let [raw (js/call SS .getTabState tab)]
+                (let [raw Any (js/call SS .getTabState tab)]
                   (when raw
-                    (let [ts (JSON/parse raw)
-                          entries (js/get ts .entries)]
+                    (let [ts Any (JSON/parse raw)
+                          entries Any (js/get ts .entries)]
                       (when (and (Array/isArray entries) (js/get entries .length))
-                        (let [(entry-count Int) (js/get entries .length)
+                        (let [entry-count Int (js/get entries .length)
                               ;; SessionStore's 1-based cursor, restored from disk.
-                              (ss-index Int) (or (js/get ts .index) 1)
-                              idx (Math/max 0 (Math/min (- entry-count 1) (- ss-index 1)))]
+                              ss-index Int (or (js/get ts .index) 1)
+                              idx Int (Math/max 0 (Math/min (- entry-count 1) (- ss-index 1)))]
                           (some-> entries (aget idx) (js/get .url)))))))
                 (catch (e Any)
                   (console/error "gjoa-tabs: getTabState failed" e)
