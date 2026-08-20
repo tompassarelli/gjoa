@@ -31,14 +31,14 @@
 
 ;; Connect to a running Marionette server. Polls until the port accepts a
 ;; connection or the timeout elapses.
-(js/export (defn connect-marionette! [(opts Any)] Any
-  (let [o (or opts {})
-        host (or (js/get o .host) "127.0.0.1")
-        port (or (js/get o .port) 2828)
-        (connect-timeout-ms Int) (or (js/get o .connectTimeoutMs) 30000)
-        deadline (+ (js/call Date .now) connect-timeout-ms)
+(js/export (defn connect-marionette! [opts Any] Any
+  (let [o (U Any (Map Any Any)) (or opts {})
+        host (U Any String) (or (js/get o .host) "127.0.0.1")
+        port (U Any Int) (or (js/get o .port) 2828)
+        connect-timeout-ms Int (or (js/get o .connectTimeoutMs) 30000)
+        deadline (U Any Int) (+ (js/call Date .now) connect-timeout-ms)
         ;; Mutable scan state — `socket`/`lastErr` accumulate across poll attempts.
-        scan {:socket nil :lastErr nil}]
+        scan (Map Keyword Nil) {:socket nil :lastErr nil}]
     ;; Both the loop and the inner try contain js/await, so beagle wraps each in
     ;; an async IIFE — they MUST be js/await'd or they run fire-and-forget and the
     ;; loop spins synchronously without ever waiting for the socket.
@@ -61,85 +61,88 @@
       nil)
     (js/await (initClient! (js/get scan .socket))))))
 
-(defn openSocket [(host String) (port Any)] Any
-  (js/new Promise (fn [resolve reject] Any (let [s (connect {:host host :port port})]
+(defn openSocket
+  [host String
+   port Any] Any
+  (js/new Promise (fn [resolve (Fn [Any] Any)
+                       reject (Fn [Any] Any)] Any (let [s Any (connect {:host host :port port})]
                 (js/call s .once "connect" (fn [] Any (resolve s)))
-                (js/call s .once "error" (fn [e] Any (reject e)))))))
+                (js/call s .once "error" (fn [e Error] Any (reject e)))))))
 
-(defn initClient! [(socket Any)] Any
+(defn initClient! [socket Any] Any
   (let [;; nextId is a monotonically increasing message-id counter; inflight maps
         ;; pending msgIds to their { resolve, reject }.
-        idState {:nextId 1}
-        (inflight (JsMap Int Any)) (js/new Map)
+        idState (Map Keyword Int) {:nextId 1}
+        inflight (JsMap Int Any) (js/new Map)
         ;; Incoming buffer — accumulates until we have a complete <length>:<json>.
-        recv {:buf (js/call Buffer .alloc 0)
+        recv (Map Keyword (U Any Bool)) {:buf (js/call Buffer .alloc 0)
               :initialBannerSeen false}
-        bannerSeen (createDeferred!)]
+        bannerSeen Any (createDeferred!)]
 
-    (js/call socket .on "data" (fn [chunk] Any ;; `_grow` lifts the `set!` into a binding so it stays a statement (a
+    (js/call socket .on "data" (fn [chunk Buffer] Any ;; `_grow` lifts the `set!` into a binding so it stays a statement (a
         ;; bare leading `set!` before `loop` mis-emits as an early return).
-        (let [_grow (js/set! recv .buf (js/call Buffer .concat [(js/get recv .buf) chunk]))]
+        (let [_grow Any (js/set! recv .buf (js/call Buffer .concat [(js/get recv .buf) chunk]))]
           (loop []
-            (let [buf (js/get recv .buf)
-                  (colonIdx Int) (js/call buf .indexOf 0x3a)] ;; ':'
+            (let [buf Any (js/get recv .buf)
+                  colonIdx Int (js/call buf .indexOf 0x3a)] ;; ':'
               (if (< colonIdx 0)
                 nil ;; need more data for header
-                (let [lenStr (js/call (js/call buf .subarray 0 colonIdx) .toString "utf8")
-                      (len Int) (js/call Number .parseInt lenStr 10)]
+                (let [lenStr Any (js/call (js/call buf .subarray 0 colonIdx) .toString "utf8")
+                      len Int (js/call Number .parseInt lenStr 10)]
                   (if (or (not (js/call Number .isFinite len)) (< len 0))
                     (do
                       (js/call socket .destroy (js/new MarionetteError (str "invalid framing header: " (js/call JSON .stringify lenStr)) nil))
                       nil)
-                    (let [totalNeeded (+ colonIdx 1 len)]
+                    (let [totalNeeded Int (+ colonIdx 1 len)]
                       (if (< (js/get buf .length) totalNeeded)
                         nil ;; need more bytes for body
                         ;; Have a full frame: extract payload, advance buf, dispatch,
                         ;; then loop for the next frame. The `set!`/work all live in
                         ;; let-bindings so none become a stray tail `return`.
-                        (let [payload (js/call (js/call buf .subarray (+ colonIdx 1) totalNeeded) .toString "utf8")
-                              _adv (js/set! recv .buf (js/call buf .subarray totalNeeded))
-                              parseState {:parsed nil :failed false}
-                              _parse (try
+                        (let [payload Any (js/call (js/call buf .subarray (+ colonIdx 1) totalNeeded) .toString "utf8")
+                              _adv Any (js/set! recv .buf (js/call buf .subarray totalNeeded))
+                              parseState (Map Keyword (U Nil Bool)) {:parsed nil :failed false}
+                              _parse Any (try
                                        (js/set! parseState .parsed (js/call JSON .parse payload))
                                        (catch (e Error)
                                          (do
                                            (js/call socket .destroy (js/new MarionetteError (str "malformed JSON from server: " payload) e))
                                            (js/set! parseState .failed true))))
-                              _dispatch (if (js/get parseState .failed)
+                              _dispatch (U Nil (U Any (U (U Nil Any) Nil))) (if (js/get parseState .failed)
                                           nil ;; socket destroyed; stop processing this chunk
-                                          (let [parsed (js/get parseState .parsed)]
+                                          (let [parsed Any (js/get parseState .parsed)]
                                             (if (not (js/get recv .initialBannerSeen))
                                               ;; Banner — discard. Shape: { applicationType, marionetteProtocol }
-                                              (let [_b (js/set! recv .initialBannerSeen true)
-                                                    r (js/get bannerSeen .resolve)]
+                                              (let [_b Any (js/set! recv .initialBannerSeen true)
+                                                    r Any (js/get bannerSeen .resolve)]
                                                 (r))
                                               ;; Response: [1, msgId, error|null, result|null]
                                               (if (and (js/call Array .isArray parsed) (= (js/get parsed .length) 4) (= (aget parsed 0) 1))
-                                                (let [msgId (aget parsed 1)
-                                                      err (aget parsed 2)
-                                                      result (aget parsed 3)
-                                                      w (js/call inflight .get msgId)]
+                                                (let [msgId Any (aget parsed 1)
+                                                      err Any (aget parsed 2)
+                                                      result Any (aget parsed 3)
+                                                      w Any (js/call inflight .get msgId)]
                                                   (if (nil? w)
                                                     nil ;; late or unknown
-                                                    (let [_d (js/call inflight .delete msgId)]
+                                                    (let [_d Any (js/call inflight .delete msgId)]
                                                       (if err
-                                                        (let [rej (js/get w .reject)] (rej (js/new MarionetteError (formatRemoteError err) err)))
-                                                        (let [res (js/get w .resolve)] (res result))))))
+                                                        (let [rej Any (js/get w .reject)] (rej (js/new MarionetteError (formatRemoteError err) err)))
+                                                        (let [res Any (js/get w .resolve)] (res result))))))
                                                 nil))))]
                           (if (js/get parseState .failed)
                             nil ;; stop: framing aborted
                             (recur)))))))))))))
 
-    (js/call socket .on "error" (fn [e] Any (doseq [pair (js/call Array .from (js/call inflight .entries))]
-          (let [id (aget pair 0)
-                w (aget pair 1)
-                rej (js/get w .reject)]
+    (js/call socket .on "error" (fn [e Error] Any (doseq [pair Any (js/call Array .from (js/call inflight .entries))]
+          (let [id Any (aget pair 0)
+                w Any (aget pair 1)
+                rej Any (js/get w .reject)]
             (rej (js/new MarionetteError "socket error" e))
             (js/call inflight .delete id)))))
-    (js/call socket .on "close" (fn [] Any (doseq [pair (js/call Array .from (js/call inflight .entries))]
-          (let [id (aget pair 0)
-                w (aget pair 1)
-                rej (js/get w .reject)]
+    (js/call socket .on "close" (fn [] Any (doseq [pair Any (js/call Array .from (js/call inflight .entries))]
+          (let [id Any (aget pair 0)
+                w Any (aget pair 1)
+                rej Any (js/get w .reject)]
             (rej (js/new MarionetteError "socket closed before response" nil))
             (js/call inflight .delete id)))))
 
@@ -147,26 +150,28 @@
     ;; commands sent before its session-init handshake.)
     (js/await (js/get bannerSeen .promise))
 
-    (let [send (fn [(name String) (params Any)] Any
-                 (let [p (or params {})
-                       (id Int) (js/get idState .nextId)]
+    (let [send (Fn [String Any] Any) (fn [name String
+                                          params Any] Any
+                 (let [p (U Any (Map Any Any)) (or params {})
+                       id Int (js/get idState .nextId)]
                    (js/set! idState .nextId (+ id 1))
-                   (let [cmd (js/call JSON .stringify [0 id name p])
-                         framed (str (js/call Buffer .byteLength cmd "utf8") ":" cmd)]
-                     (js/new Promise (fn [resolve reject] Any (js/call inflight .set id {:resolve resolve :reject reject})
-                                 (js/call socket .write framed "utf8" (fn [err] Any (if err
+                   (let [cmd String (js/call JSON .stringify [0 id name p])
+                         framed String (str (js/call Buffer .byteLength cmd "utf8") ":" cmd)]
+                     (js/new Promise (fn [resolve (Fn [Any] Any)
+                                          reject (Fn [Any] Any)] Any (js/call inflight .set id {:resolve resolve :reject reject})
+                                 (js/call socket .write framed "utf8" (fn [err Error] Any (if err
                                              (do
                                                (js/call inflight .delete id)
                                                (reject (js/new MarionetteError "write failed" err)))
                                              nil))))))))
-          ctxState {:desired nil}]
+          ctxState (Map Keyword Nil) {:desired nil}]
 
       {:newSession
        ;; caps: optional alwaysMatch map (e.g. {:pageLoadStrategy "eager"} to
        ;; return Navigate at DOMContentLoaded instead of the full load event —
        ;; heavy sites never settle their ad/tracker tail). No arg = {} (default).
-       (fn [(caps Any)] Any
-         (let [r (js/await (send "WebDriver:NewSession"
+       (fn [caps Any] Any
+         (let [r Any (js/await (send "WebDriver:NewSession"
                                  {:capabilities {:alwaysMatch (or caps {}) :firstMatch [{}]}}))]
            (js/get r .sessionId)))
 
@@ -174,31 +179,32 @@
        ;; (default "normal" = load event; "eager" = DOMContentLoaded) — event-
        ;; driven, Fission-safe. Bound it with setTimeouts.
        :navigate
-       (fn [(url String)] Any
+       (fn [url String] Any
          (js/await (send "WebDriver:Navigate" {:url url}))
          nil)
 
        :setTimeouts
-       (fn [(timeouts Any)] Any
+       (fn [timeouts Any] Any
          (js/await (send "WebDriver:SetTimeouts" timeouts))
          nil)
 
        :setContext
-       (fn [(context String)] Any
+       (fn [context String] Any
          (js/set! ctxState .desired context)
          (js/await (send "Marionette:SetContext" {:value context}))
          nil)
 
        :executeScript
-       (fn [(script String) (args Any)] Any
+       (fn [script String
+            args Any] Any
          ;; Marionette drifts the active context back to "content" when a test
          ;; opens a content tab (gBrowser.addTab to an http URL). Re-assert the
          ;; desired context before each script so chrome tests keep hitting the
          ;; browser window — and the one content test keeps hitting content.
          (when (js/get ctxState .desired)
            (js/await (send "Marionette:SetContext" {:value (js/get ctxState .desired)})))
-         (let [a (or args [])
-               r (js/await (send "WebDriver:ExecuteScript"
+         (let [a (U Any (Vec Any)) (or args [])
+               r Any (js/await (send "WebDriver:ExecuteScript"
                                  {:script script
                                   :args a
                                   ;; Some Firefox versions require these to be present.
@@ -207,11 +213,12 @@
            (js/get r .value)))
 
        :executeAsyncScript
-       (fn [(script String) (args Any)] Any
+       (fn [script String
+            args Any] Any
          (when (js/get ctxState .desired)
            (js/await (send "Marionette:SetContext" {:value (js/get ctxState .desired)})))
-         (let [a (or args [])
-               r (js/await (send "WebDriver:ExecuteAsyncScript"
+         (let [a (U Any (Vec Any)) (or args [])
+               r Any (js/await (send "WebDriver:ExecuteAsyncScript"
                                  {:script script
                                   :args a
                                   :scriptTimeout 30000
@@ -222,16 +229,16 @@
        (fn [] Any
          ;; Marionette wraps single-value returns in { value: ... } here, just
          ;; like ExecuteScript. Unwrap.
-         (let [r (js/await (send "WebDriver:GetWindowHandle" {}))]
+         (let [r Any (js/await (send "WebDriver:GetWindowHandle" {}))]
            (if (= (js/typeof r) "string") r (js/get r .value))))
 
        :getWindowHandles
        (fn [] Any
-         (let [r (js/await (send "WebDriver:GetWindowHandles" {}))]
+         (let [r Any (js/await (send "WebDriver:GetWindowHandles" {}))]
            (if (js/call Array .isArray r) r (js/get r .value))))
 
        :switchToWindow
-       (fn [(handle String)] Any
+       (fn [handle String] Any
          (js/await (send "WebDriver:SwitchToWindow" {:handle handle}))
          nil)
 
@@ -240,17 +247,17 @@
          ;; WebDriver:CloseWindow closes the active *tab*, not the chrome window.
          ;; For our case (gjoa runs as a chrome-window-level extension) we
          ;; want to close the entire window, hence Marionette:CloseChromeWindow.
-         (let [r (js/await (send "WebDriver:CloseChromeWindow" {}))]
+         (let [r Any (js/await (send "WebDriver:CloseChromeWindow" {}))]
            (if (js/call Array .isArray r) r (js/get r .value))))
 
        :performActions
-       (fn [(actions Any)] Any
+       (fn [actions Any] Any
          (js/await (send "WebDriver:PerformActions" {:actions actions}))
          nil)
 
        :takeScreenshot
        (fn [] Any
-         (let [r (js/await (send "WebDriver:TakeScreenshot" {:full true :hash false}))]
+         (let [r Any (js/await (send "WebDriver:TakeScreenshot" {:full true :hash false}))]
            (if (= (js/typeof r) "string") r (js/get r .value))))
 
        :releaseActions
@@ -259,7 +266,7 @@
          nil)
 
        :quit
-       (fn [(flags Any)] Any
+       (fn [flags Any] Any
          ;; Marionette:Quit gracefully shuts Firefox down and writes
          ;; sessionstore.jsonlz4. Returns { cause, in_app }.
          (try
@@ -283,19 +290,20 @@
          (try (js/call socket .end) (catch (e Error) nil))
          (try (js/call socket .destroy) (catch (e Error) nil)))})))
 
-(defn formatRemoteError [(err Any)] String
+(defn formatRemoteError [err Any] String
   (if (and err (= (js/typeof err) "object") (js/in? err "message"))
     (str (or (js/get err .error) "error") ": " (or (js/get err .message) "(no message)"))
     (String err)))
 
-(defn sleep [(ms Any)] Any
-  (js/new Promise (fn [r] Any (setTimeout (fn [] Any (r nil)) ms))))
+(defn sleep [ms Any] Any
+  (js/new Promise (fn [r (Fn [Any] Any)] Any (setTimeout (fn [] Any (r nil)) ms))))
 
 ;; A Deferred is a Promise plus its externalized resolve/reject. createDeferred!
 ;; assigns them out of the executor so callers can settle the promise later.
 (defn createDeferred! [] Any
-  (let [slot {:resolve nil :reject nil}
-        promise (js/new Promise (fn [res rej] Any (js/set! slot .resolve res)
+  (let [slot (Map Keyword Nil) {:resolve nil :reject nil}
+        promise (Promise Any) (js/new Promise (fn [res (Fn [Any] Any)
+                                                   rej (Fn [Any] Any)] Any (js/set! slot .resolve res)
                             (js/set! slot .reject rej)))]
     {:promise promise
      :resolve (js/get slot .resolve)
