@@ -23,8 +23,9 @@
 ;; is a backslash; no-op on *nix.
 (def BEAGLE-REF-FILE String (join REPO-ROOT "configs" "beagle.ref"))
 (def BEAGLE-REF String
-  (let [lines (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
-        ref (js/call lines .find (fn [(l String)] Bool
+  (let [lines String (js/call (readFileSync BEAGLE-REF-FILE "utf8") .split "\n")
+        ref Any
+        (js/call lines .find (fn [l String] Bool
                            (and (> (js/get (js/call l .trim) .length) 0)
                                 (not (js/call (js/call l .trim) .startsWith "#")))))]
     (if ref
@@ -44,8 +45,8 @@
 (def TEXT-FILENAMES Any
   (js/new Set ["moz.build" "configure.sh" "branding.nsi" "jar.mn" "jar.inc.mn"]))
 
-(defn is-text-file [(path String)] Any
-  (let [base (or (js/call (js/call path .split "/") .pop) "")]
+(defn is-text-file [path String] Any
+  (let [base Any (or (js/call (js/call path .split "/") .pop) "")]
     (if (js/call TEXT-FILENAMES .has base)
       true
       (js/call TEXT-EXTS .has (js/call (extname path) .toLowerCase)))))
@@ -55,9 +56,9 @@
 ;; License"), URLs (mozilla.org/MPL/2.0), file paths (firefox-branding.js),
 ;; and generic comments. Only swap brand strings inside specific structured
 ;; patterns we recognize.
-(defn substitutions [(cfg Any)] Any
-  (let [b (js/get cfg .branding)
-        u (js/get cfg .urls)]
+(defn substitutions [cfg Any] Any
+  (let [b Any (js/get cfg .branding)
+        u Any (js/get cfg .urls)]
     [
      ;; ---- brand.ftl entries (Fluent localization format) ----
      [(js/new RegExp "^-brand-shorter-name\\s*=.*$" "m") (str "-brand-shorter-name = " (js/get b .shorterName))]
@@ -118,19 +119,21 @@
      [(js/new RegExp "^!define CompanyName \".*?\"$" "m")
       (str "!define CompanyName \"" (js/get b .vendorName) "\"")]]))
 
-(defn apply-substitutions! [(text String) (cfg Any)] String
-  (let [out (atom text)]
-    (doseq [pair (substitutions cfg)]
-      (let [re (nth pair 0)
-            replacement (nth pair 1)]
+(defn apply-substitutions!
+  [text String
+   cfg Any] String
+  (let [out (Atom String) (atom text)]
+    (doseq [pair Any (substitutions cfg)]
+      (let [re Any (nth pair 0)
+            replacement Any (nth pair 1)]
         (reset! out (js/call @out .replace re replacement))))
     @out))
 
-(defn walk-files [(root String)] Any
-  (let [out []]
-    (letfn [(recurse [(dir String)] Any
-              (doseq [name (readdirSync dir)]
-                (let [path (join dir name)]
+(defn walk-files [root String] Any
+  (let [out (Vec Any) []]
+    (letfn [(recurse [dir String] Any
+              (doseq [name String (readdirSync dir)]
+                (let [path Any (join dir name)]
                   (if (js/call (statSync path) .isDirectory)
                     (recurse path)
                     (js/call out .push path)))))]
@@ -140,8 +143,8 @@
 ;; Copy mozilla's unofficial branding tree to engine/browser/branding/<binaryName>/,
 ;; applying string substitutions to text files and overwriting our PNG icons.
 (js/export (defn branding! [] Any
-  (let [cfg (load-config!)
-        target (join ENGINE-BRANDING-DIR (js/get cfg .binaryName))]
+  (let [cfg Any (load-config!)
+        target Any (join ENGINE-BRANDING-DIR (js/get cfg .binaryName))]
 
     (when (not (existsSync ENGINE-UNOFFICIAL-BRANDING))
       (throw (js/new Error (str "unofficial branding not found at " ENGINE-UNOFFICIAL-BRANDING " — "
@@ -153,15 +156,15 @@
 
     ;; 1. Walk mozilla's unofficial tree and copy each file, with substitution
     ;;    on text files.
-    (let [all-files (walk-files ENGINE-UNOFFICIAL-BRANDING)
-          text-count (atom 0)
-          binary-count (atom 0)]
-      (doseq [src all-files]
-        (let [rel (relative ENGINE-UNOFFICIAL-BRANDING src)
-              dst (join target rel)]
+    (let [all-files Any (walk-files ENGINE-UNOFFICIAL-BRANDING)
+          text-count (Atom Int) (atom 0)
+          binary-count (Atom Int) (atom 0)]
+      (doseq [src String all-files]
+        (let [rel Any (relative ENGINE-UNOFFICIAL-BRANDING src)
+              dst Any (join target rel)]
           (mkdirSync (dirname dst) {:recursive true})
           (if (is-text-file src)
-            (let [text (readFileSync src "utf8")]
+            (let [text Any (readFileSync src "utf8")]
               (writeFileSync dst (apply-substitutions! text cfg))
               (reset! text-count (+ @text-count 1)))
             ;; Binary copy — preserves icon bytes etc.
@@ -180,32 +183,32 @@
     ;;     is what actually makes the prefs take effect; unreferenced files in the
     ;;     objdir are dropped by mozpack.)
     ;;     Appended AFTER substitutions so pref values pass through verbatim.
-    (let [branding-pref-file (join target "pref" "firefox-branding.js")]
+    (let [branding-pref-file Any (join target "pref" "firefox-branding.js")]
       (when (not (existsSync branding-pref-file))
         (throw (js/new Error (str "branding pref file missing at " branding-pref-file " — Mozilla's unofficial "
                             "template no longer ships pref/firefox-branding.js, so gjoa default prefs "
                             "would not be packaged. Register a pref file explicitly before relying on this."))))
-      (let [gjoa-pref-files ["perf-prefs" "dark-mode-prefs" "adblock-prefs" "genai-prefs" "layout-prefs" "theme-prefs"]
-            tmp-dir (join REPO-ROOT ".beagle-tools" ".pref-build")
-            _ (mkdirSync tmp-dir {:recursive true})
-            pref-blocks (atom "\n\n// ===== gjoa default prefs (appended by tools/prep/branding.bjs) =====\n")]
-        (doseq [name gjoa-pref-files]
-          (let [src (join SRC-DIR "defaults" "pref" (str name ".bjs"))
-                out (join tmp-dir (str name ".js"))]
+      (let [gjoa-pref-files (Vec String) ["perf-prefs" "dark-mode-prefs" "adblock-prefs" "genai-prefs" "layout-prefs" "theme-prefs"]
+            tmp-dir Any (join REPO-ROOT ".beagle-tools" ".pref-build")
+            _ Any (mkdirSync tmp-dir {:recursive true})
+            pref-blocks (Atom String) (atom "\n\n// ===== gjoa default prefs (appended by tools/prep/branding.bjs) =====\n")]
+        (doseq [name String gjoa-pref-files]
+          (let [src Any (join SRC-DIR "defaults" "pref" (str name ".bjs"))
+                out Any (join tmp-dir (str name ".js"))]
             (when (not (existsSync src)) (throw (js/new Error (str "gjoa pref source missing: " src))))
             ;; Compile the pref .bjs → pref() JS. Sync spawn keeps this in the
             ;; (now sync) branding pipeline; a nonzero exit is fatal so a broken
             ;; pref source can't silently ship empty defaults.
-            (let [proc (js/call Bun .spawnSync {:cmd ["bash" BEAGLE-BUILD src out]
+            (let [proc Any (js/call Bun .spawnSync {:cmd ["bash" BEAGLE-BUILD src out]
                                         :cwd REPO-ROOT
                                         :stdout "pipe"
                                         :stderr "pipe"})]
               (when (not= (js/get proc .exitCode) 0)
                 (throw (js/new Error (str "beagle-build failed compiling pref source " src ":\n"
                                     (js/call (js/get proc .stderr) .toString))))))
-            (let [contents (readFileSync out "utf8")]
+            (let [contents Any (readFileSync out "utf8")]
               (reset! pref-blocks (str @pref-blocks "\n// ---- " name ".bjs ----\n" (js/call contents .trimEnd) "\n")))))
-        (let [existing (readFileSync branding-pref-file "utf8")]
+        (let [existing Any (readFileSync branding-pref-file "utf8")]
           (writeFileSync branding-pref-file (str existing @pref-blocks)))
         (js/call log .info (str "compiled + appended " (js/get gjoa-pref-files .length) " gjoa pref files to branding/" (js/get cfg .binaryName) "/pref/firefox-branding.js"))))
 
@@ -220,13 +223,13 @@
     ;;     configure surgery, and lands in omni.ja for BOTH builds. Computed to
     ;;     Firefox/<major.minor> from the pinned Firefox version. Branding stays Gjoa
     ;;     everywhere else (about:, title, app name).
-    (let [ver (js/get (js/get cfg .firefox) .version)
-          mm-match (js/call ver .match (js/new RegExp "^(\\d+\\.\\d+)"))
-          mm (if mm-match (aget mm-match 1) ver)
-          ua (str "Mozilla/5.0 (X11; Linux x86_64; rv:" mm ") Gecko/20100101 Firefox/" mm)
-          ua-pref-file (join target "pref" "firefox-branding.js")]
+    (let [ver Any (js/get (js/get cfg .firefox) .version)
+          mm-match Any (js/call ver .match (js/new RegExp "^(\\d+\\.\\d+)"))
+          mm Any (if mm-match (aget mm-match 1) ver)
+          ua String (str "Mozilla/5.0 (X11; Linux x86_64; rv:" mm ") Gecko/20100101 Firefox/" mm)
+          ua-pref-file Any (join target "pref" "firefox-branding.js")]
       (when (existsSync ua-pref-file)
-        (let [existing (readFileSync ua-pref-file "utf8")]
+        (let [existing Any (readFileSync ua-pref-file "utf8")]
           (when (not (js/call existing .includes "general.useragent.override"))
             (writeFileSync ua-pref-file
               (str existing
@@ -239,11 +242,11 @@
     ;;    convention: defaultNN.png at the branding root for sizes the desktop
     ;;    integration needs (16/22/24/32/48/64/128/256/512). We expect logoNN.png
     ;;    in our source dir at matching sizes.
-    (let [sizes [16 22 24 32 48 64 128 256 512]
-          icon-count (atom 0)]
-      (doseq [size sizes]
-        (let [src (join BRANDING-SRC (str "logo" size ".png"))
-              dst (join target (str "default" size ".png"))]
+    (let [sizes (Vec Int) [16 22 24 32 48 64 128 256 512]
+          icon-count (Atom Int) (atom 0)]
+      (doseq [size Int sizes]
+        (let [src Any (join BRANDING-SRC (str "logo" size ".png"))
+              dst Any (join target (str "default" size ".png"))]
           (if (existsSync src)
             (do
               (js/call Bun .spawnSync ["cp" src dst])
@@ -254,14 +257,14 @@
     ;; 3. Overlay our content/ directory wholesale onto engine/.../gjoa/content/.
     ;;    Replaces the Firefox-logo PNGs/SVGs that copied through from the
     ;;    unofficial template (about-logo*, about-wordmark, etc.) with ours.
-    (let [our-content (join BRANDING-SRC "content")
-          target-content (join target "content")]
+    (let [our-content Any (join BRANDING-SRC "content")
+          target-content Any (join target "content")]
       (when (existsSync our-content)
-        (let [content-count (atom 0)]
-          (doseq [name (readdirSync our-content)]
-            (let [src (join our-content name)]
+        (let [content-count (Atom Int) (atom 0)]
+          (doseq [name String (readdirSync our-content)]
+            (let [src Any (join our-content name)]
               (when (js/call (statSync src) .isFile)
-                (let [dst (join target-content name)]
+                (let [dst Any (join target-content name)]
                   (js/call Bun .spawnSync ["cp" src dst])
                   (reset! content-count (+ @content-count 1))))))
           (js/call log .info (str "overlaid " @content-count " content/ files (about-logo, wordmarks)")))))
@@ -269,10 +272,10 @@
     ;; 4. Sanity check: assert no zen-browser.app substring leaked through. If
     ;;    mozilla ships a future template that references zen, our regex won't
     ;;    catch it — fail loud rather than silently shipping it.
-    (let [written (walk-files target)]
-      (doseq [f written]
+    (let [written Any (walk-files target)]
+      (doseq [f String written]
         (when (is-text-file f)
-          (let [text (readFileSync f "utf8")]
+          (let [text Any (readFileSync f "utf8")]
             (when (js/call text .includes "zen-browser.app")
               (throw (js/new Error (str "zen-browser.app leaked into " f " — extend substitutions in branding.bjs"))))))))
 
