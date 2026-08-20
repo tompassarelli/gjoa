@@ -3,22 +3,22 @@
 
 (js/export (defn make-cross-window-tabs [] Any
   {:all (fn [] Any
-    (let [out []]
+    (let [out (Vec Any) []]
       (try
-        (loop [e (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
+        (loop [e Any (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
           (if (js/call e .hasMoreElements)
             (do
-              (let [w (js/call e .getNext)
-                    p (js/get w .Gjoa)]
+              (let [w Any (js/call e .getNext)
+                    p Any (js/get w .Gjoa)]
                 (when p
                   ;; per-window try: a window still initializing (no windows.current
                   ;; / tabs.list yet) must NOT abort the whole all-windows walk —
                   ;; otherwise one not-ready window blanks the entire shift+T picker.
                   (try
-                    (let [win (js/call (js/get p .windows) .current)
-                          tabs (js/call (js/get win .tabs) .list)]
+                    (let [win Any (js/call (js/get p .windows) .current)
+                          tabs Any (js/call (js/get win .tabs) .list)]
                       (js/call tabs .forEach
-                        (fn [t] Any
+                        (fn [t Any] Any
                           (js/call out .push {:id (js/get t .id)
                                       :url (js/get t .url)
                                       :label (js/get t .label)
@@ -36,14 +36,15 @@
           (console/error "[Gjoa.tabs.all] enumerate failed" err)))
       out))
 
-   :activate (fn [gjoa-id window-id] Any
+   :activate (fn [gjoa-id Any
+                 window-id Any] Any
     (try
-      (loop [e (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
+      (loop [e Any (js/call (js/get Services .wm) .getEnumerator "navigator:browser")]
         (if (js/call e .hasMoreElements)
-          (let [w (js/call e .getNext)
-                p (js/get w .Gjoa)]
+          (let [w Any (js/call e .getNext)
+                p Any (js/get w .Gjoa)]
             (if p
-              (let [win (js/call (js/get p .windows) .current)]
+              (let [win Any (js/call (js/get p .windows) .current)]
                 (if (= (js/get win .windowId) window-id)
                   (js/call (js/get win .tabs) .activate gjoa-id)
                   (recur e)))
