@@ -6,15 +6,19 @@
 
 ;; --- helpers ---
 
-(defn compute-filtered [(all-items Any) (query String)
-                         (preserve Bool) (filter-fn Any)] Any
+(defn compute-filtered
+  [all-items Any
+   query String
+   preserve Bool
+   filter-fn Any]
+  Any
   (if (= query "")
     (js/call all-items .slice)
-    (let [matched-set (js/new Set)]
+    (let [matched-set Any (js/new Set)]
       (js/call all-items .forEach
-        (fn [%1] Any (when (if filter-fn
+        (fn [%1 Any] Any (when (if filter-fn
                  (filter-fn %1 query)
-                 (let [hay (js/call (str (or (js/get %1 .display) "") " " (or (js/get %1 .secondary) "")) .toLowerCase)]
+                 (let [hay String (js/call (str (or (js/get %1 .display) "") " " (or (js/get %1 .secondary) "")) .toLowerCase)]
                    (js/call hay .includes query)))
            (js/call matched-set .add %1))))
       (if (not preserve)
@@ -22,43 +26,49 @@
         ;; matches, so typing "space" selects `:space` — not `:history`, whose
         ;; description ("…`:history space`…") merely mentions the word. Stable
         ;; sort keeps the original order within each rank tier.
-        (let [qfirst (or (aget (js/call (js/call (js/call query .trim) .toLowerCase) .split (js/new RegExp "\\s+")) 0) "")
-              title-rank (fn [(it Any)] Int
+        (let [qfirst String (or (aget (js/call (js/call (js/call query .trim) .toLowerCase) .split (js/new RegExp "\\s+")) 0) "")
+              title-rank (Fn [Any] Int) (fn [it Any] Int
                            (if (and (not= qfirst "")
                                     (js/call (js/call (or (js/get it .display) "") .toLowerCase) .includes qfirst))
                              0 1))]
-          (js/call (js/call all-items .filter (fn [%1] Any (js/call matched-set .has %1))) .sort
-                 (fn [a b] Any (- (title-rank a) (title-rank b)))))
+          (js/call (js/call all-items .filter (fn [%1 Any] Any (js/call matched-set .has %1))) .sort
+                 (fn
+                   [a Any
+                    b Any] Any
+                   (- (title-rank a) (title-rank b)))))
         ;; Items are caller-supplied; their ids are tab ids or command keys.
-        (let [(by-id (JsMap Any Any)) (js/new Map)]
+        (let [by-id (JsMap Any Any) (js/new Map)]
           (js/call all-items .forEach
-            (fn [%1] Any (when (and (not= (js/get %1 .id) nil) (not= (js/get %1 .id) undefined))
+            (fn [%1 Any] Any (when (and (not= (js/get %1 .id) nil) (not= (js/get %1 .id) undefined))
                (js/call by-id .set (js/get %1 .id) %1))))
-          (let [visible (js/new Set matched-set)]
+          (let [visible Any (js/new Set matched-set)]
             (js/call matched-set .forEach
-              (fn [%1] Any (loop [cur %1]
+              (fn [%1 Any] Any (loop [cur Any %1]
                  (when (and cur (not= (js/get cur .parentId) nil) (not= (js/get cur .parentId) undefined))
-                   (let [p (js/call by-id .get (js/get cur .parentId))]
+                   (let [p Any (js/call by-id .get (js/get cur .parentId))]
                      (when (and p (not (js/call visible .has p)))
                        (js/call visible .add p)
                        (recur p)))))))
-            (js/call all-items .filter (fn [%1] Any (js/call visible .has %1)))))))))
+            (js/call all-items .filter (fn [%1 Any] Any (js/call visible .has %1)))))))))
 
-(defn is-direct-match [(item Any) (query String)] Bool
+(defn is-direct-match
+  [item Any
+   query String]
+  Bool
   (if (= query "")
     true
-    (let [hay (js/call (str (or (js/get item .display) "") " " (or (js/get item .secondary) "")) .toLowerCase)]
+    (let [hay String (js/call (str (or (js/get item .display) "") " " (or (js/get item .secondary) "")) .toLowerCase)]
       (js/call hay .includes query))))
 
-(defn clear-children [(el Any)] Any
+(defn clear-children [el Any] Any
   (when (js/get el .firstChild)
     (js/call (js/get el .firstChild) .remove)
     (clear-children el)))
 
 ;; --- factory ---
 
-(js/export (defn make-picker! [(deps Any)] Any
-  (let [st {:pickerEl nil
+(js/export (defn make-picker! [deps Any] Any
+  (let [st (Map Keyword Any) {:pickerEl nil
             :pickerInput nil
             :pickerList nil
             :active false
@@ -71,9 +81,9 @@
             :filterItem nil}
 
         ;; single forward ref for the show/open-action-menu cycle
-        show-ref {:fn nil}
+        show-ref (Map Keyword Any) {:fn nil}
 
-        reset-st! (fn [] Any
+        reset-st! (Fn [] Any) (fn [] Any
           (js/set! st .active false)
           (js/set! st .onSelect nil)
           (js/set! st .actions [])
@@ -81,33 +91,35 @@
           (when (js/get st .pickerEl)
             (js/set! (js/get st .pickerEl) .hidden true)))
 
-        dismiss (fn [] Any
+        dismiss (Fn [] Any) (fn [] Any
           (when (js/get st .active)
             (reset-st!)
             (js/call deps .restoreFocus)))
 
-        commit (fn [] Any
+        commit (Fn [] Any) (fn [] Any
           (when (js/get st .active)
-            (let [item (aget (js/get st .filtered) (js/get st .selectedIdx))
-                  cb (js/get st .onSelect)
-                  query (or (some-> (js/get st .pickerInput) (js/get .value)) "")]
+            (let [item Any (aget (js/get st .filtered) (js/get st .selectedIdx))
+                  cb Any (js/get st .onSelect)
+                  query String (or (some-> (js/get st .pickerInput) (js/get .value)) "")]
               (reset-st!)
               (when (and item cb)
                 (cb item query)))))
 
         ;; --- render-list ---
-        render-list (fn [] Any
+        render-list (Fn [] Any) (fn [] Any
           (when (js/get st .pickerList)
             (clear-children (js/get st .pickerList))
             (if (= (js/get (js/get st .filtered) .length) 0)
-              (let [empty (xul "label" "gjoa-picker-empty")]
+              (let [empty Any (xul "label" "gjoa-picker-empty")]
                 (attr! empty "value" "(no matches)")
                 (js/call (js/get st .pickerList) .appendChild empty))
               (do
-                (let [query (or (some-> (js/get st .pickerInput) (js/get .value) (js/call .trim) (js/call .toLowerCase)) "")]
+                (let [query String (or (some-> (js/get st .pickerInput) (js/get .value) (js/call .trim) (js/call .toLowerCase)) "")]
                   (js/call (js/get st .filtered) .forEach
-                    (fn [item idx] Any
-                      (let [row (xul "hbox" "gjoa-picker-row")]
+                    (fn
+                      [item Any
+                       idx Int] Any
+                      (let [row Any (xul "hbox" "gjoa-picker-row")]
                         (when (= idx (js/get st .selectedIdx))
                           (attr! row "gjoa-picker-selected" "true"))
                         (when (and (js/get st .preserveTree) query (not (is-direct-match item query)))
@@ -115,7 +127,7 @@
                         ;; Items are caller-supplied, so an indent level indents the
                         ;; row only once it is proven numeric — the truthiness test
                         ;; alone would let a stray value reach the style as NaNpx.
-                        (let [depth (js/get item .depth)]
+                        (let [depth Any (js/get item .depth)]
                           (when (and (number? depth) (js/call Number .isFinite depth) (not= depth 0))
                             (js/call (js/get row .style) .setProperty "padding-left"
                               (str (+ 14 (* depth 14.0)) "px")
@@ -128,23 +140,23 @@
                           ;; page-controlled http(s) favicon URL is deliberately NOT
                           ;; loadable here (it would beacon with the chrome principal).
                           (if (js/call (js/new RegExp "^page-icon:|^data:|^chrome:|^moz-") .test (js/get item .icon))
-                            (let [img (htm "img" "gjoa-picker-icon")]
+                            (let [img Any (htm "img" "gjoa-picker-icon")]
                               (js/set! img .src (js/get item .icon))
                               (js/set! img .alt "")
                               (js/call row .appendChild img))
-                            (let [ic (xul "label" "gjoa-picker-icon-text")]
+                            (let [ic Any (xul "label" "gjoa-picker-icon-text")]
                               (attr! ic "value" (js/get item .icon))
                               (js/call row .appendChild ic))))
 
                         ;; text column
-                        (let [text (xul "hbox" "gjoa-picker-text")]
+                        (let [text Any (xul "hbox" "gjoa-picker-text")]
                           (attr! text "flex" "1")
-                          (let [primary (xul "label" "gjoa-picker-label")]
+                          (let [primary Any (xul "label" "gjoa-picker-label")]
                             (attr! primary "value" (js/get item .display))
                             (attr! primary "crop" "end")
                             (js/call text .appendChild primary))
                           (when (js/get item .secondary)
-                            (let [sec (xul "label" "gjoa-picker-secondary")]
+                            (let [sec Any (xul "label" "gjoa-picker-secondary")]
                               (attr! sec "value" (js/get item .secondary))
                               (attr! sec "crop" "end")
                               (js/call text .appendChild sec)))
@@ -160,30 +172,30 @@
                   (js/call .scrollIntoView {:block "nearest"}))))))
 
         ;; --- move-selection ---
-        move-selection (fn [(delta Int)] Any
-          (let [(match-count Int) (js/get (js/get st .filtered) .length)
-                (selected-idx Int) (js/get st .selectedIdx)]
+        move-selection (Fn [Int] Any) (fn [delta Int] Any
+          (let [match-count Int (js/get (js/get st .filtered) .length)
+                selected-idx Int (js/get st .selectedIdx)]
             (when (> match-count 0)
               (js/set! st .selectedIdx
                 (rem (+ selected-idx delta match-count) match-count))
               (render-list))))
 
         ;; --- open-action-menu ---
-        open-action-menu (fn [] Any
-          (let [target (aget (js/get st .filtered) (js/get st .selectedIdx))
-                local-actions (js/get st .actions)]
+        open-action-menu (Fn [] Any) (fn [] Any
+          (let [target Any (aget (js/get st .filtered) (js/get st .selectedIdx))
+                local-actions (Vec Any) (js/get st .actions)]
             (when (and target (js/get local-actions .length))
               (dismiss)
-              (let [show-fn (js/get show-ref .fn)]
+              (let [show-fn Any (js/get show-ref .fn)]
                 (show-fn
                   {:prompt "actions >"
                    :items (js/call local-actions .map
-                     (fn [%1] Any (let [label (str (js/get %1 .label)
+                     (fn [%1 Any] Any (let [label String (str (js/get %1 .label)
                                     (if (js/get %1 .key)
                                       (str "   (" (js/get %1 .key) ")")
                                       ""))]
                         {:display label :data %1})))
-                   :onSelect (fn [%1] Any (let [action (js/get %1 .data)]
+                   :onSelect (fn [%1 Any] Any (let [action Any (js/get %1 .data)]
                                 (try
                                   (js/call action .run target)
                                   (catch (e Any)
@@ -192,13 +204,13 @@
                                       4000)))))})))))
 
         ;; --- ensure-built ---
-        ensure-built (fn [] Any
+        ensure-built (Fn [] Any) (fn [] Any
           (when (not (js/get st .pickerEl))
-            (let [root (xul-new "vbox")
-                  input-box (xul "hbox" "gjoa-picker-input-box")
-                  prompt (xul "label" "gjoa-picker-prompt")
-                  input (htm "input" "gjoa-picker-input")
-                  list (xul "vbox" "gjoa-picker-list")]
+            (let [root Any (xul-new "vbox")
+                  input-box Any (xul "hbox" "gjoa-picker-input-box")
+                  prompt Any (xul "label" "gjoa-picker-prompt")
+                  input Any (htm "input" "gjoa-picker-input")
+                  list Any (xul "vbox" "gjoa-picker-list")]
               (js/set! root .id "gjoa-picker")
               (js/set! root .hidden true)
               (attr! root "aria-modal" "true")
@@ -215,7 +227,7 @@
 
               ;; input filter handler
               (on! input "input"
-                (fn [] Any (let [query (js/call (js/call (js/get input .value) .trim) .toLowerCase)]
+                (fn [] Any (let [query String (js/call (js/call (js/get input .value) .trim) .toLowerCase)]
                    (js/set! st .filtered
                      (compute-filtered (js/get st .items) query
                        (js/get st .preserveTree) (js/get st .filterItem)))
@@ -224,8 +236,8 @@
 
               ;; keydown handler (capture phase)
               (onc! input "keydown"
-                (fn [%1] Any (when (js/get st .active)
-                   (let [key (js/get %1 .key)]
+                (fn [%1 Any] Any (when (js/get st .active)
+                   (let [key Any (js/get %1 .key)]
                      (cond
                        (= key "Escape")
                        (do (js/call %1 .preventDefault) (js/call %1 .stopImmediatePropagation)
@@ -251,7 +263,7 @@
               ))))
 
         ;; --- show ---
-        show (fn [opts] Any
+        show (Fn [Any] Any) (fn [opts Any] Any
           (ensure-built)
           (when (and (js/get st .pickerEl) (js/get st .pickerInput) (js/get st .pickerList))
             (js/set! st .items (js/get opts .items))
@@ -263,7 +275,7 @@
             (js/set! st .filtered (js/call (js/get opts .items) .slice))
             (js/set! st .active true)
 
-            (let [prompt-el (q (js/get st .pickerEl) ".gjoa-picker-prompt")]
+            (let [prompt-el Any (q (js/get st .pickerEl) ".gjoa-picker-prompt")]
               (cond
                 (and prompt-el (js/get opts .prompt))
                 (attr! prompt-el "value" (js/get opts .prompt))
@@ -279,7 +291,7 @@
             (js/call (js/get st .pickerInput) .focus)))
 
         ;; --- destroy ---
-        destroy (fn [] Any
+        destroy (Fn [] Any) (fn [] Any
           (offc! document "keydown" on-doc-keydown)
           (offc! document "mousedown" on-doc-mousedown)
           (dismiss)
@@ -289,14 +301,14 @@
           (js/set! st .pickerList nil))
 
         ;; --- document-level listeners (capture phase) ---
-        on-doc-keydown (fn [%1] Any (when (js/get st .active)
+        on-doc-keydown (Fn [Any] Any) (fn [%1 Any] Any (when (js/get st .active)
                           (when (key= %1 "Escape")
                             (js/call %1 .preventDefault)
                             (js/call %1 .stopImmediatePropagation)
                             (dismiss))))
 
-        on-doc-mousedown (fn [%1] Any (when (and (js/get st .active) (js/get st .pickerEl))
-                            (let [t (js/get %1 .target)]
+        on-doc-mousedown (Fn [Any] Any) (fn [%1 Any] Any (when (and (js/get st .active) (js/get st .pickerEl))
+                            (let [t Any (js/get %1 .target)]
                               (when (or (not t) (not (js/call (js/get st .pickerEl) .contains t)))
                                 (dismiss)))))]
 
