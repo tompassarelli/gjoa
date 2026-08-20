@@ -16,6 +16,6 @@
   (fn [] Any
     (test "activates the final section before the literal page end"
       (fn [] Any
-        (let [m (js/call JS .match GUARD-RE)]
+        (let [m Any (js/call JS .match GUARD-RE)]
           (js/call (expect m) .toBeTruthy)
           (js/call (expect (parseInt (aget m 1) 10)) .toBeGreaterThanOrEqual 100))))))
