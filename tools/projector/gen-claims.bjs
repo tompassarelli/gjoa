@@ -21,17 +21,17 @@
 (def TMP String "/tmp/gjoa-gen")
 
 (defn main! [] Any
-  (let [v (js/get (js/get (js/call JSON .parse (readFileSync (join REPO "gjoa.json") "utf8")) .firefox) .version)
-        tag (str "FIREFOX_" (js/call v .replaceAll "." "_") "_RELEASE")
-        dir (join TMP (dirname REL))]
+  (let [v Any (js/get (js/get (js/call JSON .parse (readFileSync (join REPO "gjoa.json") "utf8")) .firefox) .version)
+       tag String (str "FIREFOX_" (js/call v .replaceAll "." "_") "_RELEASE")
+       dir Any (join TMP (dirname REL))]
     (sh (str "rm -rf " TMP " && mkdir -p " dir) nil)
     (sh (str "git -C " FF-SRC " show " tag ":" REL " > " (join TMP "pristine.mjs")) nil)
     (sh (str "cp " (join TMP "pristine.mjs") " " (join TMP REL)) nil)
     (sh (str "cd " TMP " && patch -p1 < " (join REPO "patches" "0003-newtab-redirector-gjoa.patch")) nil)
-    (let [patched (readFileSync (join TMP REL) "utf8")
-          pristine (readFileSync (join TMP "pristine.mjs") "utf8")
-          edits (build-doc patched pristine ANCHORS)
-          artifact {:file REL :edits edits}]
+    (let [patched Any (readFileSync (join TMP REL) "utf8")
+         pristine Any (readFileSync (join TMP "pristine.mjs") "utf8")
+         edits Any (build-doc patched pristine ANCHORS)
+         artifact (Map Keyword Any) {:file REL :edits edits}]
       (writeFileSync OUT (str (js/call JSON .stringify artifact nil 2) "\n"))
       (console/error (str "wrote " OUT "  (" (js/get edits .length) " set-body verbs, anchored @ " tag ")")))))
 
