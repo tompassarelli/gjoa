@@ -17,7 +17,7 @@
 
 ;; --- mode + reset (mirrors tab-tree-machine.bjs) ----------------------------
 
-(defn reset! [(mn Any)] Any
+(defn reset! [mn Any] Any
   (js/await (js/call mn .executeScript (str
       "    try { Services.prefs.setBoolPref(\"sidebar.verticalTabs\", true); } catch {}\n"
       "    try { Services.prefs.setBoolPref(\"gjoa.keys.useLeader\", false); } catch {}\n"
@@ -28,14 +28,14 @@
       "  ")))
   (await-true "return !document.getElementById(\"gjoa-tab-panel\").hasAttribute(\"gjoa-horizontal\");" 3000))
 
-(defn to-horizontal! [(mn Any)] Any
+(defn to-horizontal! [mn Any] Any
   (chrome-eval "Services.prefs.setBoolPref(\"sidebar.verticalTabs\", false); return true;")
   (await-true "return document.getElementById(\"gjoa-tab-panel\").hasAttribute(\"gjoa-horizontal\");" 3000))
 
 ;; --- tree construction: a,b siblings + c nested under b ----------------------
 
 ;; Create 3 marker root tabs <stamp>-a / -b / -c.
-(defn build-roots-js [(stamp String)] String
+(defn build-roots-js [stamp String] String
   (str "
     const principal = Services.scriptSecurityManager.getSystemPrincipal();
     const T = window.gjoaTest.treeOf;
@@ -49,7 +49,7 @@
     return true;"))
 
 ;; Nest c under b (c becomes a child of b).
-(defn nest-c-under-b-js [(stamp String)] String
+(defn nest-c-under-b-js [stamp String] String
   (str "
     const T = window.gjoaTest.treeOf;
     const find = m => [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === m);
@@ -61,12 +61,12 @@
     window.gjoaTest.rows.updateVisibility();
     return true;"))
 
-(defn await-marker-js [(marker String)] String
+(defn await-marker-js [marker String] String
   (str "return [...gBrowser.tabs].some(t => t.getAttribute(\"gjoa-test-marker\") === \"" marker "\");"))
 
 ;; Select b, place the vim cursor on b's row, and focus the panel so the
 ;; performActions keystrokes route through the vim keydown handler.
-(defn focus-b-js [(stamp String)] String
+(defn focus-b-js [stamp String] String
   (str "
     const find = m => [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === m);
     const b = find(\"" stamp "-b\");
@@ -81,14 +81,14 @@
 
 ;; parentId of c as a string ('null' for a root). The discriminating value:
 ;; before the fix the stray drop set it to null (reparented to ROOT).
-(defn c-parent-js [(stamp String)] String
+(defn c-parent-js [stamp String] String
   (str "
     const T = window.gjoaTest.treeOf;
     const c = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-c\");
     const pid = T.get(c).parentId;
     return pid == null ? \"null\" : String(pid);"))
 
-(defn b-id-js [(stamp String)] String
+(defn b-id-js [stamp String] String
   (str "
     const T = window.gjoaTest.treeOf;
     const b = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" stamp "-b\");
@@ -96,7 +96,7 @@
 
 ;; A trusted key down/up for `ch` via Marionette (untrusted synthetic events
 ;; would not reach the privileged vim handler the same way).
-(defn key-action [(ch String)] Any
+(defn key-action [ch String] Any
   [{:type "key" :id "kbd"
     :actions [{:type "keyDown" :value ch} {:type "keyUp" :value ch}]}])
 
@@ -104,12 +104,12 @@
   [(deftest "horizontal: j/k cursor nav does NOT reparent a nested child (#144)" [mn]
      (await-true "return !!(window.gjoaTest && window.gjoaTest.treeOf && window.gjoaTest.vim);" 10000)
      (js/await (reset! mn))
-     (let [stamp (str "hjk-" (Date/now))]
+     (let [stamp String (str "hjk-" (Date/now))]
        (chrome-eval (build-roots-js stamp))
        (await-true (await-marker-js (str stamp "-c")) 3000)
        (chrome-eval (nest-c-under-b-js stamp))
        ;; await the nesting landing in the tree (no fixed sleep): c.parentId == b.id
-       (let [b-id (chrome-eval (b-id-js stamp))]
+       (let [b-id String (chrome-eval (b-id-js stamp))]
          (await-true (str "return (" (c-parent-js stamp) ") === \"" b-id "\";") 3000)
          (js/await (to-horizontal! mn))
          (expect (chrome-eval (focus-b-js stamp)) "no #gjoa-tab-panel to focus for vim keys")
@@ -122,7 +122,7 @@
          ;; await-true on (the assertion is that NOTHING changed), so a brief
          ;; fixed settle is the honest wait here.
          (js/await (sleep 200))
-         (let [c-parent (chrome-eval (c-parent-js stamp))]
+         (let [c-parent String (chrome-eval (c-parent-js stamp))]
            (expect-eq c-parent b-id
              (str "j/k cursor nav reparented c (#144 regression): c.parentId must "
                   "stay b (" b-id "), got " c-parent
