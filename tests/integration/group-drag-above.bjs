@@ -7,7 +7,7 @@
 (ns gjoa.tests.integration.group-drag-above
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true wait-for expect]]))
 
-(defn ensure-sidebar-expanded [(mn Any)] Any
+(defn ensure-sidebar-expanded [mn Any] Any
   (chrome-eval "
     const sm = document.getElementById(\"sidebar-container\");
     if (sm && !sm.hasAttribute(\"sidebar-launcher-expanded\")) {
@@ -29,7 +29,9 @@
 ;; BEHAVIOUR rather than riding on whichever pair the #124 movement threshold reads.
 ;; The target rect is measured AFTER dragstart: dragging an unpinned row reveals the
 ;; empty pinned strip, which reflows the list under the pointer.
-(defn drag-script [(src Int) (tgt Int)] String
+(defn drag-script
+  [src Int
+     tgt Int] String
   (str "
     const rows = [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row, #gjoa-tab-panel .gjoa-group-row\")];
     const source = rows[" src "]; const target = rows[" tgt "];
@@ -47,7 +49,7 @@
 ;; --- drop-to-pin helpers ----------------------------------------------------
 ;; Marker attribute (not label text): a label substring collision between the
 ;; seeded and the dragged tab silently turns a failure into a pass.
-(defn add-marked-tab-js [(marker String)] String
+(defn add-marked-tab-js [marker String] String
   (str "
     const p = Services.scriptSecurityManager.getSystemPrincipal();
     const t = gBrowser.addTab(\"about:blank\", { triggeringPrincipal: p });
@@ -56,12 +58,12 @@
     window.gjoaTest.rows.updateVisibility();
     return true;"))
 
-(defn marked-row-ready-js [(marker String)] String
+(defn marked-row-ready-js [marker String] String
   (str "
     const t = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" marker "\");
     return !!(t && window.gjoaTest.rowOf.get(t));"))
 
-(defn marked-pinned-js [(marker String)] String
+(defn marked-pinned-js [marker String] String
   (str "
     const t = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === \"" marker "\");
     const r = t && window.gjoaTest.rowOf.get(t);
@@ -75,7 +77,9 @@
 ;;            BELOW the last pinned row (the natural append aim point)
 ;;   label  — a pinned row's `.gjoa-tab-label` child, which is what exercises the
 ;;            structural-equality drop routing
-(defn pin-drag-js [(marker String) (mode String)] String
+(defn pin-drag-js
+  [marker String
+     mode String] String
   (str "
     const M = \"" marker "\"; const mode = \"" mode "\";
     const tab = [...gBrowser.tabs].find(t => t.getAttribute(\"gjoa-test-marker\") === M);
@@ -110,7 +114,7 @@
 ;; Real-DND fidelity the single-shot dispatches above lack: the pointer is
 ;; hit-tested per step, comes to REST on the target, and `drop` is dispatched
 ;; only when the last dragover was canceled — a browser fires none otherwise.
-(defn drop-onto-pinned-js [(marker String)] String
+(defn drop-onto-pinned-js [marker String] String
   (str "
     const M = \"" marker "\";
     const doc = document;
@@ -200,25 +204,27 @@
         return true;")
      (await-true "return document.querySelectorAll('#gjoa-tab-panel .gjoa-group-row').length >= 1;")
      ;; Find the marked tab + the latest group; require the tab to be ABOVE it.
-     (let [rows (chrome-eval ROWS-JS)
-           grp-idx (loop [i 0 acc -1]
+     (let [rows Any (chrome-eval ROWS-JS)
+          grp-idx Int (loop [i Int 0
+                             acc Int -1]
                      (if (< i (js/get rows .length))
                        (recur (+ i 1) (if (= (js/get (aget rows i) .kind) "group") i acc))
                        acc))
-           src-idx (js/call rows .findIndex (fn [r] Any (js/call (js/get r .label) .includes "abovegrp")))]
+          src-idx Int (js/call rows .findIndex (fn [r Any] Any (js/call (js/get r .label) .includes "abovegrp")))]
        (when (or (< grp-idx 0) (< src-idx 0))
          (throw (js/new Error (str "setup: grpIdx=" grp-idx " srcIdx=" src-idx " rows=" (JSON/stringify rows)))))
        (when (>= src-idx grp-idx)
          (throw (js/new Error (str "setup: marked tab must be ABOVE the group (srcIdx=" src-idx " grpIdx=" grp-idx ")"))))
        (chrome-eval (drag-script src-idx grp-idx))
-       (js/await (js/new Promise (fn [r] Any (setTimeout (fn [] Any (r)) 250))))
+       (js/await (js/new Promise (fn [r Any] Any (setTimeout (fn [] Any (r)) 250))))
        ;; After: the marked tab must render AFTER the group and indented.
-       (let [after (chrome-eval ROWS-JS)
-             grp2 (loop [i 0 acc -1]
+       (let [after Any (chrome-eval ROWS-JS)
+            grp2 Int (loop [i Int 0
+                            acc Int -1]
                     (if (< i (js/get after .length))
                       (recur (+ i 1) (if (= (js/get (aget after i) .kind) "group") i acc))
                       acc))
-             src2 (js/call after .findIndex (fn [r] Any (js/call (js/get r .label) .includes "abovegrp")))]
+            src2 Int (js/call after .findIndex (fn [r Any] Any (js/call (js/get r .label) .includes "abovegrp")))]
          (when (or (< grp2 0) (< src2 0))
            (throw (js/new Error (str "after: grpIdx=" grp2 " srcIdx=" src2 " rows=" (JSON/stringify after)))))
          (expect (> src2 grp2)
@@ -238,7 +244,7 @@
      ;; (a) EMPTY pinned container — hidden and 0x0, so the drag must reveal it.
      (chrome-eval (add-marked-tab-js "pinguard-a"))
      (js/await (await-true (marked-row-ready-js "pinguard-a") 3000))
-     (let [ra (chrome-eval (pin-drag-js "pinguard-a" "centre"))]
+     (let [ra Any (chrome-eval (pin-drag-js "pinguard-a" "centre"))]
        (expect (not (js/get ra .error)) (str "(a) " (js/get ra .error)))
        (expect (= (js/get ra .pinnedRowsBefore) 0)
          (str "(a) scenario needs an EMPTY pinned container, saw "
@@ -249,7 +255,7 @@
      ;; point, and the first thing a drag from the tab tree crosses going up.
      (chrome-eval (add-marked-tab-js "pinguard-b"))
      (js/await (await-true (marked-row-ready-js "pinguard-b") 3000))
-     (let [rb (chrome-eval (pin-drag-js "pinguard-b" "band"))]
+     (let [rb Any (chrome-eval (pin-drag-js "pinguard-b" "band"))]
        (expect (not (js/get rb .error)) (str "(b) " (js/get rb .error)))
        (expect (js/get rb .belowLastRow)
          (str "(b) aim point y=" (js/get rb .y) " is NOT below the last pinned row's bottom "
@@ -261,7 +267,7 @@
      ;; that structural `=` mistakes for the container / panel / spacer.
      (chrome-eval (add-marked-tab-js "pinguard-c"))
      (js/await (await-true (marked-row-ready-js "pinguard-c") 3000))
-     (let [rc (chrome-eval (pin-drag-js "pinguard-c" "label"))]
+     (let [rc Any (chrome-eval (pin-drag-js "pinguard-c" "label"))]
        (expect (not (js/get rc .error)) (str "(c) " (js/get rc .error)))
        (js/await (await-true (marked-pinned-js "pinguard-c") 3000)))
 
@@ -290,7 +296,7 @@
 
      (chrome-eval (add-marked-tab-js "pindrag"))
      (js/await (await-true (marked-row-ready-js "pindrag") 3000))
-     (let [r (chrome-eval (drop-onto-pinned-js "pindrag"))]
+     (let [r Any (chrome-eval (drop-onto-pinned-js "pindrag"))]
        (expect (not (js/get r .error)) (str "gesture: " (js/get r .error)))
        (expect (js/get r .accepted)
          (str "the pointer at rest on a pinned tab must be a valid drop target — the "
@@ -305,7 +311,7 @@
               "— that line is a dead band where drops vanish. " (JSON/stringify (js/get r .indProbe))))
        (js/await (await-true (marked-pinned-js "pindrag") 3000)))
 
-     (let [liars (chrome-eval PINNED-SECTION-HONEST)]
+     (let [liars Any (chrome-eval PINNED-SECTION-HONEST)]
        (expect (= (js/get liars .length) 0)
          (str "the pinned section is showing rows whose tabs are NOT pinned: "
               (JSON/stringify liars))))
