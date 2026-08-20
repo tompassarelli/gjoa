@@ -6,7 +6,7 @@
   (:require [gjoa.tests.dsl :refer [deftest chrome-eval await-true expect expect-eq expect-includes wait-for]]))
 
 ;; Reset all non-default spaces between subtests so each one starts clean.
-(defn reset-spaces [(mn Any)] Any
+(defn reset-spaces [mn Any] Any
   (chrome-eval
     "
     const main = window.Spaces.list().find(s => s.name === \"Main\")
@@ -22,7 +22,7 @@
      (await-true "return !!window.gjoaTest && !!window.gjoaTest.vim && !!window.Spaces;" 1500)
      (js/await (reset-spaces mn))
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"space new Work\");")
-     (let [state (chrome-eval
+     (let [state Any (chrome-eval
                    "
         return {
           count: window.Spaces.list().length,
@@ -42,7 +42,7 @@
      (js/await (reset-spaces mn))
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"space new Work\");")
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"space rename Office\");")
-     (let [name (chrome-eval "return window.Spaces.active().name;")]
+     (let [name String (chrome-eval "return window.Spaces.active().name;")]
        (expect-eq name "Office"
                   (str "expected active name=Office, got " name))))
 
@@ -51,7 +51,7 @@
      (js/await (reset-spaces mn))
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"space new Work\");")
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"space switch Main\");")
-     (let [name (chrome-eval "return window.Spaces.active().name;")]
+     (let [name String (chrome-eval "return window.Spaces.active().name;")]
        (expect-eq name "Main"
                   (str "expected active=Main after switch, got " name))))
 
@@ -60,11 +60,11 @@
      (js/await (reset-spaces mn))
      ;; Create + delete (non-default) — should remove and fall back to Main.
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"space new Doomed\");")
-     (let [cnt-before (chrome-eval "return window.Spaces.list().length;")]
+     (let [cnt-before Any (chrome-eval "return window.Spaces.list().length;")]
        (expect-eq cnt-before 2
                   (str "setup failed: " cnt-before)))
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"space delete\");")
-     (let [after-del (chrome-eval
+     (let [after-del Any (chrome-eval
                        "
         return { count: window.Spaces.list().length, activeName: window.Spaces.active().name };
       ")]
@@ -74,7 +74,7 @@
                   (str "expected active=Main, got " (js/get after-del .activeName))))
      ;; Refuse-to-delete-Main: should be a no-op.
      (chrome-eval "window.gjoaTest.vim.runExCommand(\"space delete\");")
-     (let [final (chrome-eval "return window.Spaces.list().length;")]
+     (let [final Any (chrome-eval "return window.Spaces.list().length;")]
        (expect-eq final 1
                   (str "Main should not be deletable; got count=" final))))
 
@@ -106,7 +106,7 @@
         }
         press(\"g\"); press(\"s\");
       ")
-     (let [after1 (chrome-eval "return window.Spaces.active().name;")]
+     (let [after1 String (chrome-eval "return window.Spaces.active().name;")]
        (chrome-eval
          "
         function press(k, shift) {
@@ -115,7 +115,7 @@
         }
         press(\"g\"); press(\"s\");
       ")
-       (let [after2 (chrome-eval "return window.Spaces.active().name;")]
+       (let [after2 String (chrome-eval "return window.Spaces.active().name;")]
          ;; gS — reverse cycle once.
          (chrome-eval
            "
@@ -125,8 +125,8 @@
         }
         press(\"g\"); press(\"S\", true);
       ")
-         (let [after-reverse (chrome-eval "return window.Spaces.active().name;")
-               all (chrome-eval "return window.Spaces.list().map(s => s.name);")]
+         (let [after-reverse String (chrome-eval "return window.Spaces.active().name;")
+              all Any (chrome-eval "return window.Spaces.list().map(s => s.name);")]
            ;; Verify we moved (we don't pin to exact name in case ordering shifts;
            ;; the property we care about is "active changed forward, then back").
            (expect (not= after1 "Main")
@@ -144,7 +144,7 @@
      ;; Picker should now be visible. We don't assert the exact DOM (picker
      ;; internals are vim's concern), but we check that a picker container
      ;; exists in the document.
-     (let [found (chrome-eval
+     (let [found Bool (chrome-eval
                    "
         return !!document.querySelector(\"#gjoa-picker, [id*='picker']\");
       ")]
@@ -171,7 +171,7 @@
         return [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row\")]
           .filter(r => !r.hidden).length >= 2;
       " 1500)
-     (let [before (chrome-eval
+     (let [before Any (chrome-eval
                     "
         return [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row\")]
           .filter(r => !r.hidden).length;
