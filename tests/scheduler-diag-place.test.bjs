@@ -12,7 +12,9 @@
 (def SCHEDULER String
   (join REPO "src" "gjoa" "chrome" "bjs" "platform" "scheduler.bjs"))
 
-(defn has? [(s String) (pat String)] Any (js/call (js/new RegExp pat) .test s))
+(defn has?
+  [s String
+     pat String] Any (js/call (js/new RegExp pat) .test s))
 
 (describe "scheduler diag() place-safety (E009 019f79cd)"
   (fn [] Any
@@ -23,7 +25,7 @@
     ;; set! must never target an (aget ...) non-place.
     (test "diag does not assign through (set! (aget ...))"
       (fn [] Any
-        (let [src (readFileSync SCHEDULER "utf8")]
+        (let [src String (readFileSync SCHEDULER "utf8")]
           (js/call (expect (has? src "\\(set!\\s*\\(aget")) .toBe false))))
 
     ;; Functional reduce/assoc over DOMAIN-ORDER,
@@ -32,7 +34,7 @@
     ;; callers (gjoa.platform.index diag) depend on.
     (test "diag rebuilds pending map via reduce/assoc over DOMAIN-ORDER"
       (fn [] Any
-        (let [src (readFileSync SCHEDULER "utf8")]
+        (let [src String (readFileSync SCHEDULER "utf8")]
           (js/call (expect (has? src "reduce[\\s\\S]{0,80}assoc")) .toBe true)
           (js/call (expect (has? src "\\(or \\(\\.get pending domain\\) \\[\\]\\)")) .toBe true)
           (js/call (expect (has? src "DOMAIN-ORDER")) .toBe true))))))
