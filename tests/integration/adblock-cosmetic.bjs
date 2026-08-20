@@ -40,8 +40,8 @@
 (js/export (def tests Any
   [(deftest "adblock M2: cosmetic selectors flow through the native service" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
-     (let [r (js/await (js/call mn .executeScript EVAL-JS))
-           d (JSON/parse r)]
+     (let [r Any (js/await (js/call mn .executeScript EVAL-JS))
+          d Any (JSON/parse r)]
        (console/log (str "\n[M2-COSMETIC] " r))
        (expect (js/call (js/get d .generic) .includes ".gjoa-probe")
                "generic class rule ##.gjoa-probe did not come back from getHiddenClassIdSelectors")
