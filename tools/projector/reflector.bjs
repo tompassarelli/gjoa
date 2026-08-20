@@ -13,22 +13,24 @@
 
 ;; an acorn AST node: a non-null object carrying a string `type` and numeric
 ;; `start`. `(some? (js/get v .start))` (not truthiness) so start=0 still counts.
-(js/export (defn node? [(v Any)] Bool
+(js/export (defn node? [v Any] Bool
   (and (some? v) (some? (js/get v .type)) (some? (js/get v .start)))))
 
 ;; direct child AST nodes of `n` (any own prop that is a node, or array of nodes),
 ;; ordered by source position.
-(js/export (defn child-nodes [(n Any)] Any
-  (let [kids []]
-    (doseq [key (js/call Object .keys n)]
+(js/export (defn child-nodes [n Any] Any
+  (let [kids (Vec Any) []]
+    (doseq [key Any (js/call Object .keys n)]
       (when (not (or (= key "type") (= key "start") (= key "end") (= key "loc") (= key "range")))
-        (let [v (get n key)]
+        (let [v Any (get n key)]
           (when (node? v) (js/call kids .push v))
           (when (js/call Array .isArray v)
-            (doseq [e v] (when (node? e) (js/call kids .push e)))))))
+            (doseq [e Any v] (when (node? e) (js/call kids .push e)))))))
     (js/call kids .sort
-             (fn [(a Any) (b Any)] Int
-               (let [(a-start Int) (js/get a .start) (b-start Int) (js/get b .start)] (- a-start b-start))))
+             (fn [a Any
+                 b Any] Int
+               (let [a-start Int (js/get a .start)
+                    b-start Int (js/get b .start)] (- a-start b-start))))
     kids)))
 
 ;; acorn node + source -> lossless CST map {:kind :start :end :segs :kids}.
@@ -36,22 +38,25 @@
 ;; are clipped to a non-overlapping cover of [start,end]; anything not covered by
 ;; a kid stays in a seg (so the round-trip is byte-identical even if a child is
 ;; missed — it just demotes structure, never bytes).
-(js/export (defn to-cst [(n Any) (src String)] Any
-  (let [raw (child-nodes n)
-        nstart (js/get n .start)
-        nend (js/get n .end)
-        kept []]
-    (loop [i 0 last nstart]
+(js/export (defn to-cst [n Any
+                        src String] Any
+  (let [raw Any (child-nodes n)
+       nstart Any (js/get n .start)
+       nend Any (js/get n .end)
+       kept (Vec Any) []]
+    (loop [i Int 0
+          last Any nstart]
       (when (< i (js/get raw .length))
-        (let [k (aget raw i)]
+        (let [k Any (aget raw i)]
           (if (and (>= (js/get k .start) last) (<= (js/get k .end) nend))
             (do (js/call kept .push k) (recur (+ i 1) (js/get k .end)))
             (recur (+ i 1) last)))))
-    (let [segs []
-          kids []]
-      (loop [i 0 pos nstart]
+    (let [segs (Vec Any) []
+         kids (Vec Any) []]
+      (loop [i Int 0
+            pos Any nstart]
         (if (< i (js/get kept .length))
-          (let [k (aget kept i)]
+          (let [k Any (aget kept i)]
             (js/call segs .push (js/call src .slice pos (js/get k .start)))
             (js/call kids .push (to-cst k src))
             (recur (+ i 1) (js/get k .end)))
@@ -59,10 +64,11 @@
       {:kind (js/get n .type) :start nstart :end nend :segs segs :kids kids}))))
 
 ;; render a CST back to source using ONLY its segs+kids (not the original source).
-(js/export (defn render [(c Any)] String
-  (let [segs (js/get c .segs)
-        kids (js/get c .kids)]
-    (loop [i 0 out (aget segs 0)]
+(js/export (defn render [c Any] String
+  (let [segs Any (js/get c .segs)
+       kids Any (js/get c .kids)]
+    (loop [i Int 0
+          out Any (aget segs 0)]
       (if (< i (js/get kids .length))
         (recur (+ i 1) (str out (render (aget kids i)) (aget segs (+ i 1))))
         out)))))
@@ -70,19 +76,19 @@
 ;; parse a whole source string -> CST. A synthetic "File" root covers the full
 ;; byte range so file-level leading/trailing trivia (hashbang, final newline) is
 ;; preserved in segs.
-(js/export (defn reflect [(src String)] Any
-  (let [ast (parse src {:ecmaVersion "latest" :sourceType "module" :allowHashBang true})
-        root {:type "File" :start 0 :end (js/get src .length) :body [ast]}]
+(js/export (defn reflect [src String] Any
+  (let [ast Any (parse src {:ecmaVersion "latest" :sourceType "module" :allowHashBang true})
+       root (Map Keyword Any) {:type "File" :start 0 :end (js/get src .length) :body [ast]}]
     (to-cst root src))))
 
-(js/export (defn round-trips? [(src String)] Bool
+(js/export (defn round-trips? [src String] Bool
   (= (render (reflect src)) src)))
 
 (defn main! [] Any
-  (let [path (aget (js/get process .argv) 2)
-        src (readFileSync path "utf8")
-        out (render (reflect src))
-        ok (= out src)]
+  (let [path Any (aget (js/get process .argv) 2)
+       src Any (readFileSync path "utf8")
+       out String (render (reflect src))
+       ok Bool (= out src)]
     (console/error (str path ": " (js/get src .length) " bytes, byte-identical=" ok))
     (when (not ok) (js/call process .exit 1))))
 
