@@ -55,7 +55,7 @@
 (def DEV-SENTINEL String (join GJOA-DEV "JS" "gjoa-tabs.uc.js"))
 
 ;; Mirror compile.bjs `should-skip`: test-only edits must NOT bust the cache.
-(defn should-skip-rel [(rel String)] Bool
+(defn should-skip-rel [rel String] Bool
   (cond
     (= rel "macros.bjs") true
     (js/call rel .startsWith "test/") true
@@ -63,19 +63,19 @@
     :else false))
 
 ;; Recursively collect file paths under `dir` (synchronous — small tree).
-(defn walk [(dir String)] Any
-  (let [out []]
+(defn walk [dir String] Any
+  (let [out (Vec Any) []]
     (when (existsSync dir)
-      (let [entries (readdirSync dir {:withFileTypes true})
-            n (js/get entries .length)]
-        (loop [i 0]
+      (let [entries (Vec Any) (readdirSync dir {:withFileTypes true})
+            n Int (js/get entries .length)]
+        (loop [i Int 0]
           (when (< i n)
-            (let [entry (aget entries i)
-                  full (join dir (js/get entry .name))]
+            (let [entry Any (aget entries i)
+                  full String (join dir (js/get entry .name))]
               (if (js/call entry .isDirectory)
-                (let [sub (walk full)
-                      m (js/get sub .length)]
-                  (loop [j 0]
+                (let [sub (Vec String) (walk full)
+                      m Int (js/get sub .length)]
+                  (loop [j Int 0]
                     (when (< j m)
                       (js/call out .push (aget sub j))
                       (recur (+ j 1)))))
@@ -85,39 +85,39 @@
 
 ;; Collect the fingerprint input file set, filtered.
 (defn input-files [] Any
-  (let [out []]
+  (let [out (Vec Any) []]
     ;; chrome .bjs (minus macros/test/*.test.bjs)
-    (doseq [f (walk BJS-ROOT)]
+    (doseq [f String (walk BJS-ROOT)]
       (when (and (js/call f .endsWith ".bjs")
                  (not (should-skip-rel (relative BJS-ROOT f))))
         (js/call out .push f)))
     ;; chrome CSS (all of it)
-    (doseq [f (walk CSS-ROOT)] (js/call out .push f))
+    (doseq [f String (walk CSS-ROOT)] (js/call out .push f))
     ;; the bundler tools themselves — output changes if they change
-    (doseq [f (walk BUNDLE-TOOLS)]
+    (doseq [f String (walk BUNDLE-TOOLS)]
       (when (js/call f .endsWith ".bjs") (js/call out .push f)))
     ;; GjoaLoader.bjs (install recompiles it to the live .sys.mjs) + the loose
     ;; toolkit overlays (actors + fixes JSON that install mirrors into engine).
     (when (existsSync SRC-LOADER) (js/call out .push SRC-LOADER))
-    (doseq [f (walk SRC-TOOLKIT)]
+    (doseq [f String (walk SRC-TOOLKIT)]
       (when (or (js/call f .endsWith ".sys.mjs") (js/call f .endsWith ".json")) (js/call out .push f)))
     out))
 
 ;; sha256 over sorted `path:mtimeMs:size` lines + the symlink target line.
 (defn fingerprint [] String
-  (let [files (js/call (input-files) .sort)
-        h (createHash "sha256")
-        link (if (existsSync GJOA-DEV)
+  (let [files (Vec Any) (js/call (input-files) .sort)
+        h Any (createHash "sha256")
+        link (U Any String) (if (existsSync GJOA-DEV)
                (try (readlinkSync GJOA-DEV) (catch (e Any) "")) "")]
-    (doseq [f files]
-      (let [st (statSync f)]
+    (doseq [f Any files]
+      (let [st Any (statSync f)]
         (js/call h .update (str (relative REPO-ROOT f) ":" (js/get st .mtimeMs) ":" (js/get st .size) "\n"))))
     (js/call h .update (str "gjoa-dev->" link "\n"))
     (js/call h .digest "hex")))
 
 ;; Run `bun run <script>` synchronously; throw on nonzero exit.
-(defn run-script! [(name String)] Any
-  (let [r (spawnSync "bun" ["run" name]
+(defn run-script! [name String] Any
+  (let [r Any (spawnSync "bun" ["run" name]
                      {:cwd REPO-ROOT :stdio "inherit"})]
     (when (not= (js/get r .status) 0)
       (throw (js/new Error (str "`bun run " name "` failed (exit " (js/get r .status) ")"))))))
@@ -128,9 +128,9 @@
   (and (existsSync OUT-SENTINEL) (existsSync DEV-SENTINEL)))
 
 (defn main! [] Any
-  (let [h (fingerprint)
-        prev (if (existsSync STAMP) (js/call (readFileSync STAMP "utf8") .trim) "")
-        force (js/get (js/get process .env) .GJOA_CHROME_FORCE)]
+  (let [h String (fingerprint)
+        prev String (if (existsSync STAMP) (js/call (readFileSync STAMP "utf8") .trim) "")
+        force Any (js/get (js/get process .env) .GJOA_CHROME_FORCE)]
     (if (and (not force) (= prev h) (outputs-present?))
       (console/log (str "chrome bundle up to date (stamp " (js/call h .slice 0 8) ") — skipping dist+install"))
       (do
