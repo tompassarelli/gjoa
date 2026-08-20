@@ -48,31 +48,31 @@
 (def state Any {:unsub nil})
 
 ;; content-override: 0 = dark, 1 = light, 2 = no override.
-(defn set-content-override! [(v Any)] Any
+(defn set-content-override! [v Int] Any
   (set-pref-int! PREF-CONTENT-OVERRIDE v))
 
 ;; Toggle the engine-level luminance-inversion flag (read by nsPresContext).
-(defn set-invert! [(on Boolean)] Any
+(defn set-invert! [on Boolean] Any
   (set-pref-bool! PREF-INVERT on))
 
 ;; Toggle the engine pre-paint themeless-page inversion flag.
-(defn set-default-invert! [(on Boolean)] Any
+(defn set-default-invert! [on Boolean] Any
   (set-pref-bool! PREF-DEFAULT-INVERT on))
 
 ;; Exempt the `prefers-color-scheme` RFPTarget so RFP (librewolf profile) stops
 ;; forcing content light and our content-override actually reaches the page. `on`
 ;; sets the canonical override; `off` clears it — but ONLY when the pref is empty
 ;; or already our token, so we never clobber a user's custom RFP-overrides value.
-(defn set-rfp-colorscheme-exempt! [(on Boolean)] Any
-  (let [cur (pref-str PREF-RFP-OVERRIDES "")]
+(defn set-rfp-colorscheme-exempt! [on Boolean] Any
+  (let [cur String (pref-str PREF-RFP-OVERRIDES "")]
     (if on
       (when (or (= cur "") (= cur RFP-COLORSCHEME-EXEMPT))
         (set-pref-str! PREF-RFP-OVERRIDES RFP-COLORSCHEME-EXEMPT))
       (when (= cur RFP-COLORSCHEME-EXEMPT)
         (set-pref-str! PREF-RFP-OVERRIDES "")))))
 
-(defn set-chrome-scheme! [(dark Boolean)] Any
-  (let [root (js/get document .documentElement)]
+(defn set-chrome-scheme! [dark Boolean] Any
+  (let [root Any (js/get document .documentElement)]
     (if dark
       (do (js/set! (js/get root .style) .colorScheme "dark")
           (attr! root "gjoa-darkmode" "true"))
@@ -91,8 +91,8 @@
 ;; The surfaced modes are dark, uniform, light, system, and off. An unknown
 ;; preference value resolves to dark, the product default.
 (defn apply! [] Any
-  (let [en (enabled?)
-        m (mode-)]
+  (let [en Boolean (enabled?)
+        m String (mode-)]
     (cond
       (or (not en) (= m "off"))
         (do (set-chrome-scheme! false) (set-content-override! 2) (set-invert! false) (set-default-invert! false) (set-rfp-colorscheme-exempt! false))
@@ -126,15 +126,15 @@
 
 ;; Public toggle API exposed on window.
 (defn toggle [] Boolean
-  (let [new-state (not (enabled?))]
+  (let [new-state Boolean (not (enabled?))]
     (set-pref-bool! PREF-ENABLED new-state)
     new-state))
 
 ;; Cycle the primary user-facing states: dark, light, and system. Uniform and
 ;; off normalize to dark when cycling resumes.
 (defn cycle-mode [] String
-  (let [cur (mode-)
-        nxt (cond (= cur "dark")   "light"
+  (let [cur String (mode-)
+        nxt String (cond (= cur "dark")   "light"
                   (= cur "light")  "system"
                   (= cur "system") "dark"
                   :else "dark")]
@@ -145,7 +145,7 @@
 ;; and chrome agree. A user pref still overrides.
 (defn set-darkmode-defaults! [] Any
   (try
-    (let [d (js/call (js/get Services .prefs) .getDefaultBranch "")]
+    (let [d Any (js/call (js/get Services .prefs) .getDefaultBranch "")]
       (js/call d .setBoolPref PREF-ENABLED true)
       ;; Dark is the unconditional default; system remains an explicit OS-following
       ;; choice.
@@ -157,7 +157,7 @@
       (console/error "gjoa-darkmode: set-darkmode-defaults! failed" e))))
 
 (defn destroy! [] Any
-  (let [u (js/get state .unsub)]
+  (let [u Any (js/get state .unsub)]
     (when u (u)))
   (js/set! state .unsub nil)
   (set-chrome-scheme! false))
@@ -165,9 +165,13 @@
 (defn init-! [] Any
   (set-darkmode-defaults!)
   (apply!)
-  (let [observer {:observe (fn [_s _t _d] Any (apply!))}
-        mql (js/call window .matchMedia "(prefers-color-scheme: dark)")
-        on-sys (fn [_e] Any (apply!))]
+  (let [observer Any {:observe (fn
+                                  [_s Any
+                                   _t Any
+                                   _d Any] Any
+                                  (apply!))}
+        mql Any (js/call window .matchMedia "(prefers-color-scheme: dark)")
+        on-sys (Fn [Any] Any) (fn [_e Any] Any (apply!))]
     (js/call (js/get Services .prefs) .addObserver PREF-ENABLED observer)
     (js/call (js/get Services .prefs) .addObserver PREF-MODE observer)
     ;; live-follow the OS theme while in "system" mode
