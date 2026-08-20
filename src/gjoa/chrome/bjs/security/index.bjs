@@ -15,21 +15,23 @@
 ;; "152.0esr", garbage) is rejected before it reaches parse-version / newer?.
 (def VERSION-RE Any (js/new RegExp "^\\d+(\\.\\d+){0,2}$"))
 
-(defn parse-version [(v String)] Any
-  (let [cleaned (js/call (js/call v .replace (js/new RegExp "esr$" "i") "") .trim)
-        parts (js/call (js/call cleaned .split ".") .map (fn [x] Any (or (parseInt x 10) 0)))]
+(defn parse-version [v String] (Vec Int)
+  (let [cleaned String (js/call (js/call v .replace (js/new RegExp "esr$" "i") "") .trim)
+        parts (Vec Int) (js/call (js/call cleaned .split ".") .map (fn [x String] Int (or (parseInt x 10) 0)))]
     [(or (aget parts 0) 0) (or (aget parts 1) 0) (or (aget parts 2) 0)]))
 
-(defn newer? [(a String) (b String)] Boolean
-  (let [av (parse-version a)
-        bv (parse-version b)]
+(defn newer?
+  [a String
+   b String] Boolean
+  (let [av (Vec Int) (parse-version a)
+        bv (Vec Int) (parse-version b)]
     (cond
       (not= (aget bv 0) (aget av 0)) (> (aget bv 0) (aget av 0))
       (not= (aget bv 1) (aget av 1)) (> (aget bv 1) (aget av 1))
       (not= (aget bv 2) (aget av 2)) (> (aget bv 2) (aget av 2))
       :else false)))
 
-(defn get-env [(name String)] String
+(defn get-env [name String] String
   (try
     (or (js/call (js/get Services .env) .get name) "")
     (catch (_e Any) "")))
@@ -41,12 +43,14 @@
 ;; that would otherwise be silently indistinguishable from being up to date.
 (def state Any {:quitting false :confirmed-at 0})
 
-(defn quit-stale! [(my-version String) (latest-version String)] Any
+(defn quit-stale!
+  [my-version String
+   latest-version String] Any
   (when (not (js/get state .quitting))
     (js/set! state .quitting true)
     (try
-      (let [prompt-svc (js/get Services .prompt)
-            w (js/call (js/get Services .wm) .getMostRecentWindow "navigator:browser")]
+      (let [prompt-svc Any (js/get Services .prompt)
+            w Any (js/call (js/get Services .wm) .getMostRecentWindow "navigator:browser")]
         (js/call prompt-svc .alert
           w
           "gjoa is out of date — quitting"
@@ -62,20 +66,20 @@
       (catch (e Any)
         (console/error "[security] modal failed; quitting anyway" e)))
     (try
-      (let [startup (js/get Services .startup)]
+      (let [startup Any (js/get Services .startup)]
         (js/call startup .quit (js/get startup .eForceQuit)))
       (catch (e Any)
         (console/error "[security] startup.quit failed" e)))))
 
 (defn probe! [] Any
-  (let [my-version (js/get (js/get Services .appinfo) .version)]
+  (let [my-version String (js/get (js/get Services .appinfo) .version)]
     (-> (fetch PRODUCT-DETAILS-URL {:signal (js/call AbortSignal .timeout FETCH-TIMEOUT-MS)})
-        (js/call .then (fn [r] Any
+        (js/call .then (fn [r Any] Any
           (when (not (js/get r .ok))
             (throw (js/new Error (str "HTTP " (js/get r .status)))))
           (js/call r .json)))
-        (js/call .then (fn [j] Any
-          (let [latest (or (js/get j .LATEST_FIREFOX_VERSION) nil)]
+        (js/call .then (fn [j Any] Any
+          (let [latest Any (or (js/get j .LATEST_FIREFOX_VERSION) nil)]
             (cond
               (not latest)
               (console/warn "[security] probe response missing LATEST_FIREFOX_VERSION — ignoring")
@@ -91,13 +95,13 @@
                 (if (not (newer? my-version latest))
                   (console/log (str "[security] OK — " my-version
                                      " matches or exceeds latest stable " latest))
-                (let [my (parse-version my-version)
-                      up (parse-version latest)
+                (let [my (HVec Int Int Int) (parse-version my-version)
+                      up (HVec Int Int Int) (parse-version latest)
                       ;; parse-version yields a [major minor patch] triple whose
                       ;; every element is an integer or the 0 fallback.
-                      (up-major Int) (aget up 0)
-                      (my-major Int) (aget my 0)
-                      major-behind (- up-major my-major)]
+                      up-major Int (aget up 0)
+                      my-major Int (aget my 0)
+                      major-behind Int (- up-major my-major)]
                   (if (>= major-behind 1)
                     (do
                       (console/error
@@ -109,7 +113,7 @@
                       (str "[security] STALE: running " my-version
                            ", latest is " latest
                            " (same major, point behind) — gjoa status will show STALE; rebuild when convenient"))))))))))
-        (js/call .catch (fn [e] Any
+        (js/call .catch (fn [e Any] Any
           (if (= (js/get state .confirmed-at) 0)
             (console/warn
               (str "[security] probe failed and has NEVER confirmed current since launch"
