@@ -1,4 +1,4 @@
-// AUTO-VENDORED by tools/prep/overlay.bjs from $BEAGLE_PIN_ROOT/beagle-lib/lib/beagle/core.js (configs/beagle.ref = f30421aee7fe).
+// AUTO-VENDORED by tools/prep/overlay.bjs from $BEAGLE_PIN_ROOT/beagle-lib/lib/beagle/core.js (configs/beagle.ref = 4d8d804eb28b).
 // DO NOT EDIT BY HAND — re-vendored on every `bun run import` so the
 // $$bc value-semantics runtime always matches the beagle the chrome was
 // compiled against. Bump configs/beagle.ref + re-import to change it.
