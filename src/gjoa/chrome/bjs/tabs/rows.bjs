@@ -11,7 +11,7 @@
 ;; From sibling modules — no import, declare-extern only.
 ;; --- reset-style!: clear all 7 grid/position style properties ---
 
-(defn reset-style! [(el Any)] Any
+(defn reset-style! [el Any] Any
   (js/set! (js/get el .style) .gridColumn "")
   (js/set! (js/get el .style) .gridRow "")
   (js/set! (js/get el .style) .position "")
@@ -20,34 +20,34 @@
   (js/set! (js/get el .style) .width "")
   (js/set! (js/get el .style) .zIndex ""))
 
-(js/export (defn make-rows! [(deps Any)] Any
-  (let [setupDrag (:setupDrag deps)
-        activateVim (:activateVim deps)
-        selectRange (:selectRange deps)
-        clearSelection (:clearSelection deps)
-        cloneAsSibling (:cloneAsSibling deps)
-        startRename (:startRename deps)
-        scheduleSave (:scheduleSave deps)
+(js/export (defn make-rows! [deps Any] Any
+  (let [setupDrag Any (:setupDrag deps)
+        activateVim Any (:activateVim deps)
+        selectRange Any (:selectRange deps)
+        clearSelection Any (:clearSelection deps)
+        cloneAsSibling Any (:cloneAsSibling deps)
+        startRename Any (:startRename deps)
+        scheduleSave Any (:scheduleSave deps)
 
-        log (create-logger! "tabs/rows")
+        log Any (create-logger! "tabs/rows")
 
         ;; Module-private mutable state
-        counters {:group 0 :resync-pending false :grid-raf 0}
+        counters (Map Keyword Any) {:group 0 :resync-pending false :grid-raf 0}
 
         ;; ----- sync tab row -----
 
-        sync-tab-row (fn [tab] Any
-          (let [row (js/call row-of .get tab)]
+        sync-tab-row (Fn [Any] Any) (fn [tab Any] Any
+          (let [row Any (js/call row-of .get tab)]
             (when row
-              (let [td       (tree-data! tab)
-                    show-tab (or (js/call hz-display .get row) tab)
-                    show-td  (if (= show-tab tab) td (tree-data! show-tab))
-                    img      (js/call show-tab .getAttribute "image")
-                    icon-el  (q row ".gjoa-tab-icon")]
+              (let [td Any       (tree-data! tab)
+                    show-tab Any (or (js/call hz-display .get row) tab)
+                    show-td Any  (if (= show-tab tab) td (tree-data! show-tab))
+                    img Any      (js/call show-tab .getAttribute "image")
+                    icon-el Any  (q row ".gjoa-tab-icon")]
                 (when icon-el
                   (attr! icon-el "src"
                     (or img "chrome://global/skin/icons/defaultFavicon.svg")))
-                (let [label-el (q row ".gjoa-tab-label")]
+                (let [label-el Any (q row ".gjoa-tab-label")]
                   (when label-el
                     (js/set! label-el .textContent
                           (or (js/get show-td .name) (js/get show-tab .label) "New Tab"))))
@@ -63,11 +63,11 @@
 
         ;; ----- group rows -----
 
-        sync-group-row (fn [row] Any
-          (let [g (js/get row ._group)]
+        sync-group-row (Fn [Any] Any) (fn [row Any] Any
+          (let [g Any (js/get row ._group)]
             (when g
-              (let [label        (q row ".gjoa-tab-label")
-                    state-prefix (cond
+              (let [label Any        (q row ".gjoa-tab-label")
+                    state-prefix String (cond
                                    (= (js/get g .state) "todo") "[ ] "
                                    (= (js/get g .state) "wip")  "[-] "
                                    (= (js/get g .state) "done") "[x] "
@@ -78,37 +78,37 @@
                   (and (or (bool (js/get g .collapsed)) (bool (js/get g .layoutCollapsed)))
                        (has-children! row)))
                 (js/set! (js/get row .style) .paddingInlineStart
-                      (let [(level Int) (or (js/get g .level) 0)]
+                      (let [level Int (or (js/get g .level) 0)]
                         (str (+ (* level INDENT) 8) "px")))))))
 
         ;; ----- horizontal grid -----
 
-        update-horizontal-grid (fn [] Any
+        update-horizontal-grid (Fn [] Any) (fn [] Any
           (when (is-horizontal)
-            (let [raw-containers []]
+            (let [raw-containers (Vec Any) []]
               (when (js/get state .pinnedContainer)
                 (js/call raw-containers .push (js/get state .pinnedContainer)))
               (when (js/get state .panel)
                 (js/call raw-containers .push (js/get state .panel)))
 
               (js/call raw-containers .forEach
-                (fn [c] Any
-                  (let [rows-in-container (Array/from
+                (fn [c Any] Any
+                  (let [rows-in-container (Vec Any) (Array/from
                           (qa c
                             ".gjoa-tab-row, .gjoa-group-row"))
-                        gs {:col 0 :ric 0 :sc 0}]
+                        gs (Map Keyword Int) {:col 0 :ric 0 :sc 0}]
 
                     (js/call rows-in-container .forEach
-                      (fn [%1] Any (let [d (data-of! %1)]
+                      (fn [%1 Any] Any (let [d Any (data-of! %1)]
                          (when d
                            (if (js/get %1 .hidden)
                              (rmattr! %1 "gjoa-popout-child")
                              (do
-                               (let [(col Int) (js/get gs .col)]
+                               (let [col Int (js/get gs .col)]
                                  (when (or (= (level-of-row! %1) 0) (= col 0))
                                    (js/set! gs .col (+ col 1))
                                    (js/set! gs .ric 0)))
-                               (let [(ric Int) (js/get gs .ric)]
+                               (let [ric Int (js/get gs .ric)]
                                  (js/set! gs .ric (+ ric 1)))
                                (js/set! (js/get %1 .style) .gridColumn
                                      (String (js/get gs .col)))
@@ -120,8 +120,8 @@
                                  (js/set! gs .sc (js/get gs .col)))))))))
 
                     (if (> (js/get gs .col) 0)
-                      (let [tracks []]
-                        (loop [i 1]
+                      (let [tracks (Vec Any) []]
+                        (loop [i Int 1]
                           (when (<= i (js/get gs .col))
                             (js/call tracks .push
                               (if (= i (js/get gs .sc))
@@ -142,24 +142,24 @@
                   (fn [] Any (js/set! counters .grid-raf 0) (when (is-horizontal)
                    ;; Pin each container to first-row height
                    (js/call raw-containers .forEach
-                     (fn [%1] Any (let [first-row (q %1
+                     (fn [%1 Any] Any (let [first-row Any (q %1
                              ".gjoa-tab-row:not([hidden]), .gjoa-group-row:not([hidden])")]
                         (when first-row
-                          (let [(row-height Int) (js/get first-row .offsetHeight)]
+                          (let [row-height Int (js/get first-row .offsetHeight)]
                             (js/set! (js/get %1 .style) .maxHeight
                                   (str (+ row-height 2) "px")))))))
 
                    ;; Urlbar popover demotion
-                   (let [(panel-popouts Int) (if (js/get state .panel)
+                   (let [panel-popouts Int (if (js/get state .panel)
                                                (js/get (qa (js/get state .panel)
                                                            "[gjoa-popout-child]") .length)
                                                0)
-                         (pinned-popouts Int) (if (js/get state .pinnedContainer)
+                         pinned-popouts Int (if (js/get state .pinnedContainer)
                                                 (js/get (qa (js/get state .pinnedContainer)
                                                             "[gjoa-popout-child]") .length)
                                                 0)
-                         total-popouts (+ panel-popouts pinned-popouts)
-                         urlbar (by-id "urlbar")]
+                         total-popouts Int (+ panel-popouts pinned-popouts)
+                         urlbar Any (by-id "urlbar")]
                      (when urlbar
                        (when (and (> total-popouts 0)
                                   (has? urlbar "popover"))
@@ -167,21 +167,23 @@
                        (log "hzGrid:urlbar" {:totalPopouts total-popouts})))
 
                    ;; Reset fixed positions, then reapply for popouts
-                   (js/call raw-containers .forEach (fn [container] Any
-                     (let [all-in-c (qa container
+                   (js/call raw-containers .forEach (fn [container Any] Any
+                     (let [all-in-c Any (qa container
                                       ".gjoa-tab-row, .gjoa-group-row")]
                        (js/call all-in-c .forEach
-                         (fn [%1] Any (when (= (js/get (js/get %1 .style) .position) "fixed")
+                         (fn [%1 Any] Any (when (= (js/get (js/get %1 .style) .position) "fixed")
                             (reset-style! %1)))))
 
-                     (let [popouts (Array/from
+                     (let [popouts (Vec Any) (Array/from
                              (qa container "[gjoa-popout-child]"))]
                        (when (js/get popouts .length)
                          ;; Force reflow
                          (js/get container .offsetHeight)
-                         (let [rects (js/call popouts .map (fn [%1] Any (js/call %1 .getBoundingClientRect)))]
-                           (js/call popouts .forEach (fn [p idx] Any
-                             (let [r (aget rects idx)]
+                         (let [rects (Vec Any) (js/call popouts .map (fn [%1 Any] Any (js/call %1 .getBoundingClientRect)))]
+                           (js/call popouts .forEach (fn
+                                                       [p Any
+                                                        idx Int] Any
+                                                       (let [r Any (aget rects idx)]
                                (when (and (> (js/get r .width) 0)
                                           (> (js/get r .height) 0))
                                  (js/set! (js/get p .style) .position "fixed")
@@ -195,14 +197,14 @@
 
         ;; ----- visibility / collapse -----
 
-        update-visibility (fn [] Any
-          (let [space-filter (js/get deps .isTabInActiveSpace)
-                group-filter (js/get deps .isGroupInActiveSpace)
-                hide-state {:below -1}]
+        update-visibility (Fn [] Any) (fn [] Any
+          (let [space-filter Any (js/get deps .isTabInActiveSpace)
+                group-filter Any (js/get deps .isGroupInActiveSpace)
+                hide-state (Map Keyword Int) {:below -1}]
             (js/call (all-rows) .forEach
-              (fn [%1] Any (let [d (data-of! %1)]
+              (fn [%1 Any] Any (let [d Any (data-of! %1)]
                  (when d
-                   (let [lv (level-of-row! %1)]
+                   (let [lv Int (level-of-row! %1)]
                      (cond
                        (and (>= (js/get hide-state .below) 0) (> lv (js/get hide-state .below)))
                        (js/set! %1 .hidden true)
@@ -219,26 +221,26 @@
 
         ;; ----- clear horizontal grid -----
 
-        clear-horizontal-grid (fn [] Any
+        clear-horizontal-grid (Fn [] Any) (fn [] Any
           (when (> (js/get counters .grid-raf) 0)
             (cancelAnimationFrame (js/get counters .grid-raf))
             (js/set! counters .grid-raf 0))
-          (let [both []]
+          (let [both (Vec Any) []]
             (when (js/get state .pinnedContainer)
               (js/call both .push (js/get state .pinnedContainer)))
             (when (js/get state .panel)
               (js/call both .push (js/get state .panel)))
-            (js/call both .forEach (fn [container] Any
+            (js/call both .forEach (fn [container Any] Any
               (js/set! (js/get container .style) .maxHeight "")
               (js/set! (js/get container .style) .gridTemplateColumns ""))))
-          (js/call (all-rows) .forEach (fn [row] Any
+          (js/call (all-rows) .forEach (fn [row Any] Any
             (reset-style! row)
             (rmattr! row "gjoa-popout-child"))))
 
         ;; ----- toggle collapse -----
 
-        toggle-collapse (fn [row] Any
-          (let [d (data-of! row)]
+        toggle-collapse (Fn [Any] Any) (fn [row Any] Any
+          (let [d Any (data-of! row)]
             (when (and d (has-children! row))
               ;; The caret reflects the EFFECTIVE collapsed state (user collapse
               ;; OR transient layout collapse). Expanding clears both; collapsing
@@ -257,24 +259,24 @@
 
         ;; ----- row constructors -----
 
-        create-tab-row (fn [tab] Any
-          (let [row     (xul "hbox" "gjoa-tab-row")
-                icon    (xul "image" "gjoa-tab-icon")
-                label   (htm "span" "gjoa-tab-label")
-                close   (xul "image" "gjoa-tab-close")
-                chevron (xul "image" "gjoa-tab-chevron")]
+        create-tab-row (Fn [Any] Any) (fn [tab Any] Any
+          (let [row Any     (xul "hbox" "gjoa-tab-row")
+                icon Any    (xul "image" "gjoa-tab-icon")
+                label Any   (htm "span" "gjoa-tab-label")
+                close Any   (xul "image" "gjoa-tab-close")
+                chevron Any (xul "image" "gjoa-tab-chevron")]
             (attr! row "align" "center")
             (attr! close "tooltiptext" "Close tab")
 
             ;; Subtle close affordance — CSS shows it on hover + on the active
             ;; row. Sits just before the collapse chevron when both are present.
             (on! close "click"
-              (fn [%1] Any (when (= (js/get %1 .button) 0)
+              (fn [%1 Any] Any (when (= (js/get %1 .button) 0)
                  (js/call %1 .stopPropagation)
                  (js/call gBrowser .removeTab tab))))
 
             (on! chevron "click"
-              (fn [%1] Any (when (= (js/get %1 .button) 0)
+              (fn [%1 Any] Any (when (= (js/get %1 .button) 0)
                  (js/call %1 .stopPropagation)
                  (toggle-collapse row))))
 
@@ -283,10 +285,10 @@
             (js/call row-of .set tab row)
 
             (on! row "click"
-              (fn [%1] Any (if (= (js/get %1 .button) 0)
+              (fn [%1 Any] Any (if (= (js/get %1 .button) 0)
                  (if (js/get %1 .shiftKey)
                    (selectRange row)
-                   (let [target (or (js/call hz-display .get row) tab)]
+                   (let [target Any (or (js/call hz-display .get row) tab)]
                      (clearSelection)
                      (js/set! gBrowser .selectedTab target)
                      (activateVim (or (js/call row-of .get target) row))))
@@ -295,16 +297,16 @@
                    (js/call gBrowser .removeTab tab)))))
 
             (on! row "dblclick"
-              (fn [%1] Any (when (= (js/get %1 .button) 0)
+              (fn [%1 Any] Any (when (= (js/get %1 .button) 0)
                  (js/call %1 .stopPropagation)
                  (cloneAsSibling tab))))
 
             (on! row "contextmenu"
-              (fn [e] Any
+              (fn [e Any] Any
                 (js/call e .preventDefault)
                 (js/call e .stopPropagation)
                 (js/set! state .contextTab tab)
-                (let [menu (by-id "gjoa-tab-menu")]
+                (let [menu Any (by-id "gjoa-tab-menu")]
                   (when menu
                     (js/call menu .openPopupAtScreen (js/get e .screenX) (js/get e .screenY) true)))))
 
@@ -312,11 +314,13 @@
             (sync-tab-row tab)
             row))
 
-        create-group-row (fn [name level] Any
-          (let [lv (if (= level undefined) 0 level)
-                (group-seq Int) (js/get counters .group)
-                _  (js/set! counters .group (+ group-seq 1))
-                group {:id       (str "g" (js/get counters .group))
+        create-group-row (Fn [String Any] Any) (fn
+                                                 [name Any
+                                                  level Any] Any
+                                                 (let [lv Any (if (= level undefined) 0 level)
+                group-seq Int (js/get counters .group)
+                _ Any  (js/set! counters .group (+ group-seq 1))
+                group (Map Keyword Any) {:id       (str "g" (js/get counters .group))
                        :type     "group"
                        :name     (or name "New Group")
                        :level    lv
@@ -328,10 +332,10 @@
                        :spaceId  (if (js/get deps .getActiveSpaceId)
                                    (or (js/call deps .getActiveSpaceId) nil)
                                    nil)}
-                row     (xul "hbox" "gjoa-group-row")
-                marker  (htm "span" "gjoa-group-marker")
-                label   (htm "span" "gjoa-tab-label")
-                chevron (xul "image" "gjoa-tab-chevron")]
+                row Any     (xul "hbox" "gjoa-group-row")
+                marker Any  (htm "span" "gjoa-group-marker")
+                label Any   (htm "span" "gjoa-tab-label")
+                chevron Any (xul "image" "gjoa-tab-chevron")]
 
             (attr! row "align" "center")
             (js/set! row ._group group)
@@ -340,32 +344,32 @@
             (js/set! label .textContent (js/get group .name))
 
             (on! chevron "click"
-              (fn [%1] Any (when (= (js/get %1 .button) 0)
+              (fn [%1 Any] Any (when (= (js/get %1 .button) 0)
                  (js/call %1 .stopPropagation)
                  (toggle-collapse row))))
 
             (on! marker "click"
-              (fn [%1] Any (when (= (js/get %1 .button) 0)
+              (fn [%1 Any] Any (when (= (js/get %1 .button) 0)
                  (js/call %1 .stopPropagation)
                  (toggle-collapse row))))
 
             (js/call row .append marker label chevron)
 
             (on! row "click"
-              (fn [%1] Any (when (= (js/get %1 .button) 0)
+              (fn [%1 Any] Any (when (= (js/get %1 .button) 0)
                  (activateVim row))))
 
             (on! row "dblclick"
-              (fn [%1] Any (when (= (js/get %1 .button) 0)
+              (fn [%1 Any] Any (when (= (js/get %1 .button) 0)
                  (js/call %1 .stopPropagation)
                  (startRename row))))
 
             (on! row "contextmenu"
-              (fn [e] Any
+              (fn [e Any] Any
                 (js/call e .preventDefault)
                 (js/call e .stopPropagation)
                 (js/set! state .contextGroupRow row)
-                (let [menu (by-id "gjoa-group-menu")]
+                (let [menu Any (by-id "gjoa-group-menu")]
                   (when menu
                     (js/call menu .openPopupAtScreen (js/get e .screenX) (js/get e .screenY) true)))))
 
@@ -375,19 +379,19 @@
 
         ;; ----- schedule tree resync -----
 
-        schedule-tree-resync (fn [] Any
+        schedule-tree-resync (Fn [] Any) (fn [] Any
           (when (not (js/get counters .resync-pending))
             (js/set! counters .resync-pending true)
             (js/call (Promise/resolve undefined) .then (fn [] Any
               (js/set! counters .resync-pending false)
               (js/call (tabs!) .forEach
-                (fn [%1] Any (when (js/call row-of .get %1)
+                (fn [%1 Any] Any (when (js/call row-of .get %1)
                    (sync-tab-row %1))))
               (update-visibility)))))
 
         ;; ----- sync any row -----
 
-        sync-any-row (fn [row] Any
+        sync-any-row (Fn [Any] Any) (fn [row Any] Any
           (if (js/get row ._tab)
             (sync-tab-row (js/get row ._tab))
             (when (js/get row ._group)
