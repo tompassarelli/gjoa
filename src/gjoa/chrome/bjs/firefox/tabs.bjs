@@ -9,44 +9,46 @@
 (js/export (defn selected-tab [] Any
   (js/get gBrowser .selectedTab)))
 
-(js/export (defn select-tab! [(tab Any)] Any
+(js/export (defn select-tab! [tab Any] Any
   (js/set! gBrowser .selectedTab tab)))
 
 (js/export (defn tab-container [] Any
   (js/get gBrowser .tabContainer)))
 
-(js/export (defn pin-tab [(tab Any)] Any
+(js/export (defn pin-tab [tab Any] Any
   (when (not (js/get tab .pinned))
     (js/call gBrowser .pinTab tab))))
 
-(js/export (defn unpin-tab [(tab Any)] Any
+(js/export (defn unpin-tab [tab Any] Any
   (when (js/get tab .pinned)
     (js/call gBrowser .unpinTab tab))))
 
-(js/export (defn toggle-pinned [(tab Any)] Any
+(js/export (defn toggle-pinned [tab Any] Any
   (if (js/get tab .pinned)
     (unpin-tab tab)
     (pin-tab tab))))
 
-(js/export (defn remove-tab [(tab Any)] Any
+(js/export (defn remove-tab [tab Any] Any
   (js/call gBrowser .removeTab tab)))
 
-(js/export (defn duplicate-tab [(tab Any)] Any
+(js/export (defn duplicate-tab [tab Any] Any
   (js/call gBrowser .duplicateTab tab)))
 
-(js/export (defn reload-tab [(tab Any)] Any
+(js/export (defn reload-tab [tab Any] Any
   (js/call gBrowser .reloadTab tab)))
 
-(js/export (defn move-tab-to [(tab Any) (index Any)] Any
+(js/export (defn move-tab-to
+  [tab Any
+   index Any] Any
   (js/call gBrowser .moveTabTo tab index)))
 
-(js/export (defn open-tab! [(url Any)] Any
-  (let [opts {}]
+(js/export (defn open-tab! [url Any] Any
+  (let [opts Any {}]
     (js/set! opts .triggeringPrincipal
           (js/call (js/get Services .scriptSecurityManager) .getSystemPrincipal))
     (js/call gBrowser .addTab url opts))))
 
-(js/export (defn tab-icon [(tab Any)] Any
+(js/export (defn tab-icon [tab Any] Any
   (try
     (js/call gBrowser .getIcon tab)
     (catch (_e Any) nil))))
