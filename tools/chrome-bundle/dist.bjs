@@ -29,14 +29,18 @@
 ;; before this runs). bun can't execute .bjs directly, so point at the .js.
 (def TOOLS-DIR String (join REPO-ROOT ".beagle-tools" "gjoa" "tools" "chrome-bundle"))
 
-(defn step [(name String) (fn Any)] Any
-  (let [_ (console/log (str "→ " name))]
+(defn step
+  [name String
+   fn Any] Any
+  (let [_ Nil (console/log (str "→ " name))]
     (js/await (fn))))
 
-(defn copy-dir [(src String) (dst String)] Any
-  (let [_ (js/await (mkdir dst {:recursive true}))
-        names (js/await (readdir src))]
-    (doseq [name names]
+(defn copy-dir
+  [src String
+   dst String] Any
+  (let [_ Any (js/await (mkdir dst {:recursive true}))
+        names (Vec String) (js/await (readdir src))]
+    (doseq [name String names]
       (js/await (copyFile (join src name) (join dst name))))))
 
 (defn main! [] Any
@@ -47,21 +51,21 @@
 
     (js/await
       (step "compiling beagle sources"
-        (fn [] Any (let [proc (js/call Bun .spawn {:cmd ["bun" (join TOOLS-DIR "compile.js")]
+        (fn [] Any (let [proc Any (js/call Bun .spawn {:cmd ["bun" (join TOOLS-DIR "compile.js")]
                                   :cwd REPO-ROOT
                                   :stdout "inherit"
                                   :stderr "inherit"})
-                code (js/await (js/get proc .exited))]
+                         code Any (js/await (js/get proc .exited))]
             (when (not= code 0)
               (throw (js/new Error (str "beagle compile failed (exit " code ")"))))))))
 
     (js/await
       (step "bundling chrome JS"
-        (fn [] Any (let [proc (js/call Bun .spawn {:cmd ["bun" (join TOOLS-DIR "build.js")]
+        (fn [] Any (let [proc Any (js/call Bun .spawn {:cmd ["bun" (join TOOLS-DIR "build.js")]
                                   :cwd REPO-ROOT
                                   :stdout "inherit"
                                   :stderr "inherit"})
-                code (js/await (js/get proc .exited))]
+                         code Any (js/await (js/get proc .exited))]
             (when (not= code 0)
               (throw (js/new Error (str "chrome bundle failed (exit " code ")"))))))))
 
@@ -74,12 +78,12 @@
     ;; browser can never hold a stale bundle (owner: "never stale by construction").
     (js/await
       (step "writing bundle stamp"
-        (fn [] Any (let [Hasher (js/get Bun .CryptoHasher)
-                hasher (js/new Hasher "sha256")]
-            (doseq [sub ["JS" "CSS"]]
-              (let [dir (join DIST-CHROME sub)
-                    names (js/call (readdirSync dir) .sort)]
-                (doseq [name names]
+        (fn [] Any (let [Hasher Any (js/get Bun .CryptoHasher)
+                         hasher Any (js/new Hasher "sha256")]
+            (doseq [sub String ["JS" "CSS"]]
+              (let [dir String (join DIST-CHROME sub)
+                    names (Vec Any) (js/call (readdirSync dir) .sort)]
+                (doseq [name Any names]
                   (js/call hasher .update name)
                   (js/call hasher .update (readFileSync (join dir name))))))
             (writeFileSync (join DIST-CHROME ".bundle-stamp") (js/call hasher .digest "hex"))))))
