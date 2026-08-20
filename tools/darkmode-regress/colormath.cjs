@@ -1,7 +1,6 @@
 /* colormath.cjs — the ONE canonical dark-mode color math (#85 dark-mode v2).
- * CANONICAL IMPLEMENTATION LIVES HERE. `colormath.js` is a thin ESM wrapper that
- * re-exports this file (createRequire), so the ESM importers (colormath.test.js,
- * apca-w3-vectors.test.js) and the CJS/text-concat consumers (runner.bjs &
+ * CANONICAL IMPLEMENTATION LIVES HERE. ESM tests import this file directly,
+ * while the CJS/text-concat consumers (runner.bjs &
  * darkcheck-runner.bjs read this file as TEXT and eval it into browser scope;
  * wave6-*.cjs require it) resolve to ONE implementation. gjoa is
  * `"type":"module"`, so a plain `.js` required from CJS yields `{}` (the CJS
@@ -9,7 +8,7 @@
  *
  * Shared by BOTH the live harness (runner.bjs prepends this to snap.js so the
  * functions are in browser scope) AND the deterministic bun test
- * (colormath.test.js imports it via the ESM wrapper). Keep it browser-safe: no
+ * (colormath.test.js imports it directly). Keep it browser-safe: no
  * Node APIs, plain function declarations, a guarded CommonJS export at the bottom.
  *
  * It realizes the theory's two FORCED instruments (docs/darkmode-v2.md):

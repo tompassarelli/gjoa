@@ -23,7 +23,7 @@
  * canonical operator the actor mirrors). Run: bun test tools/darkmode-regress/normalize-guard.test.js
  */
 import { test, expect, describe } from "bun:test";
-import { apca, srgbToOklch } from "./colormath.js";
+import { apca, srgbToOklch } from "./colormath.cjs";
 
 // OKLCH lightness of an sRGB triple — the actor's _oklchL, via the canonical module.
 const oklchL = (rgb) => srgbToOklch(rgb)[0];

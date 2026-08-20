@@ -1,4 +1,4 @@
-/* apca-w3-vectors.test.js — exact-value conformance of colormath.js `apca()` against
+/* apca-w3-vectors.test.js — exact-value conformance of colormath.cjs `apca()` against
  * the PINNED apca-w3 v0.1.9, algorithm 0.0.98G-4g (chief-spec-apca.md §1 / DARKCHECK
  * §"Formula + provenance requirements"). This is the "measure == fix" gate: the audit
  * harness and the engine text-solve MUST share one canonical implementation, so drift
@@ -14,7 +14,7 @@
  *
  * Run: bun test tools/darkmode-regress/apca-w3-vectors.test.js */
 import { test, expect, describe } from "bun:test";
-import { apca } from "./colormath.js";
+import { apca } from "./colormath.cjs";
 
 /* ---- (1) published apca-w3 reference vectors (algo 0.0.98G-4g) ----
  * [text, bg, expectedLc]. Signed: reverse polarity (light-on-dark) is negative BY

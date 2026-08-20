@@ -9,7 +9,7 @@ import { test, expect, describe } from "bun:test";
 import {
   apca, srgbToOklch, oklchToSrgb, correct, correctRGB,
   hueDriftDeg, apcaBand, polaritySign, jointSolveHistory,
-} from "./colormath.js";
+} from "./colormath.cjs";
 
 const FLOOR = 45, CEIL = 90;
 

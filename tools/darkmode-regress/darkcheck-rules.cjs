@@ -6,27 +6,18 @@
  * its A5 gamut-exemption is an inline MIRROR of evalA5Exempt() below, byte-inert when the
  * flag is off — keep the two in lockstep if either changes.
  *
- * The colormath ORACLE is loaded ESM-trap-safe (gjoa is "type":"module", so a plain
- * require('./colormath.js') yields {} — the CJS guard never fires under ESM parse; see
- * dev-loop-assessment §7). We prefer the canonical colormath.cjs (P0.1) the moment it
- * lands, else evaluate colormath.js in a CommonJS shim so the exported functions ARE the
- * oracle's (no duplicated color math).
+ * The colormath ORACLE is the canonical CommonJS module, loaded directly so every
+ * consumer uses the same implementation (no duplicated color math or compatibility
+ * shim).
  */
 "use strict";
-const fs = require("fs");
 const path = require("path");
 
 // ---- oracle load (ESM-trap-safe) ----
 function loadColormath(dir) {
   dir = dir || __dirname;
-  const cjs = path.join(dir, "colormath.cjs"); // P0.1 canonical — poll for it
-  if (fs.existsSync(cjs)) return { cm: require(cjs), source: "colormath.cjs" };
-  const jsPath = path.join(dir, "colormath.js");
-  const src = fs.readFileSync(jsPath, "utf8");
-  const m = { exports: {} };
-  // colormath.js's own bottom guard fires with a real `module`, exporting the oracle set.
-  new Function("module", "exports", src)(m, m.exports);
-  return { cm: m.exports, source: "colormath.js(shim)" };
+  const cjs = path.join(dir, "colormath.cjs");
+  return { cm: require(cjs), source: "colormath.cjs" };
 }
 
 // ---- gamutMaxC(L,h): max in-gamut OKLCH chroma at fixed L,h (hue-preserving boundary) ----

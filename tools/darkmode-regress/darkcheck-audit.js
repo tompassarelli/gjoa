@@ -20,7 +20,7 @@
  * under-render) is QUARANTINED (status=indeterminate) — excluded from the denominator,
  * never silently passed (chief C2 / axe-core "incomplete").
  *
- * args: [meta, config, authored]. Color math (apca, srgbToOklch, Ys) from colormath.js,
+ * args: [meta, config, authored]. Color math (apca, srgbToOklch, Ys) from colormath.cjs,
  * PREPENDED by the runner. resolves { rules, stats, status } or { err }. */
 const done = arguments[arguments.length - 1];
 const meta = arguments[0];

@@ -6,7 +6,7 @@
  * (re-polarized against the real backdrop to clear the APCA floor, hue preserved):
  * a content pass applies them, then this script is re-run to measure the residual.
  * resolves { checked, total, fails:[worst...], correctives:[{cn,color}], err? }. */
-/* The color math (Ys, apca, correct, invertLum, OKLab) lives in colormath.js, which
+/* The color math (Ys, apca, correct, invertLum, OKLab) lives in colormath.cjs, which
  * runner.bjs PREPENDS to this script so the functions are in scope here. correct() is
  * now the tone-space OKLCH band-solve (hold hue, move lightness, clamp to band). */
 const done = arguments[arguments.length - 1];
