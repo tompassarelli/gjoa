@@ -31,7 +31,7 @@
         }
       ")
 
-     (let [(before Int) (chrome-eval "
+     (let [before Int (chrome-eval "
         return document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row\").length;
       ")]
 
@@ -53,7 +53,7 @@
          3000)
 
        ;; CRITICAL: every row must be visible (not [hidden]).
-       (let [counts (chrome-eval "
+       (let [counts Any (chrome-eval "
         const rows = [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row\")];
         const hiddenSamples = rows.filter(r => r.hidden)
           .slice(0, 3)
@@ -101,7 +101,7 @@
         const main = window.Spaces.list().find(s => s.name === \"Main\");
         window.Spaces.setActive(main.id);
       ")
-     (let [visibleOnMain (chrome-eval "
+     (let [visibleOnMain Any (chrome-eval "
         return [...document.querySelectorAll(\"#gjoa-tab-panel .gjoa-tab-row\")]
           .filter(r => !r.hidden).length;
       ")]
