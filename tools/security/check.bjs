@@ -34,14 +34,16 @@
 ;; Parse Firefox version into comparable numeric tuple. Format examples:
 ;;  "150.0", "151.0.1", "140.11.0esr". Drops "esr" suffix; treats missing
 ;;  patch as 0. Returns [major, minor, patch].
-(defn parseVersion [(v String)] Any
-  (let [cleaned (js/call (js/call v .replace (js/new RegExp "esr$" "i") "") .trim)
-        parts (js/call (js/call cleaned .split ".") .map (fn [x] Any (or (parseInt x 10) 0)))]
+(defn parseVersion [v String] Any
+  (let [cleaned String (js/call (js/call v .replace (js/new RegExp "esr$" "i") "") .trim)
+        parts (Vec Any) (js/call (js/call cleaned .split ".") .map (fn [x String] Any (or (parseInt x 10) 0)))]
     [(or (aget parts 0) 0) (or (aget parts 1) 0) (or (aget parts 2) 0)]))
 
 ;; -1 if a < b, 0 if equal, 1 if a > b.
-(defn cmpVersion [(a Any) (b Any)] Any
-  (loop [i 0]
+(defn cmpVersion
+  [a Any
+   b Any] Any
+  (loop [i Int 0]
     (if (>= i 3)
       0
       (if (not= (aget a i) (aget b i))
@@ -49,7 +51,7 @@
         (recur (+ i 1))))))
 
 (defn fetchVersions [] Any
-  (let [r (js/await (fetch PRODUCT-DETAILS-URL {:signal (js/call AbortSignal .timeout 10000)}))]
+  (let [r Any (js/await (fetch PRODUCT-DETAILS-URL {:signal (js/call AbortSignal .timeout 10000)}))]
     (if (not (js/get r .ok))
       (throw (js/new Error (str "product-details HTTP " (js/get r .status))))
       nil)
@@ -69,30 +71,30 @@
 ;;  We extract each (version, advisory id, severity, link) tuple from
 ;;  the page, then the caller filters by "newer than our pin".
 (defn fetchAdvisories! [] Any
-  (let [r (js/await (fetch KNOWN-VULNS-URL {:signal (js/call AbortSignal .timeout 10000)}))]
+  (let [r Any (js/await (fetch KNOWN-VULNS-URL {:signal (js/call AbortSignal .timeout 10000)}))]
     (if (not (js/get r .ok))
       (throw (js/new Error (str "known-vulns HTTP " (js/get r .status))))
       nil)
-    (let [html (js/await (js/call r .text))
+    (let [html Any (js/await (js/call r .text))
           ;; Split into per-version sections. Each section's MFSAs apply to that
           ;; exact Firefox version. The regex captures the version label + the
           ;; chunk of HTML up to the next <h3> (or end).
-          sectionRe (js/new RegExp "<h3 id=\"firefox([0-9.]+(?:esr)?)\"[^>]*>[\\s\\S]*?Fixed in Firefox ([0-9.]+(?:esr)?)\\s*</a>\\s*</h3>([\\s\\S]*?)(?=<h3 id=\"firefox|</main|<footer|$)" "g")
-          advRe (js/new RegExp "<a href=\"(/en-US/security/advisories/mfsa(\\d{4}-\\d+)/?)\"[^>]*>\\s*<span class=\"level ([a-z]+)\">[^<]*</span>([^<]*)</a>" "g")
-          out []]
+          sectionRe Regex (js/new RegExp "<h3 id=\"firefox([0-9.]+(?:esr)?)\"[^>]*>[\\s\\S]*?Fixed in Firefox ([0-9.]+(?:esr)?)\\s*</a>\\s*</h3>([\\s\\S]*?)(?=<h3 id=\"firefox|</main|<footer|$)" "g")
+          advRe Regex (js/new RegExp "<a href=\"(/en-US/security/advisories/mfsa(\\d{4}-\\d+)/?)\"[^>]*>\\s*<span class=\"level ([a-z]+)\">[^<]*</span>([^<]*)</a>" "g")
+          out (Vec Any) []]
       (loop []
-        (let [sm (js/call sectionRe .exec html)]
+        (let [sm Any (js/call sectionRe .exec html)]
           (when sm
-            (let [version (aget sm 2)
-                  sectionBody (aget sm 3)]
+            (let [version Any (aget sm 2)
+                  sectionBody Any (aget sm 3)]
               (js/set! advRe .lastIndex 0)
               (loop []
-                (let [am (js/call advRe .exec sectionBody)]
+                (let [am Any (js/call advRe .exec sectionBody)]
                   (when am
-                    (let [path (aget am 1)
-                          slug (str "mfsa" (aget am 2))
-                          severity (aget am 3)
-                          title (js/call (aget am 4) .trim)]
+                    (let [path Any (aget am 1)
+                          slug String (str "mfsa" (aget am 2))
+                          severity Any (aget am 3)
+                          title String (js/call (aget am 4) .trim)]
                       (js/call out .push {:id slug
                                   :title (or title (str "Security advisory " slug))
                                   :link (str "https://www.mozilla.org" path)
@@ -106,22 +108,28 @@
 
 ;; Advisory affects our pin if it fixes a Firefox version STRICTLY
 ;;  newer than our pinned version. (We're missing its fix.)
-(defn advisoryAffectsOurPin [(entry Any) (pinned Any)] Any
+(defn advisoryAffectsOurPin
+  [entry Any
+   pinned Any] Any
   (if (not (js/get entry .affectsVersion))
     false
     (if (js/call (js/get entry .affectsVersion) .endsWith "esr") ; ESR track is separate
       false
-      (let [v (parseVersion (js/get entry .affectsVersion))]
+      (let [v Any (parseVersion (js/get entry .affectsVersion))]
         (> (cmpVersion v pinned) 0)))))
 
-(defn isInTheWild [(entry Any)] Any
+(defn isInTheWild [entry Any] Any
   ;; Severity "critical" or explicit in-the-wild flag in title.
-  (let [text (js/call (str (js/get entry .title) " " (js/get entry .description)) .toLowerCase)]
+  (let [text String (js/call (str (js/get entry .title) " " (js/get entry .description)) .toLowerCase)]
     (or (= (js/get entry .severity) "critical")
         (js/call (js/new RegExp "(exploit|exploited)\\s+in\\s+the\\s+wild") .test text)
         (js/call (js/new RegExp "actively\\s+exploited") .test text))))
 
-(defn classify [(pinnedTuple Any) (latestTuple Any) (advisories Any) (inTheWild Any)] Any
+(defn classify
+  [pinnedTuple Any
+   latestTuple Any
+   advisories Any
+   inTheWild Any] Any
   (cond
     (> (js/get inTheWild .length) 0)
     {:status "CRITICAL"
@@ -129,15 +137,15 @@
 
     :else
     ;; parseVersion yields a [major minor patch] triple of integers.
-    (let [(latest-major Int) (aget latestTuple 0)
-          (pinned-major Int) (aget pinnedTuple 0)
-          majorDelta (- latest-major pinned-major)]
+    (let [latest-major Int (aget latestTuple 0)
+          pinned-major Int (aget pinnedTuple 0)
+          majorDelta Int (- latest-major pinned-major)]
       (cond
         (>= majorDelta 2)
         {:status "CRITICAL" :summary (str majorDelta " major versions behind")}
 
         :else
-        (let [cmp (cmpVersion pinnedTuple latestTuple)]
+        (let [cmp Any (cmpVersion pinnedTuple latestTuple)]
           (cond
             (= cmp 0)
             {:status "OK" :summary (str "at latest stable (" (js/call latestTuple .join ".") ")")}
@@ -155,11 +163,11 @@
                              ""))}))))))
 
 (js/export (defn check! [] Any
-  (let [gjoaJsonPath (join REPO-ROOT "gjoa.json")
-        gjoaJson (js/call JSON .parse (js/await (readFile gjoaJsonPath "utf8")))
-        pinned (js/get (js/get gjoaJson .firefox) .version)
-        pinnedTuple (parseVersion pinned)
-        state {:versions nil :advisories [] :netError nil}]
+  (let [gjoaJsonPath String (join REPO-ROOT "gjoa.json")
+        gjoaJson Any (js/call JSON .parse (js/await (readFile gjoaJsonPath "utf8")))
+        pinned Any (js/get (js/get gjoaJson .firefox) .version)
+        pinnedTuple Any (parseVersion pinned)
+        state (Map Keyword Any) {:versions nil :advisories [] :netError nil}]
 
     (try
       (js/set! state .versions (js/await (fetchVersions)))
@@ -172,9 +180,9 @@
           ;; Treat as partial: we have version info but not advisories.
           (js/set! state .netError (str "advisory probe failed: " (js/get e .message))))))
 
-    (let [versions (js/get state .versions)
-          advisories (js/get state .advisories)
-          netError (js/get state .netError)]
+    (let [versions Any (js/get state .versions)
+          advisories Any (js/get state .advisories)
+          netError Any (js/get state .netError)]
       (if (not versions)
         {:pinned pinned
          :latest nil
@@ -187,33 +195,34 @@
          :summary "could not verify — network probe failed"
          :detail (str "Pinned: " pinned "\nCould not reach Mozilla product-details (" netError ").\nRe-run on a working network to verify.")
          :unverified netError}
-        (let [latest (js/get versions .LATEST_FIREFOX_VERSION)
-              esr (js/get versions .FIREFOX_ESR)
-              latestTuple (parseVersion latest)
-              matchedAdvisories (js/call advisories .filter (fn [a] Any (advisoryAffectsOurPin a pinnedTuple)))
-              inTheWild (js/call matchedAdvisories .filter isInTheWild)
-              result (classify pinnedTuple latestTuple matchedAdvisories inTheWild)
-              status (js/get result .status)
-              summary (js/get result .summary)
-              detailLines [(str "Pinned:        " pinned)
+        (let [latest Any (js/get versions .LATEST_FIREFOX_VERSION)
+              esr Any (js/get versions .FIREFOX_ESR)
+              latestTuple Any (parseVersion latest)
+              matchedAdvisories (Vec Any) (js/call advisories .filter (fn [a Any] Any (advisoryAffectsOurPin a pinnedTuple)))
+              inTheWild (Vec Any) (js/call matchedAdvisories .filter isInTheWild)
+              result String (classify pinnedTuple latestTuple matchedAdvisories inTheWild)
+              status Any (js/get result .status)
+              summary Any (js/get result .summary)
+              detailLines (Vec String) [(str "Pinned:        " pinned)
                            (str "Latest stable: " latest)
                            (str "ESR track:     " esr)]]
           (when (> (js/get matchedAdvisories .length) 0)
             (js/call detailLines .push "")
             (js/call detailLines .push (str "Unfixed advisories on your pin (" (js/get matchedAdvisories .length) "):"))
             ;; Sort by severity (critical first), then advisory id newest first.
-            (let [sevRank {:critical 0 :high 1 :moderate 2 :low 3}
-                  sorted (js/call (js/call Array .from matchedAdvisories) .sort (fn [a b] Any (let [(sa Int) (let [r (aget sevRank (or (js/get a .severity) "low"))] (if (= r undefined) 4 r))
-                                        (sb Int) (let [r (aget sevRank (or (js/get b .severity) "low"))] (if (= r undefined) 4 r))]
+            (let [sevRank (Map Keyword Int) {:critical 0 :high 1 :moderate 2 :low 3}
+                  sorted (Vec Any) (js/call (js/call Array .from matchedAdvisories) .sort (fn [a String
+                                                                                               b String] Any (let [sa Int (let [r Any (aget sevRank (or (js/get a .severity) "low"))] (if (= r undefined) 4 r))
+                                                                                                                            sb Int (let [r Any (aget sevRank (or (js/get b .severity) "low"))] (if (= r undefined) 4 r))]
                                     (if (not= sa sb)
                                       (- sa sb)
                                       (if (< (js/get a .id) (js/get b .id)) 1 -1)))))]
-              (doseq [a (js/call sorted .slice 0 8)]
-                (let [sev (js/call (or (js/get a .severity) "?") .padEnd 8)
-                      wild (if (isInTheWild a) "  [in-the-wild]" "")]
+              (doseq [a Any (js/call sorted .slice 0 8)]
+                (let [sev String (js/call (or (js/get a .severity) "?") .padEnd 8)
+                      wild String (if (isInTheWild a) "  [in-the-wild]" "")]
                   (js/call detailLines .push (str "  [" sev "] " (js/get a .id) "  fixes Firefox " (js/get a .affectsVersion) wild))))
               (when (> (js/get sorted .length) 8)
-                (let [(advisory-count Int) (js/get sorted .length)]
+                (let [advisory-count Int (js/get sorted .length)]
                   (js/call detailLines .push (str "  ... and " (- advisory-count 8) " more"))))
               (js/call detailLines .push "")
               (js/call detailLines .push "Details: https://www.mozilla.org/en-US/security/known-vulnerabilities/firefox/")))
@@ -221,11 +230,11 @@
             (js/call detailLines .push "")
             (js/call detailLines .push (str "Note: " netError)))
 
-          (let [(latest-major Int) (aget latestTuple 0)
-                (pinned-major Int) (aget pinnedTuple 0)
-                majorDelta (- latest-major pinned-major)
-                patchDelta (if (= majorDelta 0) (cmpVersion pinnedTuple latestTuple) nil)
-                base {:pinned pinned
+          (let [latest-major Int (aget latestTuple 0)
+                pinned-major Int (aget pinnedTuple 0)
+                majorDelta Int (- latest-major pinned-major)
+                patchDelta (U Any Nil) (if (= majorDelta 0) (cmpVersion pinnedTuple latestTuple) nil)
+                base (Map Keyword Any) {:pinned pinned
                       :latest latest
                       :esr esr
                       :majorDelta majorDelta
@@ -239,14 +248,14 @@
               (js/set! base .unverified netError))
             base)))))))
 
-(defn statusColor [(status String)] String
+(defn statusColor [status String] String
   (cond
     (= status "OK") "[32m" ; green
     (= status "STALE") "[33m" ; yellow
     (= status "CRITICAL") "[31m" ; red
     :else "[36m")) ; cyan for UNKNOWN
 
-(defn exitCodeFor [(status String)] Any
+(defn exitCodeFor [status String] Any
   (cond
     (= status "OK") 0
     (= status "STALE") 2
@@ -254,16 +263,16 @@
     :else 1)) ; UNKNOWN
 
 (defn main! [] Any
-  (let [jsonMode (js/call (js/get process .argv) .includes "--json")
-        quietMode (js/call (js/get process .argv) .includes "--quiet")
-        r (js/await (check!))]
+  (let [jsonMode Bool (js/call (js/get process .argv) .includes "--json")
+        quietMode Bool (js/call (js/get process .argv) .includes "--quiet")
+        r Any (js/await (check!))]
     (cond
       jsonMode
       (console/log (js/call JSON .stringify r nil 2))
 
       (not quietMode)
-      (let [color (statusColor (js/get r .status))
-            reset "[0m"]
+      (let [color String (statusColor (js/get r .status))
+            reset String "[0m"]
         (console/error (str color "[security] " (js/get r .status) reset " — " (js/get r .summary)))
         (console/error (js/get r .detail))))
     (js/call process .exit (exitCodeFor (js/get r .status)))))
@@ -273,5 +282,5 @@
 ;; Run the CLI only when invoked directly — cli.bjs imports `check` as a library
 ;; and must not trigger the CLI (or its process.exit) on import.
 (when (js/get (js/import-meta) .main)
-  (js/call (main!) .catch (fn [err] Any (console/error (str "[security] check threw: " (js/get err .message)))
+  (js/call (main!) .catch (fn [err Error] Any (console/error (str "[security] check threw: " (js/get err .message)))
       (js/call process .exit 1))))
