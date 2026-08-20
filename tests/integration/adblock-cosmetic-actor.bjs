@@ -47,7 +47,7 @@
   [(deftest "adblock M2 actor: at-load + dynamic elements hidden, control kept" [mn ctx]
      (js/await (js/call mn .setContext "chrome"))
      (chrome-eval SETUP-JS)
-     (let [navOk (js/await (js/call mn .executeAsyncScript NAV-JS [TOP]))]
+     (let [navOk Bool (js/await (js/call mn .executeAsyncScript NAV-JS [TOP]))]
        (expect navOk (str "local fixture " TOP " did not load — is cosmetic-fixture-server.mjs running on :8975?"))
        (js/await (js/call mn .setContext "content"))
        ;; await-true returns nil on success and throws (timeout) on failure.
