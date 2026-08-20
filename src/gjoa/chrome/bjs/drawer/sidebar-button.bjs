@@ -5,20 +5,24 @@
 
 (declare-extern [window undefined getComputedStyle] Any)
 
-(defn install! [(sidebar-button Any) (sidebar-main Any) (compact Any)] Any
-  (let [og-icon (q sidebar-button ".toolbarbutton-icon")
-        og-icon-style (if og-icon
+(defn install!
+  [sidebar-button Any
+   sidebar-main Any
+   compact Any]
+  Any
+  (let [og-icon Any (q sidebar-button ".toolbarbutton-icon")
+        og-icon-style Any (if og-icon
                         (js/get (getComputedStyle og-icon) .listStyleImage)
                         nil)]
 
     (js/set! (js/get sidebar-button .style) .display "none")
 
-    (let [button (xul-id "toolbarbutton" "gjoa-sidebar-button")]
+    (let [button Any (xul-id "toolbarbutton" "gjoa-sidebar-button")]
       (js/set! button .className (js/get sidebar-button .className))
       (attr! button "tooltiptext" "Toggle compact mode (right-click for more)")
 
       (js/call ["cui-areatype" "widget-id" "widget-type" "removable" "overflows"] .forEach
-        (fn [%1] Any (when (has? sidebar-button %1)
+        (fn [%1 Any] Any (when (has? sidebar-button %1)
            (attr! button %1 (or (js/call sidebar-button .getAttribute %1) "")))))
 
       ;; Must follow the copy loop — it copies `removable` off the native widget.
@@ -38,9 +42,9 @@
       ;; the `#nav-bar > #gjoa-sidebar-button` order rules stop matching it — per-mode
       ;; CSS positions it from here (see chrome/css/gjoa.uc.css nav-bar layout block).
       ;; Fall back to after the hamburger, then after the native sidebar button.
-      (let [nav-bar (by-id "nav-bar")
-            reload-btn (by-id "stop-reload-button")
-            panel-ui (by-id "PanelUI-button")]
+      (let [nav-bar Any (by-id "nav-bar")
+            reload-btn Any (by-id "stop-reload-button")
+            panel-ui Any (by-id "PanelUI-button")]
         (cond
           reload-btn
           (js/call reload-btn .after button)
@@ -51,9 +55,9 @@
 
       ;; APPEND only (never prepend): tabs/layout.bjs + drawer/layout.bjs both do
       ;; first-child identity checks on sidebar-main's children. CSS order:-1 renders it first.
-      (let [strip-hide-button (xul-id "toolbarbutton" "gjoa-strip-hide-button")
-            on-strip-hide-click (fn [] Any (set-pref-bool! "gjoa.layout.horizontalSidebarStrip" false))
-            on-click (fn [%1] Any (when (= (js/get %1 .button) 0)
+      (let [strip-hide-button Any (xul-id "toolbarbutton" "gjoa-strip-hide-button")
+            on-strip-hide-click (Fn [] Any) (fn [] Any (set-pref-bool! "gjoa.layout.horizontalSidebarStrip" false))
+            on-click (Fn [Any] Any) (fn [%1 Any] Any (when (= (js/get %1 .button) 0)
                          (js/call compact .toggle)))]
         (attr! strip-hide-button "tooltiptext" "Hide strip")
         (on! strip-hide-button "click" on-strip-hide-click)
@@ -61,25 +65,25 @@
 
         (on! button "click" on-click)
 
-        (let [menu (xul-id "menupopup" "gjoa-sidebar-button-menu")]
+        (let [menu Any (xul-id "menupopup" "gjoa-sidebar-button-menu")]
 
-          (let [compact-item (mi "Enable Compact" (fn [] Any (js/call compact .toggle)))
+          (let [compact-item Any (mi "Enable Compact" (fn [] Any (js/call compact .toggle)))
 
-                collapse-item (mi "Collapse Layout"
+                collapse-item Any (mi "Collapse Layout"
                                 (fn [] Any
                                   (try
-                                    (let [prev-display (js/get (js/get sidebar-button .style) .display)]
+                                    (let [prev-display Any (js/get (js/get sidebar-button .style) .display)]
                                       (js/set! (js/get sidebar-button .style) .display "")
                                       (js/call sidebar-button .click)
                                       (js/set! (js/get sidebar-button .style) .display prev-display))
                                     (catch (e Any)
                                       (console/error "[GJOA:drawer] collapse layout failed" e)))))
 
-                strip-item (mi "Show Strip"
-                             (fn [] Any (let [cur (pref-bool "gjoa.layout.horizontalSidebarStrip" false)]
+                strip-item Any (mi "Show Strip"
+                             (fn [] Any (let [cur Bool (pref-bool "gjoa.layout.horizontalSidebarStrip" false)]
                                 (set-pref-bool! "gjoa.layout.horizontalSidebarStrip" (not cur)))))
 
-                sidebar-item (mi "Enable Sidebar"
+                sidebar-item Any (mi "Enable Sidebar"
                                (fn [] Any
                                  (try
                                    (cond
@@ -88,28 +92,28 @@
                                      (and (js/get window .SidebarUI) (js/get (js/get window .SidebarUI) .toggle))
                                      (js/call (js/get window .SidebarUI) .toggle)
                                      :else
-                                     (let [cmd (by-id "cmd_toggleSidebar")]
+                                     (let [cmd Any (by-id "cmd_toggleSidebar")]
                                        (if (and cmd (js/get cmd .doCommand))
                                          (js/call cmd .doCommand)
                                          (console/error "[GJOA:drawer] no sidebar-toggle API available"))))
                                    (catch (e Any)
                                      (console/error "[GJOA:drawer] sidebar toggle failed" e)))))
 
-                layout-item (mi "Horizontal Tabs"
-                              (fn [] Any (let [vertical (pref-bool "sidebar.verticalTabs" true)]
+                layout-item Any (mi "Horizontal Tabs"
+                              (fn [] Any (let [vertical Bool (pref-bool "sidebar.verticalTabs" true)]
                                  (set-pref-bool! "sidebar.verticalTabs" (not vertical)))))
 
-                customize-item (mi "Customize Sidebar"
+                customize-item Any (mi "Customize Sidebar"
                                  (fn [] Any
                                    (try
-                                     (let [native (by-id "toolbar-context-customize-sidebar")]
+                                     (let [native Any (by-id "toolbar-context-customize-sidebar")]
                                        (if (and native (js/get native .doCommand))
                                          (js/call native .doCommand)
                                          (when (and native (js/get native .click))
                                            (js/call native .click))))
                                      (catch (e Any)
                                        (console/error "gjoa: customize sidebar failed" e)))))
-                block-item (mi "Disable Blocking"
+                block-item Any (mi "Disable Blocking"
                              (fn [] Any (when (js/get window .gjoaBlocking) (js/call (js/get window .gjoaBlocking) .toggle))))]
 
             (js/set! compact-item .id "gjoa-toggle-compact")
@@ -122,27 +126,27 @@
 
             (js/call menu .append compact-item collapse-item strip-item sidebar-item layout-item (sep) block-item customize-item)
 
-            (let [popup-set (by-id "mainPopupSet")]
+            (let [popup-set Any (by-id "mainPopupSet")]
               (when popup-set
                 (js/call popup-set .append menu)))
 
             (attr! button "context" "gjoa-sidebar-button-menu")
 
-            (let [on-popup-showing (fn [] Any
-                                    (let [vertical (pref-bool "sidebar.verticalTabs" true)
-                                          is-compact (if vertical
+            (let [on-popup-showing (Fn [] Any) (fn [] Any
+                                    (let [vertical Bool (pref-bool "sidebar.verticalTabs" true)
+                                          is-compact Any (if vertical
                                                        (js/call compact .isCompactVertical)
                                                        (js/call compact .isCompactHorizontal))]
                                       (attr! compact-item "label" (if is-compact "Disable Compact" "Enable Compact"))
                                       (js/set! collapse-item .hidden (not vertical))
                                       (when vertical
-                                        (let [expanded (has? sidebar-main "sidebar-launcher-expanded")]
+                                        (let [expanded Bool (has? sidebar-main "sidebar-launcher-expanded")]
                                           (attr! collapse-item "label" (if expanded "Collapse Layout" "Expand Layout"))))
                                       (js/set! strip-item .hidden vertical)
                                       (when (not vertical)
-                                        (let [strip-on (pref-bool "gjoa.layout.horizontalSidebarStrip" false)]
+                                        (let [strip-on Bool (pref-bool "gjoa.layout.horizontalSidebarStrip" false)]
                                           (attr! strip-item "label" (if strip-on "Hide Strip" "Show Strip"))))
-                                      (let [sidebar-open (if (and (js/get window .SidebarController)
+                                      (let [sidebar-open Any (if (and (js/get window .SidebarController)
                                                                   (not= (js/get (js/get window .SidebarController) .isOpen) undefined))
                                                            (js/get (js/get window .SidebarController) .isOpen)
                                                            (and (not (js/get sidebar-main .hidden))
@@ -155,7 +159,7 @@
                                       (when (js/call compact .isCompactVertical) (js/call compact .pinSidebar))
                                       (when (js/call compact .isCompactHorizontal) (js/call compact .pinToolbox))))
 
-                  on-popup-hidden (fn [] Any
+                  on-popup-hidden (Fn [] Any) (fn [] Any
                                    (js/call compact .reconcile "menu:popuphidden")
                                    (js/call compact .reconcileHorizontal "menu:popuphidden"))]
 
@@ -172,13 +176,13 @@
                 (js/call strip-hide-button .remove)
                 (js/set! (js/get sidebar-button .style) .display ""))})))))))
 
-(js/export (defn make-sidebar-button! [(deps Any)] Any
-  (let [{:keys [sidebarMain compact]} deps
-        log (create-logger! "drawer/sidebar-button")
-        sidebar-main sidebarMain
+(js/export (defn make-sidebar-button! [deps Any] Any
+  (let [{:keys [sidebarMain compact]} Any deps
+        log Any (create-logger! "drawer/sidebar-button")
+        sidebar-main Any sidebarMain
         ;; drawer/layout's heal-once! ran first (index.bjs calls make-layout! before
         ;; this, unguarded), so the native node is already restored where possible.
-        native (by-id "sidebar-button")]
+        native Any (by-id "sidebar-button")]
     (if native
       (install! native sidebar-main compact)
       (do (log "init:no native #sidebar-button after nav-bar repair — skipping custom-button swap")
