@@ -10,15 +10,16 @@
 
 (declare-extern [window gBrowser] Any)
 
-(js/export (defn make-omni-icon! [(deps Any)] Any
-  (let [log (create-logger! "drawer/omni-icon")
-        nav-bar (by-id "nav-bar")]
+(js/export (defn make-omni-icon! [deps Any] Any
+  (let [log Any (create-logger! "drawer/omni-icon")
+        nav-bar Any (by-id "nav-bar")]
     (if (or (not nav-bar) (by-id "gjoa-omni-icon-button"))
       {:destroy (fn [] Any nil)}
-      (let [btn (xul-id "toolbarbutton" "gjoa-omni-icon-button")
-            menu (xul-id "menupopup" "gjoa-omni-icon-menu")
-            do-action (fn [(name String) (thunk Any)] Any
-                        (try (thunk) (catch (e Any) (js/call log .error (str name " failed") e))))]
+      (let [btn Any (xul-id "toolbarbutton" "gjoa-omni-icon-button")
+            menu Any (xul-id "menupopup" "gjoa-omni-icon-menu")
+            do-action (Fn [String Any] Any) (fn [name String
+                                               thunk Any] Any
+                                              (try (thunk) (catch (e Any) (js/call log .error (str name " failed") e))))]
         (attr! btn "class" "toolbarbutton-1 chromeclass-toolbar-additional")
         (attr! btn "type" "menu")
         (attr! btn "tooltiptext" "Navigation")
@@ -29,27 +30,27 @@
         (attr! btn "skipintoolbarset" "true")
         (attr! btn "label" "Navigation")
 
-        (let [back   (mi "Back"
+        (let [back Any   (mi "Back"
                        (fn [] Any (do-action "back" (fn [] Any (when (js/get gBrowser .canGoBack) (js/call gBrowser .goBack))))))
-              fwd    (mi "Forward"
+              fwd Any    (mi "Forward"
                        (fn [] Any (do-action "forward" (fn [] Any (when (js/get gBrowser .canGoForward) (js/call gBrowser .goForward))))))
-              reload (mi "Reload"
+              reload Any (mi "Reload"
                        (fn [] Any (do-action "reload" (fn [] Any (js/call gBrowser .reload)))))
-              ext    (mi "Extensions"
+              ext Any    (mi "Extensions"
                        (fn [] Any (do-action "extensions"
-                                (fn [] Any (let [b (by-id "unified-extensions-button")] (when b (js/call b .click)))))))
-              side   (mi "Toggle sidebar"
+                                (fn [] Any (let [b Any (by-id "unified-extensions-button")] (when b (js/call b .click)))))))
+              side Any   (mi "Toggle sidebar"
                        (fn [] Any (do-action "sidebar"
-                                (fn [] Any (let [sc (js/get window .SidebarController)]
+                                (fn [] Any (let [sc Any (js/get window .SidebarController)]
                                    (cond
                                      (and sc (js/get sc .toggle)) (js/call sc .toggle)
-                                     :else (let [cmd (by-id "cmd_toggleSidebar")]
+                                     :else (let [cmd Any (by-id "cmd_toggleSidebar")]
                                              (when (and cmd (js/get cmd .doCommand)) (js/call cmd .doCommand)))))))))]
           (js/call menu .append back fwd reload (sep) ext side))
 
         (js/call btn .appendChild menu)
         ;; Sit right after the hamburger (PanelUI), else at the nav-bar start.
-        (let [pui (by-id "PanelUI-button")]
+        (let [pui Any (by-id "PanelUI-button")]
           (if (and pui (identical? (js/get pui .parentNode) nav-bar))
             (js/call pui .after btn)
             (js/call nav-bar .prepend btn)))
